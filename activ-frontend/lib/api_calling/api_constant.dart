@@ -11,7 +11,7 @@ const LOADING = "";
 
 const totalSetup = 10;
 
-const BASE_URL = "https://staging-be.activ.co.in/api/v1";
+const BASE_URL = "https://activ-partner.onrender.com/api/v1";
 const REQUEST_OTP_URL = "$BASE_URL/auth/partner/request-otp";
 const VERIFY_OTP_URL = "$BASE_URL/auth/partner/verify-otp";
 const COMPLETE_PROFILE_URL = "$BASE_URL/auth/partner/complete-profile";
