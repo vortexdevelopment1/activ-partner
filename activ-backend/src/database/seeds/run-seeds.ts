@@ -5,6 +5,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client';
 import { getDatabaseUrlFromEnv } from '../../config/database.config';
 import { seedAdmin } from './admin.seed';
+import { seedPartner } from './partner.seed';
 import { seedCategories } from './categories.seed';
 import { seedQuestions } from './questions.seed';
 
@@ -20,6 +21,7 @@ async function runSeeds() {
     console.log('Database connected. Running seeds...');
 
     await seedAdmin(prisma);
+    await seedPartner(prisma);
     await seedCategories(prisma);
     await seedQuestions(prisma);
 

@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
@@ -28,6 +29,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VenueStatus } from '../../common/enums/venue-status.enum';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +40,7 @@ export class AuthService {
     private teamService: TeamService,
     private otpService: OtpService,
     private mailService: MailService,
+    private prisma: PrismaService,
     @InjectRepository(Partner)
     private partnerRepository: Repository<Partner>,
     @InjectRepository(TeamMember)
@@ -94,18 +97,29 @@ export class AuthService {
     const identifier = loginDto.email.trim();
     const phoneValues = this.getPhoneLookupValues(identifier);
 
-    const partnerQuery = this.partnerRepository
-      .createQueryBuilder('partner')
-      .where('LOWER(partner.email) = LOWER(:identifier)', { identifier });
+    const user = await this.prisma.users.findFirst({
+      where: {
+        OR: [
+          { email: { equals: identifier, mode: 'insensitive' } },
+          ...(phoneValues.length > 0
+            ? [{ phone_e164: { in: phoneValues } }]
+            : []),
+        ],
+      },
+      include: {
+        partner_users: {
+          include: {
+            partners: { include: { partner_business_profiles: true } },
+          },
+        },
+      },
+    });
 
-    if (phoneValues.length > 0) {
-      partnerQuery.orWhere('partner.phone IN (:...phoneValues)', { phoneValues });
-    }
+    const partnerUser = user?.partner_users[0];
+    const partner = partnerUser?.partners;
 
-    const partner = await partnerQuery.getOne();
-
-    // Fall through to team member login if no partner found
-    if (!partner) {
+    // Team members still use the legacy login path until that module is migrated.
+    if (!user || !partnerUser || !partner) {
       const member = await this.findTeamMemberByIdentifier(identifier, phoneValues);
 
       if (!member) throw new UnauthorizedException('Invalid email or password');
@@ -125,24 +139,40 @@ export class AuthService {
       return { member: memberWithoutPassword, accessToken };
     }
 
-    if (!partner.email || !partner.password) {
-      throw new UnauthorizedException('Please complete your profile before logging in');
+    if (!user.password_hash) {
+      throw new UnauthorizedException(
+        'No password is set for this account. Please use OTP login.',
+      );
     }
 
-    if (!partner.isActive) {
+    if (user.status !== 'ACTIVE' || partner.status !== 'ACTIVE') {
       throw new UnauthorizedException('Your account has been deactivated. Please contact support');
     }
 
-    const isPasswordValid = await partner.validatePassword(loginDto.password);
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password_hash,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
     const tokens = await this.generatePartnerTokens(partner);
-    const { password, phoneOtp, otpExpiresAt, resetPasswordCode, resetPasswordCodeExpiresAt, ...partnerWithoutSensitive } = partner as any;
+    const profile = partner.partner_business_profiles;
+    const names = (user.name || '').trim().split(/\s+/);
 
     return {
-      partner: partnerWithoutSensitive,
+      partner: {
+        id: partner.id,
+        firstName: names[0] || null,
+        lastName: names.slice(1).join(' ') || null,
+        email: user.email,
+        phone: user.phone_e164,
+        businessName: profile?.business_name || partner.legal_name,
+        isActive: true,
+        role: partnerUser.role,
+      },
+      userType: 'partner',
       ...tokens,
     };
   }
@@ -515,7 +545,7 @@ export class AuthService {
     return { accessToken };
   }
 
-  private async generatePartnerTokens(partner: Partner) {
+  private async generatePartnerTokens(partner: { id: string }) {
     const payload = { sub: partner.id, role: 'partner', type: 'partner' };
 
     const accessToken = this.jwtService.sign(payload, {

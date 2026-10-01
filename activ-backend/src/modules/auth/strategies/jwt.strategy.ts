@@ -5,16 +5,15 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UsersService } from '../../users/users.service';
-import { Partner } from '../../partners/entities/partner.entity';
 import { TeamMember } from '../../team/entities/team-member.entity';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private usersService: UsersService,
-    @InjectRepository(Partner)
-    private partnerRepository: Repository<Partner>,
+    private prisma: PrismaService,
     @InjectRepository(TeamMember)
     private teamMemberRepository: Repository<TeamMember>,
   ) {
@@ -36,10 +35,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     if (payload.type === 'partner') {
-      const partner = await this.partnerRepository.findOne({ where: { id: payload.sub } });
+      const partner = await this.prisma.partners.findUnique({
+        where: { id: payload.sub },
+        include: {
+          partner_business_profiles: true,
+          partner_users: { include: { users: true } },
+        },
+      });
       if (!partner) throw new UnauthorizedException('Partner not found');
-      // Inactive partners are allowed during onboarding
-      return partner;
+      if (partner.status === 'SUSPENDED') {
+        throw new UnauthorizedException('Account has been deactivated');
+      }
+
+      const partnerUser = partner.partner_users.find(
+        (link) => link.users.status === 'ACTIVE',
+      );
+      if (!partnerUser) throw new UnauthorizedException('Partner user not found');
+
+      const profile = partner.partner_business_profiles;
+      return {
+        id: partner.id,
+        userId: partnerUser.user_id,
+        email: partnerUser.users.email,
+        phone: partnerUser.users.phone_e164,
+        businessName: profile?.business_name || partner.legal_name,
+        isActive: partner.status === 'ACTIVE',
+        role: 'partner',
+      };
     }
 
     // User (admin / user role)
