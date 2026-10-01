@@ -7,8 +7,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://activ-partner.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

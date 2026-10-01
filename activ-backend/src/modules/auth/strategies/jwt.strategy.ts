@@ -65,16 +65,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // User (admin / user role)
-    const user = await this.usersService.findOne(payload.sub);
+    const user = await this.prisma.users.findUnique({
+      where: { id: payload.sub },
+    });
 
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    if (!user.isActive) {
+    if (user.status !== 'ACTIVE') {
       throw new UnauthorizedException('Your account has been deactivated');
     }
 
-    return user;
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone_e164,
+      role: user.is_admin ? 'admin' : 'user',
+      isActive: true,
+      profileImage: user.profile_photo,
+    };
   }
 }

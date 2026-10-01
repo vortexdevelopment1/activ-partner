@@ -52,26 +52,51 @@ export class AuthService {
   // ─── User Auth ─────────────────────────────────────────────────────────────
 
   async login(loginDto: LoginDto) {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    const user = await this.prisma.users.findFirst({
+      where: {
+        email: { equals: loginDto.email.trim(), mode: 'insensitive' },
+      },
+    });
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    if (!user.isActive) {
+    if (user.status !== 'ACTIVE') {
       throw new UnauthorizedException('Your account has been deactivated');
     }
 
-    const isPasswordValid = await user.validatePassword(loginDto.password);
+    if (!user.password_hash) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password_hash,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.generateUserTokens(user);
-    const { password, ...userWithoutPassword } = user as any;
+    const role = user.is_admin ? UserRole.ADMIN : UserRole.USER;
+    const tokens = await this.generateUserTokens({
+      id: user.id,
+      email: user.email,
+      role,
+    });
 
     return {
-      user: userWithoutPassword,
+      user: {
+        id: user.id,
+        firstName: user.name?.split(/\s+/)[0] || null,
+        lastName: user.name?.split(/\s+/).slice(1).join(' ') || null,
+        name: user.name,
+        email: user.email,
+        phone: user.phone_e164,
+        role,
+        isActive: true,
+        profileImage: user.profile_photo,
+      },
       ...tokens,
     };
   }
@@ -534,7 +559,11 @@ export class AuthService {
 
   // ─── Token Generation ──────────────────────────────────────────────────────
 
-  private async generateUserTokens(user: User) {
+  private async generateUserTokens(user: {
+    id: string;
+    email: string | null;
+    role: UserRole;
+  }) {
     const payload = { sub: user.id, email: user.email, role: user.role, type: 'user' };
 
     const accessToken = this.jwtService.sign(payload, {
