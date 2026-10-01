@@ -25,6 +25,7 @@ import { CreatePartnerDto } from './dto/create-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class PartnersService {
@@ -47,6 +48,7 @@ export class PartnersService {
     private readonly paymentRepository: Repository<Payment>,
     private readonly dataSource: DataSource,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(createPartnerDto: CreatePartnerDto): Promise<Partner> {
@@ -65,23 +67,68 @@ export class PartnersService {
   }
 
   async findAll(pagination: PaginationDto) {
-    if (pagination.search) {
-      return this.partnerRepository.findAndCount({
-        where: [
-          { businessName: Like(`%${pagination.search}%`) },
-          { city: Like(`%${pagination.search}%`) },
-        ],
+    const where: any = pagination.search
+      ? {
+          OR: [
+            { legal_name: { contains: pagination.search, mode: 'insensitive' } },
+            {
+              partner_business_profiles: {
+                is: {
+                  OR: [
+                    { business_name: { contains: pagination.search, mode: 'insensitive' } },
+                    { city: { contains: pagination.search, mode: 'insensitive' } },
+                    { email: { contains: pagination.search, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
+    const [partners, total] = await Promise.all([
+      this.prisma.partners.findMany({
+        where,
+        include: {
+          partner_business_profiles: true,
+          partner_users: { include: { users: true } },
+          _count: { select: { venues: true } },
+        },
         skip: pagination.skip,
         take: pagination.limit,
-        order: { createdAt: 'DESC' },
-      });
-    }
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.partners.count({ where }),
+    ]);
 
-    return this.partnerRepository.findAndCount({
-      skip: pagination.skip,
-      take: pagination.limit,
-      order: { createdAt: 'DESC' },
+    const items = partners.map((partner) => {
+      const profile = partner.partner_business_profiles;
+      const owner = partner.partner_users[0]?.users;
+      const names = (owner?.name || '').trim().split(/\s+/);
+      return {
+        id: partner.id,
+        userId: owner?.id ?? null,
+        firstName: names[0] || null,
+        lastName: names.slice(1).join(' ') || null,
+        email: owner?.email ?? profile?.email ?? null,
+        phone: owner?.phone_e164 ?? profile?.phone_e164 ?? null,
+        businessName: profile?.business_name ?? partner.legal_name,
+        businessAddress: profile?.address_line_1 ?? null,
+        city: profile?.city ?? null,
+        state: profile?.state ?? null,
+        zipCode: profile?.postal_code ?? null,
+        gstNumber: profile?.gst_number ?? null,
+        panNumber: profile?.pan_number ?? null,
+        isVerified: profile?.kyc_status === 'APPROVED',
+        isActive: partner.status === 'ACTIVE',
+        status: partner.status.toLowerCase(),
+        venueCount: partner._count.venues,
+        createdAt: partner.created_at,
+        updatedAt: partner.updated_at,
+      };
     });
+
+    return [items, total] as const;
   }
 
   async findOne(id: string): Promise<Partner> {

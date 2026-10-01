@@ -452,9 +452,15 @@ export class AuthService {
   // ─── Shared ────────────────────────────────────────────────────────────────
 
   async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
+    if (!user?.password_hash) {
+      throw new BadRequestException('Current password is incorrect');
+    }
 
-    const isCurrentValid = await user.validatePassword(changePasswordDto.currentPassword);
+    const isCurrentValid = await bcrypt.compare(
+      changePasswordDto.currentPassword,
+      user.password_hash,
+    );
     if (!isCurrentValid) {
       throw new BadRequestException('Current password is incorrect');
     }

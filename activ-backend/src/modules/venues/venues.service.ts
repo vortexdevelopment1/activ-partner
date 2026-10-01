@@ -45,6 +45,7 @@ import { SubmitVenueUpdateDto } from './dto/submit-venue-update.dto';
 import { ReviewVenueUpdateDto } from './dto/review-venue-update.dto';
 import { WalkInReservation } from './entities/walk-in-reservation.entity';
 import { CreateWalkInReservationDto } from './dto/create-walk-in-reservation.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class VenuesService {
@@ -73,6 +74,7 @@ export class VenuesService {
     private readonly notificationsService: NotificationsService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(createVenueDto: CreateVenueDto, partnerId: string): Promise<Venue> {
@@ -285,27 +287,96 @@ export class VenuesService {
   }
 
   async findAll(pagination: PaginationDto, status?: VenueStatus, categoryId?: string) {
-    const qb = this.venueRepository
-      .createQueryBuilder('venue')
-      .leftJoinAndSelect('venue.categories', 'category')
-      .leftJoinAndSelect('venue.partner', 'partner')
-      .leftJoinAndSelect('venue.images', 'images');
-
-    if (status) qb.andWhere('venue.status = :status', { status });
-    if (categoryId) qb.andWhere('category.id = :categoryId', { categoryId });
-
+    const statusMap: Record<string, 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'> = {
+      draft: 'DRAFT',
+      pending: 'DRAFT',
+      approved: 'PUBLISHED',
+      rejected: 'ARCHIVED',
+      suspended: 'ARCHIVED',
+    };
+    const where: any = {};
+    if (status) where.status = statusMap[status] || undefined;
     if (pagination.search) {
-      qb.andWhere('(venue.name ILIKE :search OR venue.city ILIKE :search)', {
-        search: `%${pagination.search}%`,
-      });
+      where.OR = [
+        { name: { contains: pagination.search, mode: 'insensitive' } },
+        { city_code: { contains: pagination.search, mode: 'insensitive' } },
+      ];
+    }
+    if (categoryId) {
+      where.partner_venue_services = { some: { service_category_id: categoryId } };
     }
 
-    qb.orderBy('venue.createdAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.limit);
+    const [venues, total] = await Promise.all([
+      this.prisma.venues.findMany({
+        where,
+        include: {
+          partners: {
+            include: {
+              partner_business_profiles: true,
+              partner_users: { include: { users: true } },
+            },
+          },
+          partner_venue_profiles: true,
+          partner_venue_images: { orderBy: { sort_order: 'asc' } },
+          partner_venue_services: {
+            include: { partner_service_categories: true },
+          },
+        },
+        skip: pagination.skip,
+        take: pagination.limit,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.venues.count({ where }),
+    ]);
 
-    const [items, total] = await qb.getManyAndCount();
-    return [items, total] as [Venue[], number];
+    const items = venues.map((venue) => {
+      const profile = venue.partner_venue_profiles;
+      const owner = venue.partners.partner_users[0]?.users;
+      const ownerNames = (owner?.name || '').trim().split(/\s+/);
+      const serviceCategory = venue.partner_venue_services[0]?.partner_service_categories;
+      const mappedStatus = venue.status === 'PUBLISHED'
+        ? 'approved'
+        : venue.status === 'ARCHIVED' ? 'rejected' : 'pending';
+      return {
+        id: venue.id,
+        partnerId: venue.partner_id,
+        partner: {
+          id: venue.partner_id,
+          firstName: ownerNames[0] || null,
+          lastName: ownerNames.slice(1).join(' ') || null,
+          email: owner?.email ?? null,
+          businessName: venue.partners.partner_business_profiles?.business_name
+            ?? venue.partners.legal_name,
+        },
+        categoryId: serviceCategory?.id ?? null,
+        category: serviceCategory
+          ? { id: serviceCategory.id, name: serviceCategory.name }
+          : null,
+        name: profile?.display_name || venue.name,
+        description: profile?.description,
+        address: profile?.address_line_1,
+        city: profile?.city || venue.city_code,
+        state: profile?.state,
+        zipCode: profile?.postal_code,
+        latitude: Number(venue.latitude),
+        longitude: Number(venue.longitude),
+        phone: profile?.contact_phone_e164,
+        status: mappedStatus,
+        isActive: venue.status === 'PUBLISHED',
+        images: venue.partner_venue_images.map((image) => ({
+          id: image.id,
+          venueId: image.venue_id,
+          imageUrl: image.url,
+          isPrimary: image.is_primary,
+          caption: image.caption,
+          createdAt: image.created_at,
+        })),
+        createdAt: profile?.created_at ?? new Date(0),
+        updatedAt: profile?.updated_at ?? new Date(0),
+      };
+    });
+
+    return [items, total] as const;
   }
 
   async findByPartner(partnerId: string, pagination: PaginationDto) {
@@ -869,11 +940,13 @@ export class VenuesService {
   }
 
   async getVenueStats() {
-    const total = await this.venueRepository.count();
-    const draft = await this.venueRepository.count({ where: { status: VenueStatus.DRAFT } });
-    const pending = await this.venueRepository.count({ where: { status: VenueStatus.PENDING } });
-    const approved = await this.venueRepository.count({ where: { status: VenueStatus.APPROVED } });
-    const rejected = await this.venueRepository.count({ where: { status: VenueStatus.REJECTED } });
+    const [total, draft, approved, rejected] = await Promise.all([
+      this.prisma.venues.count(),
+      this.prisma.venues.count({ where: { status: 'DRAFT' } }),
+      this.prisma.venues.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.venues.count({ where: { status: 'ARCHIVED' } }),
+    ]);
+    const pending = draft;
 
     return { total, draft, pending, approved, rejected };
   }
