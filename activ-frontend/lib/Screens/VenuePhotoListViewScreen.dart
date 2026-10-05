@@ -396,12 +396,18 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               }
 
                                               // Use current category for service name
-                                              final String serviceName = (widget.currentCategory['title']?.toString() ?? '').isNotEmpty
-                                                  ? widget.currentCategory['title'].toString()
-                                                  : 'Activity';
+                                              final String serviceName =
+                                                  (widget.currentCategory['name']?.toString() ?? '').isNotEmpty
+                                                      ? widget.currentCategory['name'].toString()
+                                                      : (widget.currentCategory['title']?.toString() ?? 'Activity');
+                                              final String categoryId =
+                                                  widget.currentCategory['id']?.toString() ?? '';
 
                                               final formData = FormData();
                                               formData.fields.add(MapEntry('serviceName', serviceName));
+                                              if (categoryId.isNotEmpty) {
+                                                formData.fields.add(MapEntry('categoryId', categoryId));
+                                              }
                                               for (int i = 0; i < _images.length; i++) {
                                                 final fileName = _images[i].name.isNotEmpty ? _images[i].name : "image_$i.jpg";
                                                 formData.files.add(MapEntry(

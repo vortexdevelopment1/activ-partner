@@ -140,11 +140,12 @@ import 'package:overlay_support/overlay_support.dart';
 
 import 'Screens/AuthWrapper.dart';
 import 'Style/app_colors.dart';
-
+import 'api_calling/api_constant.dart';
 
 main() async {
   // Ensure Widgets are initialized first
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeApiBaseUrl();
   await Firebase.initializeApp(
     options: FirebaseOptions(
       apiKey: "AIzaSyB11VLcJv6FF7iiBH6vJ2hr5_n246Dn6G8",

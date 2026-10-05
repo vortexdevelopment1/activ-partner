@@ -71,7 +71,9 @@ export const getDatabaseUrlFromEnv = (env: DatabaseEnv): string => {
 };
 
 export const getMigrationDatabaseUrlFromEnv = (env: DatabaseEnv): string =>
-  env.DIRECT_URL || getDatabaseUrlFromEnv(env);
+  env.DIRECT_URL
+    ? withSslMode(env.DIRECT_URL, truthy(env.DB_SSL))
+    : getDatabaseUrlFromEnv(env);
 
 export const getDatabaseUrl = (configService: ConfigService): string => {
   return getDatabaseUrlFromEnv({
@@ -97,10 +99,21 @@ export const getPrismaLogLevels = (
 export const getTypeOrmCompatibilityConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
-  const databaseUrl = getDatabaseUrl(configService);
   const sslEnabled =
     configService.get<string | boolean>('DB_SSL', false) === true ||
     configService.get<string>('DB_SSL', 'false') === 'true';
+  // TypeORM keeps long-lived connections, so Supabase's session-mode pooler is
+  // more suitable than the transaction-mode URL used by Prisma.
+  const databaseUrl = getMigrationDatabaseUrlFromEnv({
+    DATABASE_URL: configService.get<string>('DATABASE_URL'),
+    DIRECT_URL: configService.get<string>('DIRECT_URL'),
+    DB_HOST: configService.get<string>('DB_HOST'),
+    DB_PORT: configService.get<string | number>('DB_PORT'),
+    DB_USERNAME: configService.get<string>('DB_USERNAME'),
+    DB_PASSWORD: configService.get<string>('DB_PASSWORD'),
+    DB_DATABASE: configService.get<string>('DB_DATABASE'),
+    DB_SSL: sslEnabled,
+  });
   const sslConfig = sslEnabled ? { rejectUnauthorized: false } : false;
 
   return {
@@ -112,9 +125,13 @@ export const getTypeOrmCompatibilityConfig = (
     logging:
       configService.get<string | boolean>('DB_LOGGING', false) === true ||
       configService.get<string>('DB_LOGGING', 'false') === 'true',
+    retryAttempts: 10,
+    retryDelay: 3000,
     ssl: sslConfig,
     extra: {
       ssl: sslConfig,
+      connectionTimeoutMillis: 15000,
+      keepAlive: true,
     },
   };
 };

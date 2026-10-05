@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
@@ -269,100 +270,127 @@ export class AuthService {
   // ─── Phone OTP Flow ────────────────────────────────────────────────────────
 
   async requestOtp(dto: RequestOtpDto) {
-    const { phone } = dto;
-    const resendCooldown = new Date(Date.now() + 60 * 1000);
+    const phone = this.normalizePhone(dto.phone);
+    const now = new Date();
+    const latestChallenge = await this.prisma.otp_challenges.findFirst({
+      where: { phone_e164: phone, consumed_at: null },
+      orderBy: { created_at: 'desc' },
+    });
 
-    // Check team member first — if this phone belongs to an invited team member,
-    // send the OTP for the team member record and return early
-    const teamMember = await this.teamMemberRepository.findOne({ where: { phone } });
-
-    if (teamMember) {
-      if (teamMember.otpExpiresAt && teamMember.otpExpiresAt > new Date()) {
-        throw new BadRequestException('Please wait before requesting another OTP.');
-      }
-      await this.otpService.sendOtp(phone);
-      teamMember.otpExpiresAt = resendCooldown;
-      await this.teamMemberRepository.save(teamMember);
-      return { phone };
-    }
-
-    // Otherwise treat as partner onboarding flow
-    let partner = await this.partnerRepository.findOne({ where: { phone } });
-
-    if (partner?.otpExpiresAt && partner.otpExpiresAt > new Date()) {
+    if (
+      latestChallenge &&
+      latestChallenge.created_at.getTime() > now.getTime() - 60 * 1000
+    ) {
       throw new BadRequestException('Please wait before requesting another OTP.');
     }
 
-    if (!partner) {
-      partner = this.partnerRepository.create({
-        phone,
-        firstName: 'Partner',
-        lastName: 'User',
-        password: Math.random().toString(36).slice(-8) + 'A1!',
-        isActive: false,
-      });
-    }
-
     await this.otpService.sendOtp(phone);
-    partner.otpExpiresAt = resendCooldown;
-    await this.partnerRepository.save(partner);
+    await this.prisma.otp_challenges.create({
+      data: {
+        id: randomUUID(),
+        phone_e164: phone,
+        code_hash: 'managed-by-msg91',
+        expires_at: new Date(now.getTime() + 10 * 60 * 1000),
+      },
+    });
 
     return { phone };
   }
 
   async resendOtp(dto: RequestOtpDto) {
-    const { phone } = dto;
-    const resendCooldown = new Date(Date.now() + 60 * 1000);
+    const phone = this.normalizePhone(dto.phone);
+    const challenge = await this.prisma.otp_challenges.findFirst({
+      where: { phone_e164: phone, consumed_at: null },
+      orderBy: { created_at: 'desc' },
+    });
 
-    const teamMember = await this.teamMemberRepository.findOne({ where: { phone } });
-    if (teamMember) {
-      if (teamMember.otpExpiresAt && teamMember.otpExpiresAt > new Date()) {
-        throw new BadRequestException('Please wait before requesting another OTP.');
-      }
-      await this.otpService.resendOtp(phone);
-      teamMember.otpExpiresAt = resendCooldown;
-      await this.teamMemberRepository.save(teamMember);
-      return { phone };
-    }
-
-    const partner = await this.partnerRepository.findOne({ where: { phone } });
-    if (!partner) {
+    if (!challenge || challenge.expires_at <= new Date()) {
       throw new BadRequestException('Phone number not found. Please request OTP first.');
     }
-    if (partner.otpExpiresAt && partner.otpExpiresAt > new Date()) {
+    if (challenge.created_at.getTime() > Date.now() - 60 * 1000) {
       throw new BadRequestException('Please wait before requesting another OTP.');
     }
 
     await this.otpService.resendOtp(phone);
-    partner.otpExpiresAt = resendCooldown;
-    await this.partnerRepository.save(partner);
+    await this.prisma.otp_challenges.create({
+      data: {
+        id: randomUUID(),
+        phone_e164: phone,
+        code_hash: 'managed-by-msg91',
+        expires_at: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    });
 
     return { phone };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const { phone, otp } = dto;
+    const phone = this.normalizePhone(dto.phone);
+    const challenge = await this.prisma.otp_challenges.findFirst({
+      where: {
+        phone_e164: phone,
+        consumed_at: null,
+        expires_at: { gt: new Date() },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    if (!challenge) throw new BadRequestException('Invalid or expired OTP.');
 
-    const teamMember = await this.teamMemberRepository.findOne({ where: { phone } });
-    if (teamMember) {
-      const isValid = await this.otpService.verifyOtp(phone, otp);
-      if (!isValid) {
-        throw new BadRequestException('Invalid or expired OTP.');
-      }
-      return this.completeTeamMemberLogin(teamMember);
-    }
-
-    const partner = await this.partnerRepository.findOne({ where: { phone } });
-    if (!partner) {
-      throw new BadRequestException('Phone number not found. Please request OTP first.');
-    }
-
-    const isValid = await this.otpService.verifyOtp(phone, otp);
+    const isValid = await this.otpService.verifyOtp(phone, dto.otp);
     if (!isValid) {
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
-    return this.completePartnerLogin(partner);
+    const account = await this.prisma.$transaction(async (tx) => {
+      await tx.otp_challenges.update({
+        where: { id: challenge.id },
+        data: { consumed_at: new Date() },
+      });
+
+      let user = await tx.users.findUnique({ where: { phone_e164: phone } });
+      if (!user) {
+        user = await tx.users.create({
+          data: {
+            id: randomUUID(),
+            phone_e164: phone,
+            updated_at: new Date(),
+          },
+        });
+      }
+
+      let link = await tx.partner_users.findFirst({
+        where: { user_id: user.id },
+        include: { partners: { include: { partner_business_profiles: true } } },
+      });
+
+      if (!link) {
+        const partnerId = randomUUID();
+        await tx.partners.create({
+          data: {
+            id: partnerId,
+            legal_name: user.name || 'Partner User',
+            updated_at: new Date(),
+          },
+        });
+        link = await tx.partner_users.create({
+          data: {
+            id: randomUUID(),
+            partner_id: partnerId,
+            user_id: user.id,
+            role: 'PARTNER_ADMIN',
+          },
+          include: { partners: { include: { partner_business_profiles: true } } },
+        });
+      }
+
+      return { user, link };
+    });
+
+    return this.buildPartnerAuthResponse(
+      account.link.partners,
+      account.user,
+      account.link.role,
+    );
   }
 
   private async completeTeamMemberLogin(teamMember: TeamMember) {
@@ -405,48 +433,76 @@ export class AuthService {
     };
   }
 
-  private async completePartnerLogin(partner: Partner) {
-    partner.otpExpiresAt = null;
-    await this.partnerRepository.save(partner);
-
-    const tokens = await this.generatePartnerTokens(partner);
-
-    return {
-      jwt_token: tokens.accessToken,
-      userType: 'partner',
-      is_profile_completed: !!partner.email,
-      is_partner_active: partner.isActive,
-    };
-  }
-
   async completePartnerProfile(partnerId: string, dto: CompletePartnerProfileDto) {
-    const partner = await this.partnerRepository.findOne({ where: { id: partnerId } });
+    const partner = await this.prisma.partners.findUnique({
+      where: { id: partnerId },
+      include: {
+        partner_users: {
+          include: { users: true },
+          orderBy: { role: 'desc' },
+        },
+      },
+    });
 
     if (!partner) {
       throw new NotFoundException('Partner not found');
     }
 
-    // Check email is not taken by another partner
-    if (dto.email) {
-      const existingEmail = await this.partnerRepository.findOne({
-        where: { email: dto.email },
-      });
+    const owner = partner.partner_users[0];
+    if (!owner) throw new NotFoundException('Partner user not found');
 
-      if (existingEmail && existingEmail.id !== partnerId) {
-        throw new ConflictException('Email is already in use by another account');
-      }
+    const existingEmail = await this.prisma.users.findFirst({
+      where: {
+        email: { equals: dto.email, mode: 'insensitive' },
+        id: { not: owner.user_id },
+      },
+    });
+    if (existingEmail) {
+      throw new ConflictException('Email is already in use by another account');
     }
 
-    partner.firstName = dto.firstName;
-    partner.lastName = dto.lastName;
-    partner.email = dto.email;
-    if (dto.businessName) partner.businessName = dto.businessName;
-    if (dto.contactPhone) partner.contactPhone = dto.contactPhone;
+    const name = `${dto.firstName} ${dto.lastName}`.trim();
+    const businessName = dto.businessName?.trim() || partner.legal_name;
+    const now = new Date();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.users.update({
+        where: { id: owner.user_id },
+        data: { name, email: dto.email.trim(), updated_at: now },
+      });
+      const updatedPartner = await tx.partners.update({
+        where: { id: partnerId },
+        data: { legal_name: businessName, updated_at: now },
+      });
+      const profile = await tx.partner_business_profiles.upsert({
+        where: { partner_id: partnerId },
+        create: {
+          id: randomUUID(),
+          partner_id: partnerId,
+          business_name: dto.businessName?.trim() || null,
+          owner_name: name,
+          phone_e164: dto.contactPhone
+            ? this.normalizePhone(dto.contactPhone)
+            : user.phone_e164,
+          email: dto.email.trim(),
+          updated_at: now,
+        },
+        update: {
+          business_name: dto.businessName?.trim() || null,
+          owner_name: name,
+          phone_e164: dto.contactPhone
+            ? this.normalizePhone(dto.contactPhone)
+            : user.phone_e164,
+          email: dto.email.trim(),
+          updated_at: now,
+        },
+      });
+      return {
+        user,
+        partner: { ...updatedPartner, partner_business_profiles: profile },
+      };
+    });
 
-    const saved = await this.partnerRepository.save(partner);
-    const { password, phoneOtp, otpExpiresAt, resetPasswordCode, resetPasswordCodeExpiresAt, ...partnerWithoutSensitive } = saved as any;
-
-    return { partner: partnerWithoutSensitive };
+    return this.buildPartnerAuthResponse(result.partner, result.user, owner.role);
   }
 
   // ─── Shared ────────────────────────────────────────────────────────────────
@@ -552,14 +608,52 @@ export class AuthService {
   }
 
   async getPartnerAuthProfile(partner: Partner) {
-    const fresh = await this.partnerRepository.findOne({ where: { id: partner.id } });
-    const tokens = await this.generatePartnerTokens(fresh);
-    const { password, phoneOtp, otpExpiresAt, resetPasswordCode, resetPasswordCodeExpiresAt, ...partnerWithoutSensitive } = fresh as any;
+    const fresh = await this.prisma.partners.findUnique({
+      where: { id: partner.id },
+      include: {
+        partner_business_profiles: true,
+        partner_users: { include: { users: true } },
+      },
+    });
+    if (!fresh) throw new NotFoundException('Partner not found');
+
+    const owner = fresh.partner_users[0];
+    if (!owner) throw new NotFoundException('Partner user not found');
+    return this.buildPartnerAuthResponse(fresh, owner.users, owner.role);
+  }
+
+  private normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+    if (digits.length < 10) throw new BadRequestException('Invalid phone number');
+    return `+${digits}`;
+  }
+
+  private async buildPartnerAuthResponse(partner: any, user: any, role: any) {
+    const tokens = await this.generatePartnerTokens(partner);
+    const profile = partner.partner_business_profiles;
+    const names = (user.name || '').trim().split(/\s+/);
+    const isProfileComplete = Boolean(user.name && user.email);
+    const isActive = partner.status === 'ACTIVE';
 
     return {
-      partner: partnerWithoutSensitive,
+      partner: {
+        id: partner.id,
+        firstName: names[0] || null,
+        lastName: names.slice(1).join(' ') || null,
+        email: user.email,
+        phone: user.phone_e164,
+        businessName: profile?.business_name || partner.legal_name,
+        isActive,
+        role,
+      },
+      userType: 'partner',
       ...tokens,
-      isProfileComplete: !!fresh.email,
+      jwt_token: tokens.accessToken,
+      isProfileComplete,
+      is_profile_completed: isProfileComplete,
+      is_partner_active: isActive,
     };
   }
 

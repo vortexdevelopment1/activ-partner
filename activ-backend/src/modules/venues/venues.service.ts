@@ -11,6 +11,7 @@ import { Category } from '../categories/entities/category.entity';
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Venue } from './entities/venue.entity';
 import { VenueImage } from './entities/venue-image.entity';
@@ -77,67 +78,178 @@ export class VenuesService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async create(createVenueDto: CreateVenueDto, partnerId: string): Promise<Venue> {
+  async create(createVenueDto: CreateVenueDto, partnerId: string): Promise<any> {
     const { services, answers, categoryIds, ...venueData } = createVenueDto;
 
     if (!categoryIds || categoryIds.length === 0) {
       throw new BadRequestException('At least one categoryId is required');
     }
 
-    const categories = await this.categoryRepository.findBy({ id: In(categoryIds) });
+    const [partner, categories] = await Promise.all([
+      this.prisma.partners.findUnique({ where: { id: partnerId } }),
+      this.prisma.partner_service_categories.findMany({
+        where: { id: { in: categoryIds }, status: 'APPROVED' },
+        orderBy: { sort_order: 'asc' },
+      }),
+    ]);
 
-    if (categories.length === 0) {
-      throw new BadRequestException('No valid categories found for the provided categoryIds');
+    if (!partner) throw new NotFoundException('Partner not found');
+
+    const validCategoryIds = new Set(categories.map((category) => category.id));
+    const invalidCategoryIds = categoryIds.filter((id) => !validCategoryIds.has(id));
+    if (invalidCategoryIds.length > 0) {
+      throw new BadRequestException(
+        `Invalid or inactive categoryIds: ${invalidCategoryIds.join(', ')}`,
+      );
     }
 
-    const venue = this.venueRepository.create({
-      ...venueData,
-      partnerId,
-      status: VenueStatus.DRAFT,
+    if (venueData.latitude == null || venueData.longitude == null) {
+      throw new BadRequestException('Venue latitude and longitude are required');
+    }
+
+    const categorySlugs = categories.map((category) => category.slug);
+    const activities = await this.prisma.activities.findMany({
+      where: { sport_code: { in: categorySlugs }, status: 'PUBLISHED' },
+    });
+    const now = new Date();
+    const venueId = randomUUID();
+    const contactPhone = venueData.venuePhone || venueData.phone || null;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.venues.create({
+        data: {
+          id: venueId,
+          partner_id: partnerId,
+          name: venueData.name,
+          city_code: venueData.city?.trim() || 'UNKNOWN',
+          latitude: venueData.latitude,
+          longitude: venueData.longitude,
+          status: 'DRAFT',
+          policy_version: 'v1',
+          metadata: {
+            openingTime: venueData.openingTime ?? null,
+            closingTime: venueData.closingTime ?? null,
+            rules: venueData.rules ?? null,
+            locationUrl: venueData.locationUrl ?? null,
+            ownerPhone: venueData.phone ?? null,
+            venuePhone: venueData.venuePhone ?? null,
+            commission: venueData.commission ?? null,
+            categoryIds,
+            services: (services ?? []).map((service) => ({
+              name: service.name,
+              description: service.description ?? null,
+              pricePerHour: service.pricePerHour,
+              minDuration: service.minDuration ?? null,
+              maxDuration: service.maxDuration ?? null,
+              capacity: service.capacity ?? null,
+              imageUrl: service.imageUrl ?? null,
+            })),
+          },
+        },
+      });
+
+      await tx.partner_venue_profiles.create({
+        data: {
+          id: randomUUID(),
+          partner_id: partnerId,
+          venue_id: venueId,
+          display_name: venueData.name,
+          description: venueData.description ?? null,
+          contact_phone_e164: contactPhone,
+          address_line_1: venueData.venueAddress || venueData.address || null,
+          address_line_2: venueData.flatBuilding ?? null,
+          city: venueData.city ?? null,
+          state: venueData.state ?? null,
+          postal_code: venueData.zipCode ?? null,
+          amenities: venueData.amenities ?? [],
+          operating_hours: {
+            openingTime: venueData.openingTime ?? null,
+            closingTime: venueData.closingTime ?? null,
+          },
+          updated_at: now,
+        },
+      });
+
+      await tx.partner_venue_services.createMany({
+        data: categories.map((category) => ({
+          id: randomUUID(),
+          venue_id: venueId,
+          service_category_id: category.id,
+          title: category.name,
+          description: category.description,
+          status: 'DRAFT',
+          onboarding_data: {},
+          updated_at: now,
+        })),
+      });
+
+      if (activities.length > 0) {
+        await tx.venue_activities.createMany({
+          data: activities.map((activity) => ({
+            venue_id: venueId,
+            activity_id: activity.id,
+            status: 'PENDING',
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      if (answers && answers.length > 0) {
+        await tx.partner_venue_answers.createMany({
+          data: answers.map((answer) => ({
+            id: randomUUID(),
+            venue_id: venueId,
+            question_id: answer.questionId,
+            answer: answer.answer,
+            updated_at: now,
+          })),
+        });
+      }
     });
 
-    venue.categories = categories;
-
-    const savedVenue = await this.venueRepository.save(venue);
-
-    if (services && services.length > 0) {
-      const venueServices = services.map((s) =>
-        this.venueServiceRepository.create({ ...s, venueId: savedVenue.id }),
-      );
-      await this.venueServiceRepository.save(venueServices);
-    }
-
-    if (answers && answers.length > 0) {
-      const venueAnswers = answers.map((a) =>
-        this.venueAnswerRepository.create({ ...a, venueId: savedVenue.id }),
-      );
-      await this.venueAnswerRepository.save(venueAnswers);
-    }
-
-    return this.findOne(savedVenue.id);
+    return {
+      id: venueId,
+      partnerId,
+      categoryIds,
+      categories: categories.map(({ id, name, slug }) => ({ id, name, slug })),
+      ...venueData,
+      status: VenueStatus.DRAFT,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   // Partner submits venue for admin review (draft → pending)
   async submitForReview(venueId: string, partnerId: string): Promise<Venue> {
-    const venue = await this.findOne(venueId);
+    const venue = await this.prisma.venues.findUnique({ where: { id: venueId } });
 
-    if (venue.partnerId !== partnerId) {
+    if (!venue) {
+      throw new NotFoundException(`Venue with id ${venueId} not found`);
+    }
+
+    if (venue.partner_id !== partnerId) {
       throw new ForbiddenException('You can only submit your own venues');
     }
 
-    if (venue.status !== VenueStatus.DRAFT) {
+    if (venue.status !== 'DRAFT') {
       throw new BadRequestException('Only draft venues can be submitted for review');
     }
 
-    // Delete any other orphaned drafts this partner has (except the one being submitted)
-    await this.venueRepository.delete({
-      partnerId,
-      status: VenueStatus.DRAFT,
-      id: Not(venueId),
-    });
+    const metadata = this.asRecord(venue.metadata);
+    await this.prisma.$transaction([
+      this.prisma.venues.update({
+        where: { id: venueId },
+        data: {
+          metadata: { ...metadata, submittedAt: new Date().toISOString() },
+        },
+      }),
+      this.prisma.partner_venue_services.updateMany({
+        where: { venue_id: venueId, status: 'DRAFT' },
+        data: { status: 'PENDING', updated_at: new Date() },
+      }),
+    ]);
 
-    venue.status = VenueStatus.PENDING;
-    return this.venueRepository.save(venue);
+    return this.findOne(venueId);
   }
 
   // Partner saves legal info with uploaded document URLs
@@ -155,48 +267,63 @@ export class VenuesService {
       gstinDocUrl?: string;
     },
     isAdmin = false,
-  ): Promise<Partner> {
-    const venue = await this.findOne(venueId);
+  ): Promise<any> {
+    const venue = await this.prisma.venues.findUnique({
+      where: { id: venueId },
+      include: { partners: { include: { partner_business_profiles: true } } },
+    });
 
-    if (!isAdmin && venue.partnerId !== callerId) {
+    if (!venue) {
+      throw new NotFoundException(`Venue with id ${venueId} not found`);
+    }
+
+    if (!isAdmin && venue.partner_id !== callerId) {
       throw new ForbiddenException('Access denied');
     }
 
-    const partnerId = isAdmin ? venue.partnerId : callerId;
-    const partner = await this.partnerRepository.findOne({ where: { id: partnerId } });
+    const partnerId = venue.partner_id;
+    const existingMetadata = this.asRecord(venue.metadata);
+    const existingLegalInfo = this.asRecord(existingMetadata.legalInfo);
+    const now = new Date();
+    const profileData = {
+      ...(legalData.panNumber !== undefined && { pan_number: legalData.panNumber }),
+      ...(legalData.gstNumber !== undefined && { gst_number: legalData.gstNumber }),
+      ...(legalData.panCardUrl !== undefined && { pan_document_url: legalData.panCardUrl }),
+      ...(legalData.gstinDocUrl !== undefined && { gst_document_url: legalData.gstinDocUrl }),
+      updated_at: now,
+    };
 
-    if (!partner) {
-      throw new NotFoundException('Partner profile not found');
-    }
+    const [, profile] = await this.prisma.$transaction([
+      this.prisma.venues.update({
+        where: { id: venueId },
+        data: {
+          metadata: {
+            ...existingMetadata,
+            legalInfo: { ...existingLegalInfo, ...legalData, updatedAt: now.toISOString() },
+          },
+        },
+      }),
+      this.prisma.partner_business_profiles.upsert({
+        where: { partner_id: partnerId },
+        update: profileData,
+        create: {
+          id: randomUUID(),
+          partner_id: partnerId,
+          ...profileData,
+        },
+      }),
+    ]);
 
-    let aadhaarTouched = false;
-    let panTouched     = false;
-    let gstTouched     = false;
-
-    if (legalData.aadhaarName !== undefined)    { partner.aadhaarName    = legalData.aadhaarName;    aadhaarTouched = true; }
-    if (legalData.aadhaarNumber !== undefined)  { partner.aadhaarNumber  = legalData.aadhaarNumber;  aadhaarTouched = true; }
-    if (legalData.aadhaarCardUrl !== undefined) { partner.aadhaarCardUrl = legalData.aadhaarCardUrl; aadhaarTouched = true; }
-    if (legalData.panNumber !== undefined)      { partner.panNumber      = legalData.panNumber;       panTouched = true; }
-    if (legalData.panCardUrl !== undefined)     { partner.panCardUrl     = legalData.panCardUrl;      panTouched = true; }
-    if (legalData.gstNumber !== undefined)      { partner.gstNumber      = legalData.gstNumber;       gstTouched = true; }
-    if (legalData.gstName !== undefined)        { partner.gstName        = legalData.gstName;         gstTouched = true; }
-    if (legalData.gstinDocUrl !== undefined)    { partner.gstinDocUrl    = legalData.gstinDocUrl;     gstTouched = true; }
-
-    await this.partnerRepository.save(partner);
-
-    const setClauses: string[] = [];
-    if (aadhaarTouched) setClauses.push(`aadhaar_verified_at = NOW()`);
-    if (panTouched)     setClauses.push(`pan_verified_at = NOW()`);
-    if (gstTouched)     setClauses.push(`gst_verified_at = NOW()`);
-
-    if (setClauses.length > 0) {
-      await this.dataSource.query(
-        `UPDATE partners SET ${setClauses.join(', ')} WHERE id = $1`,
-        [partnerId],
-      );
-    }
-
-    return this.partnerRepository.findOne({ where: { id: partnerId } });
+    return {
+      id: venue.partners.id,
+      legalName: venue.partners.legal_name,
+      panNumber: profile.pan_number,
+      gstNumber: profile.gst_number,
+      panCardUrl: profile.pan_document_url,
+      gstinDocUrl: profile.gst_document_url,
+      ...legalData,
+      updatedAt: profile.updated_at,
+    };
   }
 
   // Partner accepts terms and provides electronic signature
@@ -205,17 +332,33 @@ export class VenuesService {
     partnerId: string,
     electronicSignature: string,
   ): Promise<Venue> {
-    const venue = await this.findOne(venueId);
+    const venue = await this.prisma.venues.findUnique({
+      where: { id: venueId },
+      include: { partner_venue_profiles: true },
+    });
 
-    if (venue.partnerId !== partnerId) {
+    if (!venue) {
+      throw new NotFoundException(`Venue with id ${venueId} not found`);
+    }
+
+    if (venue.partner_id !== partnerId) {
       throw new ForbiddenException('You can only sign your own venue agreements');
     }
 
-    venue.termsAccepted = true;
-    venue.termsAcceptedAt = new Date();
-    venue.electronicSignature = electronicSignature;
+    const acceptedAt = new Date();
+    const metadata = this.asRecord(venue.metadata);
+    await this.prisma.$transaction([
+      this.prisma.venues.update({
+        where: { id: venueId },
+        data: { metadata: { ...metadata, electronicSignature } },
+      }),
+      this.prisma.partner_venue_profiles.update({
+        where: { venue_id: venueId },
+        data: { terms_accepted_at: acceptedAt, updated_at: acceptedAt },
+      }),
+    ]);
 
-    return this.venueRepository.save(venue);
+    return this.findOne(venueId);
   }
 
   // Downloads the official branded Partner Agreement PDF with the
@@ -487,26 +630,133 @@ export class VenuesService {
   }
 
   async findOne(id: string): Promise<Venue> {
-    const venue = await this.venueRepository.findOne({
+    const venue = await this.prisma.venues.findUnique({
       where: { id },
-      relations: ['categories', 'partner', 'images', 'services', 'answers', 'answers.question'],
+      include: {
+        partners: {
+          include: {
+            partner_business_profiles: true,
+            partner_users: { include: { users: true } },
+          },
+        },
+        partner_venue_profiles: true,
+        partner_venue_images: { orderBy: { sort_order: 'asc' } },
+        partner_venue_services: {
+          include: { partner_service_categories: true },
+        },
+        partner_venue_answers: {
+          include: { partner_service_questions: true },
+        },
+      },
     });
 
     if (!venue) {
       throw new NotFoundException(`Venue with id ${id} not found`);
     }
 
-    return venue;
+    const metadata = this.asRecord(venue.metadata);
+    const profile = venue.partner_venue_profiles;
+    const businessProfile = venue.partners.partner_business_profiles;
+    const owner = venue.partners.partner_users[0]?.users;
+    const ownerNames = (owner?.name || '').trim().split(/\s+/);
+
+    return {
+      id: venue.id,
+      partnerId: venue.partner_id,
+      partner: {
+        id: venue.partner_id,
+        firstName: ownerNames[0] || null,
+        lastName: ownerNames.slice(1).join(' ') || null,
+        email: owner?.email ?? businessProfile?.email ?? null,
+        phone: owner?.phone_e164 ?? businessProfile?.phone_e164 ?? null,
+        businessName: businessProfile?.business_name ?? venue.partners.legal_name,
+      } as Partner,
+      categories: venue.partner_venue_services.map((service) => ({
+        id: service.partner_service_categories.id,
+        name: service.partner_service_categories.name,
+        description: service.partner_service_categories.description,
+      })) as Category[],
+      name: profile?.display_name || venue.name,
+      description: profile?.description ?? null,
+      address: profile?.address_line_1 ?? null,
+      city: profile?.city || venue.city_code,
+      state: profile?.state ?? null,
+      country: 'India',
+      zipCode: profile?.postal_code ?? null,
+      latitude: Number(venue.latitude),
+      longitude: Number(venue.longitude),
+      openingTime: metadata.openingTime as string ?? null,
+      closingTime: metadata.closingTime as string ?? null,
+      availability: metadata.availability as Venue['availability'] ?? null,
+      amenities: Array.isArray(profile?.amenities) ? profile.amenities as string[] : [],
+      rules: metadata.rules as string ?? null,
+      phone: metadata.ownerPhone as string ?? null,
+      venuePhone: profile?.contact_phone_e164 ?? null,
+      locationUrl: metadata.locationUrl as string ?? null,
+      flatBuilding: profile?.address_line_2 ?? null,
+      venueAddress: profile?.address_line_1 ?? null,
+      termsAccepted: Boolean(profile?.terms_accepted_at),
+      termsAcceptedAt: profile?.terms_accepted_at ?? null,
+      electronicSignature: metadata.electronicSignature as string ?? null,
+      status: venue.status === 'PUBLISHED'
+        ? VenueStatus.APPROVED
+        : venue.status === 'ARCHIVED' ? VenueStatus.REJECTED : VenueStatus.DRAFT,
+      isActive: venue.status === 'PUBLISHED',
+      bookingAccept: metadata.bookingAccept !== false,
+      hasSeenWelcome: metadata.hasSeenWelcome === true,
+      commission: Number(metadata.commission ?? 10),
+      images: venue.partner_venue_images.map((image) => ({
+        id: image.id,
+        venueId: image.venue_id,
+        imageUrl: image.url,
+        isPrimary: image.is_primary,
+        caption: image.caption,
+        createdAt: image.created_at,
+      })) as VenueImage[],
+      services: venue.partner_venue_services.map((service) => ({
+        id: service.id,
+        venueId: service.venue_id,
+        categoryId: service.service_category_id,
+        name: service.title,
+        description: service.description,
+        pricePerHour: service.price_per_hour_paise == null
+          ? null
+          : Number(service.price_per_hour_paise) / 100,
+        status: service.status.toLowerCase(),
+      })) as VenueService[],
+      answers: venue.partner_venue_answers.map((answer) => ({
+        id: answer.id,
+        venueId: answer.venue_id,
+        venueServiceId: answer.venue_service_id,
+        questionId: answer.question_id,
+        answer: answer.answer,
+        question: {
+          id: answer.partner_service_questions.id,
+          question: answer.partner_service_questions.question,
+        },
+        createdAt: answer.created_at,
+        updatedAt: answer.updated_at,
+      })) as unknown as VenueAnswer[],
+      createdAt: profile?.created_at ?? new Date(0),
+      updatedAt: profile?.updated_at ?? new Date(0),
+    } as Venue;
+  }
+
+  private asRecord(value: unknown): Record<string, any> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, any>
+      : {};
   }
 
   async setAvailability(
     venueId: string,
     venueTiming: Record<string, Record<string, Array<{ open: string; close: string; capacity?: number; price?: number; discountedPrice?: number }>>>,
     partnerId: string,
-  ): Promise<Venue> {
-    const venue = await this.findOne(venueId);
+  ): Promise<any> {
+    const venue = await this.prisma.venues.findUnique({ where: { id: venueId } });
+    if (!venue) throw new NotFoundException(`Venue with id ${venueId} not found`);
 
-    if (venue.partnerId !== partnerId) {
+    if (venue.partner_id !== partnerId) {
       throw new ForbiddenException('You can only update your own venue');
     }
 
@@ -516,9 +766,14 @@ export class VenuesService {
     // independently-managed activities (categories), each calling this endpoint
     // for just its own categoryId. Overwriting the whole object would wipe out
     // every other activity's slots.
-    const availability: Record<string, Array<{ day: string; slots: Array<{ openTime: string; closeTime: string; capacity: number; price: number; discountedPrice: number }> }>> = {
-      ...(venue.availability || {}),
-    };
+    const metadata =
+      venue.metadata && typeof venue.metadata === 'object' && !Array.isArray(venue.metadata)
+        ? venue.metadata as Record<string, any>
+        : {};
+    const availability: Record<string, Array<{ day: string; slots: Array<{ openTime: string; closeTime: string; capacity: number; price: number; discountedPrice: number }> }>> =
+      metadata.availability && typeof metadata.availability === 'object'
+        ? { ...metadata.availability }
+        : {};
 
     for (const [catId, dayMap] of Object.entries(venueTiming)) {
       const days = Object.entries(dayMap)
@@ -543,8 +798,37 @@ export class VenuesService {
       }
     }
 
-    venue.availability = availability;
-    return this.venueRepository.save(venue);
+    const updated = await this.prisma.venues.update({
+      where: { id: venueId },
+      data: { metadata: { ...metadata, availability } },
+    });
+
+    for (const [categoryId, categoryAvailability] of Object.entries(availability)) {
+      const service = await this.prisma.partner_venue_services.findFirst({
+        where: { venue_id: venueId, service_category_id: categoryId },
+      });
+      if (!service) continue;
+      const onboardingData =
+        service.onboarding_data &&
+        typeof service.onboarding_data === 'object' &&
+        !Array.isArray(service.onboarding_data)
+          ? service.onboarding_data as Record<string, any>
+          : {};
+      await this.prisma.partner_venue_services.update({
+        where: { id: service.id },
+        data: {
+          onboarding_data: { ...onboardingData, availability: categoryAvailability },
+          updated_at: new Date(),
+        },
+      });
+    }
+
+    return {
+      id: updated.id,
+      partnerId: updated.partner_id,
+      availability,
+      status: updated.status.toLowerCase(),
+    };
   }
 
   // Save / upsert answers for a venue's category questions
@@ -553,31 +837,50 @@ export class VenuesService {
     answers: Array<{ questionId: string; answer: any }>,
     partnerId: string,
     venueServiceId?: string,
-  ): Promise<VenueAnswer[]> {
-    const venue = await this.findOne(venueId);
+  ): Promise<any[]> {
+    const venue = await this.prisma.venues.findUnique({ where: { id: venueId } });
+    if (!venue) throw new NotFoundException(`Venue with id ${venueId} not found`);
 
-    if (venue.partnerId !== partnerId) {
+    if (venue.partner_id !== partnerId) {
       throw new ForbiddenException('You can only save answers for your own venues');
     }
 
-    const saved: VenueAnswer[] = [];
+    const partnerUser = await this.prisma.partner_users.findFirst({
+      where: { partner_id: partnerId },
+      orderBy: { role: 'desc' },
+    });
+    const saved: any[] = [];
 
     for (const { questionId, answer } of answers) {
-      const existing = await this.venueAnswerRepository.findOne({
-        where: { venueId, questionId, ...(venueServiceId ? { venueServiceId } : { venueServiceId: IsNull() }) },
+      const existing = await this.prisma.partner_venue_answers.findFirst({
+        where: {
+          venue_id: venueId,
+          question_id: questionId,
+          venue_service_id: venueServiceId ?? null,
+        },
       });
 
       if (existing) {
-        existing.answer = answer;
-        saved.push(await this.venueAnswerRepository.save(existing));
+        saved.push(await this.prisma.partner_venue_answers.update({
+          where: { id: existing.id },
+          data: {
+            answer,
+            answered_by_partner_user_id: partnerUser?.id ?? null,
+            updated_at: new Date(),
+          },
+        }));
       } else {
-        const newAnswer = this.venueAnswerRepository.create({
-          venueId,
-          questionId,
-          answer,
-          ...(venueServiceId ? { venueServiceId } : {}),
-        });
-        saved.push(await this.venueAnswerRepository.save(newAnswer));
+        saved.push(await this.prisma.partner_venue_answers.create({
+          data: {
+            id: randomUUID(),
+            venue_id: venueId,
+            venue_service_id: venueServiceId ?? null,
+            question_id: questionId,
+            answered_by_partner_user_id: partnerUser?.id ?? null,
+            answer,
+            updated_at: new Date(),
+          },
+        }));
       }
     }
 
@@ -613,7 +916,10 @@ export class VenuesService {
   }
 
   async processApproval(id: string, approvalDto: VenueApprovalDto, adminId: string): Promise<Venue> {
-    const venue = await this.findOne(id);
+    const venue = await this.prisma.venues.findUnique({ where: { id } });
+    if (!venue) {
+      throw new NotFoundException(`Venue with id ${id} not found`);
+    }
 
     if (
       approvalDto.status === VenueStatus.REJECTED ||
@@ -622,58 +928,91 @@ export class VenuesService {
       if (!approvalDto.reason) {
         throw new BadRequestException('Reason is required when rejecting or suspending a venue');
       }
-      venue.rejectionReason = approvalDto.reason;
     }
 
-    if (approvalDto.status === VenueStatus.APPROVED) {
-      venue.approvedAt = new Date();
-      venue.approvedBy = adminId;
-      venue.rejectionReason = null;
-      // Auto-generate password and send email to partner
-      await this.handlePartnerApproval(venue);
+    const now = new Date();
+    const metadata = this.asRecord(venue.metadata);
+    const approved = approvalDto.status === VenueStatus.APPROVED;
+    const rejected = approvalDto.status === VenueStatus.REJECTED;
+
+    await this.prisma.$transaction([
+      this.prisma.venues.update({
+        where: { id },
+        data: {
+          status: approved ? 'PUBLISHED' : 'ARCHIVED',
+          metadata: {
+            ...metadata,
+            approvedAt: approved ? now.toISOString() : null,
+            approvedBy: approved ? adminId : null,
+            rejectionReason: approved ? null : approvalDto.reason,
+            reviewStatus: approvalDto.status,
+          },
+        },
+      }),
+      this.prisma.partner_venue_services.updateMany({
+        where: { venue_id: id, status: { in: ['DRAFT', 'PENDING'] } },
+        data: approved
+          ? {
+              status: 'APPROVED', approved_at: now, approved_by: adminId,
+              rejection_reason: null, updated_at: now,
+            }
+          : {
+              status: 'REJECTED', rejection_reason: approvalDto.reason, updated_at: now,
+            },
+      }),
+    ]);
+
+    const updatedVenue = await this.findOne(id);
+    if (approved) {
+      await this.handlePartnerApproval(updatedVenue);
+    } else if (rejected) {
+      await this.handlePartnerRejection(updatedVenue, approvalDto.reason);
     }
 
-    if (approvalDto.status === VenueStatus.REJECTED) {
-      await this.handlePartnerRejection(venue, approvalDto.reason);
-    }
-
-    venue.status = approvalDto.status;
-    const saved = await this.venueRepository.save(venue);
-
-    // Auto-approve draft services AFTER venue save to prevent cascade overwrite.
-    // { cascade: true } on venue.services would re-save in-memory draft status
-    // if the update ran before venueRepository.save().
-    if (approvalDto.status === VenueStatus.APPROVED) {
-      await this.venueServiceRepository
-        .createQueryBuilder()
-        .update()
-        .set({ status: VenueServiceStatus.APPROVED, approvedAt: new Date(), approvedBy: adminId })
-        .where('venue_id = :venueId AND status = :status', { venueId: venue.id, status: 'draft' })
-        .execute();
-    }
-
-    return saved;
+    return this.findOne(id);
   }
 
   private async handlePartnerApproval(venue: Venue): Promise<void> {
-    const partner = await this.partnerRepository.findOne({ where: { id: venue.partnerId } });
+    const partner = await this.prisma.partners.findUnique({
+      where: { id: venue.partnerId },
+      include: {
+        partner_business_profiles: true,
+        partner_users: { include: { users: true } },
+      },
+    });
 
     if (!partner) return;
 
     // Skip if email is not yet set (phone-only OTP registration not yet completed)
-    if (!partner.email) return;
+    const partnerUser = partner.partner_users.find(
+      (link) => link.role === 'PARTNER_ADMIN',
+    ) ?? partner.partner_users[0];
+    if (!partnerUser?.users.email) return;
 
     // Generate a strong readable password
     const password = this.generatePassword();
 
     // Hash and save — also activate the partner account
     const hashedPassword = await bcrypt.hash(password, 10);
-    await this.partnerRepository.update(partner.id, { password: hashedPassword, isActive: true });
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.users.update({
+        where: { id: partnerUser.user_id },
+        data: { password_hash: hashedPassword, status: 'ACTIVE', updated_at: now },
+      }),
+      this.prisma.partners.update({
+        where: { id: partner.id },
+        data: { status: 'ACTIVE', updated_at: now },
+      }),
+    ]);
 
     // Send email with credentials
     await this.mailService.sendPartnerApprovalEmail({
-      toEmail: partner.email,
-      partnerName: partner.fullName || partner.businessName,
+      toEmail: partnerUser.users.email,
+      partnerName: partnerUser.users.name
+        || partner.partner_business_profiles?.owner_name
+        || partner.partner_business_profiles?.business_name
+        || partner.legal_name,
       venueName: venue.name,
       password,
     });
@@ -695,15 +1034,26 @@ export class VenuesService {
   }
 
   private async handlePartnerRejection(venue: Venue, reason: string): Promise<void> {
-    const partner = await this.partnerRepository.findOne({ where: { id: venue.partnerId } });
+    const partner = await this.prisma.partners.findUnique({
+      where: { id: venue.partnerId },
+      include: {
+        partner_business_profiles: true,
+        partner_users: { include: { users: true } },
+      },
+    });
+    const partnerUser = partner?.partner_users.find(
+      (link) => link.role === 'PARTNER_ADMIN',
+    ) ?? partner?.partner_users[0];
+    if (!partner || !partnerUser?.users.email) return;
 
-    if (!partner || !partner.email) return;
-
-    const fullName = partner.fullName || partner.businessName || '';
+    const fullName = partnerUser.users.name
+      || partner.partner_business_profiles?.owner_name
+      || partner.partner_business_profiles?.business_name
+      || partner.legal_name;
     const firstName = fullName.split(' ')[0];
 
     await this.mailService.sendPartnerRejectionEmail({
-      toEmail: partner.email,
+      toEmail: partnerUser.users.email,
       firstName,
       venueId: venue.id,
       rejectionReason: reason,
@@ -741,40 +1091,119 @@ export class VenuesService {
     userRole?: string,
     categoryId?: string,
     amenities?: string[],
-  ): Promise<VenueService> {
-    const venue = await this.findOne(venueId);
+  ): Promise<any> {
+    const venue = await this.prisma.venues.findUnique({
+      where: { id: venueId },
+    });
 
-    if (userRole !== UserRole.ADMIN && venue.partnerId !== userId) {
+    if (!venue) {
+      throw new NotFoundException(`Venue with id ${venueId} not found`);
+    }
+
+    if (userRole !== UserRole.ADMIN && venue.partner_id !== userId) {
       throw new ForbiddenException('You can only update images for your own venue services');
     }
 
-    // Find existing service by name, or create it
-    let service = await this.venueServiceRepository.findOne({
-      where: { venueId, name: serviceName },
+    let service = await this.prisma.partner_venue_services.findFirst({
+      where: {
+        venue_id: venueId,
+        ...(categoryId
+          ? { service_category_id: categoryId }
+          : { title: { equals: serviceName, mode: 'insensitive' } }),
+      },
     });
 
     if (!service) {
-      service = this.venueServiceRepository.create({
-        venueId,
-        name: serviceName,
-        pricePerHour: 0,
-        imageUrls: [],
-        ...(categoryId ? { categoryId } : {}),
-        ...(amenities && amenities.length > 0 ? { amenities } : {}),
+      const category = categoryId
+        ? await this.prisma.partner_service_categories.findUnique({
+            where: { id: categoryId },
+          })
+        : await this.prisma.partner_service_categories.findFirst({
+            where: { name: { equals: serviceName, mode: 'insensitive' } },
+          });
+      if (!category) {
+        throw new BadRequestException('A valid categoryId is required for this activity');
+      }
+
+      service = await this.prisma.partner_venue_services.create({
+        data: {
+          id: randomUUID(),
+          venue_id: venueId,
+          service_category_id: category.id,
+          title: serviceName || category.name,
+          status: 'DRAFT',
+          onboarding_data: {},
+          updated_at: new Date(),
+        },
       });
-    } else {
-      if (categoryId && !service.categoryId) service.categoryId = categoryId;
-      if (amenities && amenities.length > 0) service.amenities = amenities;
     }
 
-    service.imageUrls = [...(service.imageUrls || []), ...newUrls];
+    const currentData =
+      service.onboarding_data &&
+      typeof service.onboarding_data === 'object' &&
+      !Array.isArray(service.onboarding_data)
+        ? service.onboarding_data as Record<string, any>
+        : {};
+    const existingUrls = Array.isArray(currentData.imageUrls)
+      ? currentData.imageUrls.filter((url): url is string => typeof url === 'string')
+      : [];
+    const imageUrls = [...existingUrls, ...newUrls];
+    const serviceAmenities = amenities?.length
+      ? amenities
+      : Array.isArray(currentData.amenities)
+        ? currentData.amenities
+        : [];
 
-    // Auto-set cover photo from first image if not already set
-    if (!service.imageUrl && newUrls.length > 0) {
-      service.imageUrl = newUrls[0];
+    service = await this.prisma.partner_venue_services.update({
+      where: { id: service.id },
+      data: {
+        onboarding_data: {
+          ...currentData,
+          imageUrls,
+          coverImageUrl: currentData.coverImageUrl || imageUrls[0] || null,
+          amenities: serviceAmenities,
+        },
+        updated_at: new Date(),
+      },
+    });
+
+    if (newUrls.length > 0) {
+      const [imageCount, uploader] = await Promise.all([
+        this.prisma.partner_venue_images.count({ where: { venue_id: venueId } }),
+        this.prisma.partner_users.findFirst({
+          where: { partner_id: venue.partner_id },
+          orderBy: { role: 'desc' },
+        }),
+      ]);
+      await this.prisma.partner_venue_images.createMany({
+        data: newUrls.map((url, index) => ({
+          id: randomUUID(),
+          venue_id: venueId,
+          uploaded_by_partner_user_id: uploader?.id ?? null,
+          url,
+          caption: serviceName,
+          sort_order: imageCount + index,
+          is_primary: imageCount === 0 && index === 0,
+          metadata: {
+            serviceId: service.id,
+            serviceCategoryId: service.service_category_id,
+          },
+          updated_at: new Date(),
+        })),
+      });
     }
 
-    return this.venueServiceRepository.save(service);
+    return {
+      id: service.id,
+      venueId: service.venue_id,
+      categoryId: service.service_category_id,
+      name: service.title,
+      description: service.description,
+      imageUrl: imageUrls[0] ?? null,
+      imageUrls,
+      amenities: serviceAmenities,
+      status: service.status.toLowerCase(),
+    };
   }
 
   async setServiceCover(serviceId: string, coverUrl: string, partnerId: string): Promise<VenueService> {
