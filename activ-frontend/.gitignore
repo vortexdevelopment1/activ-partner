@@ -73,5 +73,7 @@ logs/
 # Environment
 .env
 *.env
+.env.*
+!.env.example
 
 # Web

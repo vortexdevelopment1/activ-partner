@@ -1,10 +1,11 @@
 import axios from 'axios';
 
-const LOCAL_API_URL =
-  import.meta.env.VITE_LOCAL_API_URL || 'http://localhost:3000/api/v1';
-const DEPLOYED_API_URL =
-  import.meta.env.VITE_API_URL ||
-  'https://activ-partner.onrender.com/api/v1';
+const LOCAL_API_URL = import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') || '';
+const DEPLOYED_API_URL = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
+
+if (!LOCAL_API_URL && !DEPLOYED_API_URL) {
+  throw new Error('Set VITE_API_URL or VITE_LOCAL_API_URL in the admin .env file.');
+}
 
 const LOCAL_CHECK_TIMEOUT_MS = 5000;
 const LOCAL_RECHECK_INTERVAL_MS = 5000;
@@ -14,6 +15,8 @@ let lastLocalCheckAt = 0;
 let selectionInProgress: Promise<string> | undefined;
 
 const selectApiUrl = () => {
+  if (!LOCAL_API_URL) return Promise.resolve(DEPLOYED_API_URL);
+  if (!DEPLOYED_API_URL) return Promise.resolve(LOCAL_API_URL);
   if (activeApiUrl === LOCAL_API_URL) return Promise.resolve(LOCAL_API_URL);
 
   const now = Date.now();
@@ -53,7 +56,9 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  config.baseURL = await selectApiUrl();
+  const isFallback = (config as typeof config & { _renderFallbackAttempted?: boolean })
+    ._renderFallbackAttempted;
+  config.baseURL = isFallback ? DEPLOYED_API_URL : await selectApiUrl();
 
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -68,6 +73,7 @@ api.interceptors.response.use(
       | undefined;
 
     if (
+      DEPLOYED_API_URL &&
       !error.response &&
       config?.baseURL === LOCAL_API_URL &&
       !config._renderFallbackAttempted

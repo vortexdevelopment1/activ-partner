@@ -20,23 +20,33 @@ const onboardingActivityReviewStep = 5;
 const onboardingLegalStep = 6;
 const onboardingReviewStep = 7;
 
-const LOCAL_API_URL = String.fromEnvironment(
-  "LOCAL_API_URL",
-  defaultValue: "http://localhost:3000/api/v1",
-);
-const DEPLOYED_API_URL = String.fromEnvironment(
-  "API_URL",
-  defaultValue: "https://activ-partner.onrender.com/api/v1",
-);
+const LOCAL_API_URL = String.fromEnvironment("LOCAL_API_URL");
+const DEPLOYED_API_URL = String.fromEnvironment("API_URL");
 
-String BASE_URL = DEPLOYED_API_URL;
+String BASE_URL = (DEPLOYED_API_URL.trim().isNotEmpty
+        ? DEPLOYED_API_URL
+        : LOCAL_API_URL)
+    .trim()
+    .replaceFirst(RegExp(r'/+$'), '');
 
 Future<void> initializeApiBaseUrl() async {
-  final localCandidates = <String>[LOCAL_API_URL];
+  final localUrl = LOCAL_API_URL.trim().replaceFirst(RegExp(r'/+$'), '');
+  final deployedUrl = DEPLOYED_API_URL.trim().replaceFirst(RegExp(r'/+$'), '');
+  if (localUrl.isEmpty && deployedUrl.isEmpty) {
+    throw StateError(
+      'Set API_URL or LOCAL_API_URL in .env and run Flutter with '
+      '--dart-define-from-file=.env.',
+    );
+  }
+  if (localUrl.isEmpty) {
+    BASE_URL = deployedUrl;
+    return;
+  }
+  final localCandidates = <String>[localUrl];
   if (!kIsWeb &&
       defaultTargetPlatform == TargetPlatform.android &&
-      LOCAL_API_URL.contains('localhost')) {
-    localCandidates.add(LOCAL_API_URL.replaceFirst('localhost', '10.0.2.2'));
+      Uri.parse(localUrl).host == 'localhost') {
+    localCandidates.add(localUrl.replaceFirst('localhost', '10.0.2.2'));
   }
 
   for (final candidate in localCandidates.toSet()) {
@@ -51,11 +61,11 @@ Future<void> initializeApiBaseUrl() async {
         return;
       }
     } catch (_) {
-      // Try the next local address before falling back to Render.
+      // Try the next local address before falling back to the deployed backend.
     }
   }
 
-  BASE_URL = DEPLOYED_API_URL;
+  BASE_URL = deployedUrl.isNotEmpty ? deployedUrl : localCandidates.last;
 }
 
 String get REQUEST_OTP_URL => "$BASE_URL/auth/partner/request-otp";
