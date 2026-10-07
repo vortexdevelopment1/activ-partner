@@ -1,991 +1,423 @@
 import 'dart:convert';
 
-import 'package:activ_app/Screens/ContactSupportScreen.dart';
-import 'package:activ_app/Screens/StringExtensions.dart';
-import 'package:activ_app/Style/app_colors.dart';
-import 'package:activ_app/Style/constants_messages.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
-import '../Style/app_size.dart';
+import 'package:intl/intl.dart';
+
+import '../Style/app_colors.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import '../api_calling/progress_bar/progress_bar.dart';
 import 'CommonCode.dart';
+import 'ContactSupportScreen.dart';
+import 'onboarding_widgets.dart';
 
 class ReviewSignAgreement extends StatefulWidget {
-  const ReviewSignAgreement({super.key});
+  const ReviewSignAgreement({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<ReviewSignAgreement> createState() => _State();
 }
 
 class _State extends State<ReviewSignAgreement> {
+  final _signature = TextEditingController();
+  final _documentScroll = ScrollController();
+  final _signingDate = DateTime.now();
+  String _content = '';
+  String? _error;
+  bool _loading = true, _accepted = false, _submitting = false;
+  bool _downloading = false;
+  static const _purple = Color(0xFFA634FF);
 
-  TextEditingController fullNameController = TextEditingController();
-
-  bool isButtonEnabled = false;
-  bool isChecked = false;
-  String phoneCode = "", userMobileNumber = "", fullNameSign="", todayDate="", fromDate="", setSelectDate="";
-
-  String physicalSetup = "", activityVariation = "", equipmentProvided = "", participantsFollow = "", safetyMeasures = "", activitySuited = "",
-  anythingElse = "", ownerFullName = "", ownerEmail = "", ownerMobileNumber = "", sameAsOwnerNumber = "", operateSaveValueStr = "", venueDetailsSaveValueStr = "",
-  placeOfferSaveValueStr = "", sameAsOwnerNumberChecked="";
-
-  dynamic operateSaveValue = <String, dynamic>{};
-  Map<String, dynamic> venueDetailsSaveValue = {};
-  Map<String, dynamic> placeOfferSaveValue = {};
-
-  int currentStep = onboardingReviewStep;
-  final int totalSteps = totalSetup;
-
-  void nextStep() {
-    if (currentStep < totalSteps) {
-      setState(() {
-        currentStep++;
-      });
-    }
-  }
-
-  void prevStep() {
-    if (currentStep > 1) {
-      setState(() {
-        currentStep--;
-      });
-    }
-  }
-
-  _State()
-  {
-    getData();
-  }
+  bool get _canFinish =>
+      !_loading &&
+      _content.isNotEmpty &&
+      _accepted &&
+      _signature.text.trim().isNotEmpty &&
+      !_submitting;
 
   @override
   void initState() {
     super.initState();
-
-    // Listener to update text automatically
-    fullNameController.addListener(() {
-      setState(() {
-        fullNameSign = fullNameController.text;
-      });
-    });
-  }
-
-  getData() async
-  {
-    phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
-    userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-
-    /*physicalSetup = checkString(await SharedPreference.readStr("physical_setup"));
-    activityVariation = checkString(await SharedPreference.readStr("activity_variation"));
-    equipmentProvided = checkString(await SharedPreference.readStr("equipment_provided"));
-    participantsFollow = checkString(await SharedPreference.readStr("participants_follow"));
-    safetyMeasures = checkString(await SharedPreference.readStr("safety_measures"));
-    activitySuited = checkString(await SharedPreference.readStr("activity_suited"));
-    anythingElse = checkString(await SharedPreference.readStr("anything_else"));*/
-
-    ownerFullName = checkString(await SharedPreference.readStr("owner_full_name"));
-    ownerEmail = checkString(await SharedPreference.readStr("owner_email"));
-    ownerMobileNumber = checkString(await SharedPreference.readStr("owner_mobile_number"));
-    sameAsOwnerNumber = checkString(await SharedPreference.readStr("same_as_owner_number"));
-    sameAsOwnerNumberChecked = checkString(await SharedPreference.readStr("same_as_owner_number_checked"));
-
-    print("------sameAsOwnerNumber : " + sameAsOwnerNumber.toString());
-
-    if(sameAsOwnerNumber == "true")
-    {
-      sameAsOwnerNumber = checkString(await SharedPreference.readStr("owner_mobile_number"));
-    }
-    else{}
-
-    operateSaveValueStr = checkString(await SharedPreference.readStr("operate_value"));
-    venueDetailsSaveValueStr = checkString(await SharedPreference.readStr("venue_details"));
-    placeOfferSaveValueStr = checkString(await SharedPreference.readStr("place_offer"));
-
-    if (operateSaveValueStr.isNotEmpty) {
-      operateSaveValue = jsonDecode(operateSaveValueStr);
-    }
-
-    if (venueDetailsSaveValueStr.isNotEmpty) {
-      venueDetailsSaveValue = jsonDecode(venueDetailsSaveValueStr);
-    }
-
-    if (placeOfferSaveValueStr.isNotEmpty) {
-      placeOfferSaveValue = jsonDecode(placeOfferSaveValueStr);
-    }
-
-    getCurrentDate();
-  }
-
-  Future<void> _showLegalPopup(String type) async {
-    try {
-      await initializeApiBaseUrl();
-      if (!mounted) return;
-      final response = await http.get(Uri.parse(LEGAL_URL))
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
-        if (!mounted) return;
-        CommonUtilities.createSnackBar(context, 'Failed to load content.');
-        return;
-      }
-      final body = jsonDecode(response.body);
-      final List<dynamic> items = body['data'] ?? [];
-      Map<String, dynamic>? item;
-      for (final entry in items) {
-        if (entry is Map<String, dynamic> && entry['type'] == type) {
-          item = entry;
-          break;
-        }
-      }
-      if (item == null) {
-        if (!mounted) return;
-        CommonUtilities.createSnackBar(context, 'Content not available.');
-        return;
-      }
-      final String title = (type == 'terms_and_conditions') ? 'Terms & Conditions' : 'Privacy Policy';
-      final String rawContent = item['content'] ?? '';
-      final String cleanContent = rawContent.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 8, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: AppSize.size_16,
-                          fontFamily: 'FontSemiBold',
-                          color: AppColors.darkBlack,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                      color: AppColors.darkBlack,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    cleanContent,
-                    style: const TextStyle(
-                      fontSize: AppSize.size_14,
-                      fontFamily: 'FontRegular',
-                      color: AppColors.darkBlack,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      CommonUtilities.showLog('Legal popup error: $e');
-      if (!mounted) return;
-      CommonUtilities.createSnackBar(context, 'Network error. Please try again.');
-    }
-  }
-
-  void getCurrentDate()
-  {
-    DateTime today = DateTime.now(); // Get Today Date
-    todayDate = today.toString();
-    String formatedDate1 = CommonUtilities.converDateFormate(todayDate, "DD-MM-YYYY", "yyyy-MM-dd HH:mm:ss"); //2022-09-29T08:07:48.000Z
-    fromDate = CommonUtilities.converDateFormate(formatedDate1, "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd");
-    setSelectDate = CommonUtilities.converDateFormate(fromDate, "yyyy-MM-dd", "MMMM dd, yyyy");
+    _loadAgreement();
   }
 
   @override
   void dispose() {
-    fullNameController.dispose();
+    _signature.dispose();
+    _documentScroll.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-
-    double progress = currentStep / totalSteps;
-
-    return Container(
-      child: Stack(
-        children: [
-          /*To Set Top Header Color*/
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.yellowTop,
-            ),
-          ),
-          /*To Set Bottom Header Color*/
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.white,
-            ),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double width = constraints.maxWidth;
-
-                    bool isMobile = width < 600;
-                    bool isTablet = width >= 600 && width < 1100;
-
-                    double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
-
-                    return Container(
-                      //width: containerWidth,
-                      //margin: const EdgeInsets.only(right: 20),
-                      //padding: EdgeInsets.all(isMobile ? 20 : 30),
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-
-                            Expanded(
-                              child: Container(
-                                margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
-                                child: ListView(
-                                  shrinkWrap: true,
-                                  children: [
-
-                                    getActivIcon(),
-
-                                    getStepBar(progress),
-
-                                    getText(),
-
-                                    getSubText(),
-
-                                    Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          /*Checkbox(
-                                            value: isChecked,
-                                            onChanged: (value) {
-                                              setState(() {
-                                                isChecked = value ?? false;
-                                              });
-                                            },
-                                          ),*/
-                                          Transform.translate(
-                                            offset: const Offset(0, 0),
-                                            child: Checkbox(
-                                              value: isChecked,
-                                              onChanged: (value) {
-                                                setState(() {
-                                                  isChecked = value!;
-                                                });
-                                              },
-                                              activeColor: AppColors.black, // Tick color
-                                              checkColor: AppColors.white,  // Tick icon color
-                                              side: BorderSide(color: AppColors.black, width: 2), // Border style
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Container(
-                                              alignment: Alignment.centerLeft,
-                                              margin: const EdgeInsets.only(left: 8, top: 2),
-                                              child: RichText(
-                                                text: TextSpan(
-                                                  style: const TextStyle(
-                                                    fontSize: AppSize.size_16,
-                                                    fontFamily: 'FontRegular',
-                                                    color: AppColors.darkBlack,
-                                                  ),
-                                                  children: [
-                                                    const TextSpan(text: "I agree to the ",
-                                                      style: TextStyle(
-                                                          fontSize: AppSize.size_14,
-                                                          fontFamily: 'FontRegular',
-                                                          color: AppColors.darkBlack,
-                                                          height: 1
-                                                      ),),
-                                                    TextSpan(
-                                                      text: "Terms of Service",
-                                                      style: const TextStyle(
-                                                          fontSize: AppSize.size_14,
-                                                          fontFamily: 'FontMedium',
-                                                          color: AppColors.purple
-                                                      ),
-                                                      recognizer: TapGestureRecognizer()
-                                                        ..onTap = () {
-                                                          _showLegalPopup('terms_and_conditions');
-                                                        },
-                                                    ),
-                                                    const TextSpan(text: " and ",style: TextStyle(
-                                                        fontSize: AppSize.size_14,
-                                                        fontFamily: 'FontRegular',
-                                                        color: AppColors.darkBlack,
-                                                        height: 1
-                                                    ),),
-                                                    TextSpan(
-                                                      text: "Privacy Policy",
-                                                      style: const TextStyle(
-                                                          fontSize: AppSize.size_14,
-                                                          fontFamily: 'FontMedium',
-                                                          color: AppColors.purple
-                                                      ),
-                                                      recognizer: TapGestureRecognizer()
-                                                        ..onTap = () {
-                                                          _showLegalPopup('privacy_policy');
-                                                        },
-                                                    ),
-                                                    const TextSpan(text: "."),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Electronic Signature Layout
-                                    Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-                                      decoration: BoxDecoration(
-                                          color: AppColors.white,
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: const Radius.circular(8),
-                                            topRight: const Radius.circular(8),
-                                            bottomLeft: const Radius.circular(8),
-                                            bottomRight: const Radius.circular(8),
-                                          ),
-                                          border: Border.all(color: AppColors.gray, width: 1)
-                                      ),
-                                      child: Container(
-                                        margin: const EdgeInsets.fromLTRB(10, 15, 10, 15),
-                                        child: Column(
-                                          children: [
-                                            Container(
-                                              margin: EdgeInsets.only(top: 0),
-                                              alignment: Alignment.centerLeft,
-                                              child: const Text(
-                                                "Electronic Signature",
-                                                style: TextStyle(
-                                                    fontSize: AppSize.size_16,
-                                                    fontFamily: 'FontSemiBold',
-                                                    color: AppColors.darkBlack,
-                                                    height: 1.2
-                                                ),
-                                                textAlign: TextAlign.left,
-                                              ),
-                                            ),
-
-                                            getFullNameLabel(),
-                                            getFullNameField(context),
-
-                                            Container(
-                                              margin: EdgeInsets.only(top: 8),
-                                              child: Row(
-                                                children: [
-
-                                                  Container(
-                                                    width:15,
-                                                    height: 15,
-                                                    child: Image.asset('assets/ic_question.png'),
-                                                  ),
-
-                                                  Container(
-                                                    alignment: Alignment.centerLeft,
-                                                    margin: EdgeInsets.fromLTRB(3, 0, 5, 0),
-                                                    child: const Text(
-                                                      "Type your full name as per govt records",
-                                                      style: TextStyle(
-                                                          fontSize: AppSize.size_12,
-                                                          fontFamily: 'FontSemiBold',
-                                                          color: AppColors.hintColor,
-                                                          height: 1
-                                                      ),
-                                                      textAlign: TextAlign.left,
-                                                    ),
-                                                  )
-
-                                                ],
-                                              ),
-                                            ),
-
-                                            // Your Sign Layout
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                  color: AppColors.gray3,
-                                                  borderRadius: const BorderRadius.only(
-                                                    topLeft: const Radius.circular(8),
-                                                    topRight: const Radius.circular(8),
-                                                    bottomLeft: const Radius.circular(8),
-                                                    bottomRight: const Radius.circular(8),
-                                                  ),
-                                                  border: Border.all(color: AppColors.gray, width: 1)
-                                              ),
-                                              margin: EdgeInsets.only(top: 15),
-                                              child: Container(
-                                                margin: EdgeInsets.fromLTRB(10, 10, 10, 10),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Container(
-                                                      alignment: Alignment.centerLeft,
-                                                      margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-                                                      child: Text(
-                                                        fullNameSign.isNotEmpty ? fullNameSign : "Your Sign",
-                                                        style: const TextStyle(
-                                                            fontSize: AppSize.size_16,
-                                                            fontFamily: 'FontSemiBold',
-                                                            color: AppColors.hintColor,
-                                                            fontStyle: FontStyle.italic,
-                                                            height: 1.2
-                                                        ),
-                                                        textAlign: TextAlign.left,
-                                                      ),
-                                                    ),
-
-                                                    Container(
-                                                      alignment: Alignment.centerLeft,
-                                                      margin: EdgeInsets.fromLTRB(0, 5, 0, 0),
-                                                      child: Text(
-                                                        (setSelectDate!=null && setSelectDate!="") ? "Signed on  " + setSelectDate : "Signed on ",
-                                                        style: TextStyle(
-                                                            fontSize: AppSize.size_12,
-                                                            fontFamily: 'FontRegular',
-                                                            color: AppColors.darkBlack,
-                                                            height: 1.2
-                                                        ),
-                                                        textAlign: TextAlign.left,
-                                                      ),
-                                                    )
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-
-                                            // Note Text Layout
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                  color: AppColors.white,
-                                                  borderRadius: const BorderRadius.only(
-                                                    topLeft: const Radius.circular(8),
-                                                    topRight: const Radius.circular(8),
-                                                    bottomLeft: const Radius.circular(8),
-                                                    bottomRight: const Radius.circular(8),
-                                                  ),
-                                                  border: Border.all(color: AppColors.purple1, width: 1)
-                                              ),
-                                              margin: EdgeInsets.only(top: 15),
-                                              child: Container(
-                                                margin: EdgeInsets.fromLTRB(10, 10, 10, 10),
-                                                child: Container(
-                                                  alignment: Alignment.centerLeft,
-                                                  margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-                                                  child: const Text(
-                                                    "Note: By signing here, you acknowledge that this constitutes a legally binding electronic signature equivalent to a handwritten signature, with the same force and effect.",
-                                                    style: TextStyle(
-                                                        fontSize: AppSize.size_12,
-                                                        fontFamily: 'FontMedium',
-                                                        color: AppColors.purple1,
-                                                        height: 1.4
-                                                    ),
-                                                    textAlign: TextAlign.left,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            Container(
-                              margin: const EdgeInsets.only(top: 10),
-                              child: Column(
-                                children: [
-                                  bottomBarShadow(),
-
-                                  Row(
-                                    children: [
-
-                                      Expanded(
-                                          flex: 3,
-                                          child: InkWell(
-                                              onTap: ()
-                                              {
-                                                Navigator.pop(context);
-                                              },
-                                              child: getBackButton(context, "Back", "reviewSignAgreement"))
-                                      ),
-
-
-                                      Expanded(
-                                        flex: 7,
-                                        child: InkWell(
-                                            onTap: () async {
-                                              if (validation(context)) {
-                                                await _acceptTermsAndSubmit();
-                                              }
-                                            },
-                                            child: (isChecked && fullNameController.text.toString().trim()!="")
-                                                ? getButtonBlack(context, "Finish", "reviewSignAgreement") :
-                                            getButtonGray(context, "Finish", "reviewSignAgreement")
-                                        ),
-                                      )
-                                    ],
-
-                                  )
-                                ],
-                              ),
-                            )
-
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Future<void> _acceptTermsAndSubmit() async {
-    final venueId = checkString(await SharedPreference.readStr("venue_id"));
-    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-
-    if (venueId.isEmpty) {
-      if (!mounted) return;
-      CommonUtilities.createSnackBar(context, 'Venue not found. Please restart setup.');
-      return;
-    }
-
-    if (!mounted) return;
-    ProgressBar().showLoader(context);
-
-    try {
-      // Step 1 — Accept terms + electronic signature
-      final termsRes = await http.patch(
-        Uri.parse('$BASE_URL/venues/$venueId/terms'),
-        headers: {
-          'Authorization': 'Bearer $jwtToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'electronicSignature': fullNameController.text.trim(),
-          'termsAccepted': true,
-        }),
-      );
-
-      CommonUtilities.showLog('acceptTerms status: ${termsRes.statusCode}');
-      CommonUtilities.showLog('acceptTerms response: ${termsRes.body}');
-
-      if (termsRes.statusCode != 200 && termsRes.statusCode != 201) {
-        if (!mounted) return;
-        Navigator.pop(context);
-        final body = jsonDecode(termsRes.body);
-        final msg = body['message'] ?? 'Failed to accept terms.';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.join(', ') : msg.toString());
-        return;
-      }
-
-      // Step 2 — Submit venue for admin review
-      final submitRes = await http.post(
-        Uri.parse('$BASE_URL/venues/$venueId/submit'),
-        headers: {
-          'Authorization': 'Bearer $jwtToken',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      CommonUtilities.showLog('submitForReview status: ${submitRes.statusCode}');
-      CommonUtilities.showLog('submitForReview response: ${submitRes.body}');
-
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
-      if (submitRes.statusCode == 200 || submitRes.statusCode == 201) {
-        CommonUtilities.showLog('✅ Venue submitted for review');
-        CommonUtilities.firstTimeLoginSignup = "yes";
-        CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(context, ContactSupportScreen());
-      } else {
-        final body = jsonDecode(submitRes.body);
-        final msg = body['message'] ?? 'Failed to submit venue.';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.join(', ') : msg.toString());
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      CommonUtilities.showLog('❌ Submit error: $e');
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
-    }
-  }
-
-  //-----------------------------------------------------Start Upload Sign Agreement Under Database---------------------------------
-
-  /*Future<void> ensureAnonymousLogin() async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-
-    CommonUtilities.showLog("✅ Firebase UID: ${FirebaseAuth.instance.currentUser!.uid}");
-  }*/
-
-  Future<void> saveSignAgreement1({
-    required bool agreeTerms,
-    required String electronicSign,
-  }) async {
-    // ensure user logged in
-    /*if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }*/
-
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-    final docRef = FirebaseFirestore.instance
-        .collection("activ_user")
-        .doc(uid);
-
-
-    /*await FirebaseFirestore.instance
-        .collection("activ_user")
-        .doc(uid)
-        .set(
-      {
-
-        "sign_agreement": {
-          "agree_terms_condition": agreeTerms,
-          "electronic_sign": electronicSign,
-        },
-
-        "venue_place_facilities": {
-          "physical_setup": checkString(physicalSetup),
-          "activity_variation": checkString(activityVariation),
-          "equipment_provided": checkString(equipmentProvided),
-          "participants_follow": checkString(participantsFollow),
-          "safety_measures": checkString(safetyMeasures),
-          "activity_suited": checkString(activitySuited),
-          "anything_else": checkString(anythingElse),
-        },
-
-        "owner_detail": {
-          "owner_full_name": checkString(ownerFullName),
-          "owner_email": checkString(ownerEmail),
-          "owner_mobile_number": checkString(ownerMobileNumber),
-          "same_as_owner_number": checkString(sameAsOwnerNumber),
-        },
-
-        "operate_value" : operateSaveValue,
-        "venue_details" : venueDetailsSaveValue,
-        "venue_offer": placeOfferSaveValue,
-      },
-      SetOptions(merge: true),
-    );*/
-
-    // ✅ 1. First save all normal data
-    await docRef.set(
-      {
-        "sign_agreement": {
-          "agree_terms_condition": agreeTerms,
-          "electronic_sign": electronicSign,
-        },
-
-        /*"venue_place_facilities": {
-          "physical_setup": checkString(physicalSetup),
-          "activity_variation": checkString(activityVariation),
-          "equipment_provided": checkString(equipmentProvided),
-          "participants_follow": checkString(participantsFollow),
-          "safety_measures": checkString(safetyMeasures),
-          "activity_suited": checkString(activitySuited),
-          "anything_else": checkString(anythingElse),
-        },*/
-
-        "owner_detail": {
-          "owner_full_name": checkString(ownerFullName),
-          "owner_email": checkString(ownerEmail),
-          "owner_mobile_number": checkString(ownerMobileNumber),
-          "same_as_owner_number": checkString(sameAsOwnerNumber),
-        },
-
-       // "operate_value": operateSaveValue,
-          "venue_details": venueDetailsSaveValue,
-          "venue_amenities": placeOfferSaveValue,
-          "status": 'pending',
-          "createdAt": FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-
-    // Proper nested update (IMPORTANT)
-    await docRef.update({
-      "basic_details.is_profile_completed": true,
+  Future<void> _loadAgreement() async {
+    setState(() {
+      _loading = true;
+      _error = null;
     });
-
-    CommonUtilities.showLog("✅ Sign agreement saved successfully");
-  }
-
-
-  Future<void> saveSignAgreement({
-    required bool agreeTerms,
-    required String electronicSign,
-    required String phoneKey, // 📞 phone number key
-  }) async {
     try {
-      // 1️⃣ Resolve REAL UID from phone
-      final phoneDoc = await FirebaseFirestore.instance
-          .collection("users_by_phone")
-          .doc(phoneKey)
-          .get();
-
-      if (!phoneDoc.exists) {
-        throw Exception("❌ Phone mapping not found for $phoneKey");
+      final response = await (widget.client
+                  ?.get(Uri.parse('$LEGAL_URL/partner_agreement')) ??
+              http.get(Uri.parse('$LEGAL_URL/partner_agreement')))
+          .timeout(const Duration(seconds: 15));
+      _checkResponse(response, 'Unable to load the partnership agreement.');
+      final raw = jsonDecode(response.body)['data']['content'] as String;
+      final document = html.parse(raw);
+      final content = _documentText(document.body!).trim();
+      if (content.isEmpty) {
+        throw Exception('The partnership agreement is not available yet.');
       }
+      if (mounted) setState(() => _content = content);
+    } catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
-      print("FieldValue.serverTimestamp() : ${FieldValue.serverTimestamp()}");
+  String _message(Object error) =>
+      error.toString().replaceFirst('Exception: ', '');
 
-      final String realUid = phoneDoc["uid"];
+  String _documentText(dom.Node node) {
+    if (node is dom.Text) return node.data;
+    if (node is dom.Element && ['script', 'style'].contains(node.localName)) {
+      return '';
+    }
+    if (node is dom.Element && node.localName == 'br') return '\n';
+    final text = node.nodes.map(_documentText).join();
+    if (node is dom.Element &&
+        ['h1', 'h2', 'h3', 'h4', 'p', 'div', 'li', 'tr']
+            .contains(node.localName)) {
+      return '$text\n\n';
+    }
+    return text;
+  }
 
-      // 2️⃣ Reference the actual user document by UID
-      final docRef =
-      FirebaseFirestore.instance.collection("activ_user").doc(realUid);
+  void _checkResponse(http.Response response, String fallback) {
+    if (response.statusCode == 200 || response.statusCode == 201) return;
+    String message = fallback;
+    try {
+      final value = jsonDecode(response.body)['message'];
+      if (value != null) {
+        message = value is List ? value.join(', ') : value.toString();
+      }
+    } catch (_) {/* Non-JSON errors still show a useful message. */}
+    throw Exception(message);
+  }
 
-      // ✅ 3. Save all normal data
-      await docRef.set({
-        "sign_agreement": {
-          "agree_terms_condition": agreeTerms,
-          "electronic_sign": electronicSign,
-        },
+  Future<void> _download() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    try {
+      final uri = Uri.parse('$LEGAL_URL/partner_agreement/download');
+      final response = await (widget.client?.get(uri) ?? http.get(uri))
+          .timeout(const Duration(seconds: 30));
+      _checkResponse(response, 'Unable to download the partnership agreement.');
+      final data = jsonDecode(response.body)['data'];
+      await FilePicker.platform.saveFile(
+        dialogTitle: 'Save partnership agreement',
+        fileName: data['filename'] as String? ?? 'activ-partner-agreement.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        bytes: base64Decode(data['base64'] as String),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
 
-        "owner_detail": {
-          "owner_full_name": checkString(ownerFullName),
-          "owner_email": checkString(ownerEmail),
-          "owner_mobile_number": checkString(ownerMobileNumber),
-          "same_as_owner_number": checkString(sameAsOwnerNumber),
-          "same_as_owner_number_checked": sameAsOwnerNumberChecked,
-        },
-
-        "venue_details": venueDetailsSaveValue,
-        "venue_amenities": placeOfferSaveValue,
-        "status": 'pending',
-        "createdAt": FieldValue.serverTimestamp(),
-
-      }, SetOptions(merge: true));
-
-      // 4️⃣ Proper nested update
-      await docRef.update({
-        "basic_details.is_profile_completed": true,
+  Future<void> _finish() async {
+    if (!_canFinish) return;
+    setState(() => _submitting = true);
+    try {
+      final venueId = await SharedPreference.readStr('venue_id');
+      final token = await SharedPreference.readStr('jwt_token');
+      if (venueId == null ||
+          venueId.isEmpty ||
+          token == null ||
+          token.isEmpty) {
+        throw Exception('Your session is missing. Please sign in again.');
+      }
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      };
+      final uri = Uri.parse('$BASE_URL/venues/$venueId/terms');
+      final body = jsonEncode({
+        'electronicSignature': _signature.text.trim(),
+        'termsAccepted': true
       });
-
-      CommonUtilities.showLog(
-          "✅ Sign agreement saved successfully for phone: $phoneKey");
-    } catch (e) {
-      CommonUtilities.showLog("❌ Error saving sign agreement: $e");
+      final terms =
+          await (widget.client?.patch(uri, headers: headers, body: body) ??
+                  http.patch(uri, headers: headers, body: body))
+              .timeout(const Duration(seconds: 30));
+      _checkResponse(terms, 'Failed to accept the agreement.');
+      final submitUri = Uri.parse('$BASE_URL/venues/$venueId/submit');
+      final submit = await (widget.client?.post(submitUri, headers: headers) ??
+              http.post(submitUri, headers: headers))
+          .timeout(const Duration(seconds: 30));
+      _checkResponse(submit, 'Failed to submit the venue.');
+      if (!mounted) return;
+      CommonUtilities.firstTimeLoginSignup = 'yes';
+      CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+          context, ContactSupportScreen());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
-
-  //-----------------------------------------------------End Upload Sign Agreement Under Database---------------------------------
-
-  Widget getDividerLine()
-  {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 15, 0, 15),
-      color: AppColors.gray,
-      height: 1,
-    );
-  }
-
-
-  Widget getStepBar(double progress)
-  {
-    return Container(
-        margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-        child: getStepBarCount(progress, currentStep, totalSteps),
-    );
-  }
-
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
-
-  Widget getText()
-  {
-    return Container(
-      margin: const EdgeInsets.only(top: 25),
-      alignment: Alignment.centerLeft,
-      child: const Text(
-        "Review & Sign Agreement",
-        style: TextStyle(
-            fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
-            color: AppColors.darkBlack,
-            height: 1.2
-        ),
-        textAlign: TextAlign.left,
-      ),
-    );
-  }
-
-  Widget getSubText()
-  {
-    return Container(
-      margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      child: const Text(
-        "Review your partnership details and sign to complete registration",
-        style: TextStyle(
-            fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
-            color: AppColors.black1,
-            height: 1.4
-        ),
-        textAlign: TextAlign.left,
-      ),
-    );
-  }
-
-  Widget getFullNameLabel() {
-    return Row(
-      children: [
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "Full Name",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.black1,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        ),
-
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.red,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget getFullNameField(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-      decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
-          ),
-          border: Border.all(color: AppColors.gray, width: 1)),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        child: Container(
-          child: TextFormField(
-            controller: fullNameController,
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.sentences,
-            keyboardType: TextInputType.text,
-            cursorColor: AppColors.cursorBlack,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-              new LengthLimitingTextInputFormatter(50),
-            ],
-            style: TextStyle(
-              fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
-              color: AppColors.darkBlack,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Enter Full Name', // Set the hint label text
-              hintStyle: TextStyle(
-                fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
-                color: AppColors.hintColor, // Text color of the hint label
+  @override
+  Widget build(BuildContext context) => OnboardingScaffold(
+        child: Column(children: [
+          Expanded(
+              child: SingleChildScrollView(
+            key: const Key('agreement-page-scroll'),
+            padding: const EdgeInsets.fromLTRB(15, 12, 15, 24),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const OnboardingLogo(),
+              getStepBarCount(1, 10, 10),
+              const SizedBox(height: 25),
+              Text('Review & Sign Partnership Agreement',
+                  style: OnboardingStyles.heading.copyWith(fontSize: 25)),
+              const SizedBox(height: 12),
+              Text(
+                  'Review your partnership agreement carefully before completing registration',
+                  style: OnboardingStyles.body
+                      .copyWith(fontSize: 16, height: 1.4)),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.gray)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text('Partnership Agreement',
+                                style: OnboardingStyles.heading
+                                    .copyWith(fontSize: 18))),
+                        IconButton(
+                            tooltip: 'Download partnership agreement',
+                            onPressed:
+                                _loading || _content.isEmpty || _downloading
+                                    ? null
+                                    : _download,
+                            icon: _downloading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.file_download_outlined,
+                                    color: Colors.black)),
+                      ]),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                          height: 290,
+                          child: Container(
+                            decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.gray),
+                                borderRadius: BorderRadius.circular(8)),
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator())
+                                : _error != null
+                                    ? Center(
+                                        child: Padding(
+                                            padding: const EdgeInsets.all(16),
+                                            child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(_error!,
+                                                      textAlign:
+                                                          TextAlign.center),
+                                                  TextButton(
+                                                      onPressed: _loadAgreement,
+                                                      child:
+                                                          const Text('Retry')),
+                                                ])))
+                                    : Scrollbar(
+                                        controller: _documentScroll,
+                                        thumbVisibility: true,
+                                        child: SingleChildScrollView(
+                                            controller: _documentScroll,
+                                            padding: const EdgeInsets.all(12),
+                                            child: SelectableText(_content,
+                                                style: OnboardingStyles.body
+                                                    .copyWith(
+                                                        fontSize: 16,
+                                                        height: 1.45)))),
+                          )),
+                      const SizedBox(height: 12),
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Checkbox(
+                                value: _accepted,
+                                activeColor: _purple,
+                                side:
+                                    const BorderSide(color: _purple, width: 2),
+                                onChanged:
+                                    _loading || _content.isEmpty || _submitting
+                                        ? null
+                                        : (value) => setState(
+                                            () => _accepted = value ?? false)),
+                            Expanded(
+                                child: Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Text.rich(
+                                        TextSpan(children: [
+                                          const TextSpan(
+                                              text: 'I agree to the '),
+                                          TextSpan(
+                                              text: 'Partnership Agreement',
+                                              style: OnboardingStyles.body
+                                                  .copyWith(
+                                                      color: _purple,
+                                                      fontSize: 15)),
+                                        ]),
+                                        style: OnboardingStyles.body.copyWith(
+                                            fontSize: 15, height: 1.4)))),
+                          ]),
+                    ]),
               ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  bool validation(BuildContext context) {
-    if (!isChecked) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.validationTermsAndPrivacyPolicy);
-      return false;
-    }
-    else if (fullNameController.text.trim().isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.validationFullNameEnter);
-      return false;
-    }
-    return true;
-  }
+              const SizedBox(height: 24),
+              Container(
+                key: const Key('electronic-signature-panel'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.gray),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Electronic Signature',
+                          style:
+                              OnboardingStyles.heading.copyWith(fontSize: 18)),
+                      const SizedBox(height: 14),
+                      Text.rich(
+                          TextSpan(children: [
+                            const TextSpan(text: 'Full Name'),
+                            TextSpan(
+                                text: '*',
+                                style: OnboardingStyles.body
+                                    .copyWith(color: Colors.red)),
+                          ]),
+                          style: OnboardingStyles.body.copyWith(fontSize: 16)),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                          key: const Key('agreement-signature'),
+                          controller: _signature,
+                          enabled: !_submitting,
+                          textCapitalization: TextCapitalization.words,
+                          autofillHints: const [AutofillHints.name],
+                          style: OnboardingStyles.body.copyWith(fontSize: 16),
+                          decoration: OnboardingStyles.inputDecoration(
+                              hintText: 'Enter Full Name'),
+                          onChanged: (_) => setState(() {})),
+                      const SizedBox(height: 12),
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.help_outline,
+                                size: 16, color: Colors.grey),
+                            const SizedBox(width: 6),
+                            Expanded(
+                                child: Text(
+                                    'Type your full name as per govt records',
+                                    style: OnboardingStyles.body.copyWith(
+                                        color: Colors.grey, fontSize: 14))),
+                          ]),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6F0FC),
+                          border: Border.all(color: AppColors.gray),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  _signature.text.trim().isEmpty
+                                      ? 'Your Sign'
+                                      : _signature.text.trim(),
+                                  key: const Key('signature-preview'),
+                                  style: OnboardingStyles.heading.copyWith(
+                                      fontSize: 20,
+                                      fontStyle: FontStyle.italic,
+                                      color: _signature.text.trim().isEmpty
+                                          ? Colors.grey
+                                          : AppColors.darkBlack)),
+                              const SizedBox(height: 6),
+                              Text(
+                                  'Signed on  ${DateFormat('MMMM dd, yyyy', 'en_US').format(_signingDate)}',
+                                  key: const Key('signature-date')),
+                            ]),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _purple),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                            'Note: By signing, you acknowledge that this constitutes a legally binding electronic agreement under applicable Indian laws, equivalent to a handwritten signature.',
+                            style: OnboardingStyles.body.copyWith(
+                                color: const Color(0xFFA16BC5),
+                                fontSize: 15,
+                                height: 1.5)),
+                      ),
+                    ]),
+              ),
+            ]),
+          )),
+          Container(
+              padding: const EdgeInsets.fromLTRB(15, 12, 15, 14),
+              decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.gray))),
+              child: Row(children: [
+                Expanded(
+                    flex: 3,
+                    child: OnboardingButton(
+                        label: 'Back',
+                        outlined: true,
+                        onPressed:
+                            _submitting ? null : () => Navigator.pop(context))),
+                const SizedBox(width: 16),
+                Expanded(
+                    flex: 7,
+                    child: OnboardingButton(
+                        label: 'Finish',
+                        loading: _submitting,
+                        disabledBackgroundColor: const Color(0xFF999999),
+                        disabledForegroundColor: const Color(0xFFCCCCCC),
+                        onPressed: _canFinish ? _finish : null)),
+              ])),
+        ]),
+      );
 }

@@ -238,7 +238,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
     if (pendingVenueUpdate && !await _saveVenueChanges()) return;
     if (!mounted) return;
     await Navigator.push(context,
-        MaterialPageRoute<void>(builder: (_) => const ReviewSignAgreement()));
+        MaterialPageRoute<void>(builder: (_) => ReviewSignAgreement(client: widget.client)));
   }
 
   Future<void> _editActivity(Map<String, dynamic> activity, int index) async {

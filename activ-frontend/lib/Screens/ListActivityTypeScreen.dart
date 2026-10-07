@@ -15,8 +15,11 @@ import '../Beans/venue_type_model.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'VenuePhotoUploadScreen.dart';
+import 'onboarding_widgets.dart';
 
 class ListActivityTypeScreen extends StatefulWidget {
+  const ListActivityTypeScreen({super.key, this.client});
+  final http.Client? client;
   @override
   _State createState() => _State();
 }
@@ -45,7 +48,8 @@ class _State extends State<ListActivityTypeScreen> {
       final matchesFilter = _selectedFilter == 'All' ||
           (_filterTypeMap[_selectedFilter]?.contains(model.type) ?? false);
       return matchesSearch && matchesFilter;
-    }).toList();
+    }).toList()
+      ..sort((a, b) => a.title.trim().toLowerCase().compareTo(b.title.trim().toLowerCase()));
   }
 
   int currentStep = onboardingActivitiesStep;
@@ -77,18 +81,23 @@ class _State extends State<ListActivityTypeScreen> {
 
   @override
   void initState() {
+    super.initState();
     isShimmerLoading = true;
     fetchData();
-    super.initState();
   }
 
   // Fetch active categories from REST API
   Future<void> fetchData() async {
     try {
-      final response = await http.get(
+      final response = await (widget.client?.get(
         Uri.parse(CATEGORIES_URL),
         headers: {'accept': '*/*'},
-      );
+      ) ?? http.get(
+        Uri.parse(CATEGORIES_URL),
+        headers: {'accept': '*/*'},
+      ));
+
+      if (!mounted) return;
 
       CommonUtilities.showLog("Categories status: ${response.statusCode}");
 
@@ -112,6 +121,7 @@ class _State extends State<ListActivityTypeScreen> {
       }
     } catch (e) {
       CommonUtilities.showLog("Error fetching categories: $e");
+      if (!mounted) return;
       setState(() => isShimmerLoading = false);
     }
   }
@@ -239,6 +249,7 @@ class _State extends State<ListActivityTypeScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
@@ -253,7 +264,7 @@ class _State extends State<ListActivityTypeScreen> {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF9C4DCC), width: 1.5),
+        border: Border.all(color: AppColors.gray, width: 1),
       ),
       child: TextField(
         controller: _searchController,
@@ -276,7 +287,7 @@ class _State extends State<ListActivityTypeScreen> {
   Widget getFilterChips() {
     return Container(
       margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-      height: 36,
+      height: 30,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _filterLabels.length,
@@ -287,19 +298,19 @@ class _State extends State<ListActivityTypeScreen> {
           return GestureDetector(
             onTap: () => setState(() => _selectedFilter = label),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF7B2FBE) : AppColors.white,
-                borderRadius: BorderRadius.circular(20),
+                color: isSelected ? AppColors.purple : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF7B2FBE) : AppColors.gray,
+                  color: isSelected ? AppColors.purple : AppColors.gray1,
                   width: 1,
                 ),
               ),
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: AppSize.size_13,
+                  fontSize: 12,
                   fontFamily: 'FontMedium',
                   color: isSelected ? AppColors.white : AppColors.darkBlack,
                 ),
@@ -328,19 +339,7 @@ class _State extends State<ListActivityTypeScreen> {
         // Return true to allow the pop action to proceed
         return Future.value(true);
       },
-      child: Container(
-        decoration: context.getYellowGradient,
-        child: SafeArea(
-          left: false,
-          top: true,
-          bottom: true,
-          right: false,
-          child: Scaffold(
-              resizeToAvoidBottomInset: false,
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0,0,0,0),
+      child: OnboardingScaffold(
                   child: Column(
                     children: [
 
@@ -349,6 +348,15 @@ class _State extends State<ListActivityTypeScreen> {
                       getStepBar(progress),
 
                       getOperateText(),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Choose all the available activities at your venue',
+                            style: OnboardingStyles.body.copyWith(color: AppColors.hintColor)),
+                        ),
+                      ),
 
                       getSearchBar(),
 
@@ -377,7 +385,12 @@ class _State extends State<ListActivityTypeScreen> {
                                         {
                                           Navigator.pop(context);
                                         },
-                                        child: getBackButton(context, "Back", "selectActivity"))
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(15, 12, 8, 15),
+                                          child: OnboardingButton(label: 'Back', outlined: true,
+                                            borderRadius: 8, fontSize: 16,
+                                            onPressed: () => Navigator.pop(context)),
+                                        ))
                                 ),
 
 
@@ -391,8 +404,13 @@ class _State extends State<ListActivityTypeScreen> {
                                           CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
                                         }
                                       },
-                                      child: isActivitySelected ? getButtonBlack(context, "Next", "selectActivity") :
-                                      getButtonGray(context, "Next", "selectActivity")
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(8, 12, 15, 15),
+                                        child: OnboardingButton(label: 'Next', borderRadius: 8,
+                                          disabledBackgroundColor: AppColors.gray2,
+                                          disabledForegroundColor: AppColors.gray1,
+                                          onPressed: isActivitySelected ? createVenue : null),
+                                      )
                                   ),
                                 )
                               ],
@@ -402,10 +420,6 @@ class _State extends State<ListActivityTypeScreen> {
                       )
                     ],
                   ),
-                ),
-              )
-          ),
-        ),
       ),
     );
   }
@@ -413,7 +427,7 @@ class _State extends State<ListActivityTypeScreen> {
   Widget getActivIcon()
   {
     return Container(
-        margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
+        margin: const EdgeInsets.fromLTRB(0, 48, 0, 0),
         child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
@@ -449,14 +463,11 @@ class _State extends State<ListActivityTypeScreen> {
     final list = _filteredList;
 
     if (list.isEmpty) {
-      return Expanded(
-        flex: 9,
-        child: Center(
+      return Center(
           child: Text(
             'No activities found',
             style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.hintColor),
           ),
-        ),
       );
     }
 
@@ -481,9 +492,9 @@ class _State extends State<ListActivityTypeScreen> {
             itemCount: list.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisExtent: 180,
-              mainAxisSpacing: 1.0,
-              crossAxisSpacing: 1.0,
+              mainAxisExtent: 168,
+              mainAxisSpacing: 10.0,
+              crossAxisSpacing: 10.0,
               childAspectRatio: 1.0,
             ),
             itemBuilder: (BuildContext ctxt, int index) {
@@ -499,18 +510,12 @@ class _State extends State<ListActivityTypeScreen> {
   Widget rowListItem({required VenueTypeModel model, required BuildContext context,})
   {
     return Container(
-      margin: EdgeInsets.fromLTRB(5, 5, 5, 10),
-      decoration: model.isSelected
-          ? BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.borderGradient1, AppColors.borderGradient2],
-        ),
-        borderRadius: BorderRadius.circular(12),
-      )
-          : BoxDecoration(
-        color: AppColors.gray,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
+      key: ValueKey('activity-${model.id}'),
+      margin: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        color: model.isSelected ? AppColors.gray3 : AppColors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: model.isSelected ? AppColors.purple : AppColors.gray, width: 1),
       ),
       child: InkWell(
         onTap: () async {
@@ -536,18 +541,13 @@ class _State extends State<ListActivityTypeScreen> {
           final jsonString = jsonEncode(selectedCategories);
           await SharedPreference.addStringToSF("operate_value", jsonString);
           CommonUtilities.showLog("Saved operate_value => $jsonString");
+          if (!mounted) return;
           setState(() {});
         },
         child: Container(
           width: double.infinity,
           alignment: Alignment.center,
-          margin: model.isSelected
-              ? EdgeInsets.fromLTRB(2, 2, 2, 2)
-              : EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: model.isSelected ? AppColors.gray3 : AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          padding: const EdgeInsets.all(8),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -598,15 +598,38 @@ class _State extends State<ListActivityTypeScreen> {
       child: model.image.isNotEmpty
           ? CachedNetworkImage(
               imageUrl: model.image,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               placeholder: (context, url) => const SizedBox(),
-              errorWidget: (context, url, error) => Image.asset(
-                setTypeImages(model),
-                fit: BoxFit.cover,
-              ),
+              errorWidget: (context, url, error) => _activityArtwork(model),
             )
-          : Image.asset(setTypeImages(model), fit: BoxFit.cover),
+          : _activityArtwork(model),
     );
+  }
+
+  Widget _activityArtwork(VenueTypeModel model) {
+    final name = model.type;
+    if (name == 'badminton' || name == 'court') {
+      return Image.asset('assets/ic_cock.png', fit: BoxFit.contain);
+    }
+    if (name.contains('football') || name == 'teqball') {
+      return Image.asset('assets/ic_football.png', fit: BoxFit.contain);
+    }
+    if (name == 'basketball') {
+      return const Icon(Icons.sports_basketball, size: 46, color: Color(0xFFCC842B));
+    }
+    if ({'tennis', 'padel', 'pickle ball', 'pickleball', 'squash', 'table tennis'}.contains(name)) {
+      return const Icon(Icons.sports_tennis, size: 46, color: Color(0xFF65A6A1));
+    }
+    if (name == 'hockey') {
+      return const Icon(Icons.sports_hockey, size: 46, color: AppColors.black1);
+    }
+    if (name.contains('cricket')) {
+      return const Icon(Icons.sports_cricket, size: 46, color: AppColors.green);
+    }
+    if (name == 'volleyball') {
+      return const Icon(Icons.sports_volleyball, size: 46, color: Color(0xFFCC842B));
+    }
+    return Image.asset(setTypeImages(model), fit: BoxFit.contain);
   }
 
   Widget getTitle(VenueTypeModel model, BuildContext context)
@@ -614,9 +637,9 @@ class _State extends State<ListActivityTypeScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.title!=null && model.title!="") ? model.title : "",
+        model.title,
         textAlign: TextAlign.center,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_16,
@@ -632,7 +655,7 @@ class _State extends State<ListActivityTypeScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.description!=null && model.description!="") ? model.description : "",
+        model.description,
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

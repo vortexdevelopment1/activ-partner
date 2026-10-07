@@ -361,7 +361,8 @@ export class VenuesController {
       },
     },
   })
-  @UseInterceptors(FilesInterceptor('images', 10, {
+  @UseInterceptors(FilesInterceptor('images', 12, {
+    limits: { fileSize: 5 * 1024 * 1024 },
     storage: diskStorage({
       destination: (_req, _file, cb) => {
         const path = './uploads/services';

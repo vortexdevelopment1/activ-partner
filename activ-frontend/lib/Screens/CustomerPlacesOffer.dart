@@ -235,7 +235,7 @@ class _State extends State<CustomerPlacesOffer> {
       margin: EdgeInsets.only(top: 25, left: 15, right: 15, bottom: 10),
       alignment: Alignment.centerLeft,
       child: const Text(
-        "Tell members what your place has to offer",
+        "Tell customers what your venue has to offer",
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',

@@ -536,6 +536,8 @@ class _State extends State<CategoryQuestionsScreen> {
             decoration: InputDecoration(
               hintText: q.placeholder.isNotEmpty
                   ? q.placeholder
+                  : q.questionText.trim().toLowerCase() == 'activity description'
+                  ? 'Describe this activity...'
                   : 'Enter ${q.questionText.toLowerCase()}',
               hintStyle: const TextStyle(
                 fontSize: AppSize.size_14,
@@ -580,6 +582,7 @@ class _State extends State<CategoryQuestionsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
+              key: ValueKey('question-$categoryId-${q.id}'),
               isExpanded: true,
               value: selected,
               hint: Text(

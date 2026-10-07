@@ -11,17 +11,18 @@ With both set, the app tries local first and falls back to the deployed backend.
 Android emulators also try `10.0.2.2` for a configured localhost URL. For physical
 devices, set the local URL to your computer's LAN address.
 
-Flutter reads the file at compile time when you pass:
+Flutter loads `.env` automatically at startup:
 
 ```sh
-flutter run --dart-define-from-file=.env
-flutter build apk --dart-define-from-file=.env
-flutter build web --dart-define-from-file=.env
-flutter test --dart-define-from-file=.env
+flutter run
+flutter build apk
+flutter build web
+flutter test
 ```
 
 Run these commands from `activ-frontend`. Restart or rebuild after changing
-`.env`; hot reload does not update compile-time values. For Render-only builds,
+`.env` so the bundled asset is refreshed. Build-time `--dart-define` values can
+still override either URL, including setting a URL to blank. For Render-only builds,
 leave `LOCAL_API_URL` blank.
 
 Environment values are public in the compiled app. Keep passwords and private

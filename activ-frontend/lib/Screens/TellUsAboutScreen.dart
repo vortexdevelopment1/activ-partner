@@ -14,6 +14,7 @@ import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'MobileNumberFormatter.dart';
 import 'VenueScreen.dart';
+import 'onboarding_widgets.dart';
 
 class TellUsAboutScreen extends StatefulWidget {
   const TellUsAboutScreen({super.key, this.reviewMode = false});
@@ -31,11 +32,11 @@ class _State extends State<TellUsAboutScreen> {
   TextEditingController mobileNumberController = TextEditingController();
   TextEditingController venueOwnerMobileNumberController = TextEditingController();
   bool isButtonEnabled = false;
-  bool isChecked = false;
+  bool isChecked = true;
   String phoneCode = "", userMobileNumber = "", jwtToken = "";
 
-  int currentStep = onboardingProfileStep;
-  final int totalSteps = totalSetup;
+  int currentStep = 3;
+  final int totalSteps = 10;
 
   void nextStep() {
     if (currentStep < totalSteps) {
@@ -53,14 +54,10 @@ class _State extends State<TellUsAboutScreen> {
     }
   }
 
-  _State()
-  {
-    getData();
-  }
-
   @override
   void initState() {
     super.initState();
+    getData();
   }
 
   getData() async
@@ -73,15 +70,15 @@ class _State extends State<TellUsAboutScreen> {
 
     if (!mounted) return;
     if (widget.reviewMode) {
-      final name = checkString(await SharedPreference.readStr('owner_full_name')).trim().split(RegExp(r'\s+'));
-      firstNameController.text = name.first;
-      lastNameController.text = name.skip(1).join(' ');
+      final nameParts = checkString(await SharedPreference.readStr('owner_full_name')).trim().split(RegExp(r'\s+'));
+      firstNameController.text = nameParts.first;
+      lastNameController.text = nameParts.skip(1).join(' ');
       emailController.text = checkString(await SharedPreference.readStr('owner_email'));
       isChecked = await SharedPreference.readStr('same_as_owner_number_checked') == 'true';
       if (!isChecked) {
         venueOwnerMobileNumberController.text = checkString(await SharedPreference.readStr('same_as_owner_number'));
       }
-      isButtonEnabled = firstNameController.text.isNotEmpty && emailController.text.isNotEmpty;
+      isButtonEnabled = firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty && emailController.text.isNotEmpty;
     }
     if (!mounted) return;
 
@@ -180,6 +177,7 @@ class _State extends State<TellUsAboutScreen> {
     lastNameController.dispose();
     emailController.dispose();
     mobileNumberController.dispose();
+    venueOwnerMobileNumberController.dispose();
     super.dispose();
   }
 
@@ -188,138 +186,62 @@ class _State extends State<TellUsAboutScreen> {
 
     double progress = currentStep / totalSteps;
 
-    return Container(
-      child: Stack(
-        children: [
-          /*To Set Top Header Color*/
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.yellowTop,
-            ),
-          ),
-          /*To Set Bottom Header Color*/
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.white,
-            ),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double width = constraints.maxWidth;
-
-                    bool isMobile = width < 600;
-                    bool isTablet = width >= 600 && width < 1100;
-
-                    double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
-
-                    return Container(
-                      //width: containerWidth,
-                      //margin: const EdgeInsets.only(right: 20),
-                      //padding: EdgeInsets.all(isMobile ? 20 : 30),
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-
-                            Expanded(
-                              child: Container(
-                                margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
-                                child: ListView(
-                                  shrinkWrap: true,
-                                  children: [
-
-                                    getActivIcon(),
-
-                                    getStepBar(progress),
-
-                                    getText(),
-
-                                    getSubText(),
-
-                                    getNameFields(context),
-
-                                    getEmailLabel(),
-                                    getEmailField(context),
-
-                                    getPhoneNumberText(),
-                                    getMobileNumberField(context),
-
-                                    getPhoneVerifiedText(),
-
-                                    getPrimaryContactNumberText(),
-                                    getPrimaryContactNumberSubText(),
-
-                                    getOwnerPhoneNumberText(),
-                                    getOwnerMobileNumberField(context),
-
-                                    getCheckBoxSamesOwner(),
-
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            Container(
-                              margin: const EdgeInsets.only(top: 10),
-                              child: Column(
-                                children: [
-                                  bottomBarShadow(),
-
-                                  Row(
-                                    children: [
-
-
-                                      Expanded(
-                                          flex: 3,
-                                          child: InkWell(
-                                              onTap: ()
-                                              {
-                                                Navigator.pop(context);
-                                              },
-                                              child: getBackButton(context, "Back", "tellUsAbout"))
-                                      ),
-
-
-                                      Expanded(
-                                        flex: 7,
-                                        child: InkWell(
-                                            onTap: () { if(validation(context)) { completeProfile(); } },
-                                            child: getButtonBlack(context, "Next", "tellUsAbout")
-                                        ),
-                                      )
-                                    ],
-
-                                  )
-                                ],
-                              ),
-                            )
-
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+    return OnboardingScaffold(
+      child: LayoutBuilder(builder: (context, constraints) {
+        return Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                  const SizedBox(height: 12),
+                  const OnboardingLogo(),
+                  const SizedBox(height: 4),
+                  getStepBar(progress),
+                  getText(),
+                  getSubText(),
+                  getNameFields(context),
+                  getEmailLabel(),
+                  getEmailField(context),
+                  getPhoneNumberText(),
+                  getMobileNumberField(context),
+                  getPhoneVerifiedText(),
+                  const SizedBox(height: 4),
+                  getPrimaryContactNumberText(),
+                  getPrimaryContactNumberSubText(),
+                  getCheckBoxSamesOwner(),
+                  getOwnerPhoneNumberText(),
+                  getOwnerMobileNumberField(context),
+                  const SizedBox(height: 24),
+                  ],
                 ),
               ),
             ),
-          )
-        ],
-      ),
+            Container(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.gray)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+              child: Row(children: [
+                Expanded(flex: 3, child: OnboardingButton(
+                  label: 'Back', outlined: true, borderRadius: 12,
+                  onPressed: () => Navigator.maybePop(context),
+                )),
+                const SizedBox(width: 16),
+                Expanded(flex: 7, child: OnboardingButton(
+                label: 'Next',
+                borderRadius: 12,
+                onPressed: () {
+                  if (validation(context)) completeProfile();
+                },
+              )),
+              ]),
+            ),
+          ],
+        );
+      }),
     );
   }
 
@@ -375,7 +297,7 @@ class _State extends State<TellUsAboutScreen> {
   }
 
   Widget _nameField(TextEditingController controller, String label, String hint, TextInputAction action) {
-    return Expanded(
+    return SizedBox(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -405,7 +327,7 @@ class _State extends State<TellUsAboutScreen> {
                 cursorColor: AppColors.cursorBlack,
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-                  LengthLimitingTextInputFormatter(50),
+                  LengthLimitingTextInputFormatter(100),
                 ],
                 style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.darkBlack),
                 decoration: InputDecoration(
@@ -427,9 +349,9 @@ class _State extends State<TellUsAboutScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _nameField(firstNameController, "First Name", "First Name", TextInputAction.next),
+        Expanded(child: _nameField(firstNameController, 'First Name', 'First Name', TextInputAction.next)),
         const SizedBox(width: 12),
-        _nameField(lastNameController, "Last Name", "Last Name", TextInputAction.next),
+        Expanded(child: _nameField(lastNameController, 'Last Name', 'Last Name', TextInputAction.next)),
       ],
     );
   }
@@ -573,7 +495,7 @@ class _State extends State<TellUsAboutScreen> {
                 children: [
                   Container(
                     child: Text(
-                      (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                        phoneCode,
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
                         fontFamily: 'FontRegular',
@@ -701,7 +623,7 @@ class _State extends State<TellUsAboutScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
       child: const Text(
-        "members, Activ, and partners may call on this number for booking support",
+        "Members, ACTIV team, and other partners may call on this number for booking support",
         style: TextStyle(
             fontSize: AppSize.size_14,
             fontFamily: 'FontRegular',
@@ -777,7 +699,7 @@ class _State extends State<TellUsAboutScreen> {
                   children: [
                     Container(
                       child: Text(
-                        (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                        phoneCode,
                         style: TextStyle(
                           fontSize:  AppSize.size_14,
                           fontFamily: 'FontRegular',
@@ -858,8 +780,7 @@ class _State extends State<TellUsAboutScreen> {
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Transform.translate(
-            offset: const Offset(0, -8),
+          SizedBox(
             child: Checkbox(
               value: isChecked,
               onChanged: (value) {
@@ -878,7 +799,7 @@ class _State extends State<TellUsAboutScreen> {
             ),
           ),
 
-          Container(
+          Flexible(child: Container(
             margin: EdgeInsets.only(left: 5),
             child: const Text(
               'Same as owner number',
@@ -889,7 +810,7 @@ class _State extends State<TellUsAboutScreen> {
                   height: 1
               ),
             ),
-          )
+          ))
         ],
       ),
     );

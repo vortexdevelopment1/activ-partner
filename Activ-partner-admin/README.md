@@ -15,3 +15,20 @@ Restart Vite after changing `.env`; rebuild for production changes.
 
 These variables are public in the browser bundle. Keep passwords and private
 keys in the backend environment only. Local `.env` files are ignored by Git.
+
+## Vercel Deployment
+
+Set the project Root Directory to `Activ-partner-admin`, the framework to Vite,
+the build command to `npm run build`, and the output directory to `dist`.
+
+In Project Settings > Environment Variables, add:
+
+```env
+VITE_API_URL=https://activ-partner.onrender.com/api/v1
+```
+
+Enable it for Production and Preview as needed. Leave `VITE_LOCAL_API_URL`
+unset on Vercel so visitors do not connect to their own localhost.
+Redeploy after saving: Vite embeds these values at build time, so changing
+variables does not update an existing deployment. Your ignored local `.env`
+is not uploaded from Git. Builds fail early if neither API URL is configured.

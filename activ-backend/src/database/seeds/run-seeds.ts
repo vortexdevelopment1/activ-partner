@@ -20,10 +20,15 @@ async function runSeeds() {
     await prisma.$connect();
     console.log('Database connected. Running seeds...');
 
-    await seedAdmin(prisma);
-    await seedPartner(prisma);
-    await seedCategories(prisma);
-    await seedQuestions(prisma);
+    const activityNames = process.argv.slice(2);
+    if (activityNames.length > 0) {
+      await seedQuestions(prisma, activityNames);
+    } else {
+      await seedAdmin(prisma);
+      await seedPartner(prisma);
+      await seedCategories(prisma);
+      await seedQuestions(prisma);
+    }
 
     console.log('All seeds completed successfully.');
   } catch (error) {

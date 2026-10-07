@@ -384,7 +384,17 @@ class _State extends State<VenuePhotoListViewScreen> {
                                         flex: 7,
                                         child: InkWell(
                                           onTap: () async {
-                                            if (_images.isEmpty) return;
+                                            if (_images.length < 4 || _images.length > 12) {
+                                              CommonUtilities.createSnackBar(context,
+                                                  'Please upload a minimum of 4 and a maximum of 12 images.');
+                                              return;
+                                            }
+                                            if (_imageBytes.length != _images.length ||
+                                                _imageBytes.any((bytes) => bytes.length > 5 * 1024 * 1024)) {
+                                              CommonUtilities.createSnackBar(context,
+                                                  'Each photo must be 5 MB or smaller. Please select your photos again.');
+                                              return;
+                                            }
 
                                             ProgressBar().showLoader(context);
                                             try {

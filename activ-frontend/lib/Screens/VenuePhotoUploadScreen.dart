@@ -1,4 +1,3 @@
-import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -6,13 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:overlay_support/overlay_support.dart';
 
 import '../Style/app_colors.dart';
 import '../Style/app_size.dart';
 import 'VenuePhotoListViewScreen.dart';
 import '../api_calling/api_constant.dart';
 import 'CommonCode.dart';
+import 'onboarding_widgets.dart';
 
 class VenuePhotoUploadScreen extends StatefulWidget {
   final Map<String, dynamic> currentCategory;
@@ -20,6 +19,7 @@ class VenuePhotoUploadScreen extends StatefulWidget {
   final int categoryIndex;
   final int totalCategories;
   final List<Map<String, dynamic>> accumulatedTimings;
+  final ImagePicker? imagePicker;
 
   const VenuePhotoUploadScreen({
     super.key,
@@ -28,6 +28,7 @@ class VenuePhotoUploadScreen extends StatefulWidget {
     this.categoryIndex = 1,
     this.totalCategories = 1,
     this.accumulatedTimings = const [],
+    this.imagePicker,
   });
 
   @override
@@ -37,7 +38,13 @@ class VenuePhotoUploadScreen extends StatefulWidget {
 class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   final List<XFile> _selectedImages = [];
   final List<Uint8List> _imageBytes = [];
-  final ImagePicker _picker = ImagePicker();
+  late final ImagePicker _picker = widget.imagePicker ?? ImagePicker();
+  String? _photoError;
+
+  void _showPhotoError(String message) {
+    if (!mounted) return;
+    setState(() => _photoError = message);
+  }
 
   int currentStep = onboardingActivitiesStep;
   final int totalSteps = totalSetup;
@@ -127,8 +134,24 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
   bool _isButtonEnabled = false; // by default false
 
+  void _continue() {
+    if (!_isButtonEnabled) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => VenuePhotoListViewScreen(
+      images: _selectedImages,
+      imageBytes: _imageBytes,
+      currentCategory: widget.currentCategory,
+      remainingCategories: widget.remainingCategories,
+      categoryIndex: widget.categoryIndex,
+      totalCategories: widget.totalCategories,
+      accumulatedTimings: widget.accumulatedTimings,
+    ))).then((_) {
+      if (mounted) refresh();
+    });
+  }
+
 // Update function to check button status
   void _updateButtonStatus() {
+    if (!mounted) return;
     setState(() {
       _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
     });
@@ -181,8 +204,9 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   }
 
   Future<void> _pickImages() async {
+    if (mounted) setState(() => _photoError = null);
     if (_selectedImages.length >= 12) {
-      CommonUtilities.createSnackBar(context, "You can upload maximum 12 images.");
+      _showPhotoError("You can upload maximum 12 images.");
       return;
     }
 
@@ -190,14 +214,18 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
     if (images != null && images.isNotEmpty) {
       if (_selectedImages.length + images.length > 12) {
-        CommonUtilities.createSnackBar(context, "Maximum 12 images allowed.");
+        _showPhotoError("Maximum 12 images allowed.");
         return;
       }
 
       for (var img in images) {
+        if (await img.length() > 5 * 1024 * 1024) {
+          _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
+          continue;
+        }
         final raw = await img.readAsBytes();
         if (raw.length > 5 * 1024 * 1024) {
-          if (mounted) CommonUtilities.createSnackBar(context, "Each image must be less than 5 MB.");
+          _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
           continue;
         }
 
@@ -208,6 +236,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
           minHeight: 720,
         );
 
+        if (!mounted) return;
         setState(() {
           _selectedImages.add(img);
           _imageBytes.add(compressed);
@@ -219,16 +248,21 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   }
 
   Future<void> _pickFromCamera() async {
+    if (mounted) setState(() => _photoError = null);
     if (_selectedImages.length >= 12) {
-      CommonUtilities.createSnackBar(context, "Maximum 12 images allowed.");
+      _showPhotoError("Maximum 12 images allowed.");
       return;
     }
 
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 40);
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
+      if (await image.length() > 5 * 1024 * 1024) {
+        _showPhotoError('Each photo must be 5 MB or smaller. This photo was not added.');
+        return;
+      }
       final raw = await image.readAsBytes();
       if (raw.length > 5 * 1024 * 1024) {
-        if (mounted) CommonUtilities.createSnackBar(context, "Each image must be less than 5 MB.");
+        _showPhotoError('Each photo must be 5 MB or smaller. This photo was not added.');
         return;
       }
 
@@ -239,6 +273,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         minHeight: 720,
       );
 
+      if (!mounted) return;
       setState(() {
         _selectedImages.add(image);
         _imageBytes.add(compressed);
@@ -281,49 +316,12 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   @override
   Widget build(BuildContext context)
   {
-    final double imageWidth = MediaQuery.of(context).size.width / 3.1;
+    final double imageWidth = 120;
     final double imageHeight = 120;
 
-    double progress = currentStep / totalSteps;
-
-    return Container(
-      child: Stack(
-        children: [
-          /*To Set Top Header Color*/
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.yellowTop,
-            ),
-          ),
-          /*To Set Bottom Header Color*/
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.white,
-            ),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              backgroundColor: const Color(0xFFEFF5D6),
-              body: Container(
-                decoration: context.getYellowGradient,
+    return OnboardingScaffold(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    double width = constraints.maxWidth;
-
-                    bool isMobile = width < 600;
-                    bool isTablet = width >= 600 && width < 1100;
-
-                    double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
-
                     return Container(
                       //width: containerWidth,
                       child: Container(
@@ -340,7 +338,6 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                   children: [
                                     getActivIcon(),
 
-                                    getStepBar(progress),
                                     getActivityStepLabel(widget.categoryIndex,
                                         widget.totalCategories, 1),
 
@@ -348,44 +345,39 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
                                     getSubText(),
 
-                                    if ((widget.currentCategory['title']?.toString() ?? '').isNotEmpty && widget.totalCategories > 1)
-                                      Container(
-                                        margin: const EdgeInsets.fromLTRB(0, 4, 0, 0),
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          "Category ${widget.categoryIndex} of ${widget.totalCategories}: ${widget.currentCategory['title']}",
-                                          style: const TextStyle(
-                                            fontSize: AppSize.size_14,
-                                            fontFamily: 'FontSemiBold',
-                                            color: AppColors.black1,
-                                            height: 1.3,
-                                          ),
-                                          textAlign: TextAlign.left,
+                                    if (_photoError != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8, bottom: 8),
+                                        child: Semantics(
+                                          liveRegion: true,
+                                          child: Text(_photoError!, style: const TextStyle(
+                                            color: AppColors.darkRed, fontSize: 14)),
                                         ),
                                       ),
 
                                     // Upload Box
                                     Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 25, 0, 0),
+                                      margin: const EdgeInsets.fromLTRB(0, 14, 0, 0),
                                       child: DottedBorder(
                                         color: AppColors.purple,
-                                        strokeWidth: 1.5,
-                                        dashPattern: [6, 4],
+                                        strokeWidth: 1,
+                                        dashPattern: [4, 4],
                                         borderType: BorderType.RRect,
-                                        radius: const Radius.circular(12),
+                                        radius: const Radius.circular(20),
                                         child: Container(
                                           width: double.infinity,
+                                          height: ((constraints.maxWidth - 30) * 1.15).clamp(320.0, 460.0),
                                           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(20),
                                           ),
                                           child: Column(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
                                               Container(
-                                                width: 74,
-                                                height: 58,
+                                                width: 64,
+                                                height: 52,
                                                 child: Image.asset('assets/ic_pan.png'),
                                               ),
                                               Container(
@@ -421,8 +413,9 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                   //_pickImages();
                                                 },
                                                 child: Container(
-                                                    height: 45,
-                                                    margin: const EdgeInsets.fromLTRB(65, 15, 65, 5),
+                                                    width: 160,
+                                                    height: 38,
+                                                    margin: const EdgeInsets.fromLTRB(0, 15, 0, 5),
                                                     decoration: BoxDecoration(
                                                       borderRadius: const BorderRadius.only(
                                                         topLeft: Radius.circular(12),
@@ -469,7 +462,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                     ),
 
                                     Visibility(
-                                      visible: (_selectedImages.length!=null && _selectedImages.length>0) ? true : false,
+                                      visible: _selectedImages.isNotEmpty,
                                       child: Container(
                                         alignment: Alignment.centerLeft,
                                         margin: const EdgeInsets.fromLTRB(0, 20, 0, 0),
@@ -486,7 +479,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                       ),
                                     ),
 
-                                    Container(
+                                    if (_selectedImages.isNotEmpty) Container(
                                       margin: const EdgeInsets.fromLTRB(0, 10, 0, 15),
                                       height: imageHeight,
                                       child: SizedBox(
@@ -562,44 +555,26 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                               {
                                                 Navigator.pop(context);
                                               },
-                                              child: getBackButton(context, "Back", "venuePhoto"))
+                                              child: Padding(
+                                                padding: const EdgeInsets.fromLTRB(15, 12, 8, 14),
+                                                child: OnboardingButton(label: 'Back', outlined: true,
+                                                  fontSize: 16, borderRadius: 8,
+                                                  onPressed: () => Navigator.pop(context)),
+                                              ))
                                       ),
 
 
                                       Expanded(
                                         flex: 7,
                                         child: InkWell(
-                                          onTap: () {
-                                            if (_selectedImages.length >= 4 && _selectedImages.length <= 12) {
-                                              // ✅ Valid case: navigate
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      VenuePhotoListViewScreen(
-                                                        images: _selectedImages,
-                                                        imageBytes: _imageBytes,
-                                                        currentCategory: widget.currentCategory,
-                                                        remainingCategories: widget.remainingCategories,
-                                                        categoryIndex: widget.categoryIndex,
-                                                        totalCategories: widget.totalCategories,
-                                                        accumulatedTimings: widget.accumulatedTimings,
-                                                      ),
-                                                ),
-                                              ).then((value) {
-                                                refresh();
-                                              });
-                                            } else {
-                                              // ❌ Invalid case: show message
-                                              CommonUtilities.createSnackBar(
-                                                context,
-                                                "Please upload a minimum of 4 and a maximum of 12 images.",
-                                              );
-                                            }
-                                          },
-                                          child: (_selectedImages.length >= 4 && _selectedImages.length <= 12)
-                                              ? getButtonBlack(context, "Next", "venuePhoto") // ✅ Active button
-                                              : getButtonGray(context, "Next", "venuePhoto"), // ❌ Disabled button
+                                          onTap: _isButtonEnabled ? _continue : null,
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(8, 12, 15, 14),
+                                            child: OnboardingButton(label: 'Next', borderRadius: 8,
+                                              disabledBackgroundColor: AppColors.darkGray,
+                                              disabledForegroundColor: AppColors.lightGray,
+                                              onPressed: _isButtonEnabled ? _continue : null),
+                                          ),
                                         ),
                                       )
 
@@ -617,18 +592,13 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                   },
 
                 ),
-              ),
-            ),
-          )
-        ],
-      ),
     );
   }
 
   Widget getActivIcon()
   {
     return Container(
-        margin: const EdgeInsets.only(top: 10),
+        margin: const EdgeInsets.only(top: 48, bottom: 10),
         child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
@@ -644,11 +614,11 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   Widget getText()
   {
     return Container(
-      margin: const EdgeInsets.only(top: 25),
+      margin: const EdgeInsets.only(top: 12),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        "Add some photos of your venue",
-        style: TextStyle(
+      child: Text(
+        widget.currentCategory['title']?.toString() ?? widget.currentCategory['name']?.toString() ?? 'Activity',
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
             color: AppColors.darkBlack,
@@ -664,7 +634,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "These images will be shown on the Activ venue listing page",
+        "Upload this activity\u2019s images",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',
@@ -682,6 +652,8 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     {
       CommonUtilities.callVenueImagesClear = "";
       _selectedImages.clear();
+      _imageBytes.clear();
+      _isButtonEnabled = false;
       setState(() {});
     }else{}
   }

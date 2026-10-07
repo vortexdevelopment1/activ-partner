@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 const LOCAL = "LOCAL";
@@ -20,22 +21,31 @@ const onboardingActivityReviewStep = 5;
 const onboardingLegalStep = 6;
 const onboardingReviewStep = 7;
 
-const LOCAL_API_URL = String.fromEnvironment("LOCAL_API_URL");
-const DEPLOYED_API_URL = String.fromEnvironment("API_URL");
+String get LOCAL_API_URL => const bool.hasEnvironment('LOCAL_API_URL')
+    ? const String.fromEnvironment('LOCAL_API_URL')
+    : dotenv.isInitialized
+        ? dotenv.env['LOCAL_API_URL'] ?? ''
+        : '';
+String get DEPLOYED_API_URL => const bool.hasEnvironment('API_URL')
+    ? const String.fromEnvironment('API_URL')
+    : dotenv.isInitialized
+        ? dotenv.env['API_URL'] ?? ''
+        : '';
 
-String BASE_URL = (DEPLOYED_API_URL.trim().isNotEmpty
-        ? DEPLOYED_API_URL
-        : LOCAL_API_URL)
-    .trim()
-    .replaceFirst(RegExp(r'/+$'), '');
+String BASE_URL =
+    (DEPLOYED_API_URL.trim().isNotEmpty ? DEPLOYED_API_URL : LOCAL_API_URL)
+        .trim()
+        .replaceFirst(RegExp(r'/+$'), '');
 
 Future<void> initializeApiBaseUrl() async {
+  if (!dotenv.isInitialized) {
+    await dotenv.load(fileName: '.env');
+  }
   final localUrl = LOCAL_API_URL.trim().replaceFirst(RegExp(r'/+$'), '');
   final deployedUrl = DEPLOYED_API_URL.trim().replaceFirst(RegExp(r'/+$'), '');
   if (localUrl.isEmpty && deployedUrl.isEmpty) {
     throw StateError(
-      'Set API_URL or LOCAL_API_URL in .env and run Flutter with '
-      '--dart-define-from-file=.env.',
+      'Set API_URL or LOCAL_API_URL in .env.',
     );
   }
   if (localUrl.isEmpty) {

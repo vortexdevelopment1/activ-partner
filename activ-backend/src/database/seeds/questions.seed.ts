@@ -73,9 +73,20 @@ const buildQuestions = (
   serviceCategoryId: string,
   capacityLabel: string,
   typeLabel: string,
+  activityName: string,
 ) => {
   const now = new Date();
-  const definitions = [
+  const definitions = activityName === 'Basketball' ? [
+    ['Activity Description', QuestionType.TEXTAREA, true, []],
+    ['Total Arenas', QuestionType.NUMBER, false, []],
+    ['Total Courts', QuestionType.NUMBER, false, []],
+    ['Pitch Surface', QuestionType.SELECT, false, ['Wooden', 'Synthetic', 'Concrete', 'Rubber']],
+    ['Court Type', QuestionType.SELECT, false, ['Full Court', 'Half Court']],
+    ['Playing Environment', QuestionType.MULTISELECT, false, PLAYING_ENV_OPTIONS],
+    ['Equipment Available', QuestionType.MULTISELECT, false, []],
+    ['Coaching Available', QuestionType.MULTISELECT, false, COACHING_OPTIONS],
+    ['Recommended For', QuestionType.MULTISELECT, false, RECOMMENDED_FOR_OPTIONS],
+  ] as const : [
     ['Activity Description', QuestionType.TEXTAREA, true, []],
     [capacityLabel, QuestionType.NUMBER, false, []],
     [typeLabel, QuestionType.SELECT, false, []],
@@ -97,13 +108,14 @@ const buildQuestions = (
   }));
 };
 
-export async function seedQuestions(prisma: PrismaClient) {
+export async function seedQuestions(prisma: PrismaClient, activityNames?: readonly string[]) {
   let inserted = 0;
   let skipped = 0;
 
   for (const [activityName, [capacityLabel, typeLabel]] of Object.entries(
     ACTIVITY_CONFIG,
   )) {
+    if (activityNames && !activityNames.includes(activityName)) continue;
     const category = await prisma.partner_service_categories.findUnique({
       where: { slug: toCategorySlug(activityName) },
     });
@@ -117,14 +129,34 @@ export async function seedQuestions(prisma: PrismaClient) {
       where: { service_category_id: category.id },
     });
 
-    if (existingCount > 0) {
+    if (existingCount > 0 && activityName !== 'Basketball') {
       skipped++;
       continue;
     }
 
-    const result = await prisma.partner_service_questions.createMany({
-      data: buildQuestions(category.id, capacityLabel, typeLabel),
-    });
+    const definitions = buildQuestions(category.id, capacityLabel, typeLabel, activityName);
+    const existing = existingCount > 0
+      ? await prisma.partner_service_questions.findMany({ where: { service_category_id: category.id } })
+      : [];
+    const missing = [];
+    for (const definition of definitions) {
+      const question = existing.find((item) => item.question.trim().toLowerCase() === definition.question.toLowerCase());
+      if (!question) {
+        missing.push(definition);
+      } else {
+        await prisma.partner_service_questions.update({
+          where: { id: question.id },
+          data: {
+            sort_order: definition.sort_order,
+            ...((!Array.isArray(question.options) || question.options.length === 0) && definition.options.length > 0
+              ? { options: definition.options } : {}),
+          },
+        });
+      }
+    }
+    const result = missing.length > 0
+      ? await prisma.partner_service_questions.createMany({ data: missing })
+      : { count: 0 };
     inserted += result.count;
   }
 
