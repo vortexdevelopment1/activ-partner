@@ -4,7 +4,6 @@ import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import 'CommonCode.dart';
@@ -79,8 +78,11 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                                   shrinkWrap: true,
                                   children: [
 
-                                    Container(
-                                        child: SvgPicture.asset("assets/ic_activ.svg",)
+                                    SizedBox(
+                                      height: 108,
+                                      child: Center(
+                                        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
+                                      ),
                                     ),
 
                                     Container(

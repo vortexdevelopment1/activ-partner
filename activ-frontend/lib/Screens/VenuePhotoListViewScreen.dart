@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'CategoryQuestionsScreen.dart';
@@ -18,6 +17,7 @@ import '../api_calling/progress_bar/progress_bar.dart';
 
 class VenuePhotoListViewScreen extends StatefulWidget {
   static List<Uint8List> cachedImageBytes = [];
+  static final Map<String, List<Uint8List>> cachedImagesByCategory = {};
 
   final List<XFile> images;
   final List<Uint8List> imageBytes;
@@ -46,8 +46,8 @@ class _State extends State<VenuePhotoListViewScreen> {
   late List<XFile> _images;
   late List<Uint8List> _imageBytes;
   int? _coverIndex = 0; // by default first image is cover
-  int currentStep = 7;
-  final int totalSteps = 10;
+  int currentStep = onboardingActivitiesStep;
+  final int totalSteps = totalSetup;
 
   void nextStep() {
     if (currentStep < totalSteps) {
@@ -236,6 +236,8 @@ class _State extends State<VenuePhotoListViewScreen> {
                                   getActivIcon(),
 
                                   getStepBar(progress),
+                                  getActivityStepLabel(widget.categoryIndex,
+                                      widget.totalCategories, 2),
 
                                   getText(),
 
@@ -431,6 +433,10 @@ class _State extends State<VenuePhotoListViewScreen> {
 
                                               if (response.statusCode == 201) {
                                                 if (widget.categoryIndex == 1) {
+                                                  VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+                                                }
+                                                VenuePhotoListViewScreen.cachedImagesByCategory[widget.currentCategory['id'].toString()] = List.from(_imageBytes);
+                                                if (widget.categoryIndex == 1) {
                                                   VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
                                                 } else {
                                                   VenuePhotoListViewScreen.cachedImageBytes = [
@@ -523,7 +529,7 @@ class _State extends State<VenuePhotoListViewScreen> {
   {
     return Container(
         margin: const EdgeInsets.only(top: 10),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

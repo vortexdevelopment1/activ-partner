@@ -136,7 +136,7 @@ class _State extends State<ContactSupportFormScreen> {
                                   shrinkWrap: true,
                                   children: [
 
-                                   // getActivIcon('assets/activ_tm.svg'),
+                                   // getActivIcon('assets/logo.png'),
 
 
                                    /* Container(

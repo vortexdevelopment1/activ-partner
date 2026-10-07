@@ -18,7 +18,7 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { CompletePartnerProfileDto } from './dto/complete-partner-profile.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPasswordDto, VerifyPasswordResetCodeDto } from './dto/reset-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -80,6 +80,15 @@ export class AuthController {
   })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const data = await this.authService.forgotPassword(dto);
+    return { message: data.message, data };
+  }
+
+  @Public()
+  @Post('partner/verify-reset-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify the emailed password reset code without changing the password' })
+  async verifyPasswordResetCode(@Body() dto: VerifyPasswordResetCodeDto) {
+    const data = await this.authService.verifyPasswordResetCode(dto);
     return { message: data.message, data };
   }
 

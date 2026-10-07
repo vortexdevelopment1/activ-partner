@@ -20,7 +20,8 @@ import 'CurvePopupDesign.dart';
 import 'CustomerPlacesOffer.dart';
 
 class VenueScreen extends StatefulWidget {
-  const VenueScreen({super.key});
+  const VenueScreen({super.key, this.reviewMode = false});
+  final bool reviewMode;
 
   @override
   State<VenueScreen> createState() => _State();
@@ -58,7 +59,7 @@ class _State extends State<VenueScreen> {
   bool _pincodeError = false;
   Timer? _debounce;
 
-  int currentStep = 5;
+  int currentStep = onboardingVenueStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -92,6 +93,24 @@ class _State extends State<VenueScreen> {
   {
     phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
     userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
+    if (!mounted || !widget.reviewMode) return;
+    final raw = await SharedPreference.readStr('venue_details');
+    if (!mounted || raw == null || raw.isEmpty) return;
+    final details = jsonDecode(raw) as Map<String, dynamic>;
+    venueNameController.text = details['venue_name']?.toString() ?? '';
+    descriptionController.text = details['venue_description']?.toString() ?? '';
+    addressController.text = details['venue_address']?.toString() ?? '';
+    areaController.text = details['venue_area']?.toString() ?? '';
+    cityController.text = details['venue_city']?.toString() ?? '';
+    stateController.text = details['venue_state']?.toString() ?? '';
+    pinCodeController.text = details['venue_pin_code']?.toString() ?? '';
+    venueAddressSearchController.text = addressController.text;
+    _selectedPlaceUrl = details['venue_location_url']?.toString() ?? '';
+    _selectedLat = double.tryParse(details['venue_latitude']?.toString() ?? '');
+    _selectedLon = double.tryParse(details['venue_longitude']?.toString() ?? '');
+    _pincodeResolved = cityController.text.isNotEmpty;
+    setState(() {});
+    _fetchCommission(cityController.text);
   }
 
   Future<void> _fetchCommission(String city) async {
@@ -196,7 +215,7 @@ class _State extends State<VenueScreen> {
                                   shrinkWrap: true,
                                   children: [
 
-                                    getActivIcon('assets/activ_tm.svg'),
+                                    getActivIcon('assets/logo.png'),
 
                                     getStepBarCount(progress, currentStep, totalSteps),
 
@@ -582,7 +601,12 @@ class _State extends State<VenueScreen> {
                                                 String venueDetailsSave = checkString(await SharedPreference.readStr("venue_details"));
                                                 CommonUtilities.showLog("Saved operate_value => $venueDetailsSave");
 
-                                                CommonUtilities.NavigateWithPush(context, CustomerPlacesOffer());
+                                                if (widget.reviewMode) {
+                                                  if (!mounted) return;
+                                                  Navigator.pop(context, true);
+                                                } else {
+                                                  CommonUtilities.NavigateWithPush(context, CustomerPlacesOffer());
+                                                }
                                               }else{}
 
                                             },

@@ -4,13 +4,14 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
@@ -27,7 +28,7 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { CompletePartnerProfileDto } from './dto/complete-partner-profile.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPasswordDto, VerifyPasswordResetCodeDto } from './dto/reset-password.dto';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VenueStatus } from '../../common/enums/venue-status.enum';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -194,6 +195,7 @@ export class AuthService {
         lastName: names.slice(1).join(' ') || null,
         email: user.email,
         phone: user.phone_e164,
+        avatarUrl: user.profile_photo ?? null,
         businessName: profile?.business_name || partner.legal_name,
         isActive: true,
         role: partnerUser.role,
@@ -550,53 +552,105 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const { email } = dto;
-    const partner = await this.partnerRepository.findOne({ where: { email } });
+    const user = await this.findPasswordResetUser(dto.email);
 
     // Always return a generic success response so this endpoint can't be used to enumerate registered emails
-    if (!partner) {
+    if (!user) {
       return { message: 'If an account exists for this email, a reset code has been sent.' };
     }
 
-    if (partner.resetPasswordCodeExpiresAt && partner.resetPasswordCodeExpiresAt > new Date()) {
+    // Namespace email recovery challenges so they cannot be used for phone OTP login.
+    const challengeKey = `password-reset:${user.id}`;
+    const latest = await this.prisma.otp_challenges.findFirst({
+      where: { phone_e164: challengeKey },
+      orderBy: { created_at: 'desc' },
+    });
+    if (latest && latest.created_at.getTime() > Date.now() - 60000) {
       throw new BadRequestException('Please wait before requesting another reset code.');
     }
 
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    partner.resetPasswordCode = code;
-    partner.resetPasswordCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await this.partnerRepository.save(partner);
-
-    await this.mailService.sendPasswordResetEmail({
-      toEmail: partner.email,
-      firstName: partner.firstName || 'there',
-      code,
+    const code = randomInt(1000, 10000).toString();
+    const challenge = await this.prisma.otp_challenges.create({
+      data: {
+        id: randomUUID(), phone_e164: challengeKey,
+        code_hash: await bcrypt.hash(code, 10),
+        expires_at: new Date(Date.now() + 10 * 60 * 1000),
+      },
     });
+    try {
+      const sent = await this.mailService.sendPasswordResetEmail({
+        toEmail: user.email,
+        firstName: user.name?.trim().split(/\s+/)[0] || 'there',
+        code,
+      });
+      if (!sent) {
+        throw new ServiceUnavailableException('Unable to send the reset email. Please try again.');
+      }
+    } catch (error) {
+      await this.prisma.otp_challenges.delete({ where: { id: challenge.id } });
+      throw error;
+    }
 
     return { message: 'If an account exists for this email, a reset code has been sent.' };
   }
 
-  async resetPassword(dto: ResetPasswordDto) {
-    const { email, code, newPassword } = dto;
-    const partner = await this.partnerRepository.findOne({ where: { email } });
+  private findPasswordResetUser(email: string) {
+    return this.prisma.users.findFirst({
+      where: {
+        email: { equals: email.trim(), mode: 'insensitive' },
+        partner_users: { some: {} },
+      },
+    });
+  }
 
-    if (!partner || !partner.resetPasswordCode) {
+  private async findUserWithResetCode(email: string, code: string) {
+    const user = await this.findPasswordResetUser(email);
+    if (!user) {
       throw new BadRequestException('Invalid or expired reset code.');
     }
-
+    const challenge = await this.prisma.otp_challenges.findFirst({
+      where: { phone_e164: `password-reset:${user.id}` },
+      orderBy: { created_at: 'desc' },
+    });
     if (
-      partner.resetPasswordCode !== code ||
-      !partner.resetPasswordCodeExpiresAt ||
-      partner.resetPasswordCodeExpiresAt < new Date()
+      !challenge || challenge.consumed_at || challenge.attempts >= 5 ||
+      challenge.expires_at <= new Date()
     ) {
       throw new BadRequestException('Invalid or expired reset code.');
     }
+    if (!await bcrypt.compare(code, challenge.code_hash)) {
+      await this.prisma.otp_challenges.updateMany({
+        where: { id: challenge.id, attempts: { lt: 5 }, consumed_at: null },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new BadRequestException('Invalid or expired reset code.');
+    }
+    return { user, challenge };
+  }
 
-    // Assigning triggers the @BeforeUpdate hook which hashes the new value
-    partner.password = newPassword;
-    partner.resetPasswordCode = null;
-    partner.resetPasswordCodeExpiresAt = null;
-    await this.partnerRepository.save(partner);
+  async verifyPasswordResetCode(dto: VerifyPasswordResetCodeDto) {
+    await this.findUserWithResetCode(dto.email, dto.code);
+    return { message: 'Reset code verified successfully' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const { email, code, newPassword } = dto;
+    const { user, challenge } = await this.findUserWithResetCode(email, code);
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.otp_challenges.updateMany({
+        where: { id: challenge.id, consumed_at: null,
+          expires_at: { gt: new Date() }, attempts: { lt: 5 } },
+        data: { consumed_at: new Date() },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('Invalid or expired reset code.');
+      }
+      await tx.users.update({
+        where: { id: user.id },
+        data: { password_hash: passwordHash, updated_at: new Date() },
+      });
+    });
 
     return { message: 'Password reset successfully' };
   }
@@ -646,6 +700,7 @@ export class AuthService {
         phone: user.phone_e164,
         businessName: profile?.business_name || partner.legal_name,
         isActive,
+        avatarUrl: user.profile_photo ?? null,
         role,
       },
       userType: 'partner',

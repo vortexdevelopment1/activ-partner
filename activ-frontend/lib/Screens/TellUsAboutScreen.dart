@@ -5,7 +5,6 @@ import 'package:activ_app/Style/app_colors.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../Style/app_size.dart';
 import '../api_calling/progress_bar/progress_bar_new.dart';
@@ -17,7 +16,8 @@ import 'MobileNumberFormatter.dart';
 import 'VenueScreen.dart';
 
 class TellUsAboutScreen extends StatefulWidget {
-  const TellUsAboutScreen({super.key});
+  const TellUsAboutScreen({super.key, this.reviewMode = false});
+  final bool reviewMode;
 
   @override
   State<TellUsAboutScreen> createState() => _State();
@@ -34,7 +34,7 @@ class _State extends State<TellUsAboutScreen> {
   bool isChecked = false;
   String phoneCode = "", userMobileNumber = "", jwtToken = "";
 
-  int currentStep = 4;
+  int currentStep = onboardingProfileStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -70,6 +70,20 @@ class _State extends State<TellUsAboutScreen> {
     jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
 
     mobileNumberController.text = userMobileNumber;
+
+    if (!mounted) return;
+    if (widget.reviewMode) {
+      final name = checkString(await SharedPreference.readStr('owner_full_name')).trim().split(RegExp(r'\s+'));
+      firstNameController.text = name.first;
+      lastNameController.text = name.skip(1).join(' ');
+      emailController.text = checkString(await SharedPreference.readStr('owner_email'));
+      isChecked = await SharedPreference.readStr('same_as_owner_number_checked') == 'true';
+      if (!isChecked) {
+        venueOwnerMobileNumberController.text = checkString(await SharedPreference.readStr('same_as_owner_number'));
+      }
+      isButtonEnabled = firstNameController.text.isNotEmpty && emailController.text.isNotEmpty;
+    }
+    if (!mounted) return;
 
     setState(() {});
   }
@@ -129,7 +143,11 @@ class _State extends State<TellUsAboutScreen> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         await SharedPreference.addStringToSF("is_profile_complete", "true");
         if (!mounted) return;
-        CommonUtilities.NavigateWithPush(context, VenueScreen());
+        if (widget.reviewMode) {
+          Navigator.pop(context, true);
+        } else {
+          CommonUtilities.NavigateWithPush(context, VenueScreen());
+        }
       } else {
         final body = jsonDecode(response.body);
         final msg = body['message'] ?? 'Failed to save profile. Please try again.';
@@ -317,7 +335,7 @@ class _State extends State<TellUsAboutScreen> {
   {
     return Container(
         margin: const EdgeInsets.only(top: 10),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

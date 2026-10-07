@@ -5,7 +5,6 @@ import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import '../../Style/app_colors.dart';
@@ -49,7 +48,7 @@ class _State extends State<ListActivityTypeScreen> {
     }).toList();
   }
 
-  int currentStep = 3;
+  int currentStep = onboardingActivitiesStep;
   bool isActivitySelected = false;
   bool isShimmerLoading = false;
   final int totalSteps = totalSetup;
@@ -415,7 +414,7 @@ class _State extends State<ListActivityTypeScreen> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

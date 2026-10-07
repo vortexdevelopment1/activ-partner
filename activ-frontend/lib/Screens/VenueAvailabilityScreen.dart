@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/painting.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import '../../Style/app_colors.dart';
 import '../../Style/app_size.dart';
@@ -25,8 +24,8 @@ class _State extends State<VenueAvailabilityScreen> {
   String noDataFound = NO_DATA_FOUND;
   ScrollController scrollController = ScrollController();
 
-  int currentStep = 8;
-  final int totalSteps = 10;
+  int currentStep = onboardingActivitiesStep;
+  final int totalSteps = totalSetup;
 
   void nextStep() {
     if (currentStep < totalSteps) {
@@ -155,7 +154,7 @@ class _State extends State<VenueAvailabilityScreen> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

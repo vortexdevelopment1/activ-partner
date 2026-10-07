@@ -3,7 +3,6 @@ import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -40,7 +39,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   final List<Uint8List> _imageBytes = [];
   final ImagePicker _picker = ImagePicker();
 
-  int currentStep = 7;
+  int currentStep = onboardingActivitiesStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -342,6 +341,8 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                     getActivIcon(),
 
                                     getStepBar(progress),
+                                    getActivityStepLabel(widget.categoryIndex,
+                                        widget.totalCategories, 1),
 
                                     getText(),
 
@@ -628,7 +629,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   {
     return Container(
         margin: const EdgeInsets.only(top: 10),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

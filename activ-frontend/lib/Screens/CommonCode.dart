@@ -49,7 +49,7 @@ Widget getActivIcon(String icon)
 {
   return Container(
       margin: const EdgeInsets.only(top: 10),
-      child: SvgPicture.asset(icon,)
+      child: Image.asset(icon, width: 105, height: 60, fit: BoxFit.contain)
   );
 }
 
@@ -61,6 +61,22 @@ Widget getTitleText(BuildContext context, String titleName, String screenName)
       fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_16),
       fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
       color: screenName == "Activities_Details" ? AppColors.white : AppColors.darkBlack,
+    ),
+  );
+}
+
+Widget getActivityStepLabel(int categoryIndex, int totalCategories, int subStep) {
+  return Container(
+    margin: const EdgeInsets.only(top: 16),
+    alignment: Alignment.centerLeft,
+    child: Text(
+      'Configuring Activity $categoryIndex of $totalCategories \u2014 Step $subStep/4',
+      style: const TextStyle(
+        fontSize: AppSize.size_14,
+        fontFamily: 'FontSemiBold',
+        color: AppColors.hintColor,
+        height: 1.3,
+      ),
     ),
   );
 }

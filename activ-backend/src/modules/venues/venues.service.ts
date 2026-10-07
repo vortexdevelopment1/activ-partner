@@ -577,28 +577,22 @@ export class VenuesService {
   }
 
   async findApprovedByPartner(partnerId: string): Promise<any[]> {
-    const venues = await this.venueRepository.find({
-      where: { partnerId, status: VenueStatus.APPROVED },
-      relations: [
-        'categories',
-        'images',
-        'services',
-        'answers',
-        'answers.question',
-        'answers.question.category',
-      ],
-      order: { createdAt: 'DESC' },
+    if (!partnerId) throw new ForbiddenException('Partner identity is required');
+    const records = await this.prisma.venues.findMany({
+      where: { partner_id: partnerId, status: 'PUBLISHED' },
+      select: { id: true },
+      orderBy: [{ partner_venue_profiles: { created_at: 'desc' } }, { id: 'asc' }],
     });
+    const venues = await Promise.all(records.map((record) => this.findOne(record.id)));
 
-    // Attach answers to the service whose name matches the answer's category name
+    // Match by IDs: activity titles can be customized independently of categories.
     return venues.map((venue) => ({
       ...venue,
       services: (venue.services || []).map((service) => ({
         ...service,
         answers: (venue.answers || []).filter(
-          (a) =>
-            a.question?.category?.name?.toLowerCase() ===
-            service.name?.toLowerCase(),
+          (a) => a.venueServiceId === service.id ||
+            (!a.venueServiceId && a.question?.categoryId === service.categoryId),
         ),
       })),
     }));
@@ -645,7 +639,7 @@ export class VenuesService {
           include: { partner_service_categories: true },
         },
         partner_venue_answers: {
-          include: { partner_service_questions: true },
+          include: { partner_service_questions: { include: { partner_service_categories: true } } },
         },
       },
     });
@@ -733,6 +727,11 @@ export class VenuesService {
         question: {
           id: answer.partner_service_questions.id,
           question: answer.partner_service_questions.question,
+          categoryId: answer.partner_service_questions.service_category_id,
+          category: answer.partner_service_questions.partner_service_categories
+            ? { id: answer.partner_service_questions.partner_service_categories.id,
+                name: answer.partner_service_questions.partner_service_categories.name }
+            : null,
         },
         createdAt: answer.created_at,
         updatedAt: answer.updated_at,
@@ -1382,105 +1381,176 @@ export class VenuesService {
 
   // ─── Venue Update Requests ────────────────────────────────────────────────
 
+  private mapVenueUpdateRequest(request: any): VenueUpdateRequest {
+    const changes = this.asRecord(request.requested_changes);
+    return {
+      ...changes,
+      id: request.id,
+      venueId: request.venue_id,
+      partnerId: request.partner_id,
+      status: request.status.toLowerCase(),
+      adminNotes: request.rejection_reason,
+      createdAt: request.created_at,
+      updatedAt: request.updated_at,
+      requestedChanges: changes,
+      reviewedAt: request.reviewed_at,
+    } as unknown as VenueUpdateRequest;
+  }
+
   async submitVenueUpdateRequest(
     venueId: string,
     partnerId: string,
     dto: SubmitVenueUpdateDto,
   ): Promise<VenueUpdateRequest> {
-    const venue = await this.findOne(venueId);
-
-    if (venue.partnerId !== partnerId) {
-      throw new ForbiddenException('You can only submit update requests for your own venues');
+    const changes = Object.fromEntries(
+      Object.entries(dto).filter(([key, value]) =>
+        ['name', 'description', 'address', 'city', 'state', 'zipCode', 'flatBuilding',
+          'latitude', 'longitude', 'locationUrl', 'venuePhone'].includes(key) && value != null),
+    );
+    if (Object.keys(changes).length === 0) {
+      throw new BadRequestException('Submit at least one changed field');
     }
-
-    const existing = await this.venueUpdateRequestRepo.findOne({
-      where: { venueId, status: VenueUpdateRequestStatus.PENDING },
+    if (dto.venuePhone != null) {
+      const digits = dto.venuePhone.replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        throw new BadRequestException('Enter a valid phone number');
+      }
+    }
+    const request = await this.prisma.$transaction(async (tx) => {
+      // Serialize submissions for this venue so two devices cannot create pending duplicates.
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venueId}::uuid FOR UPDATE`;
+      const venue = await tx.venues.findUnique({ where: { id: venueId } });
+      if (!venue) throw new NotFoundException('Venue not found');
+      if (venue.partner_id !== partnerId) {
+        throw new ForbiddenException('You can only submit update requests for your own venues');
+      }
+      if (venue.status !== 'PUBLISHED') {
+        throw new BadRequestException('Only approved venues can submit update requests');
+      }
+      const existing = await tx.partner_venue_update_requests.findFirst({
+        where: { venue_id: venueId, status: 'PENDING' },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'A pending update request already exists for this venue. Please wait for admin review.',
+        );
+      }
+      return tx.partner_venue_update_requests.create({
+        data: {
+          id: randomUUID(), partner_id: partnerId, venue_id: venueId,
+          status: 'PENDING', requested_changes: changes, updated_at: new Date(),
+        },
+      });
     });
-
-    if (existing) {
-      throw new ConflictException(
-        'A pending update request already exists for this venue. Please wait for admin review.',
-      );
-    }
-
-    const request = this.venueUpdateRequestRepo.create({ venueId, partnerId, ...dto });
-    return this.venueUpdateRequestRepo.save(request);
+    return this.mapVenueUpdateRequest(request);
   }
 
   async findMyVenueUpdateRequests(partnerId: string): Promise<VenueUpdateRequest[]> {
-    return this.venueUpdateRequestRepo.find({
-      where: { partnerId },
-      order: { createdAt: 'DESC' },
+    if (!partnerId) throw new ForbiddenException('Partner identity is required');
+    const requests = await this.prisma.partner_venue_update_requests.findMany({
+      where: { partner_id: partnerId }, orderBy: { created_at: 'desc' },
     });
+    return requests.map((request) => this.mapVenueUpdateRequest(request));
   }
 
   async findAllVenueUpdateRequests(
     pagination: PaginationDto,
     status?: VenueUpdateRequestStatus,
   ): Promise<[VenueUpdateRequest[], number]> {
-    const qb = this.venueUpdateRequestRepo
-      .createQueryBuilder('req')
-      .orderBy('req.createdAt', 'DESC');
-
-    if (status) {
-      qb.andWhere('req.status = :status', { status });
-    }
-
+    const where: any = {};
+    if (status) where.status = status.toUpperCase();
     if (pagination.search) {
-      qb.andWhere('req.name ILIKE :search', { search: `%${pagination.search}%` });
+      where.requested_changes = { path: ['name'], string_contains: pagination.search };
     }
-
-    qb.skip(pagination.skip).take(pagination.limit);
-    return qb.getManyAndCount();
+    const [requests, total] = await Promise.all([
+      this.prisma.partner_venue_update_requests.findMany({
+        where, orderBy: { created_at: 'desc' }, skip: pagination.skip, take: pagination.limit,
+      }),
+      this.prisma.partner_venue_update_requests.count({ where }),
+    ]);
+    return [requests.map((request) => this.mapVenueUpdateRequest(request)), total];
   }
 
   async findOneVenueUpdateRequest(id: string): Promise<VenueUpdateRequest> {
-    const request = await this.venueUpdateRequestRepo.findOne({ where: { id } });
+    const request = await this.prisma.partner_venue_update_requests.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Venue update request not found');
-    return request;
+    return this.mapVenueUpdateRequest(request);
   }
 
-  async approveVenueUpdateRequest(id: string): Promise<Venue> {
-    const request = await this.findOneVenueUpdateRequest(id);
-
-    if (request.status !== VenueUpdateRequestStatus.PENDING) {
-      throw new BadRequestException('Only pending requests can be approved');
-    }
-
-    const venue = await this.findOne(request.venueId);
-
-    // Apply only the fields that were submitted (undefined means "not requested")
-    if (request.name !== null && request.name !== undefined)        venue.name        = request.name;
-    if (request.description !== null && request.description !== undefined) venue.description = request.description;
-    if (request.address !== null && request.address !== undefined)  venue.address     = request.address;
-    if (request.city !== null && request.city !== undefined)        venue.city        = request.city;
-    if (request.state !== null && request.state !== undefined)      venue.state       = request.state;
-    if (request.zipCode !== null && request.zipCode !== undefined)  venue.zipCode     = request.zipCode;
-    if (request.flatBuilding !== null && request.flatBuilding !== undefined) venue.flatBuilding = request.flatBuilding;
-    if (request.latitude !== null && request.latitude !== undefined)   venue.latitude    = request.latitude;
-    if (request.longitude !== null && request.longitude !== undefined) venue.longitude   = request.longitude;
-    if (request.locationUrl !== null && request.locationUrl !== undefined) venue.locationUrl = request.locationUrl;
-    if (request.venuePhone !== null && request.venuePhone !== undefined)   venue.venuePhone  = request.venuePhone;
-
-    await this.venueRepository.save(venue);
-    await this.venueUpdateRequestRepo.remove(request);
-
+  async approveVenueUpdateRequest(id: string, adminId?: string): Promise<Venue> {
+    const venueId = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM partner_venue_update_requests WHERE id = ${id}::uuid FOR UPDATE`;
+      const request = await tx.partner_venue_update_requests.findUnique({ where: { id } });
+      if (!request) throw new NotFoundException('Venue update request not found');
+      if (request.status !== 'PENDING') throw new BadRequestException('Only pending requests can be approved');
+      const venue = await tx.venues.findUnique({ where: { id: request.venue_id } });
+      if (!venue) throw new NotFoundException('Venue not found');
+      const changes = this.asRecord(request.requested_changes);
+      const metadata = { ...this.asRecord(venue.metadata) };
+      if (changes.locationUrl !== undefined) metadata.locationUrl = changes.locationUrl;
+      const now = new Date();
+      await tx.venues.update({
+        where: { id: venue.id },
+        data: {
+          ...(changes.name !== undefined ? { name: changes.name } : {}),
+          ...(changes.city !== undefined ? { city_code: changes.city } : {}),
+          ...(changes.latitude !== undefined ? { latitude: changes.latitude } : {}),
+          ...(changes.longitude !== undefined ? { longitude: changes.longitude } : {}),
+          metadata,
+        },
+      });
+      const profileData: Record<string, any> = { updated_at: now };
+      for (const [field, column] of Object.entries({
+        name: 'display_name', description: 'description', address: 'address_line_1',
+        flatBuilding: 'address_line_2', city: 'city', state: 'state',
+        zipCode: 'postal_code', venuePhone: 'contact_phone_e164',
+      })) {
+        if (changes[field] !== undefined) profileData[column] = changes[field];
+      }
+      await tx.partner_venue_profiles.upsert({
+        where: { venue_id: venue.id },
+        create: {
+          id: randomUUID(), venue_id: venue.id, partner_id: venue.partner_id,
+          ...profileData, updated_at: now,
+        },
+        update: profileData,
+      });
+      await tx.partner_venue_update_requests.update({
+        where: { id }, data: {
+          status: 'APPROVED', reviewed_at: now, reviewed_by: adminId ?? null, updated_at: now,
+        },
+      });
+      return venue.id;
+    });
+    const venue = await this.findOne(venueId);
+    await this.notificationsService.notify(venue.partnerId, NotificationType.ADMIN_UPDATE,
+      'Venue details approved', `${venue.name}: your updated venue details are now live.`,
+      { venueId, requestId: id });
     return venue;
   }
 
   async rejectVenueUpdateRequest(
     id: string,
     dto: ReviewVenueUpdateDto,
+    adminId?: string,
   ): Promise<VenueUpdateRequest> {
-    const request = await this.findOneVenueUpdateRequest(id);
-
-    if (request.status !== VenueUpdateRequestStatus.PENDING) {
-      throw new BadRequestException('Only pending requests can be rejected');
-    }
-
-    request.status     = VenueUpdateRequestStatus.REJECTED;
-    request.adminNotes = dto.adminNotes ?? null;
-    return this.venueUpdateRequestRepo.save(request);
+    const request = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM partner_venue_update_requests WHERE id = ${id}::uuid FOR UPDATE`;
+      const current = await tx.partner_venue_update_requests.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Venue update request not found');
+      if (current.status !== 'PENDING') throw new BadRequestException('Only pending requests can be rejected');
+      const now = new Date();
+      return tx.partner_venue_update_requests.update({
+        where: { id }, data: {
+          status: 'REJECTED', rejection_reason: dto.adminNotes ?? null,
+          reviewed_at: now, reviewed_by: adminId ?? null, updated_at: now,
+        },
+      });
+    });
+    await this.notificationsService.notify(request.partner_id, NotificationType.ADMIN_UPDATE,
+      'Venue changes need attention', dto.adminNotes || 'Your venue changes were not approved. Please review and submit again.',
+      { venueId: request.venue_id, requestId: id });
+    return this.mapVenueUpdateRequest(request);
   }
 
   // ─── Venue Activities (per-category VenueService lifecycle) ───────────────

@@ -1,534 +1,115 @@
-import 'dart:developer';
-import 'dart:io';
-
-import 'package:activ_app/Screens/LoginScreen.dart';
-import 'package:activ_app/Screens/LoginScreenWithPassword.dart';
-import 'package:activ_app/Screens/StringExtensions.dart';
-import 'package:activ_app/Style/app_colors.dart';
-import 'package:activ_app/Style/constants_messages.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:http/http.dart' as http;
 
-import '../Database/auth_service.dart';
-import '../Database/database_service.dart';
-import '../Style/app_size.dart';
+import '../Style/app_colors.dart';
 import '../Utills/common_utilities.dart';
-import '../api_calling/api_request.dart';
-import 'CommonCode.dart';
-import 'ListActivityTypeScreen.dart';
-import 'MobileNumberFormatter.dart';
-import 'OTPVerificationScreen.dart';
+import '../api_calling/password_reset_service.dart';
 import 'ResetPasswordScreen.dart';
+import 'onboarding_widgets.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-
-  String emailId="";
-
-  ForgotPasswordScreen({required this.emailId});
+  const ForgotPasswordScreen({super.key, required this.emailId, this.client});
+  final String emailId;
+  final http.Client? client;
 
   @override
-  State<ForgotPasswordScreen> createState() => _State();
-
- /* const ForgotPasswordScreen({super.key});
-  @override
-  State<ForgotPasswordScreen> createState() => _State();*/
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _State extends State<ForgotPasswordScreen> {
-
-  TextEditingController emailController = TextEditingController();
-
-  bool isButtonEnabled = false;
-  AuthService authService = AuthService();
-
-  String phoneCode = "IND (+91)";
-
-  int currentStep = 1;
-  final int totalSteps = 10;
-
-  void nextStep() {
-    if (currentStep < totalSteps) {
-      setState(() {
-        currentStep++;
-      });
-    }
-  }
-
-  void prevStep() {
-    if (currentStep > 1) {
-      setState(() {
-        currentStep--;
-      });
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-  }
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late final _email = TextEditingController(
+    text:
+        CommonUtilities.emailVaidatation(widget.emailId) ? widget.emailId : '',
+  );
+  bool _loading = false;
 
   @override
   void dispose() {
-    emailController.dispose();
+    _email.dispose();
     super.dispose();
   }
 
+  Future<void> _sendCode() async {
+    if (_loading || !_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _loading = true);
+    try {
+      await PasswordResetService(widget.client).sendCode(_email.text.trim());
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ResetPasswordScreen(
+            emailId: _email.text.trim(), client: widget.client),
+      ));
+    } on PasswordResetException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-
-    double progress = currentStep / totalSteps;
-
-    return Container(
-      child: Stack(
-        children: [
-          /*To Set Top Header Color*/
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.yellowTop,
-            ),
-          ),
-          /*To Set Bottom Header Color*/
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.white,
-            ),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double width = constraints.maxWidth;
-
-                    bool isMobile = width < 600;
-                    bool isTablet = width >= 600 && width < 1100;
-
-                    double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
-
-                    return Container(
-                      //width: containerWidth,
-                      //margin: const EdgeInsets.only(right: 20),
-                      //padding: EdgeInsets.all(isMobile ? 20 : 30),
-                      child: Container(
-                        margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-
-                            Expanded(
-                              child: Container(
-                                margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-                                child: ListView(
-                                  shrinkWrap: true,
-                                  children: [
-
-                                    getActivIcon('assets/activ_tm.svg'),
-
-                                   // getStepBarCount(progress, currentStep, totalSteps),
-
-                                    Container(
-                                      margin: EdgeInsets.only(left: 15, right: 15),
-                                        child: getText('Forgot Password')),
-
-                                   // getSubText('We’ll send you a verification code'),
-                              
-                                    getEmailText(),
-                                    getEmailField(context),
-
-
-                                    InkWell(
-                                      onTap: ()
-                                      {
-                                        if(validation(context))
-                                        {
-                                          CommonUtilities.NavigateWithPush(context, ResetPasswordScreen(emailId: emailController.text.toString().trim(),));
-                                        }
-                                      },
-                                      child: Container(
-                                        margin: EdgeInsets.only(top: 15),
-                                          child: getButtonBlack(context, "Send OTP", "login")
-                                      ),
-                                    ),
-
-                                    InkWell(
-                                      onTap: ()
-                                      {
-                                        Navigator.pop(context);
-                                      },
-                                      child: Container(
-                                        margin: EdgeInsets.only(top: 5),
-                                        child: getLoginWithOTP(context, 'Back to Login', 'login'),
-                                      ),
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            Container(
-                              margin: EdgeInsets.only(top: 10, bottom: 10, left: 10, right: 10),
-                              child: Column(
-                                children: [
-                                 // bottomBarShadow(),
-
-                                  /*InkWell(
-                                      onTap: ()
-                                      {
-
-                                        if(isButtonEnabled)
-                                        {
-                                          SharedPreference.addStringToSF("userEmail", checkString(emailController.text.trim().toString()));
-
-                                          if(validation(context))
-                                          {
-                                            handleLogin(context);
-                                            //CommonUtilities.NavigateWithPush(context, OTPVerificationScreen());
-                                          }
-                                        }
-                                        else{}
-
-                                      },
-                                      child: isButtonEnabled ? getButtonBlack(context, "Send Code", "login") :
-                                           getButtonGray(context, "Send Code", "login")
-                                  )*/
-                                ],
-                              ),
-                            )
-
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-
-  Widget getEmailText()
-  {
-    return Row(
-      children: [
-         Container(
-          margin: EdgeInsets.fromLTRB(15, 20, 0, 0),
-          child: const Text(
-            "Email Address",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.black1,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        ),
-
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.red,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget getEmailField(BuildContext context)
-  {
-    return Container(
-      margin: EdgeInsets.fromLTRB(15, 8, 15, 0),
-      decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
-          ),
-          border: Border.all(color: AppColors.gray, width: 1)),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 0, right: 0),
-        child: Row(
-          children: [
-            Expanded(
-              //flex: 4,
-              child: Container(
-                padding: const EdgeInsets.only(left: 10, right: 10),
-                child: TextFormField(
-                  controller: emailController,
-                  textInputAction: TextInputAction.next,
-                  textCapitalization: TextCapitalization.sentences,
-                  keyboardType: TextInputType.emailAddress,
-                  cursorColor: AppColors.cursorBlack,
-                  inputFormatters: [],
-                  style: TextStyle(
-                    fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
-                    color: AppColors.darkBlack,
+  Widget build(BuildContext context) => OnboardingScaffold(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const OnboardingLogo(),
+                  const SizedBox(height: 40),
+                  const Text('Forgot password?',
+                      style: OnboardingStyles.heading),
+                  const SizedBox(height: 6),
+                  Text(
+                      "Enter your email address and we'll send you a verification code to reset your password",
+                      style: OnboardingStyles.body
+                          .copyWith(fontSize: 16, height: 1.4)),
+                  const SizedBox(height: 26),
+                  const Text.rich(TextSpan(children: [
+                    TextSpan(text: 'Email Address'),
+                    TextSpan(text: '*', style: TextStyle(color: AppColors.red)),
+                  ])),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    key: const Key('forgot-email'),
+                    controller: _email,
+                    enabled: !_loading,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.email],
+                    autocorrect: false,
+                    style: OnboardingStyles.body,
+                    decoration: OnboardingStyles.inputDecoration(),
+                    validator: (value) =>
+                        CommonUtilities.emailVaidatation(value?.trim() ?? '')
+                            ? null
+                            : 'Enter a valid email address.',
+                    onFieldSubmitted: (_) => _sendCode(),
                   ),
-                  decoration: InputDecoration(
-                    hintText: 'Enter your email address.',
-                    hintStyle: TextStyle(
-                      fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
-                      color: AppColors.hintColor,
-                    ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  ),
-                ),
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget getPasswordText()
-  {
-    return Row(
-      children: [
-        Container(
-          margin: EdgeInsets.fromLTRB(15, 20, 0, 0),
-          child: const Text(
-            "Password",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.black1,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
+                  const SizedBox(height: 24),
+                  OnboardingButton(
+                      key: const Key('forgot-send'),
+                      label: 'Send Code',
+                      loading: _loading,
+                      onPressed: _sendCode),
+                  const SizedBox(height: 16),
+                  Center(
+                      child: TextButton.icon(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, size: 14),
+                    label: const Text('Back to Login'),
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppColors.purple,
+                        textStyle: OnboardingStyles.body),
+                  )),
+                ]),
           ),
         ),
-
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.red,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        )
-      ],
-    );
-  }
-
-
-  Widget getForgotPasswordText(BuildContext context)
-  {
-    return InkWell(
-      onTap: ()
-      {
-
-      },
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Container(
-            margin: EdgeInsets.fromLTRB(0, 10, 15, 0),
-            child: const Text(
-              "Forgot Password?",
-              style: TextStyle(
-                  fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
-                  color: AppColors.purple,
-                  height: 1
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget getHorizontalLine()
-  {
-    return Container(
-      color: AppColors.gray,
-      height: 1,
-      width: 145,
-    );
-  }
-
-  Widget getOrText()
-  {
-    return Container(
-      margin: EdgeInsets.fromLTRB(10, 0, 10, 0),
-      child: Text(
-        'Or',
-        style: TextStyle(
-            color: AppColors.darkBlack,
-            fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium'
-        ),
-      ),
-    );
-  }
-
-  Widget getTermsConditionText()
-  {
-    return RichText(
-      textAlign: TextAlign.center,
-      text: TextSpan(
-        style: const TextStyle(
-            color: AppColors.black,
-            fontFamily: 'FontMedium',
-            fontSize: AppSize.size_14,
-          height: 1.5
-        ),
-        children: [
-          const TextSpan(
-            text: 'By clicking on Login, I accept the ',
-            style: const TextStyle(
-              color: AppColors.black,
-              fontFamily: 'FontMedium',
-                fontSize: AppSize.size_14
-            ),
-          ),
-
-          TextSpan(
-            text: 'Terms & Conditions',
-            style: const TextStyle(
-              color: AppColors.purple,
-              fontFamily: 'FontMedium',
-              fontSize: AppSize.size_14
-            ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () {
-                // Terms & Conditions click
-                debugPrint('Terms & Conditions clicked');
-                // Navigator.push(...)
-              },
-          ),
-
-          const TextSpan(
-            text: ' & ',
-          ),
-
-          TextSpan(
-            text: 'Privacy Policy',
-            style: const TextStyle(
-              color: AppColors.purple,
-              fontFamily: 'FontMedium',
-                fontSize: AppSize.size_14
-            ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () {
-                // Privacy Policy click
-                debugPrint('Privacy Policy clicked');
-                // Navigator.push(...)
-              },
-          ),
-        ],
-      ),
-    );
-  }
-
-  String deviceType = "", appVersionName="", appVersionCode="", deviceName="", deviceVersion="", dateTime="", todayDate="";
-
-  void handleLogin(BuildContext context) async {
-    String email = emailController.text.trim();
-
-    // Check if user exists in Firestore
-    /*bool exists = await DatabaseService(uid: mobile).checkIfUserExists(mobile);
-
-    if (exists) {
-      // User already exists Go to HomeScreen
-      CommonUtilities.NavigateWithPush(context, ListActivityTypeScreen());
-    } else {
-      authService.registerWithNumber(phoneCode, mobileNumberController.text.toString().trim()).then((value) async
-      {
-        CommonUtilities.NavigateWithPush(context, OTPVerificationScreen());
-      });
-    }*/
-
-    PackageInfo packageInfo = await PackageInfo.fromPlatform();
-
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    String deviceDetails = deviceInfo.toString();
-
-    DateTime today = DateTime.now(); // Get Today Date
-    todayDate = today.toString();
-    String formatedDate1 = CommonUtilities.converDateFormate(todayDate, "DD-MM-YYYY", "yyyy-MM-dd HH:mm:ss"); //2022-09-29T08:07:48.000Z
-    dateTime = CommonUtilities.converDateFormate(formatedDate1, "yyyy-MM-dd HH:mm:ss", "dd-MM-yyyy HH:mm:ss a");
-
-    CommonUtilities.showLog("dateTime : " + dateTime);
-
-    if (Platform.isAndroid) {
-      deviceType = "Android";
-      appVersionName = packageInfo.version;
-      appVersionCode = packageInfo.buildNumber;
-
-      AndroidDeviceInfo androidDeviceInfo = await deviceInfo.androidInfo;
-      deviceName = androidDeviceInfo.name;
-      deviceVersion = androidDeviceInfo.version.sdkInt.toString();
-    }
-    else{
-      deviceType = "IOS";
-      appVersionName = packageInfo.version;
-      appVersionCode = packageInfo.buildNumber;
-
-      IosDeviceInfo iosDeviceInfo = await deviceInfo.iosInfo;
-      deviceName = iosDeviceInfo.name;
-      deviceVersion = iosDeviceInfo.model;
-    }
-
-    authService.registerWithNumber(phoneCode, emailController.text.toString().trim(), deviceType, appVersionName, appVersionCode,
-    deviceName, deviceVersion, dateTime, "LoginScreen").then((value) async
-    {
-      CommonUtilities.NavigateWithPush(context, OTPVerificationScreen());
-    });
-  }
-
-  bool validation(BuildContext context)
-  {
-    
-    String input = emailController.text.trim();
-
-    if (input.isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.emailIdEnter);
-      return false;
-    }
-    else if (!CommonUtilities.emailVaidatation(emailController.text.trim())) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.validEmailEnter);
-      return false;
-    }
-    return true;
-  }
+      );
 }

@@ -9,7 +9,6 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../Database/auth_service.dart';
@@ -145,7 +144,7 @@ class _State extends State<LoginScreenWithPassword> {
                                   shrinkWrap: true,
                                   children: [
 
-                                    getActivIcon('assets/activ_tm.svg'),
+                                    getActivIcon('assets/logo.png'),
 
                                    // getStepBarCount(progress, currentStep, totalSteps),
 

@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import PDFDocument = require('pdfkit');
+import { PrismaService } from '../../prisma/prisma.service';
+import type { content_documents } from '../../generated/prisma/client';
 
 import { LegalContent, LegalContentType } from './entities/legal-content.entity';
 import { UpsertLegalContentDto } from './dto/upsert-legal-content.dto';
@@ -17,39 +18,79 @@ const LEGAL_TITLES: Record<LegalContentType, string> = {
 @Injectable()
 export class LegalService {
   constructor(
-    @InjectRepository(LegalContent)
-    private readonly legalRepository: Repository<LegalContent>,
+    private readonly prisma: PrismaService,
   ) {}
 
-  async upsert(type: LegalContentType, dto: UpsertLegalContentDto, adminId: string): Promise<LegalContent> {
-    const existing = await this.legalRepository.findOne({ where: { type } });
-
-    if (existing) {
-      existing.content = dto.content;
-      existing.version += 1;
-      existing.updatedBy = adminId;
-      return this.legalRepository.save(existing);
+  private validateType(type: LegalContentType) {
+    if (!Object.values(LegalContentType).includes(type)) {
+      throw new BadRequestException('Invalid legal content type');
     }
+  }
 
-    const record = this.legalRepository.create({
-      type,
-      content: dto.content,
-      version: 1,
-      updatedBy: adminId,
+  private toLegalContent(record: content_documents, updatedBy?: string): LegalContent & { title: string } {
+    return Object.assign(new LegalContent(), {
+      id: record.id, type: record.type as LegalContentType,
+      title: record.title, content: record.body,
+      version: Number(record.version) || 1,
+      createdAt: record.created_at, updatedAt: record.updated_at,
+      updatedBy: updatedBy ?? null,
     });
-    return this.legalRepository.save(record);
+  }
+
+  async upsert(type: LegalContentType, dto: UpsertLegalContentDto, adminId: string): Promise<LegalContent> {
+    this.validateType(type);
+    // Keep published history and retry conflicting saves so version numbers stay unique.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const existing = await tx.content_documents.findMany({ where: { type } });
+          const version = Math.floor(existing.reduce((highest, record) =>
+            Math.max(highest, Number(record.version) || 0), 0)) + 1;
+          const now = new Date();
+          const record = await tx.content_documents.create({
+            data: {
+              id: randomUUID(), type, version: String(version),
+              title: LEGAL_TITLES[type], body: dto.content,
+              status: 'PUBLISHED', published_at: now, updated_at: now,
+            },
+          });
+          await tx.audit_events.create({
+            data: {
+              id: randomUUID(), actor_id: adminId,
+              action: 'legal_content.published', entity_type: 'content_documents',
+              entity_id: record.id, after_json: { type, version },
+            },
+          });
+          return this.toLegalContent(record, adminId);
+        }, { isolationLevel: 'Serializable' });
+      } catch (error) {
+        if (attempt >= 2 || !['P2034', 'P2002'].includes(error?.code)) throw error;
+      }
+    }
   }
 
   async findByType(type: LegalContentType): Promise<LegalContent> {
-    const record = await this.legalRepository.findOne({ where: { type } });
+    this.validateType(type);
+    const record = await this.prisma.content_documents.findFirst({
+      where: { type, status: 'PUBLISHED' },
+      orderBy: [{ published_at: { sort: 'desc', nulls: 'last' } }, { updated_at: 'desc' }, { created_at: 'desc' }],
+    });
     if (!record) {
       throw new NotFoundException(`Content for '${type}' has not been set yet`);
     }
-    return record;
+    return this.toLegalContent(record);
   }
 
   async findAll(): Promise<LegalContent[]> {
-    return this.legalRepository.find({ order: { type: 'ASC' } });
+    const records = await this.prisma.content_documents.findMany({
+      where: { type: { in: Object.values(LegalContentType) }, status: 'PUBLISHED' },
+      orderBy: [{ type: 'asc' }, { published_at: { sort: 'desc', nulls: 'last' } }, { updated_at: 'desc' }, { created_at: 'desc' }],
+    });
+    const latest = new Map<string, LegalContent>();
+    for (const record of records) {
+      if (!latest.has(record.type)) latest.set(record.type, this.toLegalContent(record));
+    }
+    return [...latest.values()];
   }
 
   // ── PDF export ─────────────────────────────────────────────────────────────

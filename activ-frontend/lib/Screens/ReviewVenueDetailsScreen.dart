@@ -1,57 +1,61 @@
 import 'dart:convert';
 
-import 'package:activ_app/Screens/StringExtensions.dart';
-import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
-import '../Style/app_size.dart';
-import '../Utills/common_utilities.dart';
+import '../Style/app_colors.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
+import 'CategoryQuestionsScreen.dart';
 import 'CommonCode.dart';
+import 'CustomerPlacesOffer.dart';
 import 'ReviewSignAgreement.dart';
+import 'TellUsAboutScreen.dart';
+import 'VenueScreen.dart';
+import 'onboarding_widgets.dart';
 
-const _editColor = Color(0xFF7C3AED);
+const _editColor = Color(0xFFA634FF);
 
 class ReviewVenueDetailsScreen extends StatefulWidget {
-  const ReviewVenueDetailsScreen({super.key});
+  const ReviewVenueDetailsScreen({super.key, this.client, this.mapBuilder});
+  final http.Client? client;
+  final Widget Function(LatLng position)? mapBuilder;
 
   @override
   State<ReviewVenueDetailsScreen> createState() => _State();
 }
 
 class _State extends State<ReviewVenueDetailsScreen> {
-  int currentStep = 10;
-  final int totalSteps = totalSetup;
-
-  // Owner / partner
-  String ownerFullName = '';
-  String ownerEmail = '';
-  String ownerMobileNumber = '';
-  String contactNumber = '';
-
-  // Venue
-  String venueName = '';
-  String venueDescription = '';
-  String venueAddress = '';
-  String venueCity = '';
-  double? venueLat;
-  double? venueLon;
-
-  // Activities — list of {id, title, description?}
-  List<Map<String, dynamic>> activities = [];
-
-  // Amenities
+  String ownerFullName = '', ownerEmail = '', ownerMobileNumber = '';
+  String contactNumber = '', phoneCode = '+91';
+  Map<String, dynamic> venue = {};
+  List<Map<String, dynamic>> activities = [],
+      questions = [],
+      categoryTimings = [];
   List<String> amenities = [];
+  double? commissionPct;
+  bool commissionLoading = true, loading = true, saving = false;
+  bool pendingVenueUpdate = false;
+  String? loadError, commissionError;
+  int _loadVersion = 0;
 
-  // Commission
-  double commissionPct = 10;
-  bool commissionLoading = true;
+  String get city => venue['venue_city']?.toString() ?? '';
 
-  bool isProfileComplete = false;
+  dynamic _decode(String? raw, dynamic fallback) {
+    if (raw == null || raw.isEmpty) return fallback;
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return fallback;
+    }
+  }
+
+  List<Map<String, dynamic>> _maps(dynamic raw) => raw is List
+      ? raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+      : raw is Map
+          ? [Map<String, dynamic>.from(raw)]
+          : [];
 
   @override
   void initState() {
@@ -60,838 +64,636 @@ class _State extends State<ReviewVenueDetailsScreen> {
   }
 
   Future<void> _loadData() async {
-    // ── Owner details ──────────────────────────────────────────────────────
-    final ownerName =
-        checkString(await SharedPreference.readStr('owner_full_name'));
-    final ownerEmailStr =
-        checkString(await SharedPreference.readStr('owner_email'));
-    final ownerPhone =
-        checkString(await SharedPreference.readStr('owner_mobile_number'));
-    final sameChecked = checkString(
-        await SharedPreference.readStr('same_as_owner_number_checked'));
-    final sameNum =
-        checkString(await SharedPreference.readStr('same_as_owner_number'));
-    final contactNum = sameChecked == 'true' ? ownerPhone : sameNum;
-
-    // ── Venue details ──────────────────────────────────────────────────────
-    final venueDetailsStr =
-        checkString(await SharedPreference.readStr('venue_details'));
-    String vName = '', vDesc = '', vAddr = '', vCity = '';
-    if (venueDetailsStr.isNotEmpty) {
-      final v = jsonDecode(venueDetailsStr) as Map<String, dynamic>;
-      vName = v['venue_name']?.toString() ?? '';
-      vDesc = v['venue_description']?.toString() ?? '';
-      vCity = v['venue_city']?.toString() ?? '';
-      final latRaw = v['venue_latitude'];
-      final lonRaw = v['venue_longitude'];
-      if (latRaw != null) venueLat = (latRaw as num).toDouble();
-      if (lonRaw != null) venueLon = (lonRaw as num).toDouble();
-      vAddr = [
-        v['venue_address'],
-        v['venue_area'],
-        v['venue_city'],
-        v['venue_state'],
-        v['venue_pin_code'],
-      ]
-          .where((e) => e != null && e.toString().trim().isNotEmpty)
-          .join(', ');
-    }
-
-    // ── Activity type ──────────────────────────────────────────────────────
-    final operateStr =
-        checkString(await SharedPreference.readStr('operate_value'));
-    List<Map<String, dynamic>> activitiesList = [];
-    if (operateStr.isNotEmpty) {
-      final decoded = jsonDecode(operateStr);
-      if (decoded is List) {
-        activitiesList = decoded.cast<Map<String, dynamic>>();
-      } else if (decoded is Map) {
-        // Old format: single {id, title}
-        activitiesList = [decoded.cast<String, dynamic>()];
-      }
-    }
-
-    // ── Amenities ──────────────────────────────────────────────────────────
-    final placeOfferStr =
-        checkString(await SharedPreference.readStr('place_offer'));
-    List<String> amenitiesList = [];
-    if (placeOfferStr.isNotEmpty) {
-      final po = jsonDecode(placeOfferStr) as Map<String, dynamic>;
-      final list = (po['place_offer'] as List<dynamic>?) ?? [];
-      amenitiesList =
-          list.map((e) => (e as Map)['title']?.toString() ?? '').toList();
-    }
-
-    final profileComplete =
-        checkString(await SharedPreference.readStr('is_profile_complete')) == 'true';
-
-    if (!mounted) return;
-    setState(() {
-      ownerFullName = ownerName;
-      ownerEmail = ownerEmailStr;
-      ownerMobileNumber = ownerPhone;
-      contactNumber = contactNum;
-      venueName = vName;
-      venueDescription = vDesc;
-      venueAddress = vAddr;
-      venueCity = vCity;
-      activities = activitiesList;
-      amenities = amenitiesList;
-      isProfileComplete = profileComplete;
-    });
-
-    // Fetch commission after city is known
-    if (vCity.isNotEmpty) {
-      _fetchCommission(vCity);
-    } else {
-      setState(() => commissionLoading = false);
+    final version = ++_loadVersion;
+    try {
+      final values = await Future.wait([
+        for (final key in [
+          'owner_full_name',
+          'owner_email',
+          'owner_mobile_number',
+          'phoneCode',
+          'userMobileNumber',
+          'same_as_owner_number_checked',
+          'same_as_owner_number',
+          'venue_details',
+          'operate_value',
+          'place_offer',
+          'venue_commission',
+          'activity_questions_display',
+          'activity_review_timings',
+        ])
+          SharedPreference.readStr(key),
+      ]);
+      if (!mounted || version != _loadVersion) return;
+      final decodedVenue = _decode(values[7], {});
+      final offers = _decode(values[9], {});
+      final cachedCommission = double.tryParse(values[10] ?? '');
+      setState(() {
+        ownerFullName = values[0] ?? '';
+        ownerEmail = values[1] ?? '';
+        ownerMobileNumber =
+            (values[2]?.isNotEmpty ?? false) ? values[2]! : values[4] ?? '';
+        phoneCode = (values[3]?.isNotEmpty ?? false) ? values[3]! : '+91';
+        contactNumber = values[5] == 'true' || values[6] == 'true'
+            ? ownerMobileNumber
+            : values[6] ?? '';
+        venue =
+            decodedVenue is Map ? Map<String, dynamic>.from(decodedVenue) : {};
+        activities = _maps(_decode(values[8], []));
+        amenities = _maps(offers is Map ? offers['place_offer'] : [])
+            .map((e) => e['title']?.toString() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+        questions = _maps(_decode(values[11], []));
+        categoryTimings = _maps(_decode(values[12], []));
+        commissionPct = cachedCommission != null &&
+                cachedCommission >= 0 &&
+                cachedCommission <= 100
+            ? cachedCommission
+            : null;
+        loading = false;
+        loadError = null;
+      });
+      await _fetchCommission(version);
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          loading = false;
+          loadError = 'Could not load your saved details.';
+        });
     }
   }
 
-  Future<void> _fetchCommission(String city) async {
+  Future<void> _fetchCommission(int version) async {
+    if (city.isEmpty) {
+      setState(() {
+        commissionLoading = false;
+        commissionError = null;
+      });
+      return;
+    }
+    final requestCity = city;
+    setState(() {
+      commissionLoading = true;
+      commissionError = null;
+    });
     try {
-      final response = await http.get(
-        Uri.parse('$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(city)}'),
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(
+            '$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(requestCity)}'),
         headers: {'accept': '*/*'},
       );
-      CommonUtilities.showLog('Commission status: ${response.statusCode}');
-      CommonUtilities.showLog('Commission body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final pct = (body['data']?['commissionPercentage'] as num?)?.toDouble() ?? 10;
-        if (mounted) setState(() => commissionPct = pct);
+      if (!mounted || version != _loadVersion) return;
+      final body = _decode(response.body, {});
+      final pct = body is Map && body['data'] is Map
+          ? double.tryParse(
+              body['data']['commissionPercentage']?.toString() ?? '')
+          : null;
+      if (response.statusCode != 200 || pct == null || pct < 0 || pct > 100) {
+        throw const FormatException('Invalid commission response');
       }
-    } catch (e) {
-      CommonUtilities.showLog('Commission fetch error: $e');
+      setState(() => commissionPct = pct);
+    } catch (_) {
+      if (mounted && version == _loadVersion) {
+        setState(() => commissionError = 'Unable to refresh the rate.');
+      }
     } finally {
-      if (mounted) setState(() => commissionLoading = false);
+      if (mounted && version == _loadVersion)
+        setState(() => commissionLoading = false);
     }
   }
 
-  // ─── Section card ─────────────────────────────────────────────────────────
+  String _phone(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '-';
+    if (trimmed.startsWith('+')) return trimmed;
+    final prefix = phoneCode.startsWith('+') ? phoneCode : '+$phoneCode';
+    return '$prefix $trimmed';
+  }
 
-  Widget _card({
-    required String title,
-    VoidCallback? onEdit,
-    required Widget content,
-  }) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: AppSize.size_16,
-                    fontFamily: 'FontSemiBold',
-                    color: AppColors.darkBlack,
-                    height: 1,
-                  ),
-                ),
-                if (onEdit != null)
-                  InkWell(
-                    onTap: onEdit,
-                    child: Row(
-                      children: const [
-                        Icon(Icons.edit_outlined, size: 15, color: _editColor),
-                        SizedBox(width: 4),
-                        Text(
-                          'Edit',
-                          style: TextStyle(
-                            fontSize: AppSize.size_13,
-                            fontFamily: 'FontMedium',
-                            color: _editColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.gray),
+  Future<void> _editSection(Widget screen) async {
+    if (saving) return;
+    final result = await Navigator.push<bool>(
+        context, MaterialPageRoute(builder: (_) => screen));
+    if (!mounted) return;
+    await _loadData();
+    if (!mounted || result != true) return;
+    setState(() => pendingVenueUpdate = true);
+    await _saveVenueChanges();
+  }
+
+  Future<bool> _saveVenueChanges() async {
+    if (saving) return false;
+    setState(() => saving = true);
+    try {
+      final id = await SharedPreference.readStr('venue_id') ?? '';
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      if (id.isEmpty || token.isEmpty)
+        throw const FormatException('Missing session');
+      final response = await (widget.client?.patch ?? http.patch)(
+        Uri.parse('$CREATE_VENUE_URL/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token'
+        },
+        body: jsonEncode({
+          'name': venue['venue_name'] ?? '',
+          'description': venue['venue_description'] ?? '',
+          'address': venue['venue_address'] ?? '',
+          'flatBuilding': venue['venue_area'] ?? '',
+          'city': venue['venue_city'] ?? '',
+          'state': venue['venue_state'] ?? '',
+          'zipCode': venue['venue_pin_code'] ?? '',
+          'locationUrl': venue['venue_location_url'] ?? '',
+          'latitude':
+              double.tryParse(venue['venue_latitude']?.toString() ?? ''),
+          'longitude':
+              double.tryParse(venue['venue_longitude']?.toString() ?? ''),
+          'phone': ownerMobileNumber.replaceAll(RegExp(r'\D'), ''),
+          'venuePhone': contactNumber.replaceAll(RegExp(r'\D'), ''),
+          'amenities': amenities,
+          if (commissionPct != null) 'commission': commissionPct,
+        }),
+      );
+      if (!mounted) return false;
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw const FormatException('Update failed');
+      }
+      setState(() => pendingVenueUpdate = false);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('Could not save venue changes. Tap Confirm to retry.')));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> _confirm() async {
+    if (saving) return;
+    if (pendingVenueUpdate && !await _saveVenueChanges()) return;
+    if (!mounted) return;
+    await Navigator.push(context,
+        MaterialPageRoute<void>(builder: (_) => const ReviewSignAgreement()));
+  }
+
+  Future<void> _editActivity(Map<String, dynamic> activity, int index) async {
+    if (saving) return;
+    final id = await SharedPreference.readStr('venue_id') ?? '';
+    if (!mounted) return;
+    if (id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please save your venue first.')));
+      return;
+    }
+    await Navigator.push(
+        context,
+        MaterialPageRoute<bool>(
+            builder: (_) => CategoryQuestionsScreen(
+                  reviewMode: true,
+                  client: widget.client,
+                  venueId: id,
+                  currentCategory: activity,
+                  categoryIndex: index + 1,
+                  totalCategories: activities.length,
+                  accumulatedTimings: categoryTimings
+                      .where((e) => e['id'] != activity['id'])
+                      .toList(),
+                )));
+    if (mounted) await _loadData();
+  }
+
+  Widget _editButton(VoidCallback onPressed) => TextButton.icon(
+      onPressed: saving ? null : onPressed,
+      style: TextButton.styleFrom(
+          foregroundColor: _editColor,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle:
+              const TextStyle(fontFamily: 'OnboardingMedium', fontSize: 14)),
+      icon: const Icon(Icons.edit_outlined, size: 17),
+      label: const Text('Edit'));
+
+  Widget _section(String title, Widget content,
+          {VoidCallback? onEdit, Widget? trailing}) =>
+      Container(
+        margin: const EdgeInsets.only(top: 24),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: AppColors.gray),
+            borderRadius: BorderRadius.circular(8)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontFamily: 'OnboardingSemibold',
+                        fontSize: 16,
+                        height: 1.4))),
+            if (onEdit != null) _editButton(onEdit),
+            if (trailing != null) trailing,
+          ]),
+          const SizedBox(height: 16),
           content,
-        ],
-      ),
-    );
-  }
+        ]),
+      );
 
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: AppSize.size_12,
-              fontFamily: 'FontRegular',
-              color: AppColors.hintColor,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value.isNotEmpty ? value : '-',
-            style: const TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
-              color: AppColors.darkBlack,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _detail(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, height: 1.4, color: AppColors.hintColor)),
+          const SizedBox(height: 4),
+          Text(value.isEmpty ? '-' : value,
+              style: const TextStyle(
+                  fontSize: 14, fontFamily: 'OnboardingMedium', height: 1.45)),
+        ]),
+      );
 
-  // ─── Venue Partner Details ─────────────────────────────────────────────────
-
-  Widget _buildPartnerDetails() {
-    return _card(
-      title: 'Venue Partner Details',
-      onEdit: () {},
-      content: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _detailRow('Full Name', ownerFullName),
-            _detailRow('Email Address', ownerEmail),
-            _detailRow('Phone Number',
-                ownerMobileNumber.isNotEmpty ? '+91 $ownerMobileNumber' : '-'),
-            const Divider(height: 12, color: AppColors.gray),
-            const SizedBox(height: 8),
-            const Text(
-              "Venue's primary contact number",
+  Widget _partnerDetails() => _section(
+        'Venue Partner Details',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _detail('Full Name', ownerFullName),
+          _detail('Email Address', ownerEmail),
+          _detail('Phone Number', _phone(ownerMobileNumber)),
+          const Divider(height: 12, color: AppColors.gray),
+          const SizedBox(height: 14),
+          const Text("Venue's primary contact number",
               style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontSemiBold',
-                color: AppColors.darkBlack,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _detailRow('Phone Number',
-                contactNumber.isNotEmpty ? '+91 $contactNumber' : '-'),
-          ],
-        ),
-      ),
-    );
+                  fontFamily: 'OnboardingSemibold', fontSize: 16, height: 1.4)),
+          const SizedBox(height: 14),
+          _detail('Phone Number', _phone(contactNumber)),
+        ]),
+        onEdit: () => _editSection(const TellUsAboutScreen(reviewMode: true)),
+      );
+
+  Widget _venueDetails() {
+    final address = [
+      'venue_address',
+      'venue_area',
+      'venue_city',
+      'venue_state',
+      'venue_pin_code'
+    ]
+        .map((key) => venue[key]?.toString() ?? '')
+        .where((e) => e.trim().isNotEmpty)
+        .join(', ');
+    final lat = double.tryParse(venue['venue_latitude']?.toString() ?? '');
+    final lon = double.tryParse(venue['venue_longitude']?.toString() ?? '');
+    final position = lat != null &&
+            lon != null &&
+            lat >= -90 &&
+            lat <= 90 &&
+            lon >= -180 &&
+            lon <= 180
+        ? LatLng(lat, lon)
+        : null;
+    return _section(
+        'Venue Details',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _detail('Venue Name', venue['venue_name']?.toString() ?? ''),
+          _detail('Description', venue['venue_description']?.toString() ?? ''),
+          _detail('Address', address),
+          if (position != null)
+            ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                    height: 200,
+                    width: double.infinity,
+                    child: widget.mapBuilder?.call(position) ??
+                        GoogleMap(
+                          initialCameraPosition:
+                              CameraPosition(target: position, zoom: 17),
+                          markers: {
+                            Marker(
+                                markerId: const MarkerId('venue'),
+                                position: position)
+                          },
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          scrollGesturesEnabled: false,
+                          zoomGesturesEnabled: false,
+                          rotateGesturesEnabled: false,
+                          tiltGesturesEnabled: false,
+                          mapToolbarEnabled: false,
+                          compassEnabled: false,
+                          liteModeEnabled: true,
+                        ))),
+        ]),
+        onEdit: () => _editSection(const VenueScreen(reviewMode: true)));
   }
 
-  // ─── Venue Details ────────────────────────────────────────────────────────
+  Widget _commissionRow(
+          String title, String subtitle, String value, String valueLabel) =>
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style:
+                  const TextStyle(fontFamily: 'OnboardingMedium', height: 1.4)),
+          const SizedBox(height: 4),
+          Text(subtitle.replaceAll('\u20b9', 'INR '),
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.hintColor, height: 1.4)),
+        ])),
+        const SizedBox(width: 12),
+        Flexible(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          commissionLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (value.startsWith('\u20b9'))
+                    const Icon(Icons.currency_rupee,
+                        size: 16, color: _editColor),
+                  Flexible(
+                      child: Text(value.replaceAll('\u20b9', ''),
+                          style: const TextStyle(
+                              fontFamily: 'OnboardingSemibold',
+                              fontSize: 14,
+                              color: _editColor,
+                              height: 1.4))),
+                ]),
+          const SizedBox(height: 4),
+          Text(valueLabel,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.hintColor, height: 1.4)),
+        ])),
+      ]);
 
-  Widget _buildVenueDetails() {
-    return _card(
-      title: 'Venue Details',
-      onEdit: () {},
-      content: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _detailRow('Venue Name', venueName),
-            _detailRow('Description', venueDescription),
-            _detailRow('Address', venueAddress),
-            if (venueLat != null && venueLon != null) _buildVenueMap(),
-          ],
-        ),
-      ),
-    );
+  void _commissionInfo() => showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+              title: const Text('Commission Structure'),
+              content: Text(commissionPct == null
+                  ? 'The commission rate for your venue is currently unavailable. Please try refreshing the rate.'
+                  : 'The commission for your venue in $city is ${commissionPct!.toStringAsFixed(0)}% per booking. For a \u20b9100 booking, the net amount after this commission is \u20b9${(100 - commissionPct!).toStringAsFixed(0)}. Rates vary by city.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'))
+              ]));
+
+  Widget _commission() => _section(
+      "ACTIV's Commission Structure",
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _commissionRow(
+            'For your venue in ${city.isEmpty ? 'your city' : city}',
+            'Standard rate',
+            commissionPct == null
+                ? '-'
+                : '${commissionPct!.toStringAsFixed(0)}%',
+            'Per booking'),
+        const Divider(height: 24, color: AppColors.gray),
+        _commissionRow(
+            'Your earnings',
+            'For every \u20b9100 booking',
+            commissionPct == null
+                ? '-'
+                : '\u20b9${(100 - commissionPct!).toStringAsFixed(0)}',
+            'Net amount'),
+        const Divider(height: 24, color: AppColors.gray),
+        if (commissionError != null)
+          TextButton.icon(
+              onPressed: () => _fetchCommission(_loadVersion),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: Text(commissionError!)),
+        Container(
+            padding: const EdgeInsets.all(12),
+            width: double.infinity,
+            decoration: BoxDecoration(
+                border: Border.all(color: _editColor),
+                borderRadius: BorderRadius.circular(8)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text(
+                  'Note: Commission rates vary by city to ensure pricing and operational coverage across India.',
+                  style:
+                      TextStyle(fontSize: 13, color: _editColor, height: 1.5)),
+              TextButton(
+                  onPressed: _commissionInfo,
+                  style: TextButton.styleFrom(
+                      foregroundColor: _editColor,
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
+                      textStyle: const TextStyle(
+                          fontFamily: 'OnboardingMedium', fontSize: 13)),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Flexible(
+                        child: Text('Learn more about how commissions work')),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward, size: 16),
+                  ])),
+            ])),
+      ]),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+            color: const Color(0xFFFFF0F1),
+            borderRadius: BorderRadius.circular(8)),
+        child: const Text('IMPORTANT',
+            style: TextStyle(
+                fontSize: 11,
+                color: AppColors.red,
+                fontFamily: 'OnboardingSemibold')),
+      ));
+
+  IconData _amenityIcon(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('parking')) return Icons.local_parking_outlined;
+    if (lower.contains('wifi') || lower.contains('wi-fi')) return Icons.wifi;
+    if (lower.contains('locker')) return Icons.lock_outline;
+    if (lower.contains('train')) return Icons.fitness_center;
+    if (lower.contains('light')) return Icons.lightbulb_outline;
+    if (lower.contains('sound')) return Icons.speaker_outlined;
+    if (lower.contains('shower')) return Icons.shower_outlined;
+    return Icons.check_circle_outline;
   }
 
-  Widget _buildVenueMap() {
-    final position = LatLng(venueLat!, venueLon!);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        height: 180,
-        child: GoogleMap(
-          initialCameraPosition: CameraPosition(target: position, zoom: 17),
-          markers: {
-            Marker(
-              markerId: const MarkerId('venue'),
-              position: position,
-            ),
-          },
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          scrollGesturesEnabled: false,
-          zoomGesturesEnabled: false,
-          rotateGesturesEnabled: false,
-          tiltGesturesEnabled: false,
-          mapToolbarEnabled: false,
-          compassEnabled: false,
-          liteModeEnabled: true,
-        ),
-      ),
-    );
-  }
-
-  // ─── Commission Structure ─────────────────────────────────────────────────
-
-  Widget _buildCommissionCard() {
-    final city = venueCity.isNotEmpty ? venueCity : 'your city';
-    final netAmount = (100 - commissionPct).toStringAsFixed(0);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "ACTIV's Commission Structure",
-                  style: TextStyle(
-                    fontSize: AppSize.size_16,
-                    fontFamily: 'FontSemiBold',
-                    color: AppColors.darkBlack,
-                    height: 1,
-                  ),
-                ),
+  Widget _amenities() => _section(
+      'Amenities',
+      amenities.isEmpty
+          ? const Text('No amenities selected.')
+          : Wrap(spacing: 10, runSpacing: 12, children: [
+              for (final name in amenities)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.red.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'IMPORTANT',
-                    style: TextStyle(
-                      fontSize: AppSize.size_11,
-                      fontFamily: 'FontSemiBold',
-                      color: AppColors.red,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.gray),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-            child: Column(
+                    constraints: const BoxConstraints(maxWidth: 330),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                        color: AppColors.cream,
+                        borderRadius: BorderRadius.circular(4)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(_amenityIcon(name),
+                          size: 16, color: AppColors.hintColor),
+                      const SizedBox(width: 8),
+                      Flexible(
+                          child: Text(name,
+                              style: const TextStyle(
+                                  fontFamily: 'OnboardingSemibold',
+                                  fontSize: 12,
+                                  height: 1.3))),
+                    ])),
+            ]),
+      onEdit: () => _editSection(CustomerPlacesOffer(reviewMode: true)));
+
+  String _activityImage(String title) {
+    final lower = title.toLowerCase();
+    if (lower.contains('badminton') ||
+        lower.contains('tennis') ||
+        lower.contains('squash')) return 'assets/ic_cock.png';
+    if (lower.contains('football')) return 'assets/ic_football.png';
+    if (lower.contains('swim')) return 'assets/ic_pool.png';
+    if (lower.contains('gym')) return 'assets/ic_gym.png';
+    if (lower.contains('yoga')) return 'assets/ic_yoga.png';
+    return 'assets/ic_other.png';
+  }
+
+  String _activityDescription(Map<String, dynamic> activity) {
+    for (final q in questions) {
+      final matches = (q['categoryId'] != null &&
+              activity['id'] != null &&
+              q['categoryId'].toString() == activity['id'].toString()) ||
+          q['categoryTitle'] == activity['title'];
+      if (matches &&
+          q['questionText']?.toString().toLowerCase() ==
+              'activity description') {
+        return q['answer']?.toString() ?? '';
+      }
+    }
+    return activity['description']?.toString() ?? '';
+  }
+
+  Widget _activityRow(Map<String, dynamic> activity, int index) =>
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 280 ||
+              MediaQuery.textScalerOf(context).scale(16) > 20;
+          final details =
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(activity['title']?.toString() ?? '',
+                style: const TextStyle(
+                    fontFamily: 'OnboardingSemibold',
+                    fontSize: 16,
+                    height: 1.3)),
+            const SizedBox(height: 4),
+            Text(_activityDescription(activity),
+                style: const TextStyle(
+                    fontSize: 14, color: AppColors.hintColor, height: 1.4)),
+          ]);
+          final edit = _editButton(() => _editActivity(activity, index));
+          return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Row: city — percentage
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'For your venue in $city',
-                          style: const TextStyle(
-                            fontSize: AppSize.size_14,
-                            fontFamily: 'FontMedium',
-                            color: AppColors.darkBlack,
-                            height: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        const Text(
-                          'Standard rate',
-                          style: TextStyle(
-                            fontSize: AppSize.size_12,
-                            fontFamily: 'FontRegular',
-                            color: AppColors.hintColor,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        commissionLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(
-                                '${commissionPct.toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  fontSize: AppSize.size_20,
-                                  fontFamily: 'FontSemiBold',
-                                  color: AppColors.darkBlack,
-                                  height: 1,
-                                ),
-                              ),
-                        const SizedBox(height: 3),
-                        const Text(
-                          'Per booking',
-                          style: TextStyle(
-                            fontSize: AppSize.size_12,
-                            fontFamily: 'FontRegular',
-                            color: AppColors.hintColor,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Image.asset(
+                      _activityImage(activity['title']?.toString() ?? ''),
+                      width: compact ? 44 : 60,
+                      height: compact ? 44 : 60,
+                      fit: BoxFit.contain),
+                  const SizedBox(width: 12),
+                  Expanded(child: details),
+                  if (!compact) edit,
+                ]),
+                if (compact)
+                  Align(alignment: Alignment.centerRight, child: edit),
+              ]);
+        },
+      );
 
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: AppColors.gray),
-                const SizedBox(height: 12),
-
-                // Row: earnings
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your earnings',
-                          style: const TextStyle(
-                            fontSize: AppSize.size_14,
-                            fontFamily: 'FontMedium',
-                            color: AppColors.darkBlack,
-                            height: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        const Text(
-                          'Example: For every ₹100 booking',
-                          style: TextStyle(
-                            fontSize: AppSize.size_12,
-                            fontFamily: 'FontRegular',
-                            color: AppColors.hintColor,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        commissionLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(
-                                '₹$netAmount',
-                                style: const TextStyle(
-                                  fontSize: AppSize.size_20,
-                                  fontFamily: 'FontSemiBold',
-                                  color: AppColors.darkBlack,
-                                  height: 1,
-                                ),
-                              ),
-                        const SizedBox(height: 3),
-                        const Text(
-                          'Net amount',
-                          style: TextStyle(
-                            fontSize: AppSize.size_12,
-                            fontFamily: 'FontRegular',
-                            color: AppColors.hintColor,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // Note
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _editColor.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: _editColor.withValues(alpha: 0.25)),
-                  ),
-                  child: const Text(
-                    'Note: Commission rates vary by city to ensure pricing and operational coverage across India.',
-                    style: TextStyle(
-                      fontSize: AppSize.size_12,
-                      fontFamily: 'FontRegular',
-                      color: AppColors.darkBlack,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Amenities ────────────────────────────────────────────────────────────
-
-  Widget _buildAmenities() {
-    return _card(
-      title: 'Amenities',
-      onEdit: () {},
-      content: amenities.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Text(
-                'No amenities selected.',
-                style: TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
-                  color: AppColors.hintColor,
-                ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: amenities.map((name) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.gray, width: 1),
-                    ),
-                    child: Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: AppSize.size_13,
-                        fontFamily: 'FontMedium',
-                        color: AppColors.darkBlack,
-                        height: 1,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-    );
-  }
-
-  // ─── Activities ───────────────────────────────────────────────────────────
-
-  // Maps lowercase activity keywords → Material icon
-  static const Map<String, IconData> _activityIcons = {
-    'badminton': Icons.sports_tennis,
-    'tennis': Icons.sports_tennis,
-    'cricket': Icons.sports_cricket,
-    'football': Icons.sports_soccer,
-    'soccer': Icons.sports_soccer,
-    'basketball': Icons.sports_basketball,
-    'swimming': Icons.pool,
-    'gym': Icons.fitness_center,
-    'yoga': Icons.self_improvement,
-    'squash': Icons.sports_tennis,
-    'table tennis': Icons.sports_tennis,
-    'cycling': Icons.directions_bike,
-    'boxing': Icons.sports_kabaddi,
-    'volleyball': Icons.sports_volleyball,
-    'hockey': Icons.sports_hockey,
-    'golf': Icons.golf_course,
-  };
-
-  IconData _iconForActivity(String title) {
-    final lower = title.toLowerCase();
-    for (final entry in _activityIcons.entries) {
-      if (lower.contains(entry.key)) return entry.value;
-    }
-    return Icons.sports;
-  }
-
-  Widget _buildActivities() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Text(
-              'Activities',
-              style: TextStyle(
-                fontSize: AppSize.size_16,
-                fontFamily: 'FontSemiBold',
-                color: AppColors.darkBlack,
-                height: 1,
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.gray),
-
-          // Subtitle
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 10, 14, 6),
-            child: Text(
-              "You can always add more activities or update activity details later, once venue is approved.",
-              style: TextStyle(
-                fontSize: AppSize.size_13,
-                fontFamily: 'FontRegular',
-                color: AppColors.hintColor,
-                height: 1.4,
-              ),
-            ),
-          ),
-
-          // One card per activity
-          if (activities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(14, 4, 14, 14),
-              child: Text(
-                'No activities selected.',
-                style: TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
-                  color: AppColors.hintColor,
-                ),
-              ),
-            )
-          else
-            ...activities.asMap().entries.map((entry) {
-              final i = entry.key;
-              final act = entry.value;
-              final title = act['title']?.toString() ?? '';
-              final description = act['description']?.toString() ?? '';
-              final isLast = i == activities.length - 1;
-
-              return Column(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(14, 8, 14, isLast ? 14 : 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.gray, width: 1),
-                      ),
-                      child: Row(
-                        children: [
-                          // Icon in yellow circle
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: AppColors.yellowTop,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              _iconForActivity(title),
-                              size: 24,
-                              color: AppColors.darkBlack,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Title + description
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: const TextStyle(
-                                    fontSize: AppSize.size_14,
-                                    fontFamily: 'FontSemiBold',
-                                    color: AppColors.darkBlack,
-                                    height: 1.2,
-                                  ),
-                                ),
-                                if (description.isNotEmpty) ...[
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    description,
-                                    style: const TextStyle(
-                                      fontSize: AppSize.size_12,
-                                      fontFamily: 'FontRegular',
-                                      color: AppColors.hintColor,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          // Edit button
-                          InkWell(
-                            onTap: () {},
-                            child: Row(
-                              children: const [
-                                Icon(Icons.edit_outlined,
-                                    size: 15, color: _editColor),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Edit',
-                                  style: TextStyle(
-                                    fontSize: AppSize.size_13,
-                                    fontFamily: 'FontMedium',
-                                    color: _editColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (!isLast)
-                    const Divider(
-                        height: 1,
-                        color: AppColors.gray,
-                        indent: 14,
-                        endIndent: 14),
-                ],
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  // ─── Build ────────────────────────────────────────────────────────────────
+  Widget _activities() => _section(
+      'Activities',
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text(
+            'You can always add more activities or update activity details later, once venue is approved.',
+            style:
+                TextStyle(fontSize: 14, height: 1.5, color: AppColors.black1)),
+        const SizedBox(height: 16),
+        if (activities.isEmpty) const Text('No activities selected.'),
+        for (var i = 0; i < activities.length; i++)
+          Padding(
+              padding:
+                  EdgeInsets.only(bottom: i == activities.length - 1 ? 0 : 16),
+              child: _activityRow(activities[i], i)),
+      ]));
 
   @override
-  Widget build(BuildContext context) {
-    double progress = currentStep / totalSteps;
-
-    return Stack(
-      children: [
-        Align(
-          alignment: Alignment.topCenter,
-          child: Container(height: 100, color: AppColors.yellowTop),
-        ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(height: 100, color: AppColors.white),
-        ),
-        SafeArea(
-          top: true,
-          bottom: true,
-          left: false,
-          right: false,
-          child: Scaffold(
-            body: Container(
-              decoration: context.getYellowGradient,
-              child: Column(
+  Widget build(BuildContext context) => OnboardingScaffold(
+          child: Column(children: [
+        Expanded(
+            child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
                 children: [
+              const OnboardingLogo(),
+              getStepBarCount(onboardingReviewStep / totalSetup,
+                  onboardingReviewStep, totalSetup),
+              const SizedBox(height: 28),
+              const Text('Review Venue Details',
+                  style: OnboardingStyles.heading),
+              const SizedBox(height: 8),
+              const Text("Review your venue's details for a final confirmation",
+                  style: TextStyle(
+                      fontSize: 16, height: 1.4, color: AppColors.black1)),
+              if (loading)
+                const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()))
+              else if (loadError != null)
+                TextButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(loadError!))
+              else ...[
+                _partnerDetails(),
+                _venueDetails(),
+                _commission(),
+                _amenities(),
+                _activities()
+              ],
+            ])),
+        DecoratedBox(
+            decoration: const BoxDecoration(
+                color: AppColors.yellowBottom,
+                boxShadow: [
+                  BoxShadow(
+                      color: Color(0x1A000000),
+                      blurRadius: 4,
+                      offset: Offset(0, -2))
+                ]),
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Row(children: [
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(15, 0, 15, 16),
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.only(top: 10),
-                          child: SvgPicture.asset('assets/activ_tm.svg'),
-                        ),
-                        getStepBarCount(progress, currentStep, totalSteps),
-                        Container(
-                          margin: const EdgeInsets.only(top: 25),
-                          alignment: Alignment.centerLeft,
-                          child: const Text(
-                            'Review Venue Details',
-                            style: TextStyle(
-                              fontSize: AppSize.size_25,
-                              fontFamily: 'FontSemiBold',
-                              color: AppColors.darkBlack,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                          child: const Text(
-                            "Review your venue's details for a final confirmation",
-                            style: TextStyle(
-                              fontSize: AppSize.size_16,
-                              fontFamily: 'FontRegular',
-                              color: AppColors.black1,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                        if (!isProfileComplete) _buildPartnerDetails(),
-                        _buildVenueDetails(),
-                        _buildCommissionCard(),
-                        _buildAmenities(),
-                        _buildActivities(),
-                      ],
-                    ),
-                  ),
-
-                  // Bottom bar
-                  Column(
-                    children: [
-                      bottomBarShadow(),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: InkWell(
-                              onTap: () => Navigator.pop(context),
-                              child: getBackButton(
-                                  context, 'Back', 'reviewVenueDetails'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 7,
-                            child: InkWell(
-                              onTap: () => CommonUtilities.NavigateWithPush(
-                                  context, const ReviewSignAgreement()),
-                              child: getButtonBlack(
-                                  context, 'Confirm', 'reviewVenueDetails'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+                      flex: 3,
+                      child: OnboardingButton(
+                          label: 'Back',
+                          fontSize: 16,
+                          horizontalPadding: 8,
+                          borderRadius: 8,
+                          outlined: true,
+                          onPressed:
+                              saving ? null : () => Navigator.pop(context))),
+                  const SizedBox(width: 16),
+                  Expanded(
+                      flex: 7,
+                      child: OnboardingButton(
+                          label: 'Confirm',
+                          fontSize: 16,
+                          horizontalPadding: 8,
+                          borderRadius: 8,
+                          loading: saving,
+                          onPressed:
+                              loading || loadError != null ? null : _confirm)),
+                ]))),
+      ]));
 }

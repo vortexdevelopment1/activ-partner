@@ -4,7 +4,6 @@ import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_size.dart';
@@ -99,7 +98,12 @@ class CategoryQuestionsScreen extends StatefulWidget {
     this.categoryIndex = 1,
     this.totalCategories = 1,
     this.accumulatedTimings = const [],
+    this.client,
+    this.reviewMode = false,
   });
+
+  final http.Client? client;
+  final bool reviewMode;
 
   @override
   State<CategoryQuestionsScreen> createState() => _State();
@@ -117,7 +121,7 @@ class _State extends State<CategoryQuestionsScreen> {
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, dynamic> _answers = {};
 
-  int currentStep = 4;
+  int currentStep = onboardingActivitiesStep;
   final int totalSteps = totalSetup;
 
   // ─── Composite key helper ─────────────────────────────────────────────────
@@ -150,7 +154,7 @@ class _State extends State<CategoryQuestionsScreen> {
     }
 
     try {
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse('$QUESTIONS_BY_CATEGORY_URL/$categoryId'),
       );
 
@@ -175,7 +179,8 @@ class _State extends State<CategoryQuestionsScreen> {
 
         final questions = data
             .map((e) => _Question.fromJson(e as Map<String, dynamic>))
-            .where((q) => q.isActive)
+            .where((q) => q.isActive &&
+                q.questionText.trim().toLowerCase() != 'court surface')
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -244,6 +249,31 @@ class _State extends State<CategoryQuestionsScreen> {
         }
       }
 
+      if (widget.reviewMode) {
+        final raw = await SharedPreference.readStr('activity_questions_display');
+        if (!mounted) return;
+        final saved = raw == null || raw.isEmpty ? <dynamic>[] : jsonDecode(raw) as List;
+        void restore(String sectionId, _Question question) {
+          final matches = saved.where((entry) =>
+              (entry['categoryId']?.toString() == categoryId ||
+                  entry['categoryTitle'] == categoryTitle || entry['categoryTitle'] == 'General') &&
+              (entry['questionId'] == question.id || entry['questionText'] == question.questionText));
+          if (matches.isEmpty) return;
+          final answer = matches.last['answer'];
+          final key = _key(sectionId, question.id);
+          if (_textControllers.containsKey(key)) {
+            _textControllers[key]!.text = answer?.toString() ?? '';
+          } else {
+            if (['select', 'radio'].contains(question.questionType) &&
+                !question.options.contains(answer)) return;
+            _answers[key] = answer is List ? answer.map((value) => value.toString()).toList() : answer;
+          }
+        }
+        for (final section in filteredSections) {
+          for (final question in section.questions) { restore(section.categoryId, question); }
+        }
+        for (final question in globals) { restore('global', question); }
+      }
       if (!mounted) return;
       setState(() {
         _globalQuestions = globals;
@@ -324,9 +354,11 @@ class _State extends State<CategoryQuestionsScreen> {
             'answer': answer ?? '',
           });
           displayList.add({
+            'questionId': q.id,
             'questionText': q.questionText,
             'questionType': q.questionType,
             'categoryTitle': section.categoryTitle,
+            'categoryId': widget.currentCategory['id']?.toString() ?? '',
             'answer': answer,
           });
         }
@@ -340,26 +372,30 @@ class _State extends State<CategoryQuestionsScreen> {
           'answer': answer ?? '',
         });
         displayList.add({
+          'questionId': q.id,
           'questionText': q.questionText,
           'questionType': q.questionType,
           'categoryTitle': 'General',
+          'categoryId': widget.currentCategory['id']?.toString() ?? '',
           'answer': answer,
         });
       }
 
       // Persist for review screen — append if not first category
       List<dynamic> existingList = [];
-      if (widget.categoryIndex > 1) {
+      if (widget.reviewMode || widget.categoryIndex > 1) {
         final existingRaw = checkString(await SharedPreference.readStr('activity_questions_display'));
         if (existingRaw.isNotEmpty) {
           existingList = jsonDecode(existingRaw) as List<dynamic>;
         }
       }
+      final categoryId = widget.currentCategory['id']?.toString() ?? '';
+      final titles = displayList.map((q) => q['categoryTitle']).toSet();
+      existingList.removeWhere((q) => q['categoryId'] == categoryId ||
+          (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
       existingList.addAll(displayList);
-      await SharedPreference.addStringToSF(
-          "activity_questions_display", jsonEncode(existingList));
 
-      final response = await http.post(
+      final response = await (widget.client?.post ?? http.post)(
         Uri.parse('$VENUE_ANSWERS_URL/${widget.venueId}/answers'),
         headers: {
           'accept': '*/*',
@@ -377,6 +413,13 @@ class _State extends State<CategoryQuestionsScreen> {
       CommonUtilities.showLog('Submit answers body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        await SharedPreference.addStringToSF(
+            'activity_questions_display', jsonEncode(existingList));
+        if (!mounted) return;
+        if (widget.reviewMode) {
+          Navigator.pop(context, true);
+          return;
+        }
         CommonUtilities.NavigateWithPush(
             context,
             VenueTimingScreen(
@@ -756,11 +799,13 @@ class _State extends State<CategoryQuestionsScreen> {
                           // Header
                           Container(
                             margin: const EdgeInsets.only(top: 10),
-                            child: SvgPicture.asset("assets/activ_tm.svg"),
+                            child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
                           ),
 
                           // Step bar
                           getStepBarCount(progress, currentStep, totalSteps),
+                          getActivityStepLabel(
+                              widget.categoryIndex, widget.totalCategories, 3),
 
                           // Title
                           Container(

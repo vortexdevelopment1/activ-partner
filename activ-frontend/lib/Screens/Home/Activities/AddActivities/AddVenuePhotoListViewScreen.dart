@@ -8,7 +8,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:flutter_svg/svg.dart';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
@@ -666,7 +665,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   {
     return Container(
         margin: const EdgeInsets.only(top: 10),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

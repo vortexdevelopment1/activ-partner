@@ -1019,9 +1019,9 @@ export class VenuesController {
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Approve venue update request — applies changes to venue and deletes request (Admin only)' })
-  async approveVenueUpdateRequest(@Param('requestId', ParseUUIDPipe) requestId: string) {
-    const data = await this.venuesService.approveVenueUpdateRequest(requestId);
+  @ApiOperation({ summary: 'Approve venue update request and apply changes to the live venue (Admin only)' })
+  async approveVenueUpdateRequest(@Param('requestId', ParseUUIDPipe) requestId: string, @CurrentUser() user: any) {
+    const data = await this.venuesService.approveVenueUpdateRequest(requestId, user.id);
     return { message: 'Venue update request approved and applied successfully', data };
   }
 
@@ -1033,8 +1033,9 @@ export class VenuesController {
   async rejectVenueUpdateRequest(
     @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: ReviewVenueUpdateDto,
+    @CurrentUser() user: any,
   ) {
-    const data = await this.venuesService.rejectVenueUpdateRequest(requestId, dto);
+    const data = await this.venuesService.rejectVenueUpdateRequest(requestId, dto, user.id);
     return { message: 'Venue update request rejected successfully', data };
   }
 

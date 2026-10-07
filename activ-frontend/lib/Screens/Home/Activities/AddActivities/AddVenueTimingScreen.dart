@@ -10,7 +10,6 @@ import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../Style/app_colors.dart';
@@ -887,7 +886,7 @@ class _State extends State<AddVenueTimingScreen> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PickType } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
@@ -18,3 +18,5 @@ export class ResetPasswordDto {
   @MinLength(6)
   newPassword: string;
 }
+
+export class VerifyPasswordResetCodeDto extends PickType(ResetPasswordDto, ['email', 'code'] as const) {}

@@ -1,44 +1,49 @@
 import 'dart:convert';
 
-import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:activ_app/Style/constants_messages.dart';
-import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
-import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import 'CommonCode.dart';
+import 'onboarding_widgets.dart';
 import 'ForgotPasswordScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'MobileNumberScreen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.client});
+
+  final http.Client? client;
 
   @override
-  State<LoginScreen> createState() => _loginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _loginScreenState extends State<LoginScreen> {
-
+class _LoginScreenState extends State<LoginScreen> {
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
 
-  bool isPasswordVisible = false;
+  bool _isSubmitting = false;
+  late final _termsTap = TapGestureRecognizer()
+    ..onTap = () => _showLegalPopup('terms_and_conditions');
+  late final _privacyTap = TapGestureRecognizer()
+    ..onTap = () => _showLegalPopup('privacy_policy');
 
   @override
   void initState() {
     super.initState();
-    initLogin();
+    initLogin().catchError((Object error) {
+      CommonUtilities.showLog('Login initialization failed: $error');
+    });
   }
 
   Future<void> initLogin() async {
+    if (Firebase.apps.isEmpty) return;
     if (FirebaseAuth.instance.currentUser == null) {
       await FirebaseAuth.instance.signInAnonymously();
     }
@@ -50,402 +55,204 @@ class _loginScreenState extends State<LoginScreen> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(height: 100, color: AppColors.yellowTop),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(height: 100, color: AppColors.white),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
+    return OnboardingScaffold(
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
                 child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-
-                    Expanded(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-
-                          getActivIcon('assets/activ_tm.svg'),
-
-                          Container(
-                            margin: EdgeInsets.only(left: 15, right: 15),
-                            child: getText('Login to your account'),
-                          ),
-
-                          getEmailLabel(),
-                          getEmailField(context),
-
-                          getPasswordLabel(),
-                          getPasswordField(context),
-
-                          getForgotPasswordRow(context),
-
-                          Container(
-                            margin: const EdgeInsets.only(top: 10),
-                            child: InkWell(
-                              onTap: () {
-                                if (validation(context)) {
-                                  handleLogin();
-                                }
-                              },
-                              child: getButtonBlack(context, "Login", "login"),
-                            ),
-                          ),
-
-                          // "or" divider
-                          Container(
-                            alignment: Alignment.center,
-                            margin: const EdgeInsets.fromLTRB(0, 5, 0, 0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                getHorizontalLine(),
-                                getOrText(),
-                                getHorizontalLine(),
-                              ],
-                            ),
-                          ),
-
-                          // Login using OTP button
-                          InkWell(
-                            onTap: () {
-                              CommonUtilities.NavigateWithPush(context, MobileNumberScreen());
-                            },
-                            child: Container(
-                              margin: EdgeInsets.only(top: 5),
-                              child: getLoginWithOTP(context, 'Login using OTP', 'login'),
-                            ),
-                          ),
-
-                          // New to ACTIV? Create Account
-                          Container(
-                            margin: EdgeInsets.only(top: 15, bottom: 10),
-                            alignment: Alignment.center,
-                            child: RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: 'New to ACTIV? ',
-                                    style: TextStyle(
-                                      fontSize: AppSize.size_14,
-                                      fontFamily: 'FontMedium',
-                                      color: AppColors.darkBlack,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'Create Account',
-                                    style: TextStyle(
-                                      fontSize: AppSize.size_14,
-                                      fontFamily: 'FontMedium',
-                                      color: AppColors.purple,
-                                    ),
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () {
-                                        CommonUtilities.NavigateWithPush(context, MobileNumberScreen());
-                                      },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                        ],
+                    const OnboardingLogo(),
+                    const SizedBox(height: 40),
+                    const Text('Login to your account',
+                        style: OnboardingStyles.heading),
+                    const SizedBox(height: 26),
+                    _requiredLabel('Email Address or Phone Number'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      key: const Key('login-identifier'),
+                      controller: emailController,
+                      enabled: !_isSubmitting,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.username],
+                      style: OnboardingStyles.body,
+                      cursorColor: Colors.black,
+                      decoration: OnboardingStyles.inputDecoration(),
+                    ),
+                    const SizedBox(height: 26),
+                    _requiredLabel('Password'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      key: const Key('login-password'),
+                      controller: passwordController,
+                      enabled: !_isSubmitting,
+                      obscureText: true,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.password],
+                      style: OnboardingStyles.body,
+                      cursorColor: Colors.black,
+                      decoration: OnboardingStyles.inputDecoration(),
+                      onFieldSubmitted: (_) => _submit(),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _link(
+                        'Forgot Password?',
+                        () => CommonUtilities.NavigateWithPush(
+                          context,
+                          ForgotPasswordScreen(
+                              emailId: emailController.text.trim(),
+                              client: widget.client),
+                        ),
+                        fontSize: 12,
                       ),
                     ),
-
-                    // Terms & Privacy Policy footer
-                    Container(
-                      margin: EdgeInsets.only(top: 10, bottom: 10, left: 10, right: 10),
-                      child: getTermsConditionText(),
+                    const SizedBox(height: 32),
+                    OnboardingButton(
+                      key: const Key('login-submit'),
+                      label: 'Login',
+                      loading: _isSubmitting,
+                      onPressed: _submit,
                     ),
-
+                    const SizedBox(height: 32),
+                    const Row(
+                      children: [
+                        Expanded(
+                            child: Divider(color: AppColors.gray, height: 1)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('or'),
+                        ),
+                        Expanded(
+                            child: Divider(color: AppColors.gray, height: 1)),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    OnboardingButton(
+                      label: 'Login using OTP',
+                      outlined: true,
+                      onPressed: _isSubmitting ? null : _openPhoneEntry,
+                    ),
+                    const SizedBox(height: 28),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text('New to ACTIV? ',
+                            style: TextStyle(fontSize: 12)),
+                        _link('Create Account', _openPhoneEntry, fontSize: 12),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Spacer(),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OnboardingSupportMenu(
+                        buttonKey: const Key('login-support'),
+                        enabled: !_isSubmitting,
+                        client: widget.client,
+                      ),
+                    ),
+                    const SizedBox(height: 42),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          const TextSpan(
+                              text: 'By clicking on Login, I accept the '),
+                          TextSpan(
+                            text: 'Terms & Conditions',
+                            style: const TextStyle(color: AppColors.purple),
+                            recognizer: _termsTap,
+                          ),
+                          const TextSpan(text: ' &\n'),
+                          TextSpan(
+                            text: 'Privacy Policy',
+                            style: const TextStyle(color: AppColors.purple),
+                            recognizer: _privacyTap,
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      style: OnboardingStyles.body
+                          .copyWith(fontSize: 12, height: 1.7),
+                    ),
                   ],
                 ),
               ),
             ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget getEmailLabel() {
-    return Row(
-      children: [
-        Container(
-          margin: const EdgeInsets.fromLTRB(15, 20, 0, 0),
-          child: const Text(
-            "Email Address or Phone Number",
-            style: TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
-              color: AppColors.black1,
-              height: 1,
-            ),
-          ),
-        ),
-        Container(
-          margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
-              color: AppColors.red,
-              height: 1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget getEmailField(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(15, 8, 15, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        child: TextFormField(
-          controller: emailController,
-          textInputAction: TextInputAction.next,
-          keyboardType: TextInputType.emailAddress,
-          cursorColor: AppColors.cursorBlack,
-          style: TextStyle(
-            fontSize: AppSize.size_14,
-            fontFamily: 'FontRegular',
-            color: AppColors.darkBlack,
-          ),
-          decoration: InputDecoration(
-            hintText: 'Enter your email address.',
-            hintStyle: TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontRegular',
-              color: AppColors.hintColor,
-            ),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
           ),
         ),
       ),
     );
   }
 
-  Widget getPasswordLabel() {
-    return Row(
-      children: [
-        Container(
-          margin: const EdgeInsets.fromLTRB(15, 20, 0, 0),
-          child: const Text(
-            "Password",
-            style: TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
-              color: AppColors.black1,
-              height: 1,
-            ),
-          ),
-        ),
-        Container(
-          margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
-              color: AppColors.red,
-              height: 1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _requiredLabel(String text) => Text.rich(
+        TextSpan(children: [
+          TextSpan(text: text),
+          const TextSpan(text: '*', style: TextStyle(color: AppColors.red)),
+        ]),
+        style: OnboardingStyles.body.copyWith(fontSize: 14),
+      );
 
-  Widget getPasswordField(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(15, 8, 15, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 5),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: passwordController,
-                textInputAction: TextInputAction.done,
-                keyboardType: TextInputType.visiblePassword,
-                obscureText: !isPasswordVisible,
-                cursorColor: AppColors.cursorBlack,
-                style: TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
-                  color: AppColors.darkBlack,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Enter Password',
-                  hintStyle: TextStyle(
-                    fontSize: AppSize.size_14,
-                    fontFamily: 'FontRegular',
-                    color: AppColors.hintColor,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: Icon(
-                isPasswordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: AppColors.darkGray,
-                size: 20,
-              ),
-              onPressed: () {
-                setState(() {
-                  isPasswordVisible = !isPasswordVisible;
-                });
-              },
-            ),
-          ],
+  Widget _link(String text, VoidCallback onTap, {double fontSize = 14}) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: _isSubmitting ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(text,
+              style: OnboardingStyles.body
+                  .copyWith(color: AppColors.purple, fontSize: fontSize)),
         ),
       ),
     );
   }
 
-  Widget getForgotPasswordRow(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        CommonUtilities.NavigateWithPush(
-          context,
-          ForgotPasswordScreen(emailId: emailController.text.trim()),
-        );
-      },
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(0, 10, 15, 0),
-            child: const Text(
-              "Forgot Password?",
-              style: TextStyle(
-                fontSize: AppSize.size_12,
-                fontFamily: 'FontMedium',
-                color: AppColors.purple,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void _openPhoneEntry() =>
+      CommonUtilities.NavigateWithPush(context, const MobileNumberScreen());
+
+  void _submit() {
+    if (!_isSubmitting && validation(context)) {
+      FocusScope.of(context).unfocus();
+      handleLogin();
+    }
   }
 
-  Widget getHorizontalLine() {
-    return Container(
-      color: AppColors.gray,
-      height: 1,
-      width: 145,
-    );
+  void _showMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget getOrText() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-      child: Text(
-        'or',
-        style: TextStyle(
-          color: AppColors.darkBlack,
-          fontSize: AppSize.size_14,
-          fontFamily: 'FontMedium',
-        ),
-      ),
-    );
-  }
-
-  Widget getTermsConditionText() {
-    return RichText(
-      textAlign: TextAlign.center,
-      text: TextSpan(
-        style: const TextStyle(
-          color: AppColors.black,
-          fontFamily: 'FontMedium',
-          fontSize: AppSize.size_14,
-          height: 1.5,
-        ),
-        children: [
-          const TextSpan(
-            text: 'By clicking on Login, I accept the ',
-            style: TextStyle(
-              color: AppColors.black,
-              fontFamily: 'FontMedium',
-              fontSize: AppSize.size_14,
-            ),
-          ),
-          TextSpan(
-            text: 'Terms & Conditions',
-            style: const TextStyle(
-              color: AppColors.purple,
-              fontFamily: 'FontMedium',
-              fontSize: AppSize.size_14,
-            ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () => _showLegalPopup('terms_and_conditions'),
-          ),
-          const TextSpan(text: ' & '),
-          TextSpan(
-            text: 'Privacy Policy',
-            style: const TextStyle(
-              color: AppColors.purple,
-              fontFamily: 'FontMedium',
-              fontSize: AppSize.size_14,
-            ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () => _showLegalPopup('privacy_policy'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void handleLogin() async {
-    await SharedPreference.remove("jwt_token");
-    await SharedPreference.remove("is_active");
-    await SharedPreference.remove("user_type");
-    await SharedPreference.remove("permissions");
-
-    ProgressBar().showLoader(context);
-
+  Future<void> handleLogin() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
     try {
-      final response = await http.post(
+      await SharedPreference.remove("jwt_token");
+      await SharedPreference.remove("is_active");
+      await SharedPreference.remove("user_type");
+      await SharedPreference.remove("permissions");
+
+      if (!mounted) return;
+
+      final response = await (widget.client?.post ?? http.post)(
         Uri.parse(PARTNER_LOGIN_URL),
         headers: {
           'accept': '*/*',
@@ -458,7 +265,6 @@ class _loginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
 
       CommonUtilities.showLog("Partner Login status: ${response.statusCode}");
       CommonUtilities.showLog("Partner Login response: ${response.body}");
@@ -473,9 +279,10 @@ class _loginScreenState extends State<LoginScreen> {
         final bool isPartnerActive = data['partner']?['isActive'] == true;
 
         if (token.isEmpty) {
-          CommonUtilities.showLog("Partner Login missing token. Response: ${response.body}");
-          CommonUtilities.createSnackBar(
-              context, 'Login succeeded, but token was missing. Please try again.');
+          CommonUtilities.showLog(
+              "Partner Login missing token. Response: ${response.body}");
+          _showMessage(context,
+              'Login succeeded, but token was missing. Please try again.');
           return;
         }
 
@@ -486,35 +293,44 @@ class _loginScreenState extends State<LoginScreen> {
         if (isTeamMember) {
           final bool isMemberActive = data['member']?['isActive'] == true;
           final Map perms = data['member']?['permissions'] ?? {};
-          await SharedPreference.addStringToSF("is_active", isMemberActive ? "true" : "false");
+          await SharedPreference.addStringToSF(
+              "is_active", isMemberActive ? "true" : "false");
           await SharedPreference.addStringToSF("user_type", "team_member");
-          await SharedPreference.addStringToSF("permissions", jsonEncode(perms));
+          await SharedPreference.addStringToSF(
+              "permissions", jsonEncode(perms));
           if (!mounted) return;
           if (isMemberActive) {
-            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(context, HomeScreen());
+            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                context, HomeScreen());
           } else {
-            CommonUtilities.createSnackBar(context, 'Your account is not active yet. Please wait for approval.');
+            _showMessage(context,
+                'Your account is not active yet. Please wait for approval.');
           }
         } else if (isPartnerActive) {
           await SharedPreference.addStringToSF("is_active", "true");
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");
-          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(context, HomeScreen());
+          if (!mounted) return;
+          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+              context, HomeScreen());
         } else {
           await SharedPreference.addStringToSF("is_active", "false");
-          CommonUtilities.createSnackBar(context, 'Your account is not active yet. Please wait for approval.');
+          if (!mounted) return;
+          _showMessage(context,
+              'Your account is not active yet. Please wait for approval.');
         }
       } else {
         final body = jsonDecode(response.body);
         final msg = body['message'] ?? 'Login failed. Please try again.';
         if (!mounted) return;
-        CommonUtilities.createSnackBar(context, msg);
+        _showMessage(context, msg);
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog("Partner Login error: $e");
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+      _showMessage(context, 'Network error. Please check your connection.');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -550,7 +366,12 @@ class _loginScreenState extends State<LoginScreen> {
 
   Future<void> _showLegalPopup(String type) async {
     try {
-      final response = await http.get(Uri.parse(LEGAL_URL));
+      // Refresh the local-server selection after a backend restart or hot reload.
+      if (widget.client == null) await initializeApiBaseUrl();
+      if (!mounted) return;
+      final response =
+          await (widget.client?.get ?? http.get)(Uri.parse(LEGAL_URL))
+              .timeout(const Duration(seconds: 15));
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -568,17 +389,26 @@ class _loginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        final String title = item?['title']?.toString() ?? (type == 'terms_and_conditions' ? 'Terms & Conditions' : 'Privacy Policy');
-        final String raw = item?['content']?.toString() ?? 'Content not available.';
-        final String content = raw.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+        final String title = item?['title']?.toString() ??
+            (type == 'terms_and_conditions'
+                ? 'Terms & Conditions'
+                : 'Privacy Policy');
+        final String raw =
+            item?['content']?.toString() ?? 'Content not available.';
+        final String content = raw
+            .replaceAll(RegExp(r'<[^>]*>'), '')
+            .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+            .trim();
 
         showDialog(
           context: context,
           barrierDismissible: true,
           builder: (_) => Dialog(
             backgroundColor: AppColors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -588,17 +418,17 @@ class _loginScreenState extends State<LoginScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: AppSize.size_18,
-                          fontFamily: 'FontSemiBold',
-                          color: AppColors.darkBlack,
+                      Expanded(
+                        child: Text(
+                          title,
+                          style:
+                              OnboardingStyles.heading.copyWith(fontSize: 18),
                         ),
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, color: AppColors.darkBlack, size: 22),
+                        icon: const Icon(Icons.close,
+                            color: AppColors.darkBlack, size: 22),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -612,12 +442,7 @@ class _loginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
                     child: Text(
                       content,
-                      style: TextStyle(
-                        fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
-                        color: AppColors.darkBlack,
-                        height: 1.6,
-                      ),
+                      style: OnboardingStyles.body.copyWith(height: 1.6),
                     ),
                   ),
                 ),
@@ -626,11 +451,12 @@ class _loginScreenState extends State<LoginScreen> {
           ),
         );
       } else {
-        CommonUtilities.createSnackBar(context, 'Failed to load content. Please try again.');
+        _showMessage(context, 'Failed to load content. Please try again.');
       }
     } catch (e) {
+      CommonUtilities.showLog('Legal content request failed ($LEGAL_URL): $e');
       if (!mounted) return;
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+      _showMessage(context, 'Network error. Please check your connection.');
     }
   }
 
@@ -642,13 +468,14 @@ class _loginScreenState extends State<LoginScreen> {
     final isPhone = phoneDigits.length == 10 || phoneDigits.length == 12;
 
     if (identifier.isEmpty) {
-      CommonUtilities.createSnackBar(context, 'Please enter email address or phone number.');
+      _showMessage(context, 'Please enter email address or phone number.');
       return false;
     } else if (!isEmail && !isPhone) {
-      CommonUtilities.createSnackBar(context, 'Please enter a valid email address or phone number.');
+      _showMessage(
+          context, 'Please enter a valid email address or phone number.');
       return false;
     } else if (password.isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.passwordEnter);
+      _showMessage(context, ConstantsMessages.passwordEnter);
       return false;
     }
     return true;

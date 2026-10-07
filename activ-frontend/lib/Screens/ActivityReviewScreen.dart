@@ -1,26 +1,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:activ_app/Screens/StringExtensions.dart';
-import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-import '../Style/app_size.dart';
-import '../Utills/common_utilities.dart';
+import '../Style/app_colors.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LegalInformationScreen.dart';
 import 'VenuePhotoListViewScreen.dart';
+import 'onboarding_widgets.dart';
 
-// Edit button accent colour (matches screenshot)
-const _editColor = Color(0xFF7C3AED);
+const _editColor = Color(0xFFA634FF);
 
 class ActivityReviewScreen extends StatefulWidget {
   final String activityId;
   final Map<String, dynamic> venueTimingMap;
-  // Each entry: { 'id': categoryId, 'title': categoryTitle, 'timing': {...} }
   final List<Map<String, dynamic>> categoryTimings;
 
   const ActivityReviewScreen({
@@ -35,16 +30,42 @@ class ActivityReviewScreen extends StatefulWidget {
 }
 
 class _State extends State<ActivityReviewScreen> {
-  int currentStep = 9;
-  final int totalSteps = totalSetup;
-
-  List<Map<String, dynamic>> _questionDisplay = [];
-
-  // Ordered full day names
+  List<Map<String, dynamic>> _questions = [];
+  int _activityIndex = 0;
+  final _scrollController = ScrollController();
   static const _days = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-    'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
+
+  List<Map<String, dynamic>> get _activities {
+    if (widget.categoryTimings.isNotEmpty) return widget.categoryTimings;
+    final titles = _questions
+        .map((q) => q['categoryTitle']?.toString() ?? '')
+        .where((title) => title.isNotEmpty && title != 'General')
+        .toSet();
+    return [
+      for (final title in titles)
+        {'title': title, 'timing': widget.venueTimingMap},
+      if (titles.isEmpty)
+        {'title': 'Activity', 'timing': widget.venueTimingMap},
+    ];
+  }
+
+  Map<String, dynamic> get _activity => _activities[_activityIndex];
+  String get _title => _activity['title']?.toString() ?? 'Activity';
+  Map<String, dynamic> get _timing =>
+      Map<String, dynamic>.from(_activity['timing'] as Map? ?? {});
+  List<Map<String, dynamic>> get _activityQuestions => _questions
+      .where((q) => q['categoryId'] != null && _activity['id'] != null
+          ? q['categoryId'].toString() == _activity['id'].toString()
+          : q['categoryTitle'] == _title || q['categoryTitle'] == 'General')
+      .toList();
 
   @override
   void initState() {
@@ -53,551 +74,321 @@ class _State extends State<ActivityReviewScreen> {
   }
 
   Future<void> _loadQuestions() async {
-    final raw =
-        checkString(await SharedPreference.readStr('activity_questions_display'));
-    if (raw.isNotEmpty) {
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      setState(() {
-        _questionDisplay =
-            decoded.cast<Map<String, dynamic>>();
-      });
+    final raw = await SharedPreference.readStr('activity_questions_display');
+    if (!mounted || raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List || decoded.any((q) => q is! Map)) return;
+      setState(() => _questions =
+          decoded.map((q) => Map<String, dynamic>.from(q as Map)).toList());
+    } on FormatException {
+      // An incomplete local draft must not prevent reviewing saved timings.
     }
   }
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  List<Map<String, String>> _slots(Map<String, dynamic> timing, String day) {
-    final raw = timing[day];
-    if (raw == null) return [];
-    return (raw as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .map((s) => s.map((k, v) => MapEntry(k, v?.toString() ?? '')))
-        .toList();
-  }
-
-  List<String> _openDays(Map<String, dynamic> timing) =>
-      _days.where((day) {
-        final slots = _slots(timing, day);
-        return slots.any((s) => s['open'] != null && s['open'] != '-');
-      }).toList();
-
-  bool _isClosedDay(Map<String, dynamic> timing, String day) {
-    final slots = _slots(timing, day);
-    return slots.isEmpty ||
-        slots.every((s) => s['open'] == '-' || s['open'] == null || s['open']!.isEmpty);
-  }
-
-  Widget _buildTimingContent(Map<String, dynamic> timing) {
-    final openDays = _openDays(timing);
-    const dayAbbr = {
-      'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
-      'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun',
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Operating Days',
-          style: TextStyle(
-            fontSize: AppSize.size_14,
-            fontFamily: 'FontSemiBold',
-            color: AppColors.darkBlack,
-            height: 1,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: _days.map((day) {
-            final isOpen = openDays.contains(day);
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: isOpen ? AppColors.darkBlack : AppColors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isOpen ? AppColors.darkBlack : AppColors.gray,
-                ),
-              ),
-              child: Text(
-                dayAbbr[day] ?? day.substring(0, 3),
-                style: TextStyle(
-                  fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
-                  color: isOpen ? AppColors.white : AppColors.hintColor,
-                  height: 1,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 16),
-        const Divider(height: 1, color: AppColors.gray),
-        const SizedBox(height: 12),
-        const Text(
-          'Day Wise Timings',
-          style: TextStyle(
-            fontSize: AppSize.size_14,
-            fontFamily: 'FontSemiBold',
-            color: AppColors.darkBlack,
-            height: 1,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ..._days.map((day) {
-          if (_isClosedDay(timing, day)) return const SizedBox.shrink();
-          final slots = _slots(timing, day);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  day,
-                  style: const TextStyle(
-                    fontSize: AppSize.size_13,
-                    fontFamily: 'FontSemiBold',
-                    color: AppColors.darkBlack,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ...slots
-                    .where((s) =>
-                        s['open'] != null &&
-                        s['open'] != '-' &&
-                        s['close'] != null &&
-                        s['close'] != '-')
-                    .map((slot) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                  child: _timingCell(
-                                      'Open Time', slot['open'] ?? '')),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                  child: _timingCell(
-                                      'Close Time', slot['close'] ?? '')),
-                            ],
-                          ),
-                        )),
-                const Divider(height: 16, color: AppColors.gray),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  String _formatAnswer(Map<String, dynamic> q) {
-    final answer = q['answer'];
-    if (answer == null) return '-';
-    if (answer is List) return answer.join(', ');
-    return answer.toString().isEmpty ? '-' : answer.toString();
-  }
-
-  void _popTimes(int times) {
-    for (int i = 0; i < times; i++) {
-      Navigator.pop(context);
-    }
-  }
-
-  // ─── Widgets ──────────────────────────────────────────────────────────────
-
-  Widget _sectionCard({
-    required String title,
-    required VoidCallback onEdit,
-    required Widget content,
-  }) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: AppSize.size_16,
-                    fontFamily: 'FontSemiBold',
-                    color: AppColors.darkBlack,
-                    height: 1,
-                  ),
-                ),
-                InkWell(
-                  onTap: onEdit,
-                  child: Row(
-                    children: const [
-                      Icon(Icons.edit_outlined, size: 15, color: _editColor),
-                      SizedBox(width: 4),
-                      Text(
-                        'Edit',
-                        style: TextStyle(
-                          fontSize: AppSize.size_13,
-                          fontFamily: 'FontMedium',
-                          color: _editColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.gray),
-          content,
-        ],
-      ),
-    );
-  }
-
-  // ─── Photos section ───────────────────────────────────────────────────────
-
-  Widget _buildPhotosSection() {
-    final List<Uint8List> bytes = VenuePhotoListViewScreen.cachedImageBytes;
-    return _sectionCard(
-      title: 'Photos',
-      onEdit: () => _popTimes(3),
-      content: bytes.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(14),
-              child: Text(
-                'No photos uploaded.',
-                style: TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
-                  color: AppColors.hintColor,
-                ),
-              ),
-            )
-          : Column(
-              children: bytes.asMap().entries.map((entry) {
-                final isFirst = entry.key == 0;
-                return Stack(
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Image.memory(
-                        entry.value,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      ),
-                    ),
-                    if (isFirst)
-                      Positioned(
-                        top: 10,
-                        left: 10,
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.darkGray,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'Cover Photo',
-                            style: TextStyle(
-                              fontSize: AppSize.size_12,
-                              fontFamily: 'FontSemiBold',
-                              color: AppColors.white,
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              }).toList(),
-            ),
-    );
-  }
-
-  // ─── Activity Specific Details section ───────────────────────────────────
-
-  Widget _buildActivityDetailsSection() {
-    // Group questions by their category title
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (final q in _questionDisplay) {
-      final cat = q['categoryTitle']?.toString() ?? '';
-      grouped.putIfAbsent(cat, () => []).add(q);
-    }
-    final categories = grouped.keys.toList();
-    final bool multiCategory = categories.length > 1;
-
-    return _sectionCard(
-      title: 'Activity Specific Details',
-      onEdit: () => _popTimes(2),
-      content: _questionDisplay.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(14),
-              child: Text(
-                'No details available.',
-                style: TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
-                  color: AppColors.hintColor,
-                ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final cat in categories) ...[
-                    // Show category header only when multiple categories
-                    if (multiCategory)
-                      Container(
-                        margin: const EdgeInsets.fromLTRB(0, 4, 0, 10),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkBlack,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          cat,
-                          style: const TextStyle(
-                            fontSize: AppSize.size_12,
-                            fontFamily: 'FontSemiBold',
-                            color: AppColors.yellow,
-                            height: 1,
-                          ),
-                        ),
-                      ),
-                    ...grouped[cat]!.map((q) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                q['questionText']?.toString() ?? '',
-                                style: const TextStyle(
-                                  fontSize: AppSize.size_12,
-                                  fontFamily: 'FontRegular',
-                                  color: AppColors.hintColor,
-                                  height: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                _formatAnswer(q),
-                                style: const TextStyle(
-                                  fontSize: AppSize.size_14,
-                                  fontFamily: 'FontMedium',
-                                  color: AppColors.darkBlack,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
-                  ],
-                ],
-              ),
-            ),
-    );
-  }
-
-  // ─── Operational Details section ──────────────────────────────────────────
-
-  Widget _buildOperationalDetailsSection() {
-    final bool multiCategory = widget.categoryTimings.length > 1;
-
-    // Decide content based on available data
-    Widget content;
-    if (widget.categoryTimings.isEmpty) {
-      // Backward compat — flat venueTimingMap
-      content = _buildTimingContent(widget.venueTimingMap);
-    } else if (!multiCategory) {
-      // Single category — no header chip needed
-      content = _buildTimingContent(
-          (widget.categoryTimings.first['timing'] as Map<String, dynamic>?) ??
-              {});
-    } else {
-      // Multiple categories — show a chip header per category
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (int i = 0; i < widget.categoryTimings.length; i++) ...[
-            Container(
-              margin: EdgeInsets.fromLTRB(0, i == 0 ? 0 : 16, 0, 10),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.darkBlack,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                widget.categoryTimings[i]['title']?.toString() ?? '',
-                style: const TextStyle(
-                  fontSize: AppSize.size_12,
-                  fontFamily: 'FontSemiBold',
-                  color: AppColors.yellow,
-                  height: 1,
-                ),
-              ),
-            ),
-            _buildTimingContent(
-              (widget.categoryTimings[i]['timing'] as Map<String, dynamic>?) ??
-                  {},
-            ),
-          ],
-        ],
-      );
-    }
-
-    return _sectionCard(
-      title: 'Operational Details',
-      onEdit: () => _popTimes(1),
-      content: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-        child: content,
-      ),
-    );
-  }
-
-  Widget _timingCell(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: AppSize.size_12,
-            fontFamily: 'FontRegular',
-            color: AppColors.hintColor,
-            height: 1,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: AppSize.size_13,
-            fontFamily: 'FontMedium',
-            color: AppColors.darkBlack,
-            height: 1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
-    double progress = currentStep / totalSteps;
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-    return Stack(
-      children: [
-        Align(
-          alignment: Alignment.topCenter,
-          child: Container(height: 100, color: AppColors.yellowTop),
-        ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(height: 100, color: AppColors.white),
-        ),
-        SafeArea(
-          top: true,
-          bottom: true,
-          left: false,
-          right: false,
-          child: Scaffold(
-            body: Container(
-              decoration: context.getYellowGradient,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(15, 0, 15, 16),
-                      children: [
-                        // Header
-                        Container(
-                          margin: const EdgeInsets.only(top: 10),
-                          child: SvgPicture.asset('assets/activ_tm.svg'),
-                        ),
-                        getStepBarCount(progress, currentStep, totalSteps),
-                        Container(
-                          margin: const EdgeInsets.only(top: 25),
-                          alignment: Alignment.centerLeft,
-                          child: const Text(
-                            'Configuring Activity',
-                            style: TextStyle(
-                              fontSize: AppSize.size_25,
-                              fontFamily: 'FontSemiBold',
-                              color: AppColors.darkBlack,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                          child: const Text(
-                            "Review this activity's details for changes or proceed",
-                            style: TextStyle(
-                              fontSize: AppSize.size_16,
-                              fontFamily: 'FontRegular',
-                              color: AppColors.black1,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
+  List<Map<String, dynamic>> _slots(String day) => (_timing[day] as List? ?? [])
+      .map((slot) => Map<String, dynamic>.from(slot as Map))
+      .where((slot) => _hasTime(slot['open']) && _hasTime(slot['close']))
+      .toList();
 
-                        _buildPhotosSection(),
-                        _buildActivityDetailsSection(),
-                        _buildOperationalDetailsSection(),
-                      ],
+  bool _hasTime(dynamic value) =>
+      value != null && value.toString().isNotEmpty && value != '-';
+
+  String _answer(dynamic value) {
+    if (value is List) return value.join(', ');
+    return value == null || value.toString().isEmpty ? '-' : value.toString();
+  }
+
+  String _detailLabel(dynamic value) {
+    final label = value?.toString() ?? '';
+    switch (label.toLowerCase()) {
+      case 'total courts':
+        return 'Number of Courts';
+      case 'activity description':
+        return 'Description';
+      default:
+        return label;
+    }
+  }
+
+  void _edit(int screensBack) {
+    // Each configured activity contributes upload, preview, questions and timings.
+    final count = screensBack + 4 * (_activities.length - 1 - _activityIndex);
+    final navigator = Navigator.of(context);
+    for (var i = 0; i < count && navigator.canPop(); i++) {
+      navigator.pop();
+    }
+  }
+
+  void _selectActivity(int index) {
+    setState(() => _activityIndex = index);
+    _scrollController.jumpTo(0);
+  }
+
+  Widget _section(String title, int screensBack, Widget child) => Container(
+        margin: const EdgeInsets.only(top: 24),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: AppColors.gray),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontFamily: 'OnboardingSemibold',
+                        fontSize: 16,
+                        height: 1.3))),
+            TextButton.icon(
+              onPressed: () => _edit(screensBack),
+              style: TextButton.styleFrom(
+                foregroundColor: _editColor,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                textStyle: const TextStyle(
+                    fontFamily: 'OnboardingMedium', fontSize: 14),
+              ),
+              icon: const Icon(Icons.edit_outlined, size: 17),
+              label: const Text('Edit'),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          child,
+        ]),
+      );
+
+  Widget _photos() {
+    final List<Uint8List> photos = VenuePhotoListViewScreen
+            .cachedImagesByCategory[_activity['id']?.toString()] ??
+        (_activities.length == 1
+            ? VenuePhotoListViewScreen.cachedImageBytes
+            : []);
+    return _section(
+        'Photos',
+        3,
+        photos.isEmpty
+            ? const Text('No photos uploaded.')
+            : Column(children: [
+                for (var i = 0; i < photos.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                        bottom: i == photos.length - 1 ? 0 : 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: AspectRatio(
+                        aspectRatio: 1.95,
+                        child: Image.memory(photos[i],
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.broken_image_outlined))),
+                      ),
                     ),
                   ),
+              ]));
+  }
 
-                  // Bottom bar
-                  Column(
-                    children: [
-                      bottomBarShadow(),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: InkWell(
-                              onTap: () => Navigator.pop(context),
-                              child: getBackButton(
-                                  context, 'Back', 'activityReview'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 7,
-                            child: InkWell(
-                              onTap: () => CommonUtilities.NavigateWithPush(
-                                  context, const LegalInformationScreen()),
-                              child: getButtonBlack(
-                                  context, 'Next', 'activityReview'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+  Widget _details() => _section(
+      'Activity Specific Details',
+      2,
+      _activityQuestions.isEmpty
+          ? const Text('No details available.')
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (var i = 0; i < _activityQuestions.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(
+                      bottom: i == _activityQuestions.length - 1 ? 0 : 14),
+                  child: _cell(
+                      _detailLabel(_activityQuestions[i]['questionText']),
+                      _answer(_activityQuestions[i]['answer'])),
+                ),
+            ]));
+
+  Widget _cell(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.hintColor, height: 1.4)),
+          const SizedBox(height: 3),
+          Text(value,
+              style: const TextStyle(
+                  fontFamily: 'OnboardingMedium', fontSize: 14, height: 1.4)),
+        ],
+      );
+
+  String _capacity(Map<String, dynamic> slot) {
+    if (slot['capacity'] != null) return _answer(slot['capacity']);
+    for (final q in _activityQuestions) {
+      final label = q['questionText']?.toString().toLowerCase() ?? '';
+      if (label.contains('capacity')) return _answer(q['answer']);
+    }
+    return '-';
+  }
+
+  Widget _operations() {
+    final openDays = _days.where((day) => _slots(day).isNotEmpty).toList();
+    return _section(
+        'Operational Details',
+        1,
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Operating Days',
+              style: TextStyle(fontFamily: 'OnboardingSemibold')),
+          const SizedBox(height: 18),
+          SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 16,
+                  runSpacing: 10,
+                  children: [
+                    for (final day in _days)
+                      Text(day.substring(0, 3),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: openDays.contains(day)
+                                  ? AppColors.darkBlack
+                                  : AppColors.hintColor,
+                              decoration: openDays.contains(day)
+                                  ? null
+                                  : TextDecoration.lineThrough)),
+                  ])),
+          const Divider(height: 32, color: AppColors.gray),
+          const Text('Day Wise Timings',
+              style: TextStyle(fontFamily: 'OnboardingSemibold')),
+          if (openDays.isEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('Operational timings have not been added yet.'),
+          ],
+          for (var i = 0; i < openDays.length; i++) ...[
+            const SizedBox(height: 18),
+            Text(openDays[i],
+                style: const TextStyle(fontFamily: 'OnboardingSemibold')),
+            for (final slot in _slots(openDays[i])) ...[
+              const SizedBox(height: 10),
+              LayoutBuilder(builder: (context, constraints) {
+                final columns =
+                    MediaQuery.textScalerOf(context).scale(14) > 18 ? 2 : 3;
+                final width =
+                    (constraints.maxWidth - 8 * (columns - 1)) / columns;
+                return Wrap(spacing: 8, runSpacing: 12, children: [
+                  SizedBox(
+                      width: width,
+                      child: _cell('Open Time', _answer(slot['open']))),
+                  SizedBox(
+                      width: width,
+                      child: _cell('Close Time', _answer(slot['close']))),
+                  SizedBox(
+                      width: width, child: _cell('Capacity', _capacity(slot))),
+                ]);
+              }),
+            ],
+            if (i < openDays.length - 1)
+              const Divider(height: 24, color: AppColors.gray),
+          ],
+        ]));
+  }
+
+  Widget _footerButton(
+          {required String label,
+          required VoidCallback onPressed,
+          bool outlined = false}) =>
+      TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 56),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+          backgroundColor: outlined ? AppColors.cream : Colors.black,
+          foregroundColor: outlined ? Colors.black : AppColors.yellow,
+          textStyle:
+              const TextStyle(fontFamily: 'OnboardingSemibold', fontSize: 16),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: outlined
+                  ? const BorderSide(color: AppColors.gray1)
+                  : BorderSide.none),
+        ),
+        child: Text(label, textAlign: TextAlign.center),
+      );
+
+  @override
+  Widget build(BuildContext context) => OnboardingScaffold(
+        child: Column(children: [
+          Expanded(
+              child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 40, 20, 32),
+            children: [
+              const OnboardingLogo(),
+              getStepBarCount(onboardingActivityReviewStep / totalSetup,
+                  onboardingActivityReviewStep, totalSetup),
+              const SizedBox(height: 20),
+              Text(
+                  'Configuring Activity ${_activityIndex + 1} of ${_activities.length} \u2014 Step 4/4',
+                  style: const TextStyle(
+                      fontFamily: 'OnboardingMedium',
+                      fontSize: 14,
+                      color: AppColors.hintColor,
+                      height: 1.4)),
+              const SizedBox(height: 12),
+              Text(_title, style: OnboardingStyles.heading),
+              const SizedBox(height: 8),
+              const Text(
+                  "Review this activity's details for changes or proceed",
+                  style: TextStyle(
+                      fontSize: 16, height: 1.4, color: AppColors.black1)),
+              _photos(),
+              _details(),
+              _operations(),
+            ],
+          )),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: AppColors.yellowBottom,
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0x1A000000),
+                    blurRadius: 4,
+                    offset: Offset(0, -2))
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Row(children: [
+                Expanded(
+                    flex: 3,
+                    child: _footerButton(
+                        label: 'Back',
+                        outlined: true,
+                        onPressed: () => _activityIndex > 0
+                            ? _selectActivity(_activityIndex - 1)
+                            : Navigator.pop(context))),
+                const SizedBox(width: 16),
+                Expanded(
+                    flex: 7,
+                    child: _footerButton(
+                      label: _activityIndex < _activities.length - 1
+                          ? 'Configure Next Activity'
+                          : 'Next',
+                      onPressed: () => _activityIndex < _activities.length - 1
+                          ? _selectActivity(_activityIndex + 1)
+                          : Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      const LegalInformationScreen())),
+                    )),
+              ]),
             ),
           ),
-        ),
-      ],
-    );
-  }
+        ]),
+      );
 }

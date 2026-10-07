@@ -129,16 +129,13 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 */
 
-
-
-import 'package:activ_app/Screens/GetStartedScreen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:no_context_navigation/no_context_navigation.dart';
 import 'package:overlay_support/overlay_support.dart';
 
-import 'Screens/AuthWrapper.dart';
+import 'Screens/splash_screen.dart';
 import 'Style/app_colors.dart';
 import 'api_calling/api_constant.dart';
 
@@ -158,30 +155,35 @@ main() async {
   runApp(MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
-
   const MyApp({super.key});
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: AppColors.transparent,  // Set the status bar color to match the theme
-      statusBarIconBrightness: Brightness.dark,  // Set status bar icons color (light or dark)
-      systemNavigationBarColor: AppColors.white,  // Set the color of the system navigation bar
-      systemNavigationBarIconBrightness: Brightness.dark,  // Set icons for navigation bar
+      statusBarColor:
+          AppColors.transparent, // Set the status bar color to match the theme
+      statusBarIconBrightness:
+          Brightness.dark, // Set status bar icons color (light or dark)
+      systemNavigationBarColor:
+          AppColors.white, // Set the color of the system navigation bar
+      systemNavigationBarIconBrightness:
+          Brightness.dark, // Set icons for navigation bar
     ));
     return OverlaySupport(
       child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.dark, // You can change the overlay style based on your needs
+        value: SystemUiOverlayStyle
+            .dark, // You can change the overlay style based on your needs
         child: MaterialApp(
           //title: 'Flutter Demo',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(primarySwatch: Colors.orange,),
+          theme: ThemeData(
+            primarySwatch: Colors.orange,
+          ),
           navigatorKey: NavigationService.navigationKey,
-          home: new AuthWrapper(),
-         // home: new GetStartedScreen(),
+          home: const SplashScreen(),
+          // home: new GetStartedScreen(),
         ),
       ),
     );

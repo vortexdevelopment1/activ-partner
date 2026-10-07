@@ -9,7 +9,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
@@ -37,11 +36,11 @@ class _State extends State<ReviewSignAgreement> {
   anythingElse = "", ownerFullName = "", ownerEmail = "", ownerMobileNumber = "", sameAsOwnerNumber = "", operateSaveValueStr = "", venueDetailsSaveValueStr = "",
   placeOfferSaveValueStr = "", sameAsOwnerNumberChecked="";
 
-  Map<String, dynamic> operateSaveValue = {};
+  dynamic operateSaveValue = <String, dynamic>{};
   Map<String, dynamic> venueDetailsSaveValue = {};
   Map<String, dynamic> placeOfferSaveValue = {};
 
-  int currentStep = 10;
+  int currentStep = onboardingReviewStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -125,7 +124,10 @@ class _State extends State<ReviewSignAgreement> {
 
   Future<void> _showLegalPopup(String type) async {
     try {
-      final response = await http.get(Uri.parse(LEGAL_URL));
+      await initializeApiBaseUrl();
+      if (!mounted) return;
+      final response = await http.get(Uri.parse(LEGAL_URL))
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         if (!mounted) return;
         CommonUtilities.createSnackBar(context, 'Failed to load content.');
@@ -855,7 +857,7 @@ class _State extends State<ReviewSignAgreement> {
   {
     return Container(
         margin: const EdgeInsets.only(top: 10),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 

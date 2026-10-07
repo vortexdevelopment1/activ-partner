@@ -6,7 +6,6 @@ import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -80,7 +79,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   List<String> selectedDays = [];
   Map<String, DayTiming> timings = {};
 
-  int currentStep = 8;
+  int currentStep = onboardingActivitiesStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -243,6 +242,9 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                           getActivIcon(),
 
                           getStepBar(progress),
+                          if (widget.categoryTitle.isNotEmpty)
+                            getActivityStepLabel(widget.categoryIndex,
+                                widget.totalCategories, 4),
 
                           getText(),
                           getSubText(),
@@ -883,7 +885,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 
@@ -903,20 +905,6 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // "Configuring Activity 1 of 3 — Step 3/4" — only if category info is provided
-          if (hasCategory && widget.totalCategories > 1)
-            Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                "Configuring Activity ${widget.categoryIndex} of ${widget.totalCategories} — Step 3/4",
-                style: const TextStyle(
-                  fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
-                  color: AppColors.black1,
-                  height: 1,
-                ),
-              ),
-            ),
           // Category name (e.g., "Badminton") or fallback title
           Text(
             hasCategory ? widget.categoryTitle : "Set the venue's availability",
@@ -995,13 +983,12 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   // currentCategoryTiming = null means the user skipped this category.
   void _goNext(Map<String, dynamic>? currentCategoryTiming) {
     final newAccumulated = List<Map<String, dynamic>>.from(widget.accumulatedTimings);
-    if (currentCategoryTiming != null) {
-      newAccumulated.add({
-        'id': widget.categoryId,
-        'title': widget.categoryTitle,
-        'timing': currentCategoryTiming,
-      });
-    }
+    newAccumulated.removeWhere((entry) => entry['id'] == widget.categoryId);
+    newAccumulated.add({
+      'id': widget.categoryId,
+      'title': widget.categoryTitle,
+      'timing': currentCategoryTiming ?? <String, dynamic>{},
+    });
 
     if (widget.remainingCategories.isNotEmpty) {
       // More categories — start the cycle again with next category
@@ -1022,15 +1009,16 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   Future<void> _callApiAndFinish(List<Map<String, dynamic>> accumulated) async {
     // Nothing filled in for any category — skip API call
-    if (accumulated.isEmpty) {
-      _navigateToReview([]);
+    if (accumulated.every((entry) => (entry['timing'] as Map).isEmpty)) {
+      _navigateToReview(accumulated);
       return;
     }
 
     // Build API payload keyed by categoryId: { catId: timing, ... }
     final Map<String, dynamic> apiMap = {
       for (final e in accumulated)
-        e['id']?.toString() ?? '': e['timing'],
+        if ((e['timing'] as Map).isNotEmpty)
+          e['id']?.toString() ?? '': e['timing'],
     };
 
     ProgressBar().showLoader(context);
@@ -1073,6 +1061,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   // Pass per-category list to review screen for display.
   void _navigateToReview(List<Map<String, dynamic>> accumulated) {
+    SharedPreference.addStringToSF('activity_review_timings', jsonEncode(accumulated));
     CommonUtilities.NavigateWithPush(context, ActivityReviewScreen(
       activityId: widget.activityId,
       categoryTimings: accumulated,

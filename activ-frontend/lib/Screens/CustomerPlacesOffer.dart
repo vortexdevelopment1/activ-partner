@@ -8,7 +8,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/painting.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import '../../Style/app_colors.dart';
 import '../../Style/app_size.dart';
@@ -23,6 +22,8 @@ import 'ListActivityTypeScreen.dart';
 import 'VenueTimingScreen.dart';
 
 class CustomerPlacesOffer extends StatefulWidget {
+  const CustomerPlacesOffer({super.key, this.reviewMode = false});
+  final bool reviewMode;
   @override
   _State createState() => _State();
 }
@@ -35,7 +36,7 @@ class _State extends State<CustomerPlacesOffer> {
   String noDataFound = NO_DATA_FOUND;
   ScrollController scrollController = ScrollController();
 
-  int currentStep = 6;
+  int currentStep = onboardingAmenitiesStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -78,9 +79,18 @@ class _State extends State<CustomerPlacesOffer> {
       if (snapshot.exists) {
         var data = snapshot.data();
         var list = data?["facilities"] as List<dynamic>;
+        final raw = widget.reviewMode ? await SharedPreference.readStr('place_offer') : null;
+        final saved = raw == null ? <dynamic>[] : (jsonDecode(raw)['place_offer'] as List);
+        final selectedIds = saved.map((e) => e['id']?.toString()).toSet();
+        if (!mounted) return;
 
         setState(() {
           resultList = list.map((e) => VenueTypeModel.fromJson(e)).toList();
+          for (final model in resultList) {
+            model.isSelected = selectedIds.contains(model.id);
+          }
+          isSelectedValue = resultList.any((model) => model.isSelected);
+          isShimmerLoading = false;
         });
         isShimmerLoading = false;
       }
@@ -164,11 +174,21 @@ class _State extends State<CustomerPlacesOffer> {
                                   flex: 7,
                                   child: InkWell(
                                       onTap: ()
+                                      async
                                       {
                                         //CommonUtilities.NavigateWithPush(context, VenueAvailabilityScreen());
                                         if(isSelectedValue)
                                         {
-                                          CommonUtilities.NavigateWithPush(context, ListActivityTypeScreen());
+                                          if (widget.reviewMode) {
+                                            await SharedPreference.addStringToSF('place_offer', jsonEncode({
+                                              'place_offer': resultList.where((model) => model.isSelected)
+                                                  .map((model) => {'id': model.id, 'title': model.title}).toList(),
+                                            }));
+                                            if (!mounted) return;
+                                            Navigator.pop(context, true);
+                                          } else {
+                                            CommonUtilities.NavigateWithPush(context, ListActivityTypeScreen());
+                                          }
 
                                         }else{
                                           CommonUtilities.createSnackBar(context, ConstantsMessages.selectOfferType);
@@ -197,7 +217,7 @@ class _State extends State<CustomerPlacesOffer> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: SvgPicture.asset("assets/activ_tm.svg",)
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
     );
   }
 
@@ -316,7 +336,9 @@ class _State extends State<CustomerPlacesOffer> {
             // Convert to string
             String jsonString = jsonEncode(finalJson);
 
-            SharedPreference.addStringToSF("place_offer", checkString(jsonString));
+            if (!widget.reviewMode) {
+              await SharedPreference.addStringToSF("place_offer", checkString(jsonString));
+            }
             String placeOffer = checkString(await SharedPreference.readStr("place_offer"));
             CommonUtilities.showLog("Saved Place Offer => $placeOffer");
 

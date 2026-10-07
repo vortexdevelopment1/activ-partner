@@ -336,10 +336,10 @@ class _State extends State<HomeScreen> {
                 CommonUtilities.NavigateWithPush(context, MenuScreen()),
             child: ClipOval(
               child: Image.asset(
-                'assets/ic_profile_logo.png',
+                'assets/logo.png',
                 width: 36,
                 height: 36,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => Container(
                   width: 36,
                   height: 36,
@@ -353,7 +353,7 @@ class _State extends State<HomeScreen> {
             ),
           ),
           const Spacer(),
-          SvgPicture.asset('assets/activ_tm.svg'),
+          Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
           const Spacer(),
           InkWell(
             onTap: () {},

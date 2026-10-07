@@ -49,11 +49,19 @@ export const LegalPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['legal'] });
       success('Saved successfully');
     },
-    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to save'),
+    onError: (err: any) => {
+      const message = err?.response?.data?.message;
+      error(Array.isArray(message) ? message.join('\n') : message ?? 'Failed to save');
+    },
   });
 
   const handleSave = () => {
-    upsertMutation.mutate({ type: activeTab, content: contentMap[activeTab] });
+    const content = contentMap[activeTab].trim();
+    if (content.length < 10) {
+      error('Enter at least 10 characters before saving.');
+      return;
+    }
+    upsertMutation.mutate({ type: activeTab, content });
   };
 
   const activeDoc = docs.find((d) => d.type === activeTab);

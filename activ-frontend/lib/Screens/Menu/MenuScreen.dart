@@ -18,7 +18,8 @@ import '../StringExtensions.dart';
 import 'SettingsScreen.dart';
 
 class MenuScreen extends StatefulWidget {
-  const MenuScreen({super.key});
+  const MenuScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -51,7 +52,7 @@ class _MenuScreenState extends State<MenuScreen> {
       final token = checkString(await SharedPreference.readStr("jwt_token"));
       if (token.isEmpty) return;
 
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse(AUTH_PROFILE_URL),
         headers: {
           'accept': '*/*',
@@ -73,15 +74,19 @@ class _MenuScreenState extends State<MenuScreen> {
       if (member is Map) {
         name = checkString(member['fullName'] ?? member['name']);
         email = checkString(member['email']);
+        avatar = checkString(member['avatarUrl'] ?? member['profileImage']);
       } else if (partner is Map) {
         final firstName = checkString(partner['firstName']);
         final lastName = checkString(partner['lastName']);
-        name = checkString(partner['businessName']);
+        name =
+            [firstName, lastName].where((value) => value.isNotEmpty).join(' ');
         if (name.isEmpty) {
-          name = [firstName, lastName].where((value) => value.isNotEmpty).join(' ');
+          name = checkString(partner['fullName'] ??
+              partner['name'] ??
+              partner['businessName']);
         }
         email = checkString(partner['email']);
-        avatar = checkString(partner['avatarUrl'] ?? partner['logoUrl']);
+        avatar = checkString(partner['avatarUrl'] ?? partner['profileImage']);
       }
 
       if (!mounted) return;
@@ -99,6 +104,12 @@ class _MenuScreenState extends State<MenuScreen> {
   void dispose() {
     scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(context,
+        MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    if (mounted) await _loadProfileHeader();
   }
 
   @override
@@ -141,7 +152,8 @@ class _MenuScreenState extends State<MenuScreen> {
                         children: [
                           _buildHeader(scale),
                           SizedBox(height: 18 * scale),
-                          ..._menuItems().map((item) => _buildMenuRow(item, scale)),
+                          ..._menuItems()
+                              .map((item) => _buildMenuRow(item, scale)),
                         ],
                       ),
                     ),
@@ -160,17 +172,14 @@ class _MenuScreenState extends State<MenuScreen> {
       _ProfileMenuItem(
         title: 'Partner Details',
         icon: Icons.person_outline_rounded,
-        onTap: () => CommonUtilities.NavigateWithPush(
-          context,
-          const ProfileScreen(),
-        ),
+        onTap: _openProfile,
       ),
       _ProfileMenuItem(
         title: 'Venue Information',
         icon: Icons.location_on_outlined,
         onTap: () => CommonUtilities.NavigateWithPush(
           context,
-          const VenueInfoScreen(),
+          VenueInfoScreen(client: widget.client),
         ),
       ),
       _ProfileMenuItem(
@@ -316,10 +325,7 @@ class _MenuScreenState extends State<MenuScreen> {
         ),
         SizedBox(height: 8 * scale),
         InkWell(
-          onTap: () => CommonUtilities.NavigateWithPush(
-            context,
-            const ProfileScreen(),
-          ),
+          onTap: _openProfile,
           borderRadius: BorderRadius.circular(5),
           child: Container(
             height: 24 * scale,
@@ -345,14 +351,11 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Widget _buildDefaultAvatar() {
-    return Image.asset(
-      'assets/ic_profile_logo.png',
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const Icon(
-        Icons.person,
-        color: AppColors.black,
-        size: 34,
-      ),
+    return const Icon(
+      Icons.person_outline_rounded,
+      color: AppColors.black1,
+      size: 48,
+      semanticLabel: 'Partner profile',
     );
   }
 

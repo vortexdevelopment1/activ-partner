@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsNumber, MaxLength, IsNotEmpty, IsUrl, Matches } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -7,11 +7,14 @@ export class SubmitVenueUpdateDto {
   @IsOptional()
   @IsString()
   @MaxLength(255)
+  @IsNotEmpty()
   name?: string;
 
   @ApiPropertyOptional({ example: 'Updated venue description' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
   description?: string;
 
   @ApiPropertyOptional({ example: 'Food Plaza, Main Road' })
@@ -32,6 +35,7 @@ export class SubmitVenueUpdateDto {
   @ApiPropertyOptional({ example: '140307' })
   @IsOptional()
   @IsString()
+  @Matches(/^\d{6}$/)
   zipCode?: string;
 
   @ApiPropertyOptional({ example: 'Shop 2, City Plaza' })
@@ -54,10 +58,12 @@ export class SubmitVenueUpdateDto {
   @ApiPropertyOptional({ example: 'https://maps.google.com/?q=place_id:ChIJ...' })
   @IsOptional()
   @IsString()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   locationUrl?: string;
 
   @ApiPropertyOptional({ example: '+919876543210' })
   @IsOptional()
   @IsString()
+  @Matches(/^\+?[\d\s()-]+$/)
   venuePhone?: string;
 }
