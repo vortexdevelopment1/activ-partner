@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:dotted_border/dotted_border.dart';
@@ -9,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
+import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddVenuePhotoListViewScreen.dart';
 
@@ -67,6 +69,22 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   }
 
   bool _isButtonEnabled = false; // by default false
+  String activityName = "Activity";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivityName();
+  }
+
+  Future<void> _loadActivityName() async {
+    final raw = checkString(await SharedPreference.readStr("operate_value"));
+    if (raw.isEmpty) return;
+    try {
+      final value = jsonDecode(raw);
+      if (mounted) setState(() => activityName = checkString(value["title"]));
+    } catch (_) {}
+  }
 
 // Update function to check button status
   void _updateButtonStatus() {
@@ -221,6 +239,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                   shrinkWrap: true,
                                   children: [
                                     getActivIcon(),
+
+                                    getStepBarCount(2 / 6, 2, 6),
 
                                     getText(),
 
@@ -471,9 +491,9 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     return Container(
       margin: const EdgeInsets.only(top: 25),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        "Add some photos of your venue",
-        style: TextStyle(
+      child: Text(
+        activityName,
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
             color: AppColors.darkBlack,
@@ -489,7 +509,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "These images will be shown on the Activ venue listing page",
+        "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',

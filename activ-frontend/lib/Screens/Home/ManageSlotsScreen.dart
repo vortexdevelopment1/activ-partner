@@ -4,600 +4,530 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
-import '../../Utills/common_utilities.dart';
-import '../StringExtensions.dart';
+import '../onboarding_widgets.dart';
 
-// ── Data models ───────────────────────────────────────────────────────────────
+class _Slot {
+  String open, close;
+  final TextEditingController capacity, price, discount;
+  _Slot(
+      {this.open = '09:00 AM',
+      this.close = '07:00 PM',
+      String capacity = '',
+      String price = '',
+      String discount = '0'})
+      : capacity = TextEditingController(text: capacity),
+        price = TextEditingController(text: price),
+        discount = TextEditingController(text: discount);
+  void dispose() {
+    capacity.dispose();
+    price.dispose();
+    discount.dispose();
+  }
 
-class _TimeSlot {
-  String openTime;
-  String closeTime;
-  TextEditingController capacity;
-  double price;
-
-  _TimeSlot({this.openTime = '09:00 AM', this.closeTime = '07:00 PM', String capacity = '', this.price = 0})
-      : capacity = TextEditingController(text: capacity);
-
-  void dispose() => capacity.dispose();
+  _Slot copy() => _Slot(
+      open: open,
+      close: close,
+      capacity: capacity.text,
+      price: price.text,
+      discount: discount.text);
 }
-
-class _DayData {
-  final String label;
-  bool selected;
-  List<_TimeSlot> slots;
-
-  _DayData({required this.label, this.selected = false, required this.slots});
-
-  String get fullName => const {
-        'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
-        'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday',
-      }[label]!;
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 class ManageSlotsScreen extends StatefulWidget {
-  const ManageSlotsScreen({super.key});
-
+  const ManageSlotsScreen({super.key, this.client});
+  final http.Client? client;
   @override
   State<ManageSlotsScreen> createState() => _State();
 }
 
 class _State extends State<ManageSlotsScreen> {
-  late List<_DayData> _days;
-  bool _loading = true;
-  bool _saving = false;
-  String _venueId = '';
-  List<String> _categoryIds = [];
-
-  static const _dayLabelMap = {
-    'monday': 'Mon', 'tuesday': 'Tue', 'wednesday': 'Wed',
-    'thursday': 'Thu', 'friday': 'Fri', 'saturday': 'Sat', 'sunday': 'Sun',
-  };
-
-  static const List<String> _timeOptions = [
-    '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
-    '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM',
-    '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
-    '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM', '11:00 PM',
+  static const _days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday'
   ];
+  static const _purple = Color(0xFF9D38EB);
+  final _schedules = <String, Map<String, List<_Slot>>>{};
+  final _names = <String, String>{};
+  String _venueId = '';
+  String? _category, _error;
+  bool _loading = true, _saving = false;
+  Map<String, List<_Slot>> get _current => _schedules[_category]!;
 
   @override
   void initState() {
     super.initState();
-    _days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-        .map((l) => _DayData(label: l, selected: false, slots: []))
-        .toList();
-    _loadAvailability();
-  }
-
-  Future<void> _loadAvailability() async {
-    try {
-      final token = checkString(await SharedPreference.readStr('jwt_token'));
-      final res = await http.get(
-        Uri.parse(MY_APPROVED_VENUES_URL),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      CommonUtilities.showLog('ManageSlots availability: ${res.statusCode}');
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        final body = jsonDecode(res.body);
-        final List venues = (body['data'] is List) ? body['data'] : [];
-        if (venues.isEmpty) { if (mounted) setState(() => _loading = false); return; }
-
-        _venueId = venues.last['id']?.toString() ?? '';
-        // Merge slots from all categories by day
-        final Map<String, List<_TimeSlot>> merged = {};
-        final Map availability = venues.last['availability'] ?? {};
-        _categoryIds = availability.keys.map((k) => k.toString()).toList();
-        for (final categorySlots in availability.values) {
-          for (final dayEntry in (categorySlots as List)) {
-            final String day = (dayEntry['day'] ?? '').toString().toLowerCase();
-            final String? label = _dayLabelMap[day];
-            if (label == null) continue;
-            merged.putIfAbsent(label, () => []);
-            for (final slot in (dayEntry['slots'] as List? ?? [])) {
-              final cap = slot['capacity'];
-              final capStr = cap != null ? cap.toString() : '0';
-              final price = (slot['price'] as num?)?.toDouble() ?? 0;
-              merged[label]!.add(_TimeSlot(
-                openTime: slot['openTime']?.toString() ?? '09:00 AM',
-                closeTime: slot['closeTime']?.toString() ?? '07:00 PM',
-                capacity: capStr,
-                price: price,
-              ));
-            }
-          }
-        }
-
-        if (!mounted) return;
-        setState(() {
-          for (final day in _days) {
-            if (merged.containsKey(day.label)) {
-              day.selected = true;
-              day.slots = merged[day.label]!;
-            }
-          }
-          _loading = false;
-        });
-      } else {
-        if (mounted) setState(() => _loading = false);
-      }
-    } catch (e) {
-      CommonUtilities.showLog('_loadAvailability error: $e');
-      if (mounted) setState(() => _loading = false);
-    }
+    _load();
   }
 
   @override
   void dispose() {
-    for (final d in _days) {
-      for (final s in d.slots) { s.dispose(); }
+    for (final schedule in _schedules.values) {
+      for (final slots in schedule.values) {
+        for (final slot in slots) {
+          slot.dispose();
+        }
+      }
     }
     super.dispose();
   }
 
-  void _copyToAll(int fromDayIndex) {
-    final src = _days[fromDayIndex];
-    setState(() {
-      for (int i = 0; i < _days.length; i++) {
-        if (i == fromDayIndex || !_days[i].selected) continue;
-        for (final s in _days[i].slots) { s.dispose(); }
-        _days[i].slots = src.slots.map((s) => _TimeSlot(
-          openTime: s.openTime,
-          closeTime: s.closeTime,
-          capacity: s.capacity.text,
-          price: s.price,
-        )).toList();
-      }
-    });
+  String _normalTime(String time) {
+    if (time.contains('AM') || time.contains('PM')) return time;
+    final parts = time.split(':');
+    final hour = int.parse(parts[0]);
+    return '${(hour % 12 == 0 ? 12 : hour % 12).toString().padLeft(2, '0')}:${parts[1]} ${hour >= 12 ? 'PM' : 'AM'}';
   }
 
-  void _onSaveTap() {
-    for (final day in _days) {
-      if (!day.selected) continue;
-      for (int i = 0; i < day.slots.length; i++) {
-        final cap = int.tryParse(day.slots[i].capacity.text.trim()) ?? 0;
-        if (cap <= 0) {
-          CommonUtilities.createSnackBar(context,
-              'Capacity for ${day.fullName} Slot ${i + 1} must be greater than 0.');
+  int _minutes(String time) {
+    final parts = time.split(' '), clock = parts[0].split(':');
+    return (int.parse(clock[0]) % 12 + (parts[1] == 'PM' ? 12 : 0)) * 60 +
+        int.parse(clock[1]);
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await SharedPreference.readStr('jwt_token');
+      if (token == null || token.isEmpty) {
+        throw Exception('Please sign in again.');
+      }
+      final response = await (widget.client?.get ?? http.get)(
+              Uri.parse(MY_APPROVED_VENUES_URL),
+              headers: {'Authorization': 'Bearer $token'})
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      if (response.statusCode != 200) {
+        throw Exception('Unable to load slots. Please try again.');
+      }
+      final venues = jsonDecode(response.body)['data'] as List;
+      if (venues.isEmpty) return;
+      final venue = venues.last;
+      final availability = venue['availability'] as Map? ?? {};
+      _venueId = venue['id'].toString();
+      for (final service in venue['services'] as List? ?? []) {
+        if (service['status'] == 'approved' && service['categoryId'] != null) {
+          _names[service['categoryId'].toString()] =
+              service['name']?.toString() ?? 'Activity';
+        }
+      }
+      for (final key in availability.keys) {
+        _names.putIfAbsent(key.toString(), () => 'Activity');
+      }
+      for (final category in _names.keys) {
+        final schedule = <String, List<_Slot>>{};
+        for (final entry in availability[category] as List? ?? []) {
+          final day = _days
+              .where((day) =>
+                  day.toLowerCase() == entry['day'].toString().toLowerCase())
+              .firstOrNull;
+          if (day == null) continue;
+          schedule[day] = [
+            for (final slot in entry['slots'] as List? ?? [])
+              _Slot(
+                  open: _normalTime(slot['openTime'].toString()),
+                  close: _normalTime(slot['closeTime'].toString()),
+                  capacity: slot['capacity']?.toString() ?? '',
+                  price: slot['price']?.toString() ?? '',
+                  discount: slot['discountedPrice']?.toString() ?? '0')
+          ];
+        }
+        _schedules[category] = schedule;
+      }
+      _category = _names.keys.firstOrNull;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Unable to load slots. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _message(String text) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(text),
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+    ));
+  }
+
+  Future<void> _save() async {
+    if (_saving || _category == null) return;
+    if (_current.isEmpty) {
+      _message('Select at least one operating day.');
+      return;
+    }
+    for (final entry in _current.entries) {
+      for (var i = 0; i < entry.value.length; i++) {
+        final slot = entry.value[i],
+            capacity = int.tryParse(entry.value[i].capacity.text);
+        final price = double.tryParse(slot.price.text),
+            discount = slot.discount.text.trim().isEmpty
+                ? 0.0
+                : double.tryParse(slot.discount.text);
+        if (capacity == null || capacity <= 0) {
+          _message('Maximum users must be a positive whole number.');
+          return;
+        }
+        if (price == null || !price.isFinite || price <= 0) {
+          _message('Slot price must be greater than 0.');
+          return;
+        }
+        if (discount == null ||
+            !discount.isFinite ||
+            discount < 0 ||
+            discount > price) {
+          _message('Discounted price must be between 0 and the slot price.');
+          return;
+        }
+        final start = _minutes(slot.open), end = _minutes(slot.close);
+        if (end - start < 60) {
+          _message('Close time must be at least one hour after open time.');
+          return;
+        }
+        if (entry.value.take(i).any((other) =>
+            start < _minutes(other.close) && end > _minutes(other.open))) {
+          _message('Time ranges for ${entry.key} cannot overlap.');
           return;
         }
       }
     }
-    _showConfirmDialog();
-  }
-
-  Future<void> _saveSlots() async {
-    if (_venueId.isEmpty) return;
     setState(() => _saving = true);
     try {
-      final token = checkString(await SharedPreference.readStr('jwt_token'));
-
-      // Build day-wise slots map
-      final Map<String, dynamic> daySlots = {};
-      final fullDayNames = {
-        'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
-        'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday',
+      final token = await SharedPreference.readStr('jwt_token');
+      final timing = {
+        for (final entry in _current.entries)
+          entry.key: [
+            for (final slot in entry.value)
+              {
+                'open': slot.open,
+                'close': slot.close,
+                'capacity': int.parse(slot.capacity.text),
+                'price': double.parse(slot.price.text),
+                'discountedPrice': slot.discount.text.trim().isEmpty
+                    ? 0.0
+                    : double.parse(slot.discount.text),
+              }
+          ]
       };
-      for (final day in _days) {
-        if (!day.selected) continue;
-        daySlots[fullDayNames[day.label]!] = day.slots.map((s) => {
-          'open': s.openTime,
-          'close': s.closeTime,
-          'capacity': int.tryParse(s.capacity.text) ?? 0,
-          'price': s.price,
-        }).toList();
-      }
-
-      // Apply same day slots to all categories
-      final Map<String, dynamic> venueTiming = {};
-      for (final catId in _categoryIds) {
-        venueTiming[catId] = daySlots;
-      }
-
-      final res = await http.patch(
-        Uri.parse('$BASE_URL/venues/$_venueId/availability'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'venue_timing': venueTiming}),
-      );
-      CommonUtilities.showLog('saveSlots: ${res.statusCode} ${res.body}');
+      final response = await (widget.client?.patch ?? http.patch)(
+          Uri.parse('$BASE_URL/venues/$_venueId/availability'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'venue_timing': {_category!: timing}
+          })).timeout(const Duration(seconds: 20));
       if (!mounted) return;
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        CommonUtilities.createSnackBar(context, 'Slots updated successfully.');
-      } else {
-        final msg = jsonDecode(res.body)['message'] ?? 'Failed to update slots';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.first : msg.toString());
+      _message(response.statusCode == 200 || response.statusCode == 201
+          ? 'Slots and pricing updated successfully.'
+          : 'Unable to save slots. Your changes are still here.');
+    } catch (_) {
+      if (mounted) {
+        _message('Unable to save slots. Your changes are still here.');
       }
-    } catch (e) {
-      CommonUtilities.showLog('_saveSlots error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _showConfirmDialog() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Are you sure?',
-                        style: TextStyle(fontSize: 18, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-                  ),
-                  InkWell(
-                    onTap: () => Navigator.pop(ctx),
-                    borderRadius: BorderRadius.circular(20),
-                    child: const Icon(Icons.close, size: 20, color: Color(0xFF1F1F1F)),
-                  ),
-                ],
+  TextStyle get _heading => OnboardingStyles.heading.copyWith(fontSize: 18);
+  Widget _label(String label,
+          {bool required = true,
+          bool heading = false,
+          bool currency = false}) =>
+      Text.rich(
+          TextSpan(children: [
+            TextSpan(text: label),
+            if (currency) ...[
+              const TextSpan(text: ' ('),
+              const WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Icon(Icons.currency_rupee, size: 18),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'This action cannot be undone. This will update the venue availability.',
-                style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF3F3F3F)),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF9D38EB)),
-                ),
-                child: const Text(
-                  "Note: Updating your venue availability won't affect ongoing sessions or existing bookings. New timings will apply only to future bookings.",
-                  style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF9D38EB)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF1F1F1F)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text('Cancel',
-                          style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFF1F1F1F))),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        Navigator.pop(ctx);
-                        await _saveSlots();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF9D38EB),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                      ),
-                      child: const Text("Yes, I'm sure",
-                          style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Colors.white)),
-                    ),
-                  ),
-                ],
-              ),
+              const TextSpan(text: ')'),
             ],
-          ),
-        ),
-      ),
-    );
-  }
+            if (required)
+              const TextSpan(
+                  text: ' *', style: TextStyle(color: Color(0xFFFE6B6B)))
+          ]),
+          style: (heading
+              ? _heading
+              : OnboardingStyles.body.copyWith(fontSize: 15)));
+  Widget _input(TextEditingController controller, Key key,
+          {bool money = false, String? hint}) =>
+      TextField(
+        key: key,
+        controller: controller,
+        enabled: !_saving,
+        keyboardType: TextInputType.numberWithOptions(decimal: money),
+        inputFormatters: [
+          money
+              ? FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'))
+              : FilteringTextInputFormatter.digitsOnly
+        ],
+        style: OnboardingStyles.body.copyWith(fontSize: 16),
+        decoration: OnboardingStyles.inputDecoration(hintText: hint).copyWith(
+            prefixIcon:
+                money ? const Icon(Icons.currency_rupee, size: 18) : null,
+            prefixIconConstraints: const BoxConstraints(minWidth: 36),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _purple))),
+      );
+  Widget _time(String value, ValueChanged<String?> change) =>
+      DropdownButtonFormField<String>(
+        initialValue: value,
+        isExpanded: true,
+        decoration: OnboardingStyles.inputDecoration(),
+        style: OnboardingStyles.body,
+        icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+        items: [
+          for (var hour = 0; hour < 24; hour++)
+            DropdownMenuItem(
+                value: _normalTime('${hour.toString().padLeft(2, '0')}:00'),
+                child:
+                    Text(_normalTime('${hour.toString().padLeft(2, '0')}:00'))),
+          if (!value.endsWith(':00 AM') && !value.endsWith(':00 PM'))
+            DropdownMenuItem(value: value, child: Text(value)),
+        ],
+        onChanged: _saving ? null : change,
+      );
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  Widget _day(String day) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(day, style: _heading)),
+          TextButton.icon(
+              onPressed: _saving
+                  ? null
+                  : () => setState(() {
+                        for (final other in _current.keys.toList()) {
+                          if (other == day) continue;
+                          for (final slot in _current[other]!) {
+                            slot.dispose();
+                          }
+                          _current[other] = _current[day]!
+                              .map((slot) => slot.copy())
+                              .toList();
+                        }
+                      }),
+              icon: const Icon(Icons.copy_outlined, size: 19),
+              label: Text('Copy to all',
+                  style: OnboardingStyles.body.copyWith(color: _purple)),
+              style: TextButton.styleFrom(
+                  foregroundColor: _purple, textStyle: OnboardingStyles.body)),
+        ]),
+        for (var index = 0; index < _current[day]!.length; index++)
+          _slot(day, index),
+        TextButton.icon(
+            onPressed: _saving
+                ? null
+                : () => setState(() => _current[day]!.add(_Slot())),
+            icon: const Icon(Icons.add, size: 18),
+            label: Text('Add time slot',
+                style: OnboardingStyles.body.copyWith(color: _purple)),
+            style: TextButton.styleFrom(foregroundColor: _purple)),
+        const SizedBox(height: 20),
+      ]);
+
+  Widget _slot(String day, int index) {
+    final slot = _current[day]![index];
+    return Padding(
+        key: ObjectKey(slot),
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  _label('Open Time'),
+                  const SizedBox(height: 8),
+                  _time(
+                      slot.open, (value) => setState(() => slot.open = value!))
+                ])),
+            const SizedBox(width: 16),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  _label('Close Time'),
+                  const SizedBox(height: 8),
+                  _time(slot.close,
+                      (value) => setState(() => slot.close = value!))
+                ])),
+            SizedBox(
+                width: 32,
+                child: IconButton(
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Delete time slot',
+                    onPressed: _saving
+                        ? null
+                        : () => setState(() {
+                              slot.dispose();
+                              _current[day]!.removeAt(index);
+                              if (_current[day]!.isEmpty) _current.remove(day);
+                            }),
+                    icon: const Icon(Icons.delete_outline))),
+          ]),
+          const SizedBox(height: 14),
+          _label('Max Users allowed per 1-Hour Slot'),
+          const SizedBox(height: 8),
+          _input(slot.capacity, Key('slot-capacity-$day-$index')),
+          const SizedBox(height: 10),
+          Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFD5DDDF))),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label('Slot Price', heading: true, currency: true),
+                    const SizedBox(height: 14),
+                    _input(slot.price, Key('slot-price-$day-$index'),
+                        money: true, hint: '500'),
+                    const SizedBox(height: 20),
+                    _label('Discounted Slot Price',
+                        required: false, heading: true, currency: true),
+                    const SizedBox(height: 14),
+                    _input(slot.discount, Key('slot-discount-$day-$index'),
+                        money: true, hint: '0'),
+                  ])),
+        ]));
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F5E8),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
+  Widget build(BuildContext context) => OnboardingScaffold(
+          child: Column(children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            child: Row(children: [
+              IconButton.filledTonal(
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(backgroundColor: Colors.white),
+                  onPressed: _saving ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back)),
+              const SizedBox(width: 12),
               Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
-                    : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                  children: [
-                    _buildDayChips(),
-                    const SizedBox(height: 24),
-                    const Text('Day Wise Timings',
-                        style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-                    const SizedBox(height: 14),
-                    ..._buildDaySections(),
-                  ],
-                ),
-              ),
-              if (!_loading) _buildSaveButton(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAppBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          InkWell(
-            onTap: () => Navigator.pop(context),
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-              width: 40, height: 40,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: const Icon(Icons.arrow_back, size: 18, color: Color(0xFF1F1F1F)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Text('Manage slots',
-              style: TextStyle(fontSize: 18, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDayChips() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Mark Operating Days',
-            style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: List.generate(_days.length, (i) {
-            final d = _days[i];
-            return InkWell(
-              onTap: () {
-                if (d.selected) {
-                  final selectedCount = _days.where((x) => x.selected).length;
-                  if (selectedCount <= 1) {
-                    CommonUtilities.createSnackBar(context, 'At least one operating day must be selected.');
-                    return;
-                  }
-                  setState(() {
-                    for (final s in d.slots) { s.dispose(); }
-                    d.slots.clear();
-                    d.selected = false;
-                  });
-                } else {
-                  setState(() {
-                    d.selected = true;
-                    if (d.slots.isEmpty) d.slots.add(_TimeSlot());
-                  });
-                }
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: d.selected ? const Color(0xFFEDE9FE) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: d.selected ? const Color(0xFF1F1F1F) : const Color(0xFFE5E7EB),
-                    width: d.selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Text(d.label,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontFamily: 'Satoshi',
-                        fontWeight: FontWeight.w600,
-                        color: d.selected ? const Color(0xFF1F1F1F) : const Color(0xFF9E9E9E),
-                        decoration: d.selected ? null : TextDecoration.lineThrough,
-                        decorationColor: const Color(0xFF9E9E9E))),
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-
-  List<Widget> _buildDaySections() {
-    final widgets = <Widget>[];
-    final selectedDays = _days.where((d) => d.selected).toList();
-    for (int di = 0; di < selectedDays.length; di++) {
-      final day = selectedDays[di];
-      final dayIdx = _days.indexOf(day);
-      widgets.add(_buildDaySection(dayIdx));
-      if (di < selectedDays.length - 1) {
-        widgets.add(const Divider(height: 28, color: Color(0xFFE5E7EB)));
-      }
-    }
-    return widgets;
-  }
-
-  Widget _buildDaySection(int dayIdx) {
-    final day = _days[dayIdx];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(day.fullName,
-                style: const TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-            const Spacer(),
-            InkWell(
-              onTap: () => _copyToAll(dayIdx),
-              child: const Row(
-                children: [
-                  Icon(Icons.copy_outlined, size: 14, color: Color(0xFF9D38EB)),
-                  SizedBox(width: 4),
-                  Text('Copy to all', style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w500, color: Color(0xFF9D38EB))),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ...List.generate(day.slots.length, (si) => _buildSlotRow(dayIdx, si)),
-        const SizedBox(height: 4),
-        InkWell(
-          onTap: () => setState(() => day.slots.add(_TimeSlot())),
-          child: const Row(
-            children: [
-              Icon(Icons.add, size: 16, color: Color(0xFF9D38EB)),
-              SizedBox(width: 4),
-              Text('Add time slot',
-                  style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFF9D38EB))),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSlotRow(int dayIdx, int slotIdx) {
-    final slot = _days[dayIdx].slots[slotIdx];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _slotLabel('Open Time'),
-                  const SizedBox(height: 4),
-                  _timeDropdown(slot.openTime, (v) => setState(() => slot.openTime = v!)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _slotLabel('Close Time'),
-                  const SizedBox(height: 4),
-                  _timeDropdown(slot.closeTime, (v) => setState(() => slot.closeTime = v!)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(top: 20),
-              child: InkWell(
-                onTap: () {
-                  final day = _days[dayIdx];
-                  if (day.slots.length > 1) {
-                    // Just remove this slot
-                    setState(() {
-                      slot.dispose();
-                      day.slots.removeAt(slotIdx);
-                    });
-                  } else {
-                    // Last slot — deselect the day, but only if at least 1 other day stays selected
-                    final selectedCount = _days.where((d) => d.selected).length;
-                    if (selectedCount <= 1) {
-                      CommonUtilities.createSnackBar(context, 'At least one operating day must be selected.');
-                      return;
-                    }
-                    setState(() {
-                      slot.dispose();
-                      day.slots.clear();
-                      day.selected = false;
-                    });
-                  }
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: const Icon(Icons.delete_outline, size: 22, color: Color(0xFF7F7F7F)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _slotLabel('Capacity'),
-        const SizedBox(height: 4),
-        TextFormField(
-          controller: slot.capacity,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w500, color: Color(0xFF1F1F1F)),
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF9D38EB))),
-          ),
-        ),
-        const SizedBox(height: 14),
-      ],
-    );
-  }
-
-  Widget _slotLabel(String text) {
-    return Text.rich(TextSpan(children: [
-      TextSpan(text: text, style: const TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFF3F3F3F))),
-      const TextSpan(text: '*', style: TextStyle(color: Color(0xFFFE6B6B))),
-    ]));
-  }
-
-  Widget _timeDropdown(String value, ValueChanged<String?> onChanged) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _timeOptions.contains(value) ? value : _timeOptions.first,
-          isExpanded: true,
-          icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF1F1F1F)),
-          style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', color: Color(0xFF1F1F1F)),
-          items: _timeOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSaveButton() {
-    return Container(
-      color: Colors.transparent,
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-      child: InkWell(
-        onTap: _onSaveTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: double.infinity,
-          height: 52,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F1F), borderRadius: BorderRadius.circular(12)),
-          child: const Center(
-            child: Text('Save Changes',
-                style: TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFFFFD700))),
-          ),
-        ),
-      ),
-    );
-  }
+                  child: Text('Manage Slots & Pricing',
+                      style: _heading.copyWith(fontSize: 23))),
+            ])),
+        Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_error!),
+                        TextButton(
+                            onPressed: _load, child: const Text('Retry')),
+                      ]))
+                    : _category == null
+                        ? const Center(
+                            child: Text('No approved activities found.'))
+                        : ListView(
+                            key: const Key('manage-slots-scroll'),
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                            children: [
+                                if (_names.length > 1) ...[
+                                  DropdownButtonFormField<String>(
+                                      initialValue: _category,
+                                      decoration:
+                                          OnboardingStyles.inputDecoration(
+                                              hintText: 'Activity'),
+                                      items: [
+                                        for (final entry in _names.entries)
+                                          DropdownMenuItem(
+                                              value: entry.key,
+                                              child: Text(entry.value))
+                                      ],
+                                      onChanged: _saving
+                                          ? null
+                                          : (value) => setState(
+                                              () => _category = value)),
+                                  const SizedBox(height: 20)
+                                ],
+                                Text('Mark Operating Days', style: _heading),
+                                const SizedBox(height: 16),
+                                LayoutBuilder(
+                                    builder: (context, constraints) => Wrap(
+                                            spacing: 12,
+                                            runSpacing: 12,
+                                            children: [
+                                              for (final day in _days)
+                                                SizedBox(
+                                                    width: (constraints.maxWidth -
+                                                            36) /
+                                                        4,
+                                                    height: 54,
+                                                    child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            backgroundColor: _current
+                                                                    .containsKey(
+                                                                        day)
+                                                                ? const Color(
+                                                                    0xFFF6F0FC)
+                                                                : Colors.white,
+                                                            foregroundColor:
+                                                                Colors.black,
+                                                            side: BorderSide(
+                                                                color: _current.containsKey(day)
+                                                                    ? Colors
+                                                                        .black
+                                                                    : const Color(
+                                                                        0xFFD5DDDF)),
+                                                            shape: RoundedRectangleBorder(
+                                                                borderRadius:
+                                                                    BorderRadius.circular(8))),
+                                                        onPressed: _saving
+                                                            ? null
+                                                            : () => setState(() {
+                                                                  if (_current
+                                                                      .containsKey(
+                                                                          day)) {
+                                                                    for (final slot
+                                                                        in _current
+                                                                            .remove(day)!) {
+                                                                      slot.dispose();
+                                                                    }
+                                                                  } else {
+                                                                    _current[
+                                                                        day] = [
+                                                                      _Slot()
+                                                                    ];
+                                                                  }
+                                                                }),
+                                                        child: Text(day.substring(0, 3), style: OnboardingStyles.body.copyWith(fontSize: 16)))),
+                                            ])),
+                                const SizedBox(height: 28),
+                                Text('Day Wise Timings', style: _heading),
+                                const SizedBox(height: 12),
+                                for (final day in _days)
+                                  if (_current.containsKey(day)) _day(day),
+                              ])),
+        if (!_loading && _error == null && _category != null)
+          Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: OnboardingButton(
+                  label: 'Save Changes',
+                  loading: _saving,
+                  onPressed: _saving ? null : _save)),
+      ]));
 }

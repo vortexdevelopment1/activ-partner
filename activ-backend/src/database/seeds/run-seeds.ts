@@ -25,7 +25,9 @@ async function runSeeds() {
       await seedQuestions(prisma, activityNames);
     } else {
       await seedAdmin(prisma);
-      await seedPartner(prisma);
+      if (process.env.SEED_DEMO_PARTNER === 'true') {
+        await seedPartner(prisma);
+      }
       await seedCategories(prisma);
       await seedQuestions(prisma);
     }

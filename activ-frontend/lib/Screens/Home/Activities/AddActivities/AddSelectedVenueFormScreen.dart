@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +9,7 @@ import '../../../../Style/constants_messages.dart';
 import '../../../../Utills/common_utilities.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
-import 'AddVenuePhotoUploadScreen.dart';
+import 'AddActivityAmenitiesScreen.dart';
 
 
 class AddSelectedVenueFormScreen extends StatefulWidget {
@@ -26,7 +28,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
 
   bool isButtonEnabled = false;
   bool isChecked = false;
-  String phoneCode = "", userMobileNumber = "";
+  String phoneCode = "", userMobileNumber = "", activityName = "Activity";
 
   _State()
   {
@@ -42,6 +44,12 @@ class _State extends State<AddSelectedVenueFormScreen> {
   {
     phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
     userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
+    final raw = checkString(await SharedPreference.readStr("operate_value"));
+    if (raw.isNotEmpty) {
+      try {
+        activityName = checkString(jsonDecode(raw)["title"]);
+      } catch (_) {}
+    }
     setState(() {});
   }
 
@@ -113,6 +121,8 @@ class _State extends State<AddSelectedVenueFormScreen> {
 
                                     getActivIcon(),
 
+                                    getStepBarCount(4 / 6, 4, 6),
+
                                     getText(),
 
                                     getSubText(),
@@ -169,7 +179,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
                                                 SharedPreference.addStringToSF("maximum_capacity", checkString(maxCapacityController.text.trim().toString()));
                                                 SharedPreference.addStringToSF("description", checkString(descriptionController.text.trim().toString()));
 
-                                                CommonUtilities.NavigateWithPush(context, AddVenuePhotoUploadScreen());
+                                                CommonUtilities.NavigateWithPush(context, const AddActivityAmenitiesScreen());
                                                 //CommonUtilities.NavigateWithPush(context, AddCustomerPlacesOffer());
 
                                               } else{}
@@ -211,9 +221,9 @@ class _State extends State<AddSelectedVenueFormScreen> {
     return Container(
       margin: EdgeInsets.only(top: 5),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        "Tell us about you, Venue Place!",
-        style: TextStyle(
+      child: Text(
+        activityName,
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
             color: AppColors.darkBlack,
@@ -229,7 +239,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "We will use these details for venue place",
+        "Provide Activity Specific Details",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',

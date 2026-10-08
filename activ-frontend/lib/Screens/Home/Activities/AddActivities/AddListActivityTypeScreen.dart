@@ -105,7 +105,14 @@ class _State extends State<AddListActivityTypeScreen> {
 
                       getActivIcon(),
 
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
+                        child: getStepBarCount(1 / 6, 1, 6),
+                      ),
+
                       getOperateText(),
+
+                      getOperateSubText(),
 
                       isShimmerLoading == true ? buildShimmer(context) :
                       Expanded(
@@ -178,7 +185,7 @@ class _State extends State<AddListActivityTypeScreen> {
       margin: const EdgeInsets.only(top: 5, left: 15, right: 15, bottom: 10),
       alignment: Alignment.centerLeft,
       child: const Text(
-        "What type of venue do you operate?",
+        "Select activity",
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
@@ -186,6 +193,22 @@ class _State extends State<AddListActivityTypeScreen> {
             height: 1.2
         ),
         textAlign: TextAlign.left,
+      ),
+    );
+  }
+
+  Widget getOperateSubText()
+  {
+    return Container(
+      margin: const EdgeInsets.only(left: 15, right: 15, bottom: 8),
+      alignment: Alignment.centerLeft,
+      child: const Text(
+        "Choose the activity available at your venue",
+        style: TextStyle(
+          fontSize: AppSize.size_14,
+          fontFamily: 'FontRegular',
+          color: AppColors.black1,
+        ),
       ),
     );
   }

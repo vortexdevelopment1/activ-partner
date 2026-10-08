@@ -81,14 +81,13 @@ describe('post-approval venue updates', () => {
     await expect(service.findMyVenueUpdateRequests('')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('applies approved fields atomically and preserves unrelated live metadata', async () => {
+  it('applies approved fields atomically without rewriting metadata', async () => {
     await service.approveVenueUpdateRequest('request-1', 'admin-1');
     expect(tx.venues.update).toHaveBeenCalledWith({ where: { id: 'venue-1' }, data: {
-      name: 'Updated Arena', metadata: { commission: 12, bookingAccept: false,
-        availability: { badminton: [] }, locationUrl: 'https://maps.app.goo.gl/example' },
+      name: 'Updated Arena',
     } });
     expect(tx.partner_venue_profiles.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { venue_id: 'venue-1' }, update: expect.objectContaining({ display_name: 'Updated Arena', address_line_2: '' }),
+      where: { venue_id: 'venue-1' }, update: expect.objectContaining({ display_name: 'Updated Arena', address_line_2: '', location_url: 'https://maps.app.goo.gl/example' }),
     }));
     expect(tx.partner_venue_update_requests.update).toHaveBeenCalledWith({ where: { id: 'request-1' },
       data: expect.objectContaining({ status: 'APPROVED', reviewed_by: 'admin-1', reviewed_at: expect.any(Date) }) });

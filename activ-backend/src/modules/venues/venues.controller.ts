@@ -22,6 +22,7 @@ import { extname } from 'path';
 import * as fs from 'fs';
 import { VenuesService } from './venues.service';
 import { CreateVenueDto } from './dto/create-venue.dto';
+import { ManageActivityDto } from './dto/manage-activity.dto';
 import { AdminCreateVenueDto } from './dto/admin-create-venue.dto';
 import { UpdateVenueDto } from './dto/update-venue.dto';
 import { VenueApprovalDto } from './dto/venue-approval.dto';
@@ -721,6 +722,39 @@ export class VenuesController {
     return { message: 'Activity details fetched successfully', data };
   }
 
+  @Get('activities/:serviceId/management')
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  async getActivityManagement(
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return { data: await this.venuesService.getActivityManagement(serviceId, user.id) };
+  }
+
+  @Patch('activities/:serviceId/management')
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  async updateActivityManagement(
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+    @Body() dto: ManageActivityDto,
+  ) {
+    await this.venuesService.updateActivityManagement(serviceId, user.id, dto);
+    return { message: 'Activity updated successfully' };
+  }
+
+  @Delete('activities/:serviceId/management')
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  async archiveActivity(
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.venuesService.updateActivityManagement(serviceId, user.id, {}, true);
+    return { message: 'Activity deleted. Existing bookings are preserved.' };
+  }
+
   @Post('activities/:serviceId/save-draft')
   @ApiBearerAuth()
   @Roles(UserRole.PARTNER)
@@ -1067,7 +1101,7 @@ export class VenuesController {
   @Public()
   @ApiOperation({ summary: 'Get venue details by ID (Public)' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.venuesService.findOne(id);
+    const data = await this.venuesService.findPublicVenue(id);
     return { message: 'Venue fetched successfully', data };
   }
 

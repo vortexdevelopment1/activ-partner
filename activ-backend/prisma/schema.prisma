@@ -169,6 +169,17 @@ model venues {
   status                        PublishStatus                   @default(DRAFT)
   policy_version                String
   metadata                      Json?
+  booking_accept                Boolean                         @default(true)
+  has_seen_welcome              Boolean                         @default(false)
+  commission_percent            Decimal?                        @db.Decimal(7, 4)
+  submitted_at                  DateTime?
+  approved_at                   DateTime?
+  approved_by                   String?                         @db.Uuid
+  review_status                 String?
+  rejection_reason              String?
+  partner_venue_amenities       partner_venue_amenities[]
+  partner_venue_availability    partner_venue_availability[]
+  partner_venue_legal_documents partner_venue_legal_documents?
   facilities                    facilities[]
   partner_venue_answers         partner_venue_answers[]
   partner_venue_images          partner_venue_images[]
@@ -442,16 +453,17 @@ model partner_gst_verification_requests {
 }
 
 model partner_service_categories {
-  id                        String                      @id @db.Uuid
-  slug                      String                      @unique
-  name                      String
-  description               String?
-  status                    PartnerVenueServiceStatus   @default(PENDING)
-  sort_order                Int                         @default(0)
-  created_at                DateTime                    @default(now())
-  updated_at                DateTime
-  partner_service_questions partner_service_questions[]
-  partner_venue_services    partner_venue_services[]
+  partner_venue_availability partner_venue_availability[]
+  id                         String                       @id @db.Uuid
+  slug                       String                       @unique
+  name                       String
+  description                String?
+  status                     PartnerVenueServiceStatus    @default(PENDING)
+  sort_order                 Int                          @default(0)
+  created_at                 DateTime                     @default(now())
+  updated_at                 DateTime
+  partner_service_questions  partner_service_questions[]
+  partner_venue_services     partner_venue_services[]
 
   @@index([status, sort_order])
 }
@@ -543,49 +555,68 @@ model partner_venue_answers {
 }
 
 model partner_venue_images {
-  id                          String         @id @db.Uuid
-  venue_id                    String         @db.Uuid
-  uploaded_by_partner_user_id String?        @db.Uuid
+  venue_service_id            String?                 @db.Uuid
+  is_cover                    Boolean                 @default(false)
+  partner_venue_services      partner_venue_services? @relation(fields: [venue_service_id], references: [id], onDelete: Cascade)
+  id                          String                  @id @db.Uuid
+  venue_id                    String                  @db.Uuid
+  uploaded_by_partner_user_id String?                 @db.Uuid
   url                         String
   caption                     String?
-  sort_order                  Int            @default(0)
-  is_primary                  Boolean        @default(false)
-  metadata                    Json           @default("{}")
-  created_at                  DateTime       @default(now())
+  sort_order                  Int                     @default(0)
+  is_primary                  Boolean                 @default(false)
+  metadata                    Json                    @default("{}")
+  created_at                  DateTime                @default(now())
   updated_at                  DateTime
-  partner_users               partner_users? @relation(fields: [uploaded_by_partner_user_id], references: [id])
-  venues                      venues         @relation(fields: [venue_id], references: [id], onDelete: Cascade)
+  partner_users               partner_users?          @relation(fields: [uploaded_by_partner_user_id], references: [id])
+  venues                      venues                  @relation(fields: [venue_id], references: [id], onDelete: Cascade)
 
+  @@index([venue_service_id, sort_order])
   @@index([venue_id, sort_order])
 }
 
 model partner_venue_profiles {
-  id                 String           @id @db.Uuid
-  partner_id         String           @db.Uuid
-  venue_id           String           @unique @db.Uuid
-  display_name       String?
-  description        String?
-  contact_phone_e164 String?
-  contact_email      String?
-  address_line_1     String?
-  address_line_2     String?
-  city               String?
-  state              String?
-  postal_code        String?
-  amenities          Json             @default("[]")
-  operating_hours    Json             @default("{}")
-  onboarding_status  PartnerKycStatus @default(PENDING)
-  terms_accepted_at  DateTime?
-  terms_accepted_by  String?          @db.Uuid
-  created_at         DateTime         @default(now())
-  updated_at         DateTime
-  partners           partners         @relation(fields: [partner_id], references: [id])
-  venues             venues           @relation(fields: [venue_id], references: [id], onDelete: Cascade)
+  opening_time         String?
+  closing_time         String?
+  rules                String?
+  location_url         String?
+  owner_phone_e164     String?
+  electronic_signature String?
+  id                   String           @id @db.Uuid
+  partner_id           String           @db.Uuid
+  venue_id             String           @unique @db.Uuid
+  display_name         String?
+  description          String?
+  contact_phone_e164   String?
+  contact_email        String?
+  address_line_1       String?
+  address_line_2       String?
+  city                 String?
+  state                String?
+  postal_code          String?
+  amenities            Json             @default("[]")
+  operating_hours      Json             @default("{}")
+  onboarding_status    PartnerKycStatus @default(PENDING)
+  terms_accepted_at    DateTime?
+  terms_accepted_by    String?          @db.Uuid
+  created_at           DateTime         @default(now())
+  updated_at           DateTime
+  partners             partners         @relation(fields: [partner_id], references: [id])
+  venues               venues           @relation(fields: [venue_id], references: [id], onDelete: Cascade)
 
   @@index([partner_id, onboarding_status])
 }
 
 model partner_venue_services {
+  is_active                    Boolean                        @default(true)
+  pause_reason                 String?
+  min_duration_minutes         Int?
+  max_duration_minutes         Int?
+  capacity                     Int?
+  submitted_at                 DateTime?
+  partner_venue_images         partner_venue_images[]
+  partner_service_amenities    partner_service_amenities[]
+  partner_service_paused_slots partner_service_paused_slots[]
   id                           String                         @id @db.Uuid
   venue_id                     String                         @db.Uuid
   facility_id                  String?                        @db.Uuid
@@ -612,6 +643,66 @@ model partner_venue_services {
   @@index([facility_id, status])
   @@index([service_category_id, status])
   @@index([venue_id, status])
+}
+
+model partner_venue_amenities {
+  venue_id   String @db.Uuid
+  title      String
+  sort_order Int    @default(0)
+  venues     venues @relation(fields: [venue_id], references: [id], onDelete: Cascade)
+
+  @@id([venue_id, title])
+}
+
+model partner_service_amenities {
+  venue_service_id       String                 @db.Uuid
+  title                  String
+  sort_order             Int                    @default(0)
+  partner_venue_services partner_venue_services @relation(fields: [venue_service_id], references: [id], onDelete: Cascade)
+
+  @@id([venue_service_id, title])
+}
+
+model partner_venue_availability {
+  id                         String                     @id @db.Uuid
+  venue_id                   String                     @db.Uuid
+  service_category_id        String                     @db.Uuid
+  day                        String
+  sort_order                 Int                        @default(0)
+  open_time                  String
+  close_time                 String
+  capacity                   Int                        @default(0)
+  price_paise                BigInt                     @default(0)
+  discounted_price_paise     BigInt                     @default(0)
+  venues                     venues                     @relation(fields: [venue_id], references: [id], onDelete: Cascade)
+  partner_service_categories partner_service_categories @relation(fields: [service_category_id], references: [id])
+
+  @@unique([venue_id, service_category_id, day, sort_order])
+  @@index([service_category_id, day])
+}
+
+model partner_venue_legal_documents {
+  venue_id         String   @id @db.Uuid
+  aadhaar_name     String?
+  aadhaar_number   String?
+  aadhaar_card_url String?
+  pan_number       String?
+  pan_card_url     String?
+  gst_number       String?
+  gst_name         String?
+  gstin_doc_url    String?
+  updated_at       DateTime @updatedAt
+  venues           venues   @relation(fields: [venue_id], references: [id], onDelete: Cascade)
+}
+
+model partner_service_paused_slots {
+  venue_service_id       String                 @db.Uuid
+  slot_id                String                 @db.Uuid
+  partner_venue_services partner_venue_services @relation(fields: [venue_service_id], references: [id], onDelete: Cascade)
+  slots                  slots                  @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+
+  @@id([venue_service_id, slot_id])
+  @@index([slot_id])
 }
 
 model partner_venue_update_requests {
@@ -702,17 +793,18 @@ model sessions {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model slots {
-  id               String             @id @db.Uuid
-  facility_id      String             @db.Uuid
-  starts_at        DateTime
-  ends_at          DateTime
-  capacity         Int
-  booked_quantity  Int                @default(0)
-  status           SlotStatus         @default(AVAILABLE)
-  price_paise      BigInt
-  booking_attempts booking_attempts[]
-  bookings         bookings[]
-  facilities       facilities         @relation(fields: [facility_id], references: [id], onDelete: Cascade)
+  partner_service_paused_slots partner_service_paused_slots[]
+  id                           String                         @id @db.Uuid
+  facility_id                  String                         @db.Uuid
+  starts_at                    DateTime
+  ends_at                      DateTime
+  capacity                     Int
+  booked_quantity              Int                            @default(0)
+  status                       SlotStatus                     @default(AVAILABLE)
+  price_paise                  BigInt
+  booking_attempts             booking_attempts[]
+  bookings                     bookings[]
+  facilities                   facilities                     @relation(fields: [facility_id], references: [id], onDelete: Cascade)
 
   @@index([facility_id, starts_at, status])
 }

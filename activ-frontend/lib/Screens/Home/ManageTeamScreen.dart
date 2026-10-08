@@ -66,7 +66,8 @@ class _Member {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ManageTeamScreen extends StatefulWidget {
-  const ManageTeamScreen({super.key});
+  const ManageTeamScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<ManageTeamScreen> createState() => _State();
@@ -95,7 +96,7 @@ class _State extends State<ManageTeamScreen> {
     setState(() => _loading = true);
     try {
       final headers = await _authHeaders();
-      final res = await http.get(Uri.parse(TEAM_URL), headers: headers);
+      final res = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL), headers: headers);
       CommonUtilities.showLog('GET team: ${res.statusCode} ${res.body}');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
@@ -126,7 +127,7 @@ class _State extends State<ManageTeamScreen> {
           'analyticsView': analyticsView,
         },
       });
-      final res = await http.post(Uri.parse(TEAM_URL), headers: headers, body: body);
+      final res = await (widget.client?.post ?? http.post)(Uri.parse(TEAM_URL), headers: headers, body: body);
       CommonUtilities.showLog('POST team: ${res.statusCode} ${res.body}');
       if (!mounted || !dialogCtx.mounted) return;
       if (res.statusCode == 200 || res.statusCode == 201) {
@@ -157,7 +158,7 @@ class _State extends State<ManageTeamScreen> {
           'analyticsView': analyticsView,
         },
       });
-      final res = await http.patch(Uri.parse('$TEAM_URL/${member.id}'), headers: headers, body: body);
+      final res = await (widget.client?.patch ?? http.patch)(Uri.parse('$TEAM_URL/${member.id}'), headers: headers, body: body);
       CommonUtilities.showLog('PATCH team: ${res.statusCode} ${res.body}');
       if (!mounted || !dialogCtx.mounted) return;
       if (res.statusCode == 200) {
@@ -175,7 +176,7 @@ class _State extends State<ManageTeamScreen> {
   Future<void> _deleteMember(String id, BuildContext dialogCtx) async {
     try {
       final headers = await _authHeaders();
-      final res = await http.delete(Uri.parse('$TEAM_URL/$id'), headers: headers);
+      final res = await (widget.client?.delete ?? http.delete)(Uri.parse('$TEAM_URL/$id'), headers: headers);
       CommonUtilities.showLog('DELETE team: ${res.statusCode} ${res.body}');
       if (!mounted || !dialogCtx.mounted) return;
       if (res.statusCode == 200) {

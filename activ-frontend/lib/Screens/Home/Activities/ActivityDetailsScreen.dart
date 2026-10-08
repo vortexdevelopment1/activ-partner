@@ -1,6 +1,5 @@
 import 'package:activ_app/Style/app_size.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
@@ -8,7 +7,6 @@ import 'package:flutter_svg/svg.dart';
 import '../../../Beans/activity_model.dart';
 import '../../../Beans/venue_image_model.dart';
 import '../../../Style/app_colors.dart';
-import '../../../api_calling/api_request.dart';
 import '../../CommonCode.dart';
 import '../../StringExtensions.dart';
 
@@ -46,53 +44,8 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
     // today expanded by default
     expandedDays[today] = true;
 
-    fetchPlaceOfferData();
+    placeOfferList = widget.activity.placeOffer;
   }
-
-  Future<void> fetchPlaceOfferData() async {
-    try {
-
-      userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-      final String phoneKey = 'IND (+91)'+ userMobileNumber;
-
-      // 2️⃣ Get UID from users_by_phone
-      final phoneDoc = await FirebaseFirestore.instance
-          .collection('users_by_phone')
-          .doc(phoneKey)
-          .get();
-
-      if (!phoneDoc.exists) {
-        debugPrint("❌ Phone mapping not found for $phoneKey");
-        return;
-      }
-
-      final String realUid = phoneDoc['uid'];
-
-
-      // ✅ Dynamic UID
-      //String uid = FirebaseAuth.instance.currentUser!.uid;
-
-      var snapshot = await FirebaseFirestore.instance
-          .collection("activ_user")
-          .doc(realUid)
-          .get();
-
-      if (snapshot.exists) {
-        var data = snapshot.data();
-
-        var venueAmenities = data?['venue_amenities'];
-        var list = (venueAmenities?['place_offer'] ?? []) as List<dynamic>;
-
-        setState(() {
-          placeOfferList = list;
-          //isShimmerLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint("Error fetching place_offer: $e");
-    }
-  }
-
 
   String getToday() {
     final days = [

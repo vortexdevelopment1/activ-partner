@@ -17,6 +17,7 @@ import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
 import 'ManageBookingsScreen.dart';
+import 'dashboard_setup_cards.dart';
 
 // ── Dummy data models ─────────────────────────────────────────────────────────
 
@@ -61,7 +62,8 @@ class _BookingItem {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<HomeScreen> createState() => _State();
@@ -77,7 +79,9 @@ class _State extends State<HomeScreen> {
   bool _permPricing = true;
 
   /// Toggle: true = approved venue (screenshot 1), false = new venue (screenshot 2)
-  final bool _isApproved = true;
+  bool _isApproved = false;
+  bool _needsPricing = false, _needsTeam = false;
+  String? _setupError;
 
   // ── Dummy stats ──────────────────────────────────────────────────────────────
   final List<_StatItem> _approvedStats = const [
@@ -160,11 +164,10 @@ class _State extends State<HomeScreen> {
       final token = checkString(await SharedPreference.readStr('jwt_token'));
       if (token.isEmpty) return;
 
-      final res = await http.get(
+      final res = await (widget.client?.get ?? http.get)(
         Uri.parse(MY_APPROVED_VENUES_URL),
         headers: {'Authorization': 'Bearer $token'},
-      );
-      CommonUtilities.showLog('my-approved-venues: ${res.statusCode} ${res.body}');
+      ).timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         final body = jsonDecode(res.body);
@@ -178,12 +181,32 @@ class _State extends State<HomeScreen> {
             if (name.isNotEmpty) { venueName = name; }
             _venueId = id;
             _isBookingsPaused = paused;
+            _isApproved = true;
+            _needsPricing = dashboardNeedsPricing(Map<String, dynamic>.from(venue));
+            _setupError = null;
           });
+        } else if (mounted) {
+          setState(() { _isApproved = false; _needsPricing = false; _needsTeam = false; _setupError = null; });
         }
+        if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
+          final team = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL),
+            headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 15));
+          if (team.statusCode != 200) throw Exception('Unable to check team setup.');
+          final data = jsonDecode(team.body)['data'] as List;
+          if (mounted) setState(() => _needsTeam = data.isEmpty);
+        }
+      } else {
+        throw Exception('Unable to check venue setup.');
       }
     } catch (e) {
       CommonUtilities.showLog('_fetchVenueName error: $e');
+      if (mounted) setState(() => _setupError = 'Unable to check setup.');
     }
+  }
+
+  Future<void> _openSetup(Widget screen) async {
+    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => screen));
+    if (mounted) await _fetchVenueName();
   }
 
   void _noAccess() => CommonUtilities.createSnackBar(
@@ -292,7 +315,13 @@ class _State extends State<HomeScreen> {
                     children: [
                       _buildGreeting(),
                       const SizedBox(height: 16),
-                      if (!_isApproved) _buildCTABanners(),
+                      if (_isPartner && _isApproved) DashboardSetupCards(
+                        pricingRequired: _needsPricing, teamRequired: _needsTeam,
+                        onPricing: () => _openSetup(ManagePricingScreen(client: widget.client)),
+                        onTeam: () => _openSetup(ManageTeamScreen(client: widget.client)),
+                      ),
+                      if (_isPartner && _setupError != null) TextButton.icon(
+                        onPressed: _fetchVenueName, icon: const Icon(Icons.refresh), label: Text('$_setupError Retry')),
                       _buildStatsGrid(),
                       const SizedBox(height: 20),
                       _buildSectionLabel('Quick Actions'),
@@ -336,7 +365,7 @@ class _State extends State<HomeScreen> {
                 CommonUtilities.NavigateWithPush(context, MenuScreen()),
             child: ClipOval(
               child: Image.asset(
-                'assets/logo.png',
+                'assets/ic_profile_logo.png',
                 width: 36,
                 height: 36,
                 fit: BoxFit.contain,
@@ -591,7 +620,7 @@ class _State extends State<HomeScreen> {
       mainAxisSpacing: 10,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 187 / 132,
+      mainAxisExtent: 150 + (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 32).toDouble() * 5,
       children: [
         _actionCard(
           title: 'Manage Bookings',
@@ -606,7 +635,7 @@ class _State extends State<HomeScreen> {
           subtitle: 'Add team members',
           image: 'assets/ic_manage_team.png',
           onTap: _isPartner
-              ? () => CommonUtilities.NavigateWithPush(context, const ManageTeamScreen())
+              ? () => _openSetup(ManageTeamScreen(client: widget.client))
               : _noAccess,
         ),
         _actionCard(
@@ -614,7 +643,7 @@ class _State extends State<HomeScreen> {
           subtitle: 'Add or update availability',
           image: 'assets/ic_manage_slot.png',
           onTap: _isPartner
-              ? () => CommonUtilities.NavigateWithPush(context, const ManageSlotsScreen())
+              ? () => _openSetup(ManageSlotsScreen(client: widget.client))
               : _noAccess,
         ),
         _actionCard(
@@ -622,7 +651,7 @@ class _State extends State<HomeScreen> {
           subtitle: 'Manage pricing strategy',
           image: 'assets/ic_manage_price.png',
           onTap: _permPricing
-              ? () => CommonUtilities.NavigateWithPush(context, const ManagePricingScreen())
+              ? () => _openSetup(ManagePricingScreen(client: widget.client))
               : _noAccess,
         ),
       ],

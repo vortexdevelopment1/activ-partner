@@ -57,7 +57,8 @@ class _DayData {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ManagePricingScreen extends StatefulWidget {
-  const ManagePricingScreen({super.key});
+  const ManagePricingScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<ManagePricingScreen> createState() => _State();
@@ -127,7 +128,7 @@ class _State extends State<ManagePricingScreen> {
   Future<void> _loadData() async {
     try {
       final token = checkString(await SharedPreference.readStr('jwt_token'));
-      final res = await http.get(
+      final res = await (widget.client?.get ?? http.get)(
         Uri.parse(MY_APPROVED_VENUES_URL),
         headers: {'Authorization': 'Bearer $token'},
       );
@@ -143,7 +144,11 @@ class _State extends State<ManagePricingScreen> {
 
           // Availability → merge slots by day across all categories
           final Map availability = venue['availability'] ?? {};
-          final catIds = availability.keys.map((k) => k.toString()).toList();
+          final catIds = <String>{
+            ...availability.keys.map((k) => k.toString()),
+            for (final service in venue['services'] as List? ?? [])
+              if (service['status'] == 'approved' && service['categoryId'] != null) service['categoryId'].toString(),
+          }.toList();
           final Map<String, List<_SlotData>> merged = {};
           for (final categorySlots in availability.values) {
             for (final dayEntry in (categorySlots as List)) {
@@ -243,7 +248,7 @@ class _State extends State<ManagePricingScreen> {
       for (final catId in _categoryIds) {
         venueTiming[catId] = daySlots;
       }
-      final res = await http.patch(
+      final res = await (widget.client?.patch ?? http.patch)(
         Uri.parse('$BASE_URL/venues/$_venueId/availability'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'venue_timing': venueTiming}),

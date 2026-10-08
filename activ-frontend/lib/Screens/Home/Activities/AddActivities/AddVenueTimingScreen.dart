@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import '../../../../api_calling/api_request.dart';
+import 'AddActivitySubmissionResultScreen.dart';
 
 
 class DayTiming {
@@ -732,9 +733,12 @@ class _State extends State<AddVenueTimingScreen> {
                                             venueTimingMap,
                                             'IND (+91)' + userMobileNumber!,
                                           );
-                                          CommonUtilities.createSnackBar(context, "Activity added successfully.");
+                                          CommonUtilities.createSnackBar(context, "Activity submitted successfully.");
                                           CommonUtilities.addActivitySuccessfully = "yes";
-                                          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(context, VenueActivityListScreen());
+                                          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                                            context,
+                                            const AddActivitySubmissionResultScreen(),
+                                          );
 
                                         } catch (e) {
                                           Navigator.pop(context);

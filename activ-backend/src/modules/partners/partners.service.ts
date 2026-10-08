@@ -210,9 +210,14 @@ export class PartnersService {
   }
 
   async updateAvatar(partnerId: string, avatarUrl: string): Promise<Partner> {
-    const partner = await this.findOne(partnerId);
-    partner.avatarUrl = avatarUrl;
-    return this.partnerRepository.save(partner);
+    const owner = await this.prisma.partner_users.findFirst({
+      where: { partner_id: partnerId, role: 'PARTNER_ADMIN' },
+    });
+    if (!owner) throw new NotFoundException('Partner owner not found');
+    await this.prisma.users.update({
+      where: { id: owner.user_id }, data: { profile_photo: avatarUrl },
+    });
+    return { id: partnerId, avatarUrl } as Partner;
   }
 
   async updateLegalInfo(

@@ -26,12 +26,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: { sub: string; role: string; type?: string }) {
     if (payload.type === 'team_member') {
-      const member = await this.teamMemberRepository.findOne({ where: { id: payload.sub } });
-      if (!member) throw new UnauthorizedException('Team member not found');
-      if (!member.isActive) throw new UnauthorizedException('Account has been deactivated');
-      // Attach role string so RolesGuard can read it
-      (member as any).role = 'team_member';
-      return member;
+      const staff = await this.prisma.partner_staff_profiles.findUnique({ where: { id: payload.sub },
+        include: { partner_users: { include: { users: true, partners: true } } } });
+      if (!staff) throw new UnauthorizedException('Team member not found');
+      const settings = staff.permissions as Record<string, any>;
+      if (settings.isActive === false || staff.partner_users.users.status !== 'ACTIVE' || staff.partner_users.partners.status === 'SUSPENDED') {
+        throw new UnauthorizedException('Account has been deactivated');
+      }
+      return { id: staff.id, partnerId: staff.partner_users.partner_id, role: 'team_member',
+        permissions: { bookingManagement: settings.bookingManagement === true,
+          pricingControl: settings.pricingControl === true, analyticsView: settings.analyticsView === true } };
     }
 
     if (payload.type === 'partner') {

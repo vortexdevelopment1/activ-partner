@@ -29,7 +29,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   late List<XFile> _images;
   int? _coverIndex = 0; // by default first image is cover
   GlobalKey _imgKey = GlobalKey();
-  String userMobileNumber = '', phoneCode="";
+  String userMobileNumber = '', phoneCode="", activityName = "Activity";
 
 
   @override
@@ -43,6 +43,12 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   {
     phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
     userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
+    final raw = checkString(await SharedPreference.readStr("operate_value"));
+    if (raw.isNotEmpty) {
+      try {
+        activityName = checkString(jsonDecode(raw)["title"]);
+      } catch (_) {}
+    }
     setState(() {});
   }
 
@@ -195,6 +201,8 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                               child: Column(
                                 children: [
                                   getActivIcon(),
+
+                                  getStepBarCount(3 / 6, 3, 6),
 
                                   getText(),
 
@@ -588,11 +596,13 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       ) async {
 
     final operateJson = checkString(await SharedPreference.readStr("operate_value"));
-    //final placeOfferJson = checkString(await SharedPreference.readStr("place_offer"));
+    final placeOfferJson = checkString(await SharedPreference.readStr("place_offer"));
 
 
     final operateValue = jsonDecode(operateJson);
-   // final placeOfferMap = jsonDecode(placeOfferJson);
+    final placeOfferMap = placeOfferJson.isEmpty
+        ? <String, dynamic>{'place_offer': []}
+        : jsonDecode(placeOfferJson);
 
     final imageList = await uploadActivityImages(images, realUid);
 
@@ -604,7 +614,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       "activity_id": "act_${DateTime.now().millisecondsSinceEpoch}",
 
       "operate_value": operateValue,
-      //"place_offer": placeOfferMap["place_offer"] ?? [],
+      "place_offer": placeOfferMap["place_offer"] ?? [],
 
       "number_of_court": checkString(await SharedPreference.readStr("number_of_court")),
       "flooring_type": checkString(await SharedPreference.readStr("flooring_type")),
@@ -674,9 +684,9 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     return Container(
       margin: EdgeInsets.only(top: 5),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        "Add some photos of your venue",
-        style: TextStyle(
+      child: Text(
+        activityName,
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
             color: AppColors.darkBlack,
@@ -692,7 +702,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "These images will be shown on the Activ venue listing page",
+        "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',

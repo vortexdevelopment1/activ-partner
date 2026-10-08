@@ -184,6 +184,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    const staffMember = await this.teamService.findByPhone(user.phone_e164);
+    if (staffMember) return this.completeTeamMemberLogin(staffMember);
     const tokens = await this.generatePartnerTokens(partner);
     const profile = partner.partner_business_profiles;
     const names = (user.name || '').trim().split(/\s+/);
@@ -388,6 +390,8 @@ export class AuthService {
       return { user, link };
     });
 
+    const staffMember = await this.teamService.findByPhone(phone);
+    if (staffMember) return this.completeTeamMemberLogin(staffMember);
     return this.buildPartnerAuthResponse(
       account.link.partners,
       account.user,
@@ -396,9 +400,9 @@ export class AuthService {
   }
 
   private async completeTeamMemberLogin(teamMember: TeamMember) {
-    teamMember.otpExpiresAt = null;
+    if (!teamMember.isActive) throw new UnauthorizedException('Account has been deactivated');
     teamMember.status = TeamMemberStatus.ACTIVE;
-    await this.teamMemberRepository.save(teamMember);
+    await this.teamService.markActive(teamMember.id);
 
     const jwt_token = this.jwtService.sign(
       {
@@ -414,14 +418,12 @@ export class AuthService {
       },
     );
 
-    let venue = await this.venueRepository.findOne({
-      where: { partnerId: teamMember.partnerId, status: VenueStatus.APPROVED },
-      order: { createdAt: 'DESC' },
+    let venue = await this.prisma.venues.findFirst({
+      where: { partner_id: teamMember.partnerId, status: 'PUBLISHED' },
     });
     if (!venue) {
-      venue = await this.venueRepository.findOne({
-        where: { partnerId: teamMember.partnerId },
-        order: { createdAt: 'DESC' },
+      venue = await this.prisma.venues.findFirst({
+        where: { partner_id: teamMember.partnerId },
       });
     }
 
@@ -430,6 +432,7 @@ export class AuthService {
       userType: 'team_member',
       role: teamMember.role,
       permissions: teamMember.permissions,
+      member: teamMember,
       venueId: venue?.id ?? null,
       venueName: venue?.name ?? null,
     };
@@ -662,6 +665,10 @@ export class AuthService {
   }
 
   async getPartnerAuthProfile(partner: Partner) {
+    if ((partner as any).role === 'team_member') {
+      const member = await this.teamService.findOne(partner.id, (partner as any).partnerId);
+      return { member, userType: 'team_member', partner: undefined };
+    }
     const fresh = await this.prisma.partners.findUnique({
       where: { id: partner.id },
       include: {
