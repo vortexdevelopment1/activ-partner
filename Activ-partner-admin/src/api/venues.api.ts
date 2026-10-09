@@ -33,7 +33,7 @@ export const venuesApi = {
   getPending: (params?: { page?: number; limit?: number }) =>
     api.get('/venues/admin/pending', { params }),
   getStats: () => api.get('/venues/admin/stats'),
-  getById: (id: string) => api.get(`/venues/${id}`),
+  getById: (id: string) => api.get(`/venues/admin/${id}`),
   processApproval: (id: string, data: { status: string; reason?: string }) =>
     api.patch(`/venues/admin/${id}/approval`, data),
   approve: (id: string) =>

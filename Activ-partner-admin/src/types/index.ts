@@ -186,6 +186,7 @@ export interface Venue {
   phone?: string;
   status: VenueStatus;
   rejectionReason?: string;
+  submittedAt?: string | null;
   approvedAt?: string;
   approvedBy?: string;
   isActive: boolean;

@@ -589,6 +589,42 @@ data: { terms_accepted_at: acceptedAt, electronic_signature: electronicSignature
     return [await Promise.all(records.map((record) => this.findPublicVenue(record.id))), total] as const;
   }
 
+  async findAdminVenue(id: string) {
+    const venue = await this.findOne(id);
+    const review = await this.prisma.venues.findUnique({
+      where: { id },
+      select: {
+        status: true, submitted_at: true, approved_at: true, approved_by: true,
+        review_status: true, rejection_reason: true,
+        partner_venue_legal_documents: true,
+      },
+    });
+    if (!review) throw new NotFoundException(`Venue with id ${id} not found`);
+    const legal = review.partner_venue_legal_documents;
+    return {
+      ...venue,
+      status: review.status === 'DRAFT' && review.submitted_at
+        ? VenueStatus.PENDING
+        : review.status === 'ARCHIVED' && review.review_status === VenueStatus.SUSPENDED
+          ? VenueStatus.SUSPENDED : venue.status,
+      submittedAt: review.submitted_at,
+      approvedAt: review.approved_at,
+      approvedBy: review.approved_by,
+      rejectionReason: review.rejection_reason,
+      partner: {
+        ...venue.partner,
+        aadhaarName: legal?.aadhaar_name ?? null,
+        aadhaarNumber: legal?.aadhaar_number ?? null,
+        aadhaarCardUrl: legal?.aadhaar_card_url ?? null,
+        panNumber: legal?.pan_number ?? null,
+        panCardUrl: legal?.pan_card_url ?? null,
+        gstNumber: legal?.gst_number ?? null,
+        gstName: legal?.gst_name ?? null,
+        gstinDocUrl: legal?.gstin_doc_url ?? null,
+      },
+    };
+  }
+
   async findPublicVenue(id: string) {
     const venue = await this.findOne(id);
     if (venue.status !== VenueStatus.APPROVED || !venue.bookingAccept) throw new NotFoundException('Venue not available');

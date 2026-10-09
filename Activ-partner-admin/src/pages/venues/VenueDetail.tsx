@@ -17,6 +17,7 @@ import {
   CheckSquare,
   ShieldCheck,
   Trash2,
+  RefreshCw,
 } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { Badge } from '../../components/ui/Badge';
@@ -60,10 +61,12 @@ export const VenueDetail: React.FC = () => {
   const [changesOpen, setChangesOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error: loadError, refetch, isFetching } = useQuery({
     queryKey: ['venue', id],
     queryFn: () => venuesApi.getById(id!),
     enabled: !!id,
+    retry: (failureCount, err: any) =>
+      ![401, 403, 404].includes(err?.response?.status) && failureCount < 2,
   });
 
   const venue: Venue | undefined = data?.data?.data;
@@ -119,10 +122,29 @@ export const VenueDetail: React.FC = () => {
     );
   }
 
+  if (isError) {
+    const status = (loadError as any)?.response?.status;
+    const message = status === 404 ? 'Venue not found.'
+      : status === 401 ? 'Your session has expired. Please sign in again.'
+      : status === 403 ? 'You do not have permission to view this venue.'
+      : 'Unable to load venue details. Please try again.';
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-32 text-gray-400" role="alert">
+        <p>{message}</p>
+        {![401, 403, 404].includes(status) && (
+          <button type="button" onClick={() => void refetch()} disabled={isFetching}
+            className="btn-primary flex items-center gap-2">
+            <RefreshCw size={16} /> {isFetching ? 'Retrying...' : 'Retry'}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (!venue) {
     return (
       <div className="flex items-center justify-center py-32 text-gray-400">
-        Venue not found.
+        Venue details are unavailable.
       </div>
     );
   }
@@ -571,7 +593,7 @@ export const VenueDetail: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Submitted</span>
                 <span className="text-gray-700">
-                  {new Date(venue.createdAt).toLocaleDateString('en-IN', {
+                  {new Date(venue.submittedAt ?? venue.createdAt).toLocaleDateString('en-IN', {
                     day: '2-digit',
                     month: 'short',
                     year: 'numeric',

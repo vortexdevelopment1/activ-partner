@@ -963,6 +963,15 @@ export class VenuesController {
     };
   }
 
+  @Get('admin/:id')
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get complete venue details for admin review, including unapproved venues' })
+  async findAdminVenue(@Param('id', ParseUUIDPipe) id: string) {
+    const data = await this.venuesService.findAdminVenue(id);
+    return { message: 'Venue fetched successfully', data };
+  }
+
   @Get('admin/activities/pending')
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
