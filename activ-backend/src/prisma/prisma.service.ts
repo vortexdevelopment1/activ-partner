@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -12,7 +12,19 @@ export class PrismaService
 {
   constructor(configService: ConfigService) {
     const connectionString = getDatabaseUrl(configService);
-    const adapter = new PrismaPg(connectionString);
+    const adapter = new PrismaPg({
+      connectionString,
+      max: 5,
+      connectionTimeoutMillis: 15000,
+      idleTimeoutMillis: 10000,
+      maxLifetimeSeconds: 300,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+    }, {
+      onPoolError: () => new Logger(PrismaService.name).warn(
+        'An idle database connection was lost; the pool will replace it.',
+      ),
+    });
 
     super({
       adapter,

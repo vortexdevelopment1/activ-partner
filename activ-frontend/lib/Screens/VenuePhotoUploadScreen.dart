@@ -338,8 +338,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                   children: [
                                     getActivIcon(),
 
-                                    getActivityStepLabel(widget.categoryIndex,
-                                        widget.totalCategories, 1),
+                                    getStepBar(currentStep / totalSteps),
 
                                     getText(),
 
@@ -357,7 +356,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
                                     // Upload Box
                                     Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 14, 0, 0),
+                                      margin: const EdgeInsets.fromLTRB(0, 28, 0, 0),
                                       child: DottedBorder(
                                         color: AppColors.purple,
                                         strokeWidth: 1,
@@ -366,7 +365,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                         radius: const Radius.circular(20),
                                         child: Container(
                                           width: double.infinity,
-                                          height: ((constraints.maxWidth - 30) * 1.15).clamp(320.0, 460.0),
+                                          constraints: const BoxConstraints(minHeight: 270),
                                           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
@@ -558,7 +557,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                               child: Padding(
                                                 padding: const EdgeInsets.fromLTRB(15, 12, 8, 14),
                                                 child: OnboardingButton(label: 'Back', outlined: true,
-                                                  fontSize: 16, borderRadius: 8,
+                                                  fontSize: 18, borderRadius: 12,
                                                   onPressed: () => Navigator.pop(context)),
                                               ))
                                       ),
@@ -570,7 +569,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                           onTap: _isButtonEnabled ? _continue : null,
                                           child: Padding(
                                             padding: const EdgeInsets.fromLTRB(8, 12, 15, 14),
-                                            child: OnboardingButton(label: 'Next', borderRadius: 8,
+                                            child: OnboardingButton(label: 'Next', borderRadius: 12,
                                               disabledBackgroundColor: AppColors.darkGray,
                                               disabledForegroundColor: AppColors.lightGray,
                                               onPressed: _isButtonEnabled ? _continue : null),
@@ -614,11 +613,11 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   Widget getText()
   {
     return Container(
-      margin: const EdgeInsets.only(top: 12),
+      margin: const EdgeInsets.only(top: 30),
       alignment: Alignment.centerLeft,
-      child: Text(
-        widget.currentCategory['title']?.toString() ?? widget.currentCategory['name']?.toString() ?? 'Activity',
-        style: const TextStyle(
+      child: const Text(
+        'Add some photos of your venue',
+        style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
             color: AppColors.darkBlack,
@@ -634,7 +633,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "Upload this activity\u2019s images",
+        'These images will be shown on the Activ venue listing page',
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',

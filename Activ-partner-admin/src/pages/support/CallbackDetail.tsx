@@ -115,7 +115,7 @@ export const CallbackDetail: React.FC = () => {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/support/callback')}
+            onClick={() => navigate(-1)}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft size={18} className="text-gray-500" />

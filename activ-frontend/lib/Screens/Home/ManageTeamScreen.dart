@@ -76,6 +76,7 @@ class ManageTeamScreen extends StatefulWidget {
 class _State extends State<ManageTeamScreen> {
   List<_Member> _members = [];
   bool _loading = true;
+  String? _loadError;
 
   static const _roles = ['Manager', 'Receptionist', 'Trainer', 'Staff'];
 
@@ -92,34 +93,59 @@ class _State extends State<ManageTeamScreen> {
     return {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
   }
 
+  String? _validPhone(String name, String input, BuildContext dialogContext) {
+    var phone = input.trim().replaceAll(RegExp(r'[\s()-]'), '');
+    if (RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) phone = '+91$phone';
+    String? error;
+    if (name.trim().isEmpty) {
+      error = 'Full name is required';
+    } else if (!RegExp(r'^\+[1-9]\d{9,14}$').hasMatch(phone)) {
+      error = 'Enter a valid phone number with country code, e.g. +919876543210';
+    }
+    if (error != null) {
+      showDialog<void>(context: dialogContext, builder: (context) => AlertDialog(
+        content: Text(error!),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+      ));
+      return null;
+    }
+    return phone;
+  }
+
   Future<void> _loadMembers() async {
-    setState(() => _loading = true);
+    setState(() { _loading = true; _loadError = null; });
     try {
       final headers = await _authHeaders();
-      final res = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL), headers: headers);
+      final res = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL), headers: headers)
+          .timeout(const Duration(seconds: 35));
       CommonUtilities.showLog('GET team: ${res.statusCode} ${res.body}');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         final List data = body is List ? body : (body['data'] ?? body['team'] ?? []);
         if (!mounted) return;
         setState(() { _members = data.map((j) => _Member.fromJson(j)).toList(); });
+      } else if (mounted) {
+        setState(() => _loadError = res.statusCode == 401
+            ? 'Your session has expired. Please sign in again.'
+            : 'Unable to load team members. Please try again.');
       }
     } catch (e) {
       CommonUtilities.showLog('loadMembers error: $e');
+      if (mounted) setState(() => _loadError = 'Unable to load team members. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _createMember({
-    required String name, required String email, required String role,
+    required String name, required String phone, required String role,
     required bool bookingMgmt, required bool pricingControl, required bool analyticsView,
     required BuildContext dialogCtx,
   }) async {
     try {
       final headers = await _authHeaders();
       final body = jsonEncode({
-        'fullName': name, 'email': email,
+        'fullName': name, 'phone': phone,
         'role': role.toLowerCase(),
         'permissions': {
           'bookingManagement': bookingMgmt,
@@ -143,14 +169,14 @@ class _State extends State<ManageTeamScreen> {
   }
 
   Future<void> _updateMember({
-    required _Member member, required String name, required String email,
+    required _Member member, required String name, required String phone,
     required String role, required bool bookingMgmt, required bool pricingControl,
     required bool analyticsView, required BuildContext dialogCtx,
   }) async {
     try {
       final headers = await _authHeaders();
       final body = jsonEncode({
-        'fullName': name, 'email': email,
+        'fullName': name, 'phone': phone,
         'role': role.toLowerCase(),
         'permissions': {
           'bookingManagement': bookingMgmt,
@@ -195,7 +221,7 @@ class _State extends State<ManageTeamScreen> {
 
   void _showAddDialog() {
     final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
     String role = 'Manager';
     bool bookingMgmt = true;
     bool pricingControl = false;
@@ -221,8 +247,8 @@ class _State extends State<ManageTeamScreen> {
                 _fieldLabel('Full Name'),
                 _textField(nameCtrl, 'Abhishek Sharma'),
                 const SizedBox(height: 14),
-                _fieldLabel('Email Address'),
-                _textField(emailCtrl, 'abhishek.sharma@maxfitness.com', keyboardType: TextInputType.emailAddress),
+                _fieldLabel('Phone Number'),
+                _textField(phoneCtrl, '+919876543210', keyboardType: TextInputType.phone),
                 const SizedBox(height: 14),
                 _fieldLabel('Role'),
                 _roleDropdown(role, (v) => setLocal(() => role = v!)),
@@ -236,18 +262,18 @@ class _State extends State<ManageTeamScreen> {
                 saving
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
                     : _purpleButton('Send Invite', () async {
-                        if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
-                          CommonUtilities.createSnackBar(context, 'Name and email are required');
+                        final phone = _validPhone(nameCtrl.text, phoneCtrl.text, ctx);
+                        if (phone == null) {
                           return;
                         }
                         setLocal(() => saving = true);
                         await _createMember(
-                          name: nameCtrl.text.trim(), email: emailCtrl.text.trim(),
+                          name: nameCtrl.text.trim(), phone: phone,
                           role: role, bookingMgmt: bookingMgmt,
                           pricingControl: pricingControl, analyticsView: analyticsView,
                           dialogCtx: ctx,
                         );
-                        setLocal(() => saving = false);
+                        if (ctx.mounted) setLocal(() => saving = false);
                       }),
               ],
             ),
@@ -259,7 +285,7 @@ class _State extends State<ManageTeamScreen> {
 
   void _showEditDialog(_Member m) {
     final nameCtrl = TextEditingController(text: m.name);
-    final emailCtrl = TextEditingController(text: m.email);
+    final phoneCtrl = TextEditingController(text: m.phone);
     String role = m.displayRole;
     bool bookingMgmt = m.bookingMgmt;
     bool pricingControl = m.pricingControl;
@@ -285,8 +311,8 @@ class _State extends State<ManageTeamScreen> {
                 _fieldLabel('Full Name'),
                 _textField(nameCtrl, 'Full name'),
                 const SizedBox(height: 14),
-                _fieldLabel('Email Address'),
-                _textField(emailCtrl, 'Email address', keyboardType: TextInputType.emailAddress),
+                _fieldLabel('Phone Number'),
+                _textField(phoneCtrl, '+919876543210', keyboardType: TextInputType.phone),
                 const SizedBox(height: 14),
                 _fieldLabel('Role'),
                 _roleDropdown(role, (v) => setLocal(() => role = v!)),
@@ -310,15 +336,17 @@ class _State extends State<ManageTeamScreen> {
                 saving
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
                     : _purpleButton('Save Changes', () async {
+                        final phone = _validPhone(nameCtrl.text, phoneCtrl.text, ctx);
+                        if (phone == null) return;
                         setLocal(() => saving = true);
                         await _updateMember(
                           member: m,
-                          name: nameCtrl.text.trim(), email: emailCtrl.text.trim(),
+                          name: nameCtrl.text.trim(), phone: phone,
                           role: role, bookingMgmt: bookingMgmt,
                           pricingControl: pricingControl, analyticsView: analyticsView,
                           dialogCtx: ctx,
                         );
-                        setLocal(() => saving = false);
+                        if (ctx.mounted) setLocal(() => saving = false);
                       }),
               ],
             ),
@@ -376,7 +404,7 @@ class _State extends State<ManageTeamScreen> {
                               onPressed: () async {
                                 setLocal(() => deleting = true);
                                 await _deleteMember(m.id, ctx);
-                                setLocal(() => deleting = false);
+                                if (ctx.mounted) setLocal(() => deleting = false);
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFE6B6B),
@@ -480,6 +508,13 @@ class _State extends State<ManageTeamScreen> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
+                  : _loadError != null
+                      ? Center(child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(_loadError!, textAlign: TextAlign.center),
+                            TextButton(onPressed: _loadMembers, child: const Text('Retry')),
+                          ])))
                   : RefreshIndicator(
                       onRefresh: _loadMembers,
                       color: const Color(0xFF9D38EB),
@@ -495,7 +530,7 @@ class _State extends State<ManageTeamScreen> {
                       ),
                     ),
             ),
-            if (!_loading && _members.isNotEmpty) _buildNewMemberButton(),
+            if (!_loading && _loadError == null && _members.isNotEmpty) _buildNewMemberButton(),
           ],
         ),
       ),
@@ -564,7 +599,7 @@ class _State extends State<ManageTeamScreen> {
       Text('${m.joinedLabel} ${m.joinedDate}',
           style: const TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF7F7F7F))),
       const SizedBox(height: 4),
-      Text('${m.email}  |  ${m.phone}',
+      Text([m.email, m.phone].where((value) => value.isNotEmpty).join('  |  '),
           style: const TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF3F3F3F))),
       const SizedBox(height: 12),
       Row(children: [

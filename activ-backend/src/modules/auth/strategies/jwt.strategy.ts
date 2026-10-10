@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { UsersService } from '../../users/users.service';
 import { TeamMember } from '../../team/entities/team-member.entity';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { databaseRead } from '../../../prisma/database-read';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -25,6 +26,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: { sub: string; role: string; type?: string }) {
+    return databaseRead(() => this.validateAccount(payload));
+  }
+
+  private async validateAccount(payload: { sub: string; role: string; type?: string }) {
     if (payload.type === 'team_member') {
       const staff = await this.prisma.partner_staff_profiles.findUnique({ where: { id: payload.sub },
         include: { partner_users: { include: { users: true, partners: true } } } });

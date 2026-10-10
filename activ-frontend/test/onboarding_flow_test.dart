@@ -938,7 +938,7 @@ void main() {
     const Size(360, 740),
     const Size(1280, 900)
   ]) {
-    testWidgets('activity photo upload matches reference at ${size.width}px',
+    testWidgets('venue photo upload matches reference at ${size.width}px',
         (tester) async {
       await showScreen(
           tester,
@@ -953,12 +953,11 @@ void main() {
             tester.element(find.byType(VenuePhotoUploadScreen)));
       });
       await tester.pumpAndSettle();
-      expect(find.text('Badminton'), findsOneWidget);
-      expect(find.text('Upload this activity\u2019s images'), findsOneWidget);
-      expect(find.text('Configuring Activity 1 of 3 \u2014 Step 1/4'),
+      expect(find.text('Add some photos of your venue'), findsOneWidget);
+      expect(find.text('These images will be shown on the Activ venue listing page'),
           findsOneWidget);
-      expect(find.text('Add some photos of your venue'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('4/7'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
       final next = find.widgetWithText(TextButton, 'Next');
       expect(tester.widget<TextButton>(next).onPressed, isNull);
       expect(tester.takeException(), isNull);
@@ -1100,6 +1099,30 @@ void main() {
     expect(find.byIcon(Icons.lock_outline), findsNothing);
     expect(tester.takeException(), isNull);
     await capture(tester, 'venue-update-editable-430x1276');
+  });
+
+  testWidgets('venue update accepts paginated approved venue responses',
+      (tester) async {
+    seedVenueInfo();
+    await showScreen(
+        tester,
+        VenueInfoScreen(
+            client: MockClient((request) async => http.Response(
+                jsonEncode({
+                  'data': request.url.path.contains('update-requests/my')
+                      ? []
+                      : {
+                          'total': 1,
+                          'items': [
+                            {...liveVenue, '_id': liveVenue['id']}
+                          ],
+                        }
+                }),
+                200))));
+    expect(find.text('No venue data found.'), findsNothing);
+    expect(tester.widget<TextFormField>(venueField('name')).controller?.text,
+        'Sports Arena Complex');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

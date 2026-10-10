@@ -11,6 +11,7 @@ import {
   HttpStatus,
   UploadedFile,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -61,6 +62,13 @@ export class BankAccountsController {
     },
   })
   @UseInterceptors(FileInterceptor('cancelledCheque', {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['.jpg', '.jpeg', '.png', '.pdf'];
+      cb(allowed.includes(extname(file.originalname).toLowerCase())
+        ? null : new BadRequestException('Only JPG, JPEG, PNG and PDF files are allowed'),
+        allowed.includes(extname(file.originalname).toLowerCase()));
+    },
     storage: diskStorage({
       destination: (_req, _file, cb) => {
         const dir = './uploads/bank-docs';
@@ -92,6 +100,12 @@ export class BankAccountsController {
   async getMyBankAccounts(@CurrentUser() user: any) {
     const data = await this.bankAccountsService.findByPartner(user.id);
     return { message: 'Bank accounts fetched successfully', data };
+  }
+
+  @Get('summary')
+  @Roles(UserRole.PARTNER)
+  async summary(@CurrentUser() user: any) {
+    return { message: 'Bank account summary fetched', data: await this.bankAccountsService.summary(user.id) };
   }
 
   @Patch(':id/mark-verified-seen')
@@ -135,8 +149,8 @@ export class BankAccountsController {
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.PARTNER)
   @ApiOperation({ summary: 'Get bank account submission by ID' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.bankAccountsService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const data = await this.bankAccountsService.findOne(id, user.role === UserRole.ADMIN ? undefined : user.id);
     return { message: 'Bank account fetched successfully', data };
   }
 

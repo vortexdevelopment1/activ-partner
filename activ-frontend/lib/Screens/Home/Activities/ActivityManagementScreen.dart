@@ -10,6 +10,7 @@ import '../../../api_calling/api_constant.dart';
 import '../../../api_calling/api_request.dart';
 import '../ManagePricingScreen.dart';
 import '../ManageSlotsScreen.dart';
+import 'DirectBookSlotScreen.dart';
 
 const _background = Color(0xFFF0F6D2);
 const _purple = Color(0xFFA536F5);
@@ -395,6 +396,23 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               remove: _removeImage,
               imageUrl: _imageUrl)));
 
+  Future<void> _bookSlots() async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => DirectBookSlotScreen(
+                  activity: widget.activity,
+                  activityData: _data,
+                  venueId: _data['venueId']?.toString() ?? widget.venueId,
+                  venueName: _data['venueName']?.toString() ??
+                      _data['venue']?['name']?.toString() ??
+                      _data['venueDetails']?['name']?.toString() ??
+                      'Venue',
+                  client: _client,
+                )));
+    if (mounted) await _load();
+  }
+
   void _allBookings() => _sheet('Recent Bookings',
       _items('bookings').map(_booking).toList(), 'No bookings yet');
   void _reviews() => _sheet(
@@ -534,6 +552,11 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                       'Update Slots, Availability & Pricing',
                                       Icons.calendar_today_outlined,
                                       _slots),
+                                  _action(
+                                      'Book Slots',
+                                      'Reserve slots for direct walk-ins',
+                                      Icons.lock_outline,
+                                      _bookSlots),
                                   _action(
                                       'Manage Images',
                                       'Upload & update activity images',
