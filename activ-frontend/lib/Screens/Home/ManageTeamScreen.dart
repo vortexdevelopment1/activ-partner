@@ -1,83 +1,139 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+
+import '../../Style/app_colors.dart';
+import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
-import '../../Utills/common_utilities.dart';
-
-// ── Model ─────────────────────────────────────────────────────────────────────
-
-class _Member {
-  final String id;
-  String name;
-  String email;
-  String phone;
-  String role;       // lowercase: manager | receptionist | trainer | staff
-  String status;     // 'active' | 'invited'
-  String joinedDate;
-  bool bookingMgmt;
-  bool pricingControl;
-  bool analyticsView;
-
-  _Member({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.role,
-    required this.status,
-    required this.joinedDate,
-    this.bookingMgmt = false,
-    this.pricingControl = false,
-    this.analyticsView = false,
-  });
-
-  factory _Member.fromJson(Map<String, dynamic> j) {
-    final perms = j['permissions'] as Map<String, dynamic>? ?? {};
-    final isActive = (j['status'] ?? '').toString().toLowerCase() == 'active';
-    return _Member(
-      id: j['id']?.toString() ?? '',
-      name: j['fullName']?.toString() ?? '',
-      email: j['email']?.toString() ?? '',
-      phone: j['phone']?.toString() ?? '',
-      role: j['role']?.toString() ?? 'staff',
-      status: isActive ? 'active' : 'invited',
-      joinedDate: _formatDate(j['createdAt']?.toString()),
-      bookingMgmt: perms['bookingManagement'] == true,
-      pricingControl: perms['pricingControl'] == true,
-      analyticsView: perms['analyticsView'] == true,
-    );
-  }
-
-  static String _formatDate(String? iso) {
-    if (iso == null) return '';
-    try {
-      final d = DateTime.parse(iso);
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) { return iso; }
-  }
-
-  String get displayRole => role[0].toUpperCase() + role.substring(1);
-  bool get isActive => status == 'active';
-  String get joinedLabel => isActive ? 'Joined' : 'Added';
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+import '../StringExtensions.dart';
 
 class ManageTeamScreen extends StatefulWidget {
   const ManageTeamScreen({super.key, this.client});
+
   final http.Client? client;
 
   @override
-  State<ManageTeamScreen> createState() => _State();
+  State<ManageTeamScreen> createState() => _ManageTeamScreenState();
 }
 
-class _State extends State<ManageTeamScreen> {
-  List<_Member> _members = [];
+class _RoleOption {
+  const _RoleOption(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+class _TeamMember {
+  _TeamMember({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.role,
+    required this.status,
+    required this.createdAt,
+    required this.bookingManagement,
+  });
+
+  final String id;
+  final String name;
+  final String phone;
+  final String role;
+  final String status;
+  final String createdAt;
+  final bool bookingManagement;
+
+  factory _TeamMember.fromJson(Map<String, dynamic> json) {
+    final permissions = json['permissions'] is Map<String, dynamic>
+        ? json['permissions'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final role = checkString(json['role']);
+    final status = checkString(json['status']);
+
+    return _TeamMember(
+      id: checkString(json['id']),
+      name: checkString(json['fullName'] ?? json['name']),
+      phone: checkString(json['phone']),
+      role: role.isEmpty ? 'staff' : role,
+      status: status.isEmpty ? 'invite_sent' : status,
+      createdAt: _formatDate(checkString(json['createdAt'])),
+      bookingManagement: permissions['bookingManagement'] == true,
+    );
+  }
+
+  static String _formatDate(String value) {
+    if (value.isEmpty) return _todayLabel();
+    try {
+      final date = DateTime.parse(value).toLocal();
+      return _formatDateParts(date.day, date.month, date.year);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  static String _todayLabel() {
+    final now = DateTime.now();
+    return _formatDateParts(now.day, now.month, now.year);
+  }
+
+  static String _formatDateParts(int day, int month, int year) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '$day ${months[month - 1]} $year';
+  }
+
+  String get roleLabel => _ManageTeamScreenState.roleLabelFor(role);
+
+  String get statusLabel {
+    if (status.toLowerCase() == 'active') return 'Active';
+    return 'Invite Sent';
+  }
+}
+
+class _ManageTeamScreenState extends State<ManageTeamScreen> {
+  static const Color _background = Color(0xFFF0F7D2);
+  static const Color _ink = Color(0xFF1F1F1F);
+  static const Color _muted = Color(0xFF7F7F7F);
+  static const Color _line = Color(0xFFE2E8E6);
+  static const Color _purpleSoft = Color(0xFFF1E6FF);
+
+  static const List<_RoleOption> _roles = [
+    _RoleOption('Manager', 'manager'),
+    _RoleOption('Receptionist', 'receptionist'),
+    _RoleOption('Trainer', 'trainer'),
+    _RoleOption('Staff', 'staff'),
+    _RoleOption('Floor Manager', 'floor_manager'),
+    _RoleOption('Security', 'security'),
+  ];
+
+  final List<_TeamMember> _members = [];
   bool _loading = true;
 
-  static const _roles = ['Manager', 'Receptionist', 'Trainer', 'Staff'];
+  static String roleLabelFor(String value) {
+    final normalized = value.toLowerCase();
+    for (final role in _roles) {
+      if (role.value == normalized) return role.label;
+    }
+    return normalized
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
+  }
 
   @override
   void initState() {
@@ -85,521 +141,1010 @@ class _State extends State<ManageTeamScreen> {
     _loadMembers();
   }
 
-  // ── API helpers ────────────────────────────────────────────────────────────
-
   Future<Map<String, String>> _authHeaders() async {
-    final token = await SharedPreference.readStr('jwt_token');
-    return {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    return {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
+      'Authorization': 'Bearer $token',
+    };
   }
 
   Future<void> _loadMembers() async {
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);
     try {
-      final headers = await _authHeaders();
-      final res = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL), headers: headers);
-      CommonUtilities.showLog('GET team: ${res.statusCode} ${res.body}');
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        final List data = body is List ? body : (body['data'] ?? body['team'] ?? []);
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(TEAM_URL),
+        headers: await _authHeaders(),
+      );
+      CommonUtilities.showLog('GET team ${response.statusCode}: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final decoded = jsonDecode(response.body);
+        final rawData = decoded is List ? decoded : decoded['data'];
+        final data = rawData is List ? rawData : <dynamic>[];
+        final nextMembers = data
+            .whereType<Map<String, dynamic>>()
+            .map(_TeamMember.fromJson)
+            .toList();
+
         if (!mounted) return;
-        setState(() { _members = data.map((j) => _Member.fromJson(j)).toList(); });
+        setState(() {
+          _members
+            ..clear()
+            ..addAll(nextMembers);
+        });
+      } else {
+        _showApiError(response.body, 'Unable to load team members');
       }
-    } catch (e) {
-      CommonUtilities.showLog('loadMembers error: $e');
+    } catch (error) {
+      CommonUtilities.showLog('Manage team load error: $error');
+      if (mounted) {
+        CommonUtilities.createSnackBar(context, 'Unable to load team members');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _createMember({
-    required String name, required String email, required String role,
-    required bool bookingMgmt, required bool pricingControl, required bool analyticsView,
-    required BuildContext dialogCtx,
-  }) async {
+  Future<void> _createMember(_TeamMemberFormData data, BuildContext dialogContext) async {
     try {
-      final headers = await _authHeaders();
-      final body = jsonEncode({
-        'fullName': name, 'email': email,
-        'role': role.toLowerCase(),
-        'permissions': {
-          'bookingManagement': bookingMgmt,
-          'pricingControl': pricingControl,
-          'analyticsView': analyticsView,
-        },
-      });
-      final res = await (widget.client?.post ?? http.post)(Uri.parse(TEAM_URL), headers: headers, body: body);
-      CommonUtilities.showLog('POST team: ${res.statusCode} ${res.body}');
-      if (!mounted || !dialogCtx.mounted) return;
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        Navigator.pop(dialogCtx);
-        _loadMembers();
-      } else {
-        final msg = jsonDecode(res.body)['message'] ?? 'Failed to send invite';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.first : msg.toString());
-      }
-    } catch (e) {
-      CommonUtilities.showLog('createMember error: $e');
-    }
-  }
-
-  Future<void> _updateMember({
-    required _Member member, required String name, required String email,
-    required String role, required bool bookingMgmt, required bool pricingControl,
-    required bool analyticsView, required BuildContext dialogCtx,
-  }) async {
-    try {
-      final headers = await _authHeaders();
-      final body = jsonEncode({
-        'fullName': name, 'email': email,
-        'role': role.toLowerCase(),
-        'permissions': {
-          'bookingManagement': bookingMgmt,
-          'pricingControl': pricingControl,
-          'analyticsView': analyticsView,
-        },
-      });
-      final res = await (widget.client?.patch ?? http.patch)(Uri.parse('$TEAM_URL/${member.id}'), headers: headers, body: body);
-      CommonUtilities.showLog('PATCH team: ${res.statusCode} ${res.body}');
-      if (!mounted || !dialogCtx.mounted) return;
-      if (res.statusCode == 200) {
-        Navigator.pop(dialogCtx);
-        _loadMembers();
-      } else {
-        final msg = jsonDecode(res.body)['message'] ?? 'Update failed';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.first : msg.toString());
-      }
-    } catch (e) {
-      CommonUtilities.showLog('updateMember error: $e');
-    }
-  }
-
-  Future<void> _deleteMember(String id, BuildContext dialogCtx) async {
-    try {
-      final headers = await _authHeaders();
-      final res = await (widget.client?.delete ?? http.delete)(Uri.parse('$TEAM_URL/$id'), headers: headers);
-      CommonUtilities.showLog('DELETE team: ${res.statusCode} ${res.body}');
-      if (!mounted || !dialogCtx.mounted) return;
-      if (res.statusCode == 200) {
-        Navigator.pop(dialogCtx);
-        _loadMembers();
-      } else {
-        final msg = jsonDecode(res.body)['message'] ?? 'Delete failed';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.first : msg.toString());
-      }
-    } catch (e) {
-      CommonUtilities.showLog('deleteMember error: $e');
-    }
-  }
-
-  // ── Dialogs ────────────────────────────────────────────────────────────────
-
-  void _showAddDialog() {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    String role = 'Manager';
-    bool bookingMgmt = true;
-    bool pricingControl = false;
-    bool analyticsView = false;
-    bool saving = false;
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setLocal) => Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dialogHeader('Add new team member', ctx),
-                const SizedBox(height: 20),
-                _fieldLabel('Full Name'),
-                _textField(nameCtrl, 'Abhishek Sharma'),
-                const SizedBox(height: 14),
-                _fieldLabel('Email Address'),
-                _textField(emailCtrl, 'abhishek.sharma@maxfitness.com', keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 14),
-                _fieldLabel('Role'),
-                _roleDropdown(role, (v) => setLocal(() => role = v!)),
-                const Divider(height: 28, color: Color(0xFFE5E7EB)),
-                const Text('Permissions', style: TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-                const SizedBox(height: 12),
-                _permissionRow('Booking management', 'Allow managing customer bookings', bookingMgmt, (v) => setLocal(() => bookingMgmt = v)),
-                _permissionRow('Pricing control', 'Allow editing pricing and offers', pricingControl, (v) => setLocal(() => pricingControl = v)),
-                _permissionRow('Analytics view', 'Allow viewing analytics and reports', analyticsView, (v) => setLocal(() => analyticsView = v)),
-                const SizedBox(height: 20),
-                saving
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
-                    : _purpleButton('Send Invite', () async {
-                        if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
-                          CommonUtilities.createSnackBar(context, 'Name and email are required');
-                          return;
-                        }
-                        setLocal(() => saving = true);
-                        await _createMember(
-                          name: nameCtrl.text.trim(), email: emailCtrl.text.trim(),
-                          role: role, bookingMgmt: bookingMgmt,
-                          pricingControl: pricingControl, analyticsView: analyticsView,
-                          dialogCtx: ctx,
-                        );
-                        setLocal(() => saving = false);
-                      }),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEditDialog(_Member m) {
-    final nameCtrl = TextEditingController(text: m.name);
-    final emailCtrl = TextEditingController(text: m.email);
-    String role = m.displayRole;
-    bool bookingMgmt = m.bookingMgmt;
-    bool pricingControl = m.pricingControl;
-    bool analyticsView = m.analyticsView;
-    bool saving = false;
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setLocal) => Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dialogHeader('Edit member details', ctx),
-                const SizedBox(height: 20),
-                _fieldLabel('Full Name'),
-                _textField(nameCtrl, 'Full name'),
-                const SizedBox(height: 14),
-                _fieldLabel('Email Address'),
-                _textField(emailCtrl, 'Email address', keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 14),
-                _fieldLabel('Role'),
-                _roleDropdown(role, (v) => setLocal(() => role = v!)),
-                const Divider(height: 28, color: Color(0xFFE5E7EB)),
-                const Text('Permissions', style: TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-                const SizedBox(height: 12),
-                _permissionRow('Booking management', 'Allow managing customer bookings', bookingMgmt, (v) => setLocal(() => bookingMgmt = v)),
-                _permissionRow('Pricing control', 'Allow editing pricing and offers', pricingControl, (v) => setLocal(() => pricingControl = v)),
-                _permissionRow('Analytics view', 'Allow viewing analytics and reports', analyticsView, (v) => setLocal(() => analyticsView = v)),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: () { Navigator.pop(ctx); _showDeleteConfirm(m); },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFFE6B6B)),
-                    minimumSize: const Size(double.infinity, 48),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Text('Delete Member', style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFFFE6B6B))),
-                ),
-                const SizedBox(height: 10),
-                saving
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
-                    : _purpleButton('Save Changes', () async {
-                        setLocal(() => saving = true);
-                        await _updateMember(
-                          member: m,
-                          name: nameCtrl.text.trim(), email: emailCtrl.text.trim(),
-                          role: role, bookingMgmt: bookingMgmt,
-                          pricingControl: pricingControl, analyticsView: analyticsView,
-                          dialogCtx: ctx,
-                        );
-                        setLocal(() => saving = false);
-                      }),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteConfirm(_Member m) {
-    bool deleting = false;
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(child: Text('Are you sure?', style: TextStyle(fontSize: 18, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F)))),
-                    InkWell(onTap: () => Navigator.pop(ctx), borderRadius: BorderRadius.circular(20),
-                        child: const Icon(Icons.close, size: 20, color: Color(0xFF1F1F1F))),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Text('This action cannot be undone. This will permanently delete the member from your team.',
-                    style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF3F3F3F))),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF1F1F1F)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text('Cancel', style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFF1F1F1F))),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: deleting
-                          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFE6B6B)))
-                          : ElevatedButton(
-                              onPressed: () async {
-                                setLocal(() => deleting = true);
-                                await _deleteMember(m.id, ctx);
-                                setLocal(() => deleting = false);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFE6B6B),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                elevation: 0,
-                              ),
-                              child: const Text("Yes, I'm sure", style: TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Colors.white)),
-                            ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Shared widgets ─────────────────────────────────────────────────────────
-
-  Widget _dialogHeader(String title, BuildContext ctx) => Row(
-    children: [
-      Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F)))),
-      InkWell(onTap: () => Navigator.pop(ctx), borderRadius: BorderRadius.circular(20),
-          child: const Icon(Icons.close, size: 20, color: Color(0xFF1F1F1F))),
-    ],
-  );
-
-  Widget _fieldLabel(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text.rich(TextSpan(children: [
-      TextSpan(text: text, style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w600, color: Color(0xFF3F3F3F))),
-      const TextSpan(text: '*', style: TextStyle(color: Color(0xFFFE6B6B))),
-    ])),
-  );
-
-  Widget _textField(TextEditingController ctrl, String hint, {TextInputType? keyboardType}) =>
-      TextField(
-        controller: ctrl, keyboardType: keyboardType,
-        style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', color: Color(0xFF1F1F1F)),
-        decoration: InputDecoration(
-          hintText: hint, hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF9E9E9E)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF9D38EB))),
-          filled: true, fillColor: Colors.white,
-        ),
+      final response = await (widget.client?.post ?? http.post)(
+        Uri.parse(TEAM_URL),
+        headers: await _authHeaders(),
+        body: jsonEncode(data.toPayload()),
       );
+      CommonUtilities.showLog('POST team ${response.statusCode}: ${response.body}');
 
-  Widget _roleDropdown(String value, ValueChanged<String?> onChanged) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-    decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE5E7EB)), color: Colors.white),
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: value, isExpanded: true,
-        icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1F1F1F)),
-        style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', color: Color(0xFF1F1F1F)),
-        items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-        onChanged: onChanged,
-      ),
-    ),
-  );
+      if (!mounted || !dialogContext.mounted) return;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        Navigator.pop(dialogContext);
+        await _loadMembers();
+      } else {
+        _showApiError(response.body, 'Failed to send invite');
+      }
+    } catch (error) {
+      CommonUtilities.showLog('Manage team create error: $error');
+      if (mounted) CommonUtilities.createSnackBar(context, 'Failed to send invite');
+    }
+  }
 
-  Widget _permissionRow(String title, String subtitle, bool value, ValueChanged<bool> onChanged) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Row(
-      children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-          Text(subtitle, style: const TextStyle(fontSize: 11, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF7F7F7F))),
-        ])),
-        Switch(value: value, onChanged: onChanged,
-            activeThumbColor: Colors.white, activeTrackColor: const Color(0xFF9D38EB),
-            inactiveThumbColor: Colors.white, inactiveTrackColor: const Color(0xFFE5E7EB)),
-      ],
-    ),
-  );
+  Future<void> _updateMember(
+    _TeamMember member,
+    _TeamMemberFormData data,
+    BuildContext dialogContext,
+  ) async {
+    try {
+      final response = await (widget.client?.patch ?? http.patch)(
+        Uri.parse('$TEAM_URL/${member.id}'),
+        headers: await _authHeaders(),
+        body: jsonEncode(data.toPayload()),
+      );
+      CommonUtilities.showLog('PATCH team ${response.statusCode}: ${response.body}');
 
-  Widget _purpleButton(String label, VoidCallback onTap) => InkWell(
-    onTap: onTap, borderRadius: BorderRadius.circular(10),
-    child: Container(
-      width: double.infinity, height: 48,
-      decoration: BoxDecoration(color: const Color(0xFF9D38EB), borderRadius: BorderRadius.circular(10)),
-      child: Center(child: Text(label, style: const TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Colors.white))),
-    ),
-  );
+      if (!mounted || !dialogContext.mounted) return;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        Navigator.pop(dialogContext);
+        await _loadMembers();
+      } else {
+        _showApiError(response.body, 'Failed to save changes');
+      }
+    } catch (error) {
+      CommonUtilities.showLog('Manage team update error: $error');
+      if (mounted) CommonUtilities.createSnackBar(context, 'Failed to save changes');
+    }
+  }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  Future<void> _deleteMember(_TeamMember member, BuildContext dialogContext) async {
+    try {
+      final response = await (widget.client?.delete ?? http.delete)(
+        Uri.parse('$TEAM_URL/${member.id}'),
+        headers: await _authHeaders(),
+      );
+      CommonUtilities.showLog('DELETE team ${response.statusCode}: ${response.body}');
+
+      if (!mounted || !dialogContext.mounted) return;
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        Navigator.pop(dialogContext);
+        await _loadMembers();
+      } else {
+        _showApiError(response.body, 'Failed to delete member');
+      }
+    } catch (error) {
+      CommonUtilities.showLog('Manage team delete error: $error');
+      if (mounted) CommonUtilities.createSnackBar(context, 'Failed to delete member');
+    }
+  }
+
+  void _showApiError(String body, String fallback) {
+    var message = fallback;
+    try {
+      final decoded = jsonDecode(body);
+      final apiMessage = decoded['message'];
+      if (apiMessage is List && apiMessage.isNotEmpty) {
+        message = apiMessage.first.toString();
+      } else if (apiMessage != null) {
+        message = apiMessage.toString();
+      }
+    } catch (_) {}
+
+    if (mounted) CommonUtilities.createSnackBar(context, message);
+  }
+
+  void _openMemberDialog({_TeamMember? member}) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      builder: (dialogContext) {
+        return _TeamMemberDialog(
+          roles: _roles,
+          member: member,
+          onSubmit: (data) {
+            if (member == null) {
+              return _createMember(data, dialogContext);
+            }
+            return _updateMember(member, data, dialogContext);
+          },
+          onDelete: member == null
+              ? null
+              : () => _deleteMember(member, dialogContext),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5E8),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildAppBar(),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF9D38EB)))
-                  : RefreshIndicator(
-                      onRefresh: _loadMembers,
-                      color: const Color(0xFF9D38EB),
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                        children: [
-                          Text('Team members (${_members.length})',
-                              style: const TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-                          const SizedBox(height: 14),
-                          if (_members.isEmpty) _buildEmptyState()
-                          else ..._members.map((m) => _buildMemberCard(m)),
-                        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: _background,
+      ),
+      child: Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Header(onBack: () => Navigator.pop(context)),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                      child: _loading
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.purple,
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Team members (${_members.length})',
+                                  style: const TextStyle(
+                                    color: _ink,
+                                    fontFamily: 'Satoshi',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (_members.isEmpty)
+                                  _EmptyMembersCard(
+                                    onAdd: () => _openMemberDialog(),
+                                  )
+                                else
+                                  Expanded(
+                                    child: ListView.separated(
+                                      physics: _members.length <= 3
+                                          ? const NeverScrollableScrollPhysics()
+                                          : const BouncingScrollPhysics(),
+                                      padding: EdgeInsets.zero,
+                                      itemCount: _members.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(height: 12),
+                                      itemBuilder: (_, index) {
+                                        final member = _members[index];
+                                        return _MemberCard(
+                                          member: member,
+                                          onEdit: () =>
+                                              _openMemberDialog(member: member),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  if (!_loading && _members.isNotEmpty)
+                    _FixedAddButton(onTap: () => _openMemberDialog()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamMemberFormData {
+  const _TeamMemberFormData({
+    required this.fullName,
+    required this.phone,
+    required this.role,
+    required this.bookingManagement,
+  });
+
+  final String fullName;
+  final String phone;
+  final String role;
+  final bool bookingManagement;
+
+  Map<String, dynamic> toPayload() {
+    return {
+      'fullName': fullName,
+      'phone': phone,
+      'role': role,
+      'permissions': {
+        'bookingManagement': bookingManagement,
+      },
+    };
+  }
+}
+
+class _TeamMemberDialog extends StatefulWidget {
+  const _TeamMemberDialog({
+    required this.roles,
+    required this.onSubmit,
+    this.member,
+    this.onDelete,
+  });
+
+  final List<_RoleOption> roles;
+  final _TeamMember? member;
+  final Future<void> Function(_TeamMemberFormData data) onSubmit;
+  final Future<void> Function()? onDelete;
+
+  @override
+  State<_TeamMemberDialog> createState() => _TeamMemberDialogState();
+}
+
+class _TeamMemberDialogState extends State<_TeamMemberDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late String _role;
+  late bool _bookingManagement;
+  bool _saving = false;
+  bool _deleting = false;
+
+  bool get _isEdit => widget.member != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final member = widget.member;
+    _nameController = TextEditingController(text: member?.name ?? '');
+    _phoneController = TextEditingController(
+      text: _phoneDigits(member?.phone ?? ''),
+    );
+    final initialRole = member?.role ?? widget.roles.first.value;
+    _role = widget.roles.any((role) => role.value == initialRole)
+        ? initialRole
+        : widget.roles.first.value;
+    _bookingManagement = member?.bookingManagement ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  static String _phoneDigits(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('91') && digits.length > 10) {
+      return digits.substring(2);
+    }
+    return digits;
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+
+    if (name.isEmpty) {
+      CommonUtilities.createSnackBar(context, 'Full name is required');
+      return;
+    }
+    if (phoneDigits.length < 10) {
+      CommonUtilities.createSnackBar(context, 'Enter a valid mobile number');
+      return;
+    }
+
+    setState(() => _saving = true);
+    await widget.onSubmit(
+      _TeamMemberFormData(
+        fullName: name,
+        phone: '+91$phoneDigits',
+        role: _role,
+        bookingManagement: _bookingManagement,
+      ),
+    );
+    if (mounted) setState(() => _saving = false);
+  }
+
+  Future<void> _delete() async {
+    if (widget.onDelete == null) return;
+    setState(() => _deleting = true);
+    await widget.onDelete!();
+    if (mounted) setState(() => _deleting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final size = MediaQuery.sizeOf(context);
+    final maxHeight = size.height - viewInsets.vertical - 80;
+
+    return Dialog(
+      alignment: Alignment.center,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 520, maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isEdit ? 'Edit member details' : 'Add new team member',
+                      style: const TextStyle(
+                        color: _ManageTeamScreenState._ink,
+                        fontFamily: 'Satoshi',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, size: 24),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const _RequiredLabel('Full Name'),
+              _InputBox(
+                controller: _nameController,
+                hint: 'e.g. Abhishek Sharma',
+              ),
+              const SizedBox(height: 18),
+              const _RequiredLabel('Mobile Number'),
+              Row(
+                children: [
+                  Container(
+                    height: 58,
+                    width: 92,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _ManageTeamScreenState._line),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '+91',
+                          style: TextStyle(
+                            color: _ManageTeamScreenState._ink,
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _InputBox(
+                      controller: _phoneController,
+                      hint: '9876543210',
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'A login link will be sent via SMS/WhatsApp',
+                style: TextStyle(
+                  color: _ManageTeamScreenState._muted,
+                  fontFamily: 'Satoshi',
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const _RequiredLabel('Role'),
+              _RoleDropdown(
+                value: _role,
+                roles: widget.roles,
+                onChanged: (value) => setState(() => _role = value),
+              ),
+              const SizedBox(height: 18),
+              const Divider(height: 1, color: _ManageTeamScreenState._line),
+              const SizedBox(height: 20),
+              const Text(
+                'Permissions',
+                style: TextStyle(
+                  color: _ManageTeamScreenState._ink,
+                  fontFamily: 'Satoshi',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Booking management',
+                          style: TextStyle(
+                            color: _ManageTeamScreenState._ink,
+                            fontFamily: 'Satoshi',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Allow managing customer bookings',
+                          style: TextStyle(
+                            color: _ManageTeamScreenState._muted,
+                            fontFamily: 'Satoshi',
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _bookingManagement,
+                    activeTrackColor: AppColors.purple,
+                    activeThumbColor: Colors.white,
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: const Color(0xFFE7E7E7),
+                    onChanged: (value) {
+                      setState(() => _bookingManagement = value);
+                    },
+                  ),
+                ],
+              ),
+              if (_isEdit) ...[
+                const SizedBox(height: 26),
+                _deleting
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.red,
+                        ),
+                      )
+                    : SizedBox(
+                        width: double.infinity,
+                        height: 58,
+                        child: OutlinedButton(
+                          onPressed: _delete,
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.red),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text(
+                            'Delete Member',
+                            style: TextStyle(
+                              color: AppColors.red,
+                              fontFamily: 'Satoshi',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+              ],
+              const SizedBox(height: 14),
+              _saving
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.purple),
+                    )
+                  : _PurpleButton(
+                      label: _isEdit ? 'Save Changes' : 'Send Invite',
+                      onTap: _submit,
+                    ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: onBack,
+            borderRadius: BorderRadius.circular(28),
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.arrow_back,
+                color: _ManageTeamScreenState._ink,
+              ),
             ),
-            if (!_loading && _members.isNotEmpty) _buildNewMemberButton(),
+          ),
+          const SizedBox(width: 18),
+          const Text(
+            'Manage team',
+            style: TextStyle(
+              color: _ManageTeamScreenState._ink,
+              fontFamily: 'Satoshi',
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyMembersCard extends StatelessWidget {
+  const _EmptyMembersCard({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(26, 56, 26, 32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _ManageTeamScreenState._line),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.help_outline_rounded,
+            color: _ManageTeamScreenState._muted,
+            size: 46,
+          ),
+          const SizedBox(height: 54),
+          const Text(
+            'No team members yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _ManageTeamScreenState._ink,
+              fontFamily: 'Satoshi',
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Add your on-ground staff - receptionists, managers, floor staff and more.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _ManageTeamScreenState._muted,
+              fontFamily: 'Satoshi',
+              fontSize: 15,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 30),
+          _PurpleButton(label: '+ New Member', onTap: onAdd),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberCard extends StatelessWidget {
+  const _MemberCard({
+    required this.member,
+    required this.onEdit,
+  });
+
+  final _TeamMember member;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _ManageTeamScreenState._line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: member.name,
+                        style: const TextStyle(
+                          color: _ManageTeamScreenState._ink,
+                          fontFamily: 'Satoshi',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: '  |  ',
+                        style: TextStyle(
+                          color: _ManageTeamScreenState._muted,
+                          fontFamily: 'Satoshi',
+                          fontSize: 14,
+                        ),
+                      ),
+                      TextSpan(
+                        text: member.roleLabel,
+                        style: const TextStyle(
+                          color: _ManageTeamScreenState._ink,
+                          fontFamily: 'Satoshi',
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1BF),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  member.statusLabel,
+                  style: const TextStyle(
+                    color: Color(0xFFC98500),
+                    fontFamily: 'Satoshi',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Added ${member.createdAt}',
+            style: const TextStyle(
+              color: _ManageTeamScreenState._muted,
+              fontFamily: 'Satoshi',
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.phone_outlined,
+                color: _ManageTeamScreenState._muted,
+                size: 17,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  member.phone,
+                  style: const TextStyle(
+                    color: _ManageTeamScreenState._muted,
+                    fontFamily: 'Satoshi',
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          InkWell(
+            onTap: onEdit,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                color: _ManageTeamScreenState._purpleSoft,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.edit_outlined,
+                color: AppColors.purple,
+                size: 22,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FixedAddButton extends StatelessWidget {
+  const _FixedAddButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        10,
+        20,
+        20 + MediaQuery.paddingOf(context).bottom,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 58,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: _ManageTeamScreenState._ink,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_rounded, color: AppColors.yellow, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'New member',
+                style: TextStyle(
+                  color: AppColors.yellow,
+                  fontFamily: 'Satoshi',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RequiredLabel extends StatelessWidget {
+  const _RequiredLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: label,
+              style: const TextStyle(
+                color: _ManageTeamScreenState._ink,
+                fontFamily: 'Satoshi',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const TextSpan(
+              text: '*',
+              style: TextStyle(
+                color: AppColors.red,
+                fontFamily: 'Satoshi',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildAppBar() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    child: Row(
-      children: [
-        InkWell(
-          onTap: () => Navigator.pop(context),
-          borderRadius: BorderRadius.circular(24),
-          child: Container(width: 40, height: 40,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: const Icon(Icons.arrow_back, size: 18, color: Color(0xFF1F1F1F))),
+class _InputBox extends StatelessWidget {
+  const _InputBox({
+    required this.controller,
+    required this.hint,
+    this.keyboardType,
+    this.inputFormatters,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 58,
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        style: const TextStyle(
+          color: _ManageTeamScreenState._ink,
+          fontFamily: 'Satoshi',
+          fontSize: 16,
         ),
-        const SizedBox(width: 12),
-        const Text('Manage team', style: TextStyle(fontSize: 18, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-      ],
-    ),
-  );
-
-  Widget _buildEmptyState() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E7EB))),
-    child: Column(
-      children: [
-        Image.asset('assets/ic_question.png', width: 90, height: 90),
-        const SizedBox(height: 16),
-        const Text('No team members found', style: TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-        const SizedBox(height: 6),
-        const Text('Invite your team members to smoothly operate and manage your venue',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF7F7F7F))),
-        const SizedBox(height: 20),
-        _purpleButton('+ New Member', _showAddDialog),
-      ],
-    ),
-  );
-
-  Widget _buildMemberCard(_Member m) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E7EB))),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(child: Text.rich(TextSpan(children: [
-          TextSpan(text: m.name, style: const TextStyle(fontSize: 14, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F))),
-          const TextSpan(text: '  |  ', style: TextStyle(fontSize: 13, color: Color(0xFF9E9E9E))),
-          TextSpan(text: m.displayRole, style: const TextStyle(fontSize: 13, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF3F3F3F))),
-        ]))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: m.isActive ? const Color(0xFFEDE9FE) : const Color(0xFFFEF3C7),
-            borderRadius: BorderRadius.circular(20),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Color(0xFFA0A0A0),
+            fontFamily: 'Satoshi',
+            fontSize: 15,
           ),
-          child: Text(m.isActive ? 'Active' : 'Invite Sent',
-              style: TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w600,
-                  color: m.isActive ? const Color(0xFF9D38EB) : const Color(0xFFD97706))),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: _ManageTeamScreenState._line),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: _ManageTeamScreenState._line),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.purple),
+          ),
         ),
-      ]),
-      const SizedBox(height: 4),
-      Text('${m.joinedLabel} ${m.joinedDate}',
-          style: const TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF7F7F7F))),
-      const SizedBox(height: 4),
-      Text('${m.email}  |  ${m.phone}',
-          style: const TextStyle(fontSize: 12, fontFamily: 'Satoshi', fontWeight: FontWeight.w400, color: Color(0xFF3F3F3F))),
-      const SizedBox(height: 12),
-      Row(children: [
-        _actionIcon(Icons.mail_outline, () {}),
-        const SizedBox(width: 10),
-        _actionIcon(Icons.chat_bubble_outline, () {}),
-        const SizedBox(width: 10),
-        _actionIcon(Icons.phone_outlined, () {}),
-        const SizedBox(width: 10),
-        _actionIcon(Icons.edit_outlined, () => _showEditDialog(m)),
-      ]),
-    ]),
-  );
-
-  Widget _actionIcon(IconData icon, VoidCallback onTap) => InkWell(
-    onTap: onTap, borderRadius: BorderRadius.circular(20),
-    child: Container(width: 36, height: 36,
-        decoration: const BoxDecoration(color: Color(0xFFEDE9FE), shape: BoxShape.circle),
-        child: Icon(icon, size: 16, color: const Color(0xFF9D38EB))),
-  );
-
-  Widget _buildNewMemberButton() => Container(
-    color: Colors.transparent,
-    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-    child: InkWell(
-      onTap: _showAddDialog, borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity, height: 52,
-        decoration: BoxDecoration(color: const Color(0xFF1F1F1F), borderRadius: BorderRadius.circular(12)),
-        child: const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.add, color: Color(0xFFFFD700), size: 18),
-          SizedBox(width: 6),
-          Text('New member', style: TextStyle(fontSize: 15, fontFamily: 'Satoshi', fontWeight: FontWeight.w700, color: Color(0xFFFFD700))),
-        ])),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _RoleDropdown extends StatelessWidget {
+  const _RoleDropdown({
+    required this.value,
+    required this.roles,
+    required this.onChanged,
+  });
+
+  final String value;
+  final List<_RoleOption> roles;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 58,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _ManageTeamScreenState._line),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          dropdownColor: const Color(0xFFFFF8FF),
+          borderRadius: BorderRadius.circular(2),
+          style: const TextStyle(
+            color: _ManageTeamScreenState._ink,
+            fontFamily: 'Satoshi',
+            fontSize: 16,
+          ),
+          items: roles
+              .map(
+                (role) => DropdownMenuItem<String>(
+                  value: role.value,
+                  child: Text(role.label),
+                ),
+              )
+              .toList(),
+          onChanged: (next) {
+            if (next != null) onChanged(next);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _PurpleButton extends StatelessWidget {
+  const _PurpleButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 58,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.purple,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'Satoshi',
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -9,10 +9,11 @@ import '../../Style/app_colors.dart';
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
-import '../ContactSupportFormScreen.dart';
 import '../GetStartedScreen.dart';
+import '../HelpSupportScreen.dart';
 import '../Home/Activities/VenueActivityListScreen.dart';
 import '../Home/ManageTeamScreen.dart';
+import '../Home/PartnerAgreementScreen.dart';
 import '../Home/ProfileScreen.dart';
 import '../Home/VenueInfoScreen.dart';
 import '../Home/ViewDocumentScreen.dart';
@@ -200,7 +201,7 @@ class _MenuScreenState extends State<MenuScreen> {
           icon: Icons.group_outlined,
           onTap: () => CommonUtilities.NavigateWithPush(
             context,
-            const ManageTeamScreen(),
+            ManageTeamScreen(client: widget.client),
           ),
         ),
       _ProfileMenuItem(
@@ -208,7 +209,7 @@ class _MenuScreenState extends State<MenuScreen> {
         icon: Icons.support_agent_rounded,
         onTap: () => CommonUtilities.NavigateWithPush(
           context,
-          const ContactSupportFormScreen(),
+          HelpSupportScreen(client: widget.client),
         ),
       ),
       if (_isPartner)
@@ -217,7 +218,7 @@ class _MenuScreenState extends State<MenuScreen> {
           icon: Icons.article_outlined,
           onTap: () => CommonUtilities.NavigateWithPush(
             context,
-            const ViewDocumentScreen(),
+            const PartnerAgreementScreen(),
           ),
         ),
       _ProfileMenuItem(
