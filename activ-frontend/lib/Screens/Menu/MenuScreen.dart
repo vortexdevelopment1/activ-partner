@@ -15,6 +15,8 @@ import '../Home/Activities/VenueActivityListScreen.dart';
 import '../Home/ManageTeamScreen.dart';
 import '../Home/PartnerAgreementScreen.dart';
 import '../Home/ProfileScreen.dart';
+import '../Home/BankAccountScreen.dart';
+import '../Home/PayoutHistoryScreen.dart';
 import '../Home/VenueInfoScreen.dart';
 import '../Home/ViewDocumentScreen.dart';
 import '../StringExtensions.dart';
@@ -110,8 +112,10 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Future<void> _openProfile() async {
-    await Navigator.push(context,
-        MaterialPageRoute<void>(builder: (_) => ProfileScreen(client: widget.client)));
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => ProfileScreen(client: widget.client)));
     if (mounted) await _loadProfileHeader();
   }
 
@@ -187,13 +191,15 @@ class _MenuScreenState extends State<MenuScreen> {
         _ProfileMenuItem(
           title: 'Bank Details',
           icon: Icons.credit_card_rounded,
-          onTap: () => _showComingSoon('Bank Details'),
+          onTap: () => CommonUtilities.NavigateWithPush(
+              context, BankAccountScreen(client: widget.client)),
         ),
       if (_isPartner)
         _ProfileMenuItem(
           title: 'Payout History',
           icon: Icons.currency_rupee_rounded,
-          onTap: () => _showComingSoon('Payout History'),
+          onTap: () => CommonUtilities.NavigateWithPush(
+              context, PayoutHistoryScreen(client: widget.client)),
         ),
       if (_isPartner)
         _ProfileMenuItem(
@@ -578,10 +584,6 @@ class _MenuScreenState extends State<MenuScreen> {
             context, 'Unable to load policy. Please try again.');
       }
     }
-  }
-
-  void _showComingSoon(String title) {
-    CommonUtilities.createSnackBar(context, '$title will be available soon.');
   }
 }
 

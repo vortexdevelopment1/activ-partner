@@ -87,6 +87,7 @@ model partners {
   created_at                        DateTime                            @default(now())
   updated_at                        DateTime
   partner_bank_accounts             partner_bank_accounts[]
+  partner_payouts                   partner_payouts[]
   partner_business_profiles         partner_business_profiles?
   partner_callback_requests         partner_callback_requests[]
   partner_city_commissions          partner_city_commissions[]
@@ -361,6 +362,10 @@ model partner_bank_accounts {
   bank_name           String
   account_number      String
   ifsc_code           String
+  account_type        String?
+  branch_name         String?
+  cancelled_cheque_url String?
+  has_seen_verified_screen Boolean @default(false)
   upi_id              String?
   status              PartnerBankAccountStatus @default(UNDER_REVIEW)
   is_primary          Boolean                  @default(false)
@@ -370,8 +375,33 @@ model partner_bank_accounts {
   created_at          DateTime                 @default(now())
   updated_at          DateTime
   partners            partners                 @relation(fields: [partner_id], references: [id])
+  partner_payouts     partner_payouts[]
 
   @@index([partner_id, status])
+}
+
+model partner_payouts {
+  id              String @id @db.Uuid
+  partner_id      String @db.Uuid
+  bank_account_id String? @db.Uuid
+  reference       String @unique
+  amount_paise    BigInt
+  status          PartnerPayoutStatus @default(PENDING)
+  payout_date     DateTime
+  failure_reason  String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime
+  partners        partners @relation(fields: [partner_id], references: [id])
+  bank_account    partner_bank_accounts? @relation(fields: [bank_account_id], references: [id])
+
+  @@index([partner_id, payout_date])
+  @@index([partner_id, status, payout_date])
+}
+
+enum PartnerPayoutStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model partner_business_profiles {

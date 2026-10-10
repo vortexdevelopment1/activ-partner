@@ -35,6 +35,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'Authorization': 'Bearer $token',
       }).timeout(const Duration(seconds: 20));
 
+  List<Map<String, dynamic>> _venuesFromData(dynamic data) {
+    final dynamic source = data is List
+        ? data
+        : data is Map
+            ? data['items'] ?? data['venues'] ?? data['data']
+            : null;
+    if (source is! List) return [];
+    return source
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  String _idOf(Map venue) => (venue['id'] ?? venue['_id'] ?? '').toString();
+
   @override
   void initState() {
     super.initState();
@@ -94,10 +109,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (venuesResponse.statusCode != 200) {
             throw Exception('Venue unavailable');
           }
-          final venues = (jsonDecode(venuesResponse.body)['data'] as List)
-              .whereType<Map>()
-              .toList();
-          final matching = venues.where((venue) => venue['id'] == selectedId);
+          final venues =
+              _venuesFromData(jsonDecode(venuesResponse.body)['data']);
+          final matching =
+              venues.where((venue) => _idOf(venue) == selectedId?.toString());
           final venue = matching.isNotEmpty
               ? matching.first
               : (venues.isNotEmpty ? venues.first : null);

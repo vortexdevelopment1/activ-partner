@@ -30,17 +30,23 @@ void main() {
       }));
 
   MockClient client(
-          {bool verified = true, bool fail = false, bool venueFail = false}) =>
+          {bool verified = true,
+          bool fail = false,
+          bool venueFail = false,
+          bool paginatedVenues = false}) =>
       MockClient((request) async {
         expect(request.headers['Authorization'], 'Bearer token');
         if (fail) return http.Response('{}', 500);
         if (request.url.path.endsWith('/my-approved-venues')) {
+          final venues = [
+            {'id': 'other', 'venuePhone': '+91 9999999999'},
+            {'id': 'selected', 'venuePhone': '+91 9111467798'},
+          ];
           return http.Response(
               jsonEncode({
-                'data': [
-                  {'id': 'other', 'venuePhone': '+91 9999999999'},
-                  {'id': 'selected', 'venuePhone': '+91 9111467798'},
-                ]
+                'data': paginatedVenues
+                    ? {'total': venues.length, 'items': venues}
+                    : venues
               }),
               venueFail ? 500 : 200);
         }
@@ -140,6 +146,16 @@ void main() {
     await show(
         tester, client(verified: false), const Size(360, 800), GlobalKey());
     expect(find.text('Verified Partner'), findsNothing);
+  });
+
+  testWidgets('venue phone loads from paginated approved venue response',
+      (tester) async {
+    await show(tester, client(paginatedVenues: true), const Size(360, 800),
+        GlobalKey());
+    await tester.scrollUntilVisible(find.text('Venue Primary Number'), 180);
+    expect(find.text('+91 9111467798'), findsNWidgets(2));
+    expect(find.text('Unable to load venue number'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('profile failure shows retry instead of sample identity',

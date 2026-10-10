@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:activ_app/api_calling/api_constant.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +14,7 @@ void main() {
   });
 
   tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
     dotenv.clean();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', null);
@@ -55,5 +56,25 @@ void main() {
     dotenv.loadFromString(envString: 'API_URL=\nLOCAL_API_URL=');
 
     await expectLater(initializeApiBaseUrl(), throwsStateError);
+  });
+
+  test('debug startup uses the local API when both hosts are configured',
+      () async {
+    dotenv.loadFromString(
+        envString:
+            'LOCAL_API_URL=http://localhost:3000/api/v1\nAPI_URL=https://backend.example.test/api/v1');
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    await initializeApiBaseUrl();
+    expect(BASE_URL, 'http://localhost:3000/api/v1');
+  });
+
+  test('Android debug startup uses the emulator host for the local API',
+      () async {
+    dotenv.loadFromString(
+        envString:
+            'LOCAL_API_URL=http://localhost:3000/api/v1\nAPI_URL=https://backend.example.test/api/v1');
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await initializeApiBaseUrl();
+    expect(BASE_URL, 'http://10.0.2.2:3000/api/v1');
   });
 }

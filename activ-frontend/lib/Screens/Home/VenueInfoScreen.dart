@@ -78,6 +78,25 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     return Map<String, dynamic>.from(decoded);
   }
 
+  List<Map<String, dynamic>> _venuesFromData(dynamic data) {
+    final dynamic source = data is List
+        ? data
+        : data is Map
+            ? data['items'] ?? data['venues'] ?? data['data']
+            : null;
+    if (source is! List) {
+      throw const FormatException(
+          'Could not load venue details. Please try again.');
+    }
+    return source
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  String _idOf(Map<String, dynamic> item) =>
+      (item['id'] ?? item['_id'] ?? '').toString();
+
   Future<void> _loadVenue() async {
     setState(() {
       _loading = true;
@@ -105,16 +124,9 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         throw const FormatException(
             'Could not load venue details. Please try again.');
       }
-      final data = _body(response.body)['data'];
-      if (data is! List) {
-        throw const FormatException(
-            'Could not load venue details. Please try again.');
-      }
-      final venues = data
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-      final matching = venues.where((venue) => venue['id'] == selectedId);
+      final venues = _venuesFromData(_body(response.body)['data']);
+      final matching =
+          venues.where((venue) => _idOf(venue) == selectedId?.toString());
       _venue = venues.isEmpty
           ? {}
           : matching.isNotEmpty
@@ -139,7 +151,9 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         final requests = requestsData
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
-            .where((e) => (e['venueId'] ?? e['venue_id']) == _venue['id'])
+            .where((e) =>
+                (e['venueId'] ?? e['venue_id'] ?? '').toString() ==
+                _idOf(_venue))
             .toList();
         final pending = requests
             .where((e) => e['status']?.toString().toLowerCase() == 'pending');

@@ -47,6 +47,14 @@ Future<void> initializeApiBaseUrl() async {
       'Set API_URL or LOCAL_API_URL in .env.',
     );
   }
+  if (const bool.hasEnvironment('API_URL') && deployedUrl.isNotEmpty) {
+    BASE_URL = deployedUrl;
+    return;
+  }
+  if (kDebugMode && localUrl.isNotEmpty) {
+    BASE_URL = _localUrlForCurrentPlatform(localUrl);
+    return;
+  }
   if (localUrl.isEmpty) {
     BASE_URL = deployedUrl;
     return;
@@ -59,13 +67,6 @@ Future<void> initializeApiBaseUrl() async {
 
   if (ACTIVE_CODE_STATUS == LOCAL) {
     BASE_URL = _localUrlForCurrentPlatform(localUrl);
-    return;
-  }
-
-  if (kDebugMode) {
-    BASE_URL = deployedUrl.isNotEmpty
-        ? deployedUrl
-        : _localUrlForCurrentPlatform(localUrl);
     return;
   }
 
@@ -97,7 +98,8 @@ String get MY_APPROVED_VENUES_URL => "$BASE_URL/venues/my-approved-venues";
 String get PAUSE_BOOKINGS_URL => "$BASE_URL/venues";
 String get MANAGE_SLOTS_URL => "$BASE_URL/venues/slots";
 String get AUTH_PROFILE_URL => "$BASE_URL/auth/partner/auth-profile";
-String get CHANGE_PARTNER_PASSWORD_URL => "$BASE_URL/auth/partner/change-password";
+String get CHANGE_PARTNER_PASSWORD_URL =>
+    "$BASE_URL/auth/partner/change-password";
 String get NOTIFICATION_PREFERENCES_URL => "$BASE_URL/notification-preferences";
 String get DELETE_PARTNER_ACCOUNT_URL => "$BASE_URL/partners/account";
 String get SUPPORT_EMAIL_URL => "$BASE_URL/support/email";

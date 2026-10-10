@@ -674,13 +674,54 @@ export class AuthService {
       include: {
         partner_business_profiles: true,
         partner_users: { include: { users: true } },
+        venues: {
+          select: {
+            id: true,
+            status: true,
+            approved_at: true,
+            review_status: true,
+            partner_venue_legal_documents: true,
+          },
+          orderBy: { id: 'asc' },
+        },
       },
     });
     if (!fresh) throw new NotFoundException('Partner not found');
 
     const owner = fresh.partner_users[0];
     if (!owner) throw new NotFoundException('Partner user not found');
-    return this.buildPartnerAuthResponse(fresh, owner.users, owner.role);
+    const response = await this.buildPartnerAuthResponse(fresh, owner.users, owner.role);
+    const business = fresh.partner_business_profiles;
+    return {
+      ...response,
+      partner: {
+        ...response.partner,
+        isVerified: business?.kyc_status === 'APPROVED',
+        panCardUrl: business?.pan_document_url ?? null,
+        gstNumber: business?.gst_number ?? null,
+        gstinDocUrl: business?.gst_document_url ?? null,
+        gstIsVerified: business?.kyc_status === 'APPROVED' && Boolean(business?.gst_document_url),
+        legalDocuments: (fresh.venues ?? []).map((venue) => {
+          const legal = venue.partner_venue_legal_documents;
+          const verified = venue.review_status === VenueStatus.APPROVED ||
+            (!venue.review_status && venue.status === 'PUBLISHED');
+          return {
+            venueId: venue.id,
+            isVerified: verified,
+            aadhaarCardUrl: legal?.aadhaar_card_url ?? null,
+            panCardUrl: legal?.pan_card_url ?? null,
+            gstNumber: legal?.gst_number ?? null,
+            gstName: legal?.gst_name ?? null,
+            gstinDocUrl: legal?.gstin_doc_url ?? null,
+            gstIsVerified: verified && Boolean(legal?.gstin_doc_url),
+            documentsUpdatedAt: legal?.updated_at ?? null,
+            aadhaarVerifiedAt: verified && legal?.aadhaar_card_url ? venue.approved_at : null,
+            panVerifiedAt: verified && legal?.pan_card_url ? venue.approved_at : null,
+            gstVerifiedAt: verified && legal?.gstin_doc_url ? venue.approved_at : null,
+          };
+        }),
+      },
+    };
   }
 
   private normalizePhone(phone: string): string {
