@@ -78,22 +78,18 @@ class _State extends State<VenueScreen> {
     }
   }
 
-  _State()
-  {
-    getData();
-  }
-
   @override
   void initState() {
-    fetchStates();
     super.initState();
+    getData();
+    fetchStates();
   }
 
   getData() async
   {
     phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
     userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-    if (!mounted || !widget.reviewMode) return;
+    if (!mounted) return;
     final raw = await SharedPreference.readStr('venue_details');
     if (!mounted || raw == null || raw.isEmpty) return;
     final details = jsonDecode(raw) as Map<String, dynamic>;
@@ -104,7 +100,7 @@ class _State extends State<VenueScreen> {
     cityController.text = details['venue_city']?.toString() ?? '';
     stateController.text = details['venue_state']?.toString() ?? '';
     pinCodeController.text = details['venue_pin_code']?.toString() ?? '';
-    venueAddressSearchController.text = addressController.text;
+    venueAddressSearchController.text = details['venue_search_address']?.toString() ?? addressController.text;
     _selectedPlaceUrl = details['venue_location_url']?.toString() ?? '';
     _selectedLat = double.tryParse(details['venue_latitude']?.toString() ?? '');
     _selectedLon = double.tryParse(details['venue_longitude']?.toString() ?? '');
@@ -497,6 +493,7 @@ class _State extends State<VenueScreen> {
                                                   "venue_name": venueNameController.text.toString().trim(),
                                                   "venue_description": descriptionController.text.toString().trim(),
                                                   "venue_location_url": _selectedPlaceUrl,
+                                                  "venue_search_address": venueAddressSearchController.text.trim(),
                                                   "venue_address": addressController.text.toString().trim(),
                                                   "venue_area": areaController.text.toString().trim(),
                                                   "venue_city": cityController.text.toString().trim(),
@@ -508,13 +505,13 @@ class _State extends State<VenueScreen> {
                                                 // Convert to String
                                                 String jsonString = jsonEncode(venueDetails);
                                                 // Save in SharedPreferences
-                                                SharedPreference.addStringToSF("venue_details", checkString(jsonString));
-                                                SharedPreference.addStringToSF("venue_commission", _commissionPct.toString());
+                                                await SharedPreference.addStringToSF("venue_details", checkString(jsonString));
+                                                await SharedPreference.addStringToSF("venue_commission", _commissionPct.toString());
                                                 String venueDetailsSave = checkString(await SharedPreference.readStr("venue_details"));
                                                 CommonUtilities.showLog("Saved operate_value => $venueDetailsSave");
 
+                                                if (!mounted) return;
                                                 if (widget.reviewMode) {
-                                                  if (!mounted) return;
                                                   Navigator.pop(context, true);
                                                 } else {
                                                   CommonUtilities.NavigateWithPush(context, CustomerPlacesOffer());

@@ -10,6 +10,7 @@ import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../GetStartedScreen.dart';
+import '../VenuePhotoListViewScreen.dart';
 import '../StringExtensions.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -824,8 +825,15 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
         throw Exception(_messageFromResponse(response.body) ??
             'Unable to delete account. Please try again.');
       }
-      await FirebaseAuth.instance.signOut();
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {
+        CommonUtilities.showLog('Firebase sign-out unavailable after account deletion.');
+      }
       await SharedPreference.clearSF();
+      VenuePhotoListViewScreen.cachedImageBytes.clear();
+      VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+      VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
       if (mounted) {
         CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
           context,

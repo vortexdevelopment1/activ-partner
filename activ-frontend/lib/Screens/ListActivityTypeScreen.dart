@@ -104,6 +104,14 @@ class _State extends State<ListActivityTypeScreen> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
         final List<dynamic> list = body['data'] ?? [];
+        final raw = await SharedPreference.readStr('operate_value');
+        final saved = raw == null || raw.isEmpty ? <dynamic>[] : jsonDecode(raw);
+        final selections = saved is List ? saved : [saved];
+        final selectedIds = selections
+            .whereType<Map>()
+            .map((entry) => entry['id']?.toString())
+            .toSet();
+        if (!mounted) return;
 
         setState(() {
           resultList = list.map((e) => VenueTypeModel(
@@ -114,6 +122,10 @@ class _State extends State<ListActivityTypeScreen> {
             image: e['imageUrl'] ?? "",
             active: e['isActive'] ?? true,
           )).toList();
+          for (final model in resultList) {
+            model.isSelected = selectedIds.contains(model.id.toString());
+          }
+          isActivitySelected = resultList.any((model) => model.isSelected);
           isShimmerLoading = false;
         });
       } else {

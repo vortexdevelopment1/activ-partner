@@ -14,6 +14,7 @@ import 'package:activ_app/Screens/GetStartedScreen.dart';
 import 'package:activ_app/Screens/LoginScreen.dart';
 import 'package:activ_app/Screens/MobileNumberScreen.dart';
 import 'package:activ_app/Screens/Menu/MenuScreen.dart';
+import 'package:activ_app/Screens/Menu/SettingsScreen.dart';
 import 'package:activ_app/Screens/Home/VenueInfoScreen.dart';
 import 'package:activ_app/Screens/Home/HomeScreen.dart';
 import 'package:activ_app/Screens/Home/dashboard_setup_cards.dart';
@@ -26,6 +27,8 @@ import 'package:activ_app/Screens/OTPVerificationScreen.dart';
 import 'package:activ_app/Screens/ReviewVenueDetailsScreen.dart';
 import 'package:activ_app/Screens/ReviewSignAgreement.dart';
 import 'package:activ_app/Screens/TellUsAboutScreen.dart';
+import 'package:activ_app/Screens/CustomerPlacesOffer.dart';
+import 'package:activ_app/Screens/VenueTimingScreen.dart';
 import 'package:activ_app/Screens/ListActivityTypeScreen.dart';
 import 'package:activ_app/Screens/VenuePhotoUploadScreen.dart';
 import 'package:flutter/material.dart';
@@ -971,6 +974,116 @@ void main() {
     });
   }
 
+  testWidgets('successful account deletion clears onboarding data and returns to registration', (tester) async {
+    VenuePhotoListViewScreen.cachedImagesByCategory['old-category'] = [Uint8List(1)];
+    SharedPreferences.setMockInitialValues({'jwt_token': 'token', 'owner_full_name': 'Old owner', 'venue_details': '{"venue_name":"Old venue"}'});
+    final client = MockClient((request) async {
+      expect(request.method, 'DELETE');
+      expect(request.url.path, endsWith('/partners/account'));
+      return http.Response('{"message":"Account deleted successfully"}', 200);
+    });
+    addTearDown(client.close);
+    await showScreen(tester, SettingsScreen(client: client));
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getKeys(), isEmpty);
+    expect(VenuePhotoListViewScreen.cachedImagesByCategory, isEmpty);
+    expect(find.byType(GetStartedScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('onboarding timing keeps step eight, saves slot size and rejects repeated ranges', (tester) async {
+    String? toast;
+    const channel = MethodChannel('PonnamKarthik/fluttertoast');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      toast = call.arguments['msg'] as String?;
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    await showScreen(tester, const VenueTimingScreen(activityId: 'venue', categoryId: 'basketball', categoryTitle: 'Basketball'));
+    expect(find.text('8/10'), findsOneWidget);
+    expect(find.textContaining('Configuring Activity'), findsNothing);
+    expect(find.text('Slot size'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30 minutes').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Mon'));
+    await tester.tap(find.text('Mon'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add time slot'));
+    await tester.tap(find.text('Add time slot'));
+    await tester.pumpAndSettle();
+    final dynamic state = tester.state(find.byType(VenueTimingScreen));
+    expect(state.buildVenueTiming()['Monday'][0]['slotDurationMinutes'], '30');
+    await tester.ensureVisible(find.text('Add time slot'));
+    await tester.tap(find.text('Add time slot'));
+    await tester.pumpAndSettle();
+    expect(state.timings['Mon'].timeSlots[1], {'open': '', 'close': ''});
+    state.timings['Mon'].timeSlots[1] = {'open': '09:00 AM', 'close': '07:00 PM'};
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(toast, 'Time ranges for Mon must not overlap or repeat.');
+    expect(find.byType(VenueTimingScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('24 amenities load and new selections persist when reopened', (tester) async {
+    final titles = ['Free Parking', 'First Aid Kit', 'WiFi', 'Air Conditioned',
+      'Locker Room', 'Lounge Room', 'Personal Training', 'Fencing',
+      'Proper Lighting', 'Shower Room', 'Sound System', 'Childcare',
+      'Surveillance cameras', 'Rental Equipments', 'Monitored Parking',
+      'Drinking Water', 'Changing Rooms', 'Restrooms', 'Seating Area',
+      'Charging Stations', 'Caf\u00e9', 'Wheelchair Support', 'Fire Safety', 'Waiting Area'];
+    SharedPreferences.setMockInitialValues({
+      'place_offer': jsonEncode({'place_offer': [{'id': '22', 'title': 'Wheelchair Support'}]}),
+    });
+    final client = MockClient((request) async {
+      expect(request.url.path, endsWith('/amenities/active'));
+      return http.Response(jsonEncode({'data': [
+        for (var i = 0; i < titles.length; i++)
+          {'id': '${i + 1}', 'title': titles[i], 'type': 'parking', 'active': true},
+      ]}), 200);
+    });
+    addTearDown(client.close);
+    await showScreen(tester, CustomerPlacesOffer(client: client));
+    expect(tester.widget<GridView>(find.byType(GridView)).childrenDelegate.estimatedChildCount, 24);
+    await tester.scrollUntilVisible(find.text('Fire Safety'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Fire Safety'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    final selected = jsonDecode(prefs.getString('place_offer')!)['place_offer'] as List;
+    expect(selected.map((item) => item['title']), containsAll(['Wheelchair Support', 'Fire Safety']));
+    await showScreen(tester, CustomerPlacesOffer(client: client));
+    await tester.scrollUntilVisible(find.text('Fire Safety'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Fire Safety'));
+    await tester.pumpAndSettle();
+    final restored = jsonDecode(prefs.getString('place_offer')!)['place_offer'] as List;
+    expect(restored.map((item) => item['title']), ['Wheelchair Support']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('onboarding profile preserves saved fields when reopened', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'phoneCode': '+91',
+      'userMobileNumber': '98-0123-4567',
+      'owner_full_name': 'Virat Kohli',
+      'owner_email': 'virat.kohli@gmail.com',
+      'same_as_owner_number_checked': 'true',
+    });
+    for (var visit = 0; visit < 2; visit++) {
+      await showScreen(tester, const TellUsAboutScreen());
+      expect(find.text('Virat'), findsOneWidget);
+      expect(find.text('Kohli'), findsOneWidget);
+      expect(find.text('virat.kohli@gmail.com'), findsOneWidget);
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   for (final size in [
     const Size(430, 1056),
     const Size(360, 740),
@@ -1578,12 +1691,14 @@ void main() {
     expect(find.text('+91 98-7654-3210'), findsOneWidget);
     expect(find.text('Sports Arena Complex'), findsOneWidget);
     expect(find.text('12%'), findsOneWidget);
-    expect(find.text('88'), findsOneWidget);
+    expect(find.text('Your earnings'), findsNothing);
+    expect(find.text('Net amount'), findsNothing);
+    expect(find.text('88'), findsNothing);
     expect(find.text('Free Parking'), findsOneWidget);
     expect(find.text('Badminton'), findsOneWidget);
     expect(find.text('Tennis'), findsOneWidget);
     expect(find.text('Box Cricket'), findsOneWidget);
-    expect(find.text('7/7'), findsOneWidget);
+    expect(find.text('10/10'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await capture(tester, 'venue-review-430x2342');
     await tester.tap(find.text('Learn more about how commissions work'));
@@ -1835,9 +1950,11 @@ void main() {
           tester.element(find.byType(ActivityReviewScreen)));
     });
     await tester.pumpAndSettle();
-    expect(find.text('5/7'), findsOneWidget);
+    expect(find.text('9/10'), findsOneWidget);
+    expect(find.text('Configuring Activity'), findsOneWidget);
+    expect(find.text('Cover Photo'), findsOneWidget);
     expect(find.text('Configuring Activity 1 of 2 \u2014 Step 4/4'),
-        findsOneWidget);
+        findsNothing);
     expect(find.text('Badminton'), findsOneWidget);
     expect(find.text('Photos'), findsOneWidget);
     expect(find.text('Number of Courts'), findsOneWidget);
@@ -2279,7 +2396,7 @@ void main() {
     expect(answers['environment'], ['Indoor', 'Floodlights']);
   });
 
-  testWidgets('activity questions hide Court Surface and show third sub-step',
+  testWidgets('activity questions match step eight and hide equipment and sub-step',
       (tester) async {
     Map<String, dynamic>? submitted;
     final routes = _Routes();
@@ -2308,6 +2425,13 @@ void main() {
                   'isRequired': false,
                   'options': ['Standard', 'Premium']
                 },
+                {
+                  'id': 'equipment',
+                  'questionText': 'Equipment Available',
+                  'questionType': 'multiselect',
+                  'isRequired': false,
+                  'options': ['Balls', 'Rackets']
+                },
               ]
             }),
             200);
@@ -2327,9 +2451,10 @@ void main() {
         routes: routes);
     expect(find.text('Court Surface'), findsNothing);
     expect(find.byType(DropdownButton<String>), findsOneWidget);
-    expect(find.text('4/7'), findsOneWidget);
+    expect(find.text('8/10'), findsOneWidget);
+    expect(find.text('Equipment Available'), findsNothing);
     expect(find.text('Configuring Activity 2 of 3 \u2014 Step 3/4'),
-        findsOneWidget);
+        findsNothing);
     await capture(tester, 'activity-questions-step3-430x932');
     await tester.enterText(
         find.byType(TextFormField), 'A spacious squash court.');
@@ -2338,6 +2463,7 @@ void main() {
     expect(submitted, isNotNull);
     final answers = submitted!['answers'] as List<dynamic>;
     expect(answers.any((item) => item['questionId'] == 'surface'), isFalse);
+    expect(answers.any((item) => item['questionId'] == 'equipment'), isFalse);
     expect(answers.any((item) => item['questionId'] == 'description'), isTrue);
   });
 

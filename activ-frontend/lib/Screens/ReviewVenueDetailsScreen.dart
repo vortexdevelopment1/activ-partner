@@ -295,6 +295,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                         fontSize: 16,
                         height: 1.4))),
             if (onEdit != null) _editButton(onEdit),
+            if (trailing != null) const SizedBox(width: 12),
             if (trailing != null) trailing,
           ]),
           const SizedBox(height: 16),
@@ -403,7 +404,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                   fontSize: 12, color: AppColors.hintColor, height: 1.4)),
         ])),
         const SizedBox(width: 12),
-        Flexible(
+        Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           commissionLoading
@@ -411,18 +412,13 @@ class _State extends State<ReviewVenueDetailsScreen> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (value.startsWith('\u20b9'))
-                    const Icon(Icons.currency_rupee,
-                        size: 16, color: _editColor),
-                  Flexible(
-                      child: Text(value.replaceAll('\u20b9', ''),
-                          style: const TextStyle(
-                              fontFamily: 'OnboardingSemibold',
-                              fontSize: 14,
-                              color: _editColor,
-                              height: 1.4))),
-                ]),
+              : Text(value,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontFamily: 'OnboardingSemibold',
+                      fontSize: 14,
+                      color: _editColor,
+                      height: 1.4)),
           const SizedBox(height: 4),
           Text(valueLabel,
               textAlign: TextAlign.right,
@@ -437,7 +433,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
               title: const Text('Commission Structure'),
               content: Text(commissionPct == null
                   ? 'The commission rate for your venue is currently unavailable. Please try refreshing the rate.'
-                  : 'The commission for your venue in $city is ${commissionPct!.toStringAsFixed(0)}% per booking. For a \u20b9100 booking, the net amount after this commission is \u20b9${(100 - commissionPct!).toStringAsFixed(0)}. Rates vary by city.'),
+                  : 'The commission for your venue in $city is ${commissionPct!.toStringAsFixed(0)}% per booking. Rates vary by city.'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -454,14 +450,6 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 ? '-'
                 : '${commissionPct!.toStringAsFixed(0)}%',
             'Per booking'),
-        const Divider(height: 24, color: AppColors.gray),
-        _commissionRow(
-            'Your earnings',
-            'For every \u20b9100 booking',
-            commissionPct == null
-                ? '-'
-                : '\u20b9${(100 - commissionPct!).toStringAsFixed(0)}',
-            'Net amount'),
         const Divider(height: 24, color: AppColors.gray),
         if (commissionError != null)
           TextButton.icon(

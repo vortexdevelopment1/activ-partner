@@ -18,6 +18,7 @@ import '../api_calling/progress_bar/progress_bar.dart';
 class VenuePhotoListViewScreen extends StatefulWidget {
   static List<Uint8List> cachedImageBytes = [];
   static final Map<String, List<Uint8List>> cachedImagesByCategory = {};
+  static final Map<String, int> cachedCoverIndexByCategory = {};
 
   final List<XFile> images;
   final List<Uint8List> imageBytes;
@@ -236,8 +237,6 @@ class _State extends State<VenuePhotoListViewScreen> {
                                   getActivIcon(),
 
                                   getStepBar(progress),
-                                  getActivityStepLabel(widget.categoryIndex,
-                                      widget.totalCategories, 2),
 
                                   getText(),
 
@@ -444,8 +443,10 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               if (response.statusCode == 201) {
                                                 if (widget.categoryIndex == 1) {
                                                   VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+                                                  VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
                                                 }
                                                 VenuePhotoListViewScreen.cachedImagesByCategory[widget.currentCategory['id'].toString()] = List.from(_imageBytes);
+                                                VenuePhotoListViewScreen.cachedCoverIndexByCategory[widget.currentCategory['id'].toString()] = _coverIndex ?? 0;
                                                 if (widget.categoryIndex == 1) {
                                                   VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
                                                 } else {
@@ -557,7 +558,7 @@ class _State extends State<VenuePhotoListViewScreen> {
       margin: EdgeInsets.only(top: 25),
       alignment: Alignment.centerLeft,
       child: const Text(
-        "Add some photos of your venue",
+        "Review Your Venue Photos",
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'FontSemiBold',
@@ -574,7 +575,7 @@ class _State extends State<VenuePhotoListViewScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
-        "These images will be shown on the Activ venue listing page",
+        "Review the photos that will appear on your venue listing. You can go back to add or remove photos before submitting your venue for review.",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'FontRegular',

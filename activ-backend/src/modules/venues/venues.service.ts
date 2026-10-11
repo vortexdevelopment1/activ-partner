@@ -816,11 +816,24 @@ data: { terms_accepted_at: acceptedAt, electronic_signature: electronicSignature
       throw new BadRequestException('Schedule category does not belong to this venue');
     }
     const rows = categories.flatMap((id) => availabilityRows(venueId, id, venueTiming[id]));
+    const durations = categories.map((id) => {
+      const values = [...new Set(Object.values(venueTiming[id]).flat()
+        .filter((slot: any) => slot.open !== '-' && slot.close !== '-' && slot.slotDurationMinutes !== undefined)
+        .map((slot: any) => Number(slot.slotDurationMinutes)))];
+      if (values.length > 1) throw new BadRequestException('Use the same slot size for all time ranges of an activity');
+      return { id, minutes: values[0] };
+    });
     await this.prisma.$transaction(async (tx) => {
       await tx.partner_venue_availability.deleteMany({ where: {
         venue_id: venueId, service_category_id: { in: categories },
       } });
       if (rows.length) await tx.partner_venue_availability.createMany({ data: rows });
+      for (const duration of durations) {
+        if (duration.minutes !== undefined) await tx.partner_venue_services.updateMany({
+          where: { venue_id: venueId, service_category_id: duration.id, status: { not: 'ARCHIVED' } },
+          data: { min_duration_minutes: duration.minutes },
+        });
+      }
     });
     const availability = mapVenueAvailability(await this.prisma.partner_venue_availability.findMany({
       where: { venue_id: venueId }, orderBy: [{ day: 'asc' }, { sort_order: 'asc' }],

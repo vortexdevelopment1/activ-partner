@@ -159,12 +159,15 @@ class _State extends State<ActivityReviewScreen> {
               label: const Text('Edit'),
             ),
           ]),
+          if (title == 'Photos') const Divider(height: 1, color: AppColors.gray),
           const SizedBox(height: 12),
           child,
         ]),
       );
 
   Widget _photos() {
+    final coverIndex = VenuePhotoListViewScreen.cachedCoverIndexByCategory[
+        _activity['id']?.toString()] ?? 0;
     final List<Uint8List> photos = VenuePhotoListViewScreen
             .cachedImagesByCategory[_activity['id']?.toString()] ??
         (_activities.length == 1
@@ -182,13 +185,23 @@ class _State extends State<ActivityReviewScreen> {
                         bottom: i == photos.length - 1 ? 0 : 16),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: AspectRatio(
+                      child: Stack(children: [AspectRatio(
                         aspectRatio: 1.95,
                         child: Image.memory(photos[i],
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const Center(
                                 child: Icon(Icons.broken_image_outlined))),
                       ),
+                        if (i == coverIndex) Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
+                            child: const Text('Cover Photo', style: TextStyle(color: Colors.white, fontFamily: 'OnboardingSemibold', fontSize: 14)),
+                          ),
+                        ),
+                      ]),
                     ),
                   ),
               ]));
@@ -200,6 +213,8 @@ class _State extends State<ActivityReviewScreen> {
       _activityQuestions.isEmpty
           ? const Text('No details available.')
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_title, style: const TextStyle(fontFamily: 'OnboardingSemibold', fontSize: 16)),
+              const SizedBox(height: 14),
               for (var i = 0; i < _activityQuestions.length; i++)
                 Padding(
                   padding: EdgeInsets.only(
@@ -325,21 +340,13 @@ class _State extends State<ActivityReviewScreen> {
           Expanded(
               child: ListView(
             controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 40, 20, 32),
+            padding: const EdgeInsets.fromLTRB(15, 10, 15, 32),
             children: [
               const OnboardingLogo(),
               getStepBarCount(onboardingActivityReviewStep / totalSetup,
                   onboardingActivityReviewStep, totalSetup),
-              const SizedBox(height: 20),
-              Text(
-                  'Configuring Activity ${_activityIndex + 1} of ${_activities.length} \u2014 Step 4/4',
-                  style: const TextStyle(
-                      fontFamily: 'OnboardingMedium',
-                      fontSize: 14,
-                      color: AppColors.hintColor,
-                      height: 1.4)),
-              const SizedBox(height: 12),
-              Text(_title, style: OnboardingStyles.heading),
+              const SizedBox(height: 25),
+              const Text('Configuring Activity', style: OnboardingStyles.heading),
               const SizedBox(height: 8),
               const Text(
                   "Review this activity's details for changes or proceed",

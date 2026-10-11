@@ -17,9 +17,10 @@ const onboardingVenueStep = 4;
 const onboardingAmenitiesStep = 5;
 const onboardingActivitiesStep = 6;
 const onboardingPhotosStep = 7;
-const onboardingActivityReviewStep = 7;
-const onboardingLegalStep = 8;
-const onboardingReviewStep = 9;
+const onboardingQuestionsStep = 8;
+const onboardingActivityReviewStep = 9;
+const onboardingLegalStep = 9;
+const onboardingReviewStep = 10;
 
 String get LOCAL_API_URL => const bool.hasEnvironment('LOCAL_API_URL')
     ? const String.fromEnvironment('LOCAL_API_URL')
@@ -106,6 +107,7 @@ String get DELETE_PARTNER_ACCOUNT_URL => "$BASE_URL/partners/account";
 String get SUPPORT_EMAIL_URL => "$BASE_URL/support/email";
 String get SUPPORT_CALLBACK_URL => "$BASE_URL/support/callback";
 String get FAQ_PUBLIC_URL => "$BASE_URL/faqs/public";
+String get AMENITIES_URL => "$BASE_URL/amenities/active";
 String get PINCODE_LOOKUP_URL => "$BASE_URL/location/pincode";
 String get LEGAL_URL => "$BASE_URL/legal";
 String get TEAM_URL => "$BASE_URL/team";

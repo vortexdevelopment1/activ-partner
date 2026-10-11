@@ -30,6 +30,7 @@ import { NotificationPreferencesModule } from './modules/notification-preference
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AdminNotificationsModule } from './modules/admin-notifications/admin-notifications.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { AmenitiesModule } from './modules/amenities/amenities.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -78,6 +79,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     NotificationsModule,
     AdminNotificationsModule,
     ReviewsModule,
+    AmenitiesModule,
   ],
   providers: [
     {

@@ -66,21 +66,21 @@ class _State extends State<TellUsAboutScreen> {
     userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
     jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
 
+    final fullName = checkString(await SharedPreference.readStr('owner_full_name'));
+    final email = checkString(await SharedPreference.readStr('owner_email'));
+    final sameNumber = await SharedPreference.readStr('same_as_owner_number_checked');
+    final contactNumber = checkString(await SharedPreference.readStr('same_as_owner_number'));
+    if (!mounted) return;
     mobileNumberController.text = userMobileNumber;
-
-    if (!mounted) return;
-    if (widget.reviewMode) {
-      final nameParts = checkString(await SharedPreference.readStr('owner_full_name')).trim().split(RegExp(r'\s+'));
-      firstNameController.text = nameParts.first;
-      lastNameController.text = nameParts.skip(1).join(' ');
-      emailController.text = checkString(await SharedPreference.readStr('owner_email'));
-      isChecked = await SharedPreference.readStr('same_as_owner_number_checked') == 'true';
-      if (!isChecked) {
-        venueOwnerMobileNumberController.text = checkString(await SharedPreference.readStr('same_as_owner_number'));
-      }
-      isButtonEnabled = firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty && emailController.text.isNotEmpty;
+    final nameParts = fullName.trim().split(RegExp(r'\s+'));
+    firstNameController.text = nameParts.first;
+    lastNameController.text = nameParts.skip(1).join(' ');
+    emailController.text = email;
+    isChecked = sameNumber == 'true';
+    if (!isChecked) {
+      venueOwnerMobileNumberController.text = contactNumber;
     }
-    if (!mounted) return;
+    isButtonEnabled = firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty && emailController.text.isNotEmpty;
 
     setState(() {});
   }
