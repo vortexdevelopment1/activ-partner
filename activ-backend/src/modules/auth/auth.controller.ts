@@ -199,6 +199,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Roles(UserRole.PARTNER)
   @Patch('partner/change-password')
   @HttpCode(HttpStatus.OK)
@@ -209,10 +210,14 @@ export class AuthController {
       'Validates the current password before applying the new one.',
   })
   async changePartnerPassword(
-    @CurrentUser() partner: Partner,
+    @CurrentUser() partner: Partner & { userId?: string },
     @Body() dto: ChangePasswordDto,
   ) {
-    const data = await this.authService.changePartnerPassword(partner.id, dto);
+    const data = await this.authService.changePartnerPassword(
+      partner.id,
+      dto,
+      partner.userId,
+    );
     return { message: 'Password changed successfully', data };
   }
 }

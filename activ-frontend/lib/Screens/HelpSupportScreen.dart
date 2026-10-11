@@ -465,6 +465,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
             'Unable to request callback. Please try again.');
       }
       await _showCallbackDialog(context);
+      if (!mounted) return;
+      Navigator.pop(context);
     } catch (error) {
       if (mounted) CommonUtilities.createSnackBar(context, _cleanError(error));
     } finally {

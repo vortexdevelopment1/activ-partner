@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +12,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { MailService } from '../mail/mail.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class SupportService {
@@ -21,11 +23,33 @@ export class SupportService {
     private readonly emailRepo: Repository<SupportEmail>,
     private readonly mailService: MailService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  async createCallback(dto: CreateCallbackRequestDto, partnerId?: string): Promise<CallbackRequest> {
-    const request = this.callbackRepo.create({ ...dto, partnerId });
-    const saved = await this.callbackRepo.save(request);
+  async createCallback(dto: CreateCallbackRequestDto, partnerId?: string) {
+    const preferredAt = this.callbackPreferredAt(
+      dto.callbackDate,
+      dto.callbackTime,
+    );
+    const saved = await this.prisma.partner_callback_requests.create({
+      data: {
+        id: randomUUID(),
+        partner_id: partnerId ?? null,
+        subject: `Callback request from ${dto.partnerName}`,
+        notes: [
+          `Partner: ${dto.partnerName}`,
+          `Venue: ${dto.venueName}`,
+          `City: ${dto.city}`,
+          `Phone: ${dto.phone}`,
+          `Email: ${dto.email}`,
+          `Preferred date: ${dto.callbackDate}`,
+          `Preferred time: ${dto.callbackTime}`,
+          `Query: ${dto.query}`,
+        ].join('\n'),
+        preferred_at: preferredAt,
+        updated_at: new Date(),
+      },
+    });
 
     await this.mailService.sendCallbackRequestEmail({
       partnerName: dto.partnerName,
@@ -39,6 +63,11 @@ export class SupportService {
     });
 
     return saved;
+  }
+
+  private callbackPreferredAt(date: string, time: string): Date | null {
+    const value = new Date(`${date} ${time}`);
+    return Number.isNaN(value.getTime()) ? null : value;
   }
 
   async findAll(
@@ -85,20 +114,45 @@ export class SupportService {
   async createEmail(
     dto: CreateSupportEmailDto,
     partnerId: string,
+    userId?: string,
     file?: Express.Multer.File,
-  ): Promise<SupportEmail> {
-    const attachmentUrl = file
-      ? await this.cloudinaryService.uploadFile(file, 'activ/support-attachments', 'auto')
-      : null;
-    const attachmentOriginalName = file ? file.originalname : null;
+  ) {
+    const partnerUser = userId
+      ? await this.prisma.partner_users.findFirst({
+          where: { partner_id: partnerId, user_id: userId },
+        })
+      : await this.prisma.partner_users.findFirst({
+          where: { partner_id: partnerId },
+          orderBy: { id: 'asc' },
+        });
 
-    const email = this.emailRepo.create({
-      ...dto,
-      partnerId,
-      attachmentUrl,
-      attachmentOriginalName,
+    const uploaded = file
+      ? await this.cloudinaryService.uploadFile(
+          file,
+          'activ/support-attachments',
+          'auto',
+        )
+      : null;
+    const attachments = uploaded
+      ? [
+          {
+            url: uploaded,
+            originalName: file?.originalname ?? null,
+          },
+        ]
+      : [];
+
+    return this.prisma.partner_support_requests.create({
+      data: {
+        id: randomUUID(),
+        partner_id: partnerId,
+        partner_user_id: partnerUser?.id ?? null,
+        subject: dto.subject,
+        message: dto.message,
+        attachments,
+        updated_at: new Date(),
+      },
     });
-    return this.emailRepo.save(email);
   }
 
   async findAllEmails(

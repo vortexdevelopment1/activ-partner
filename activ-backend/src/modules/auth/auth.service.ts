@@ -555,25 +555,46 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
-  async changePartnerPassword(partnerId: string, dto: ChangePasswordDto) {
-    const partner = await this.partnerRepository.findOne({ where: { id: partnerId } });
+  async changePartnerPassword(
+    partnerId: string,
+    dto: ChangePasswordDto,
+    userId?: string,
+  ) {
+    const partnerUser = userId
+      ? await this.prisma.partner_users.findFirst({
+          where: { partner_id: partnerId, user_id: userId },
+          include: { users: true },
+        })
+      : await this.prisma.partner_users.findFirst({
+          where: { partner_id: partnerId, users: { status: 'ACTIVE' } },
+          include: { users: true },
+        });
 
-    if (!partner) {
-      throw new NotFoundException('Partner not found');
+    if (!partnerUser) {
+      throw new NotFoundException('Partner user not found');
     }
 
-    if (!partner.password) {
-      throw new BadRequestException('No password set on this account. Please use OTP login.');
+    if (!partnerUser.users.password_hash) {
+      throw new BadRequestException(
+        'No password is set for this account. Please use OTP login.',
+      );
     }
 
-    const isCurrentValid = await partner.validatePassword(dto.currentPassword);
+    const isCurrentValid = await bcrypt.compare(
+      dto.currentPassword,
+      partnerUser.users.password_hash,
+    );
     if (!isCurrentValid) {
       throw new BadRequestException('Current password is incorrect');
     }
 
-    // Assigning triggers the @BeforeUpdate hook which hashes the new value
-    partner.password = dto.newPassword;
-    await this.partnerRepository.save(partner);
+    await this.prisma.users.update({
+      where: { id: partnerUser.user_id },
+      data: {
+        password_hash: await bcrypt.hash(dto.newPassword, 10),
+        updated_at: new Date(),
+      },
+    });
 
     return { message: 'Password changed successfully' };
   }

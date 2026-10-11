@@ -132,10 +132,15 @@ export class SupportController {
   )
   async createEmail(
     @Body() dto: CreateSupportEmailDto,
-    @CurrentUser() partner: Partner,
+    @CurrentUser() partner: Partner & { userId?: string },
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const data = await this.supportService.createEmail(dto, partner.id, file);
+    const data = await this.supportService.createEmail(
+      dto,
+      partner.id,
+      partner.userId,
+      file,
+    );
     return { message: 'Support email submitted successfully', data };
   }
 
