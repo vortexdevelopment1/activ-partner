@@ -79,7 +79,8 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   List<String> selectedDays = [];
   Map<String, DayTiming> timings = {};
 
-  int currentStep = onboardingActivitiesStep;
+  int currentStep = onboardingQuestionsStep;
+  int _slotDurationMinutes = 60;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -165,9 +166,34 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   }
 
   /// Validation Function
+  void _updateSlotTime(String day, int index, String field, String picked) {
+    if (!mounted) return;
+    final candidate = {...timings[day]!.timeSlots[index], field: picked};
+    if (candidate['open']!.isNotEmpty && candidate['close']!.isNotEmpty) {
+      final open = DateFormat('hh:mm a').parse(candidate['open']!);
+      final close = DateFormat('hh:mm a').parse(candidate['close']!);
+      for (var i = 0; i < timings[day]!.timeSlots.length; i++) {
+        if (i == index) continue;
+        final other = timings[day]!.timeSlots[i];
+        if (other['open']!.isEmpty || other['close']!.isEmpty) continue;
+        if (open.isBefore(DateFormat('hh:mm a').parse(other['close']!)) &&
+            close.isAfter(DateFormat('hh:mm a').parse(other['open']!))) {
+          _showError('Time ranges for $day must not overlap or repeat.');
+          return;
+        }
+      }
+    }
+    setState(() => timings[day]!.timeSlots[index][field] = picked);
+  }
+
   bool _validateTimings() {
     for (var day in selectedDays) {
       var slots = timings[day]!.timeSlots;
+      final ranges = <List<DateTime>>[];
+      if (slots.isEmpty) {
+        _showError("Please add a time range for $day");
+        return false;
+      }
       for (var slot in slots) {
         String? open = slot["open"];
         String? close = slot["close"];
@@ -184,6 +210,15 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
           _showError("In $day, Opening time must be earlier than closing time.");
           return false;
         }
+        if (ranges.any((range) => openTime.isBefore(range[1]) && closeTime.isAfter(range[0]))) {
+          _showError("Time ranges for $day must not overlap or repeat.");
+          return false;
+        }
+        if (closeTime.difference(openTime).inMinutes < _slotDurationMinutes) {
+          _showError("The time range for $day must fit at least one $_slotDurationMinutes-minute slot.");
+          return false;
+        }
+        ranges.add([openTime, closeTime]);
       }
     }
     return true;
@@ -242,14 +277,29 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                           getActivIcon(),
 
                           getStepBar(progress),
-                          if (widget.categoryTitle.isNotEmpty)
-                            getActivityStepLabel(widget.categoryIndex,
-                                widget.totalCategories, 4),
 
                           getText(),
                           getSubText(),
 
                           getSkipNote(),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(15, 12, 15, 10),
+                            child: DropdownButtonFormField<int>(
+                              value: _slotDurationMinutes,
+                              decoration: const InputDecoration(
+                                labelText: 'Slot size',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              items: [30, 60, 90, 120].map((minutes) => DropdownMenuItem(
+                                value: minutes, child: Text('$minutes minutes'),
+                              )).toList(),
+                              onChanged: (value) {
+                                if (value != null) setState(() => _slotDurationMinutes = value);
+                              },
+                            ),
+                          ),
 
                           Container(
                             margin: const EdgeInsets.only(top: 10, left: 15, right: 15, bottom: 10),
@@ -523,10 +573,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                                               String? picked =
                                                               await _pickTime(context, slot["open"]);
                                                               if (picked != null) {
-                                                                setState(() {
-                                                                  timings[day]!.timeSlots[index]["open"] =
-                                                                      picked;
-                                                                });
+                                                                _updateSlotTime(day, index, 'open', picked);
                                                               }
                                                             },
                                                             child: Container(
@@ -545,7 +592,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                                                 MainAxisAlignment.spaceBetween,
                                                                 children: [
                                                                   Text(
-                                                                    slot["open"]!,
+                                                                    slot["open"]!.isEmpty ? 'Select time' : slot["open"]!,
                                                                     style: const TextStyle(
                                                                       fontSize: AppSize.size_14,
                                                                       fontFamily: 'FontRegular',
@@ -603,10 +650,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                                               String? picked =
                                                               await _pickTime(context, slot["close"]);
                                                               if (picked != null) {
-                                                                setState(() {
-                                                                  timings[day]!.timeSlots[index]["close"] =
-                                                                      picked;
-                                                                });
+                                                                _updateSlotTime(day, index, 'close', picked);
                                                               }
                                                             },
                                                             child: Container(
@@ -625,7 +669,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                                                 MainAxisAlignment.spaceBetween,
                                                                 children: [
                                                                   Text(
-                                                                    slot["close"]!,
+                                                                    slot["close"]!.isEmpty ? 'Select time' : slot["close"]!,
                                                                     style: const TextStyle(
                                                                       fontSize: AppSize.size_14,
                                                                       fontFamily: 'FontRegular',
@@ -679,8 +723,8 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                             {
                                               setState(() {
                                                 timings[day]!.timeSlots.add({
-                                                  "open": "09:00 AM",
-                                                  "close": "07:00 PM"
+                                                  "open": timings[day]!.timeSlots.isEmpty ? "09:00 AM" : "",
+                                                  "close": timings[day]!.timeSlots.isEmpty ? "07:00 PM" : ""
                                                 });
                                               });
                                             },
@@ -865,7 +909,8 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
         venueTiming[apiKey] = timings[day]!.timeSlots.map((slot) {
           return {
             "open": slot["open"] ?? "-",
-            "close": slot["close"] ?? "-"
+            "close": slot["close"] ?? "-",
+            "slotDurationMinutes": _slotDurationMinutes.toString(),
           };
         }).toList();
 

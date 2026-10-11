@@ -5,7 +5,7 @@ import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
-import 'ContactSupportFormScreen.dart';
+import 'LoginScreen.dart';
 
 class ContactSupportScreen extends StatefulWidget {
   const ContactSupportScreen({super.key});
@@ -112,41 +112,15 @@ class _State extends State<ContactSupportScreen> {
                                 children: [
                                   bottomBarShadow(),
 
-                                  Row(
-                                    children: [
-
-                                      Expanded(
-                                          flex: 3,
-                                          child: Container(
-                                            margin: EdgeInsets.only(top: 0, left: 10),
-                                            alignment: Alignment.center,
-                                            child: const Text(
-                                              "Need Help?",
-                                              style: TextStyle(
-                                                  fontSize: AppSize.size_17,
-                                                  fontFamily: 'FontBold',
-                                                  color: AppColors.black,
-                                                  height: 1.2
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                      ),
-
-
-                                      Expanded(
-                                        flex: 7,
-                                        child: InkWell(
-                                            onTap: ()
-                                            {
-                                              CommonUtilities.NavigateWithPush(context, ContactSupportFormScreen());
-                                            },
-                                            child: getButtonBlack(context, "Contact Support", "contactSupport")
-
-                                        ),
-                                      )
-                                    ],
-
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: InkWell(
+                                      onTap: () {
+                                        CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                                            context, const LoginScreen());
+                                      },
+                                      child: getButtonBlack(context, "Back to Login", "contactSupport"),
+                                    ),
                                   )
                                 ],
                               ),

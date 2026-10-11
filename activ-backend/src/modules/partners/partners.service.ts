@@ -20,12 +20,12 @@ import { VenueService as VenueServiceEntity } from '../venues/entities/venue-ser
 import { VenueAnswer } from '../venues/entities/venue-answer.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Payment } from '../payments/entities/payment.entity';
-import { BookingStatus } from '../../common/enums/booking-status.enum';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 import { PrismaService } from '../../prisma/prisma.service';
+import { deletePartnerAccount } from './delete-partner-account';
 
 @Injectable()
 export class PartnersService {
@@ -268,58 +268,10 @@ export class PartnersService {
   }
 
   async deleteAccount(partnerId: string): Promise<void> {
-    await this.findOne(partnerId);
-
-    const venues = await this.venueRepository.find({
-      where: { partnerId },
-      select: ['id'],
-    });
-
-    if (venues.length > 0) {
-      const venueIds = venues.map((v) => v.id);
-
-      // Block deletion if any booking is still active
-      const activeBookingCount = await this.bookingRepository.count({
-        where: [
-          { venueId: In(venueIds), status: BookingStatus.PENDING },
-          { venueId: In(venueIds), status: BookingStatus.CONFIRMED },
-        ],
-      });
-
-      if (activeBookingCount > 0) {
-        throw new BadRequestException(
-          'Cannot delete account: there are active bookings on your venues. Please cancel or complete all pending bookings first.',
-        );
-      }
-
-      // Collect all booking IDs to delete payments first (FK: payments.booking_id → bookings.id)
-      const bookings = await this.bookingRepository.find({
-        where: { venueId: In(venueIds) },
-        select: ['id'],
-      });
-
-      if (bookings.length > 0) {
-        const bookingIds = bookings.map((b) => b.id);
-        await this.paymentRepository.delete({ bookingId: In(bookingIds) });
-        await this.bookingRepository.delete({ venueId: In(venueIds) });
-      }
-
-      // Delete venue child records (FK: each references venue_id)
-      await this.venueAnswerRepository.delete({ venueId: In(venueIds) });
-      await this.venueImageRepository.delete({ venueId: In(venueIds) });
-      await this.venueServiceRepository.delete({ venueId: In(venueIds) });
-
-      // Clear venue_categories junction table (no TypeORM repository for junction tables)
-      await this.venueRepository.manager.query(
-        `DELETE FROM venue_categories WHERE venue_id = ANY($1::uuid[])`,
-        [venueIds],
-      );
-
-      await this.venueRepository.delete({ partnerId });
-    }
-
-    // Delete partner — DB-level onDelete: CASCADE on team_members.partner_id handles team cleanup
-    await this.partnerRepository.delete({ id: partnerId });
+    await this.prisma.$transaction(
+      (tx) => deletePartnerAccount(tx, partnerId),
+      { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' },
+    );
   }
 
   // ─── GST Verification ────────────────────────────────────────────────────

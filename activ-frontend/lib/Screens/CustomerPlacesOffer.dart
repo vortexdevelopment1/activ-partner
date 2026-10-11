@@ -4,7 +4,7 @@ import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/painting.dart';
@@ -22,8 +22,9 @@ import 'ListActivityTypeScreen.dart';
 import 'VenueTimingScreen.dart';
 
 class CustomerPlacesOffer extends StatefulWidget {
-  const CustomerPlacesOffer({super.key, this.reviewMode = false});
+  const CustomerPlacesOffer({super.key, this.reviewMode = false, this.client});
   final bool reviewMode;
+  final http.Client? client;
   @override
   _State createState() => _State();
 }
@@ -33,6 +34,7 @@ class _State extends State<CustomerPlacesOffer> {
   int page = 1;
   bool isSelectedValue = false;
   bool isShimmerLoading = false;
+  String? _loadError;
   String noDataFound = NO_DATA_FOUND;
   ScrollController scrollController = ScrollController();
 
@@ -62,25 +64,21 @@ class _State extends State<CustomerPlacesOffer> {
 
   @override
   void initState() {
+    super.initState();
     isShimmerLoading = true;
     fetchData();
-    super.initState();
   }
 
   // Fetch Data Name
   Future<void> fetchData() async {
+    setState(() { isShimmerLoading = true; _loadError = null; });
     try {
-      var snapshot = await FirebaseFirestore.instance
-          .collection("customer_facilities_type")
-          .doc("facilities_type")
-         // .doc("main_document")
-          .get();
-
-      if (snapshot.exists) {
-        var data = snapshot.data();
-        var list = data?["facilities"] as List<dynamic>;
-        final raw = widget.reviewMode ? await SharedPreference.readStr('place_offer') : null;
-        final saved = raw == null ? <dynamic>[] : (jsonDecode(raw)['place_offer'] as List);
+      final response = await (widget.client?.get ?? http.get)(Uri.parse(AMENITIES_URL));
+      if (response.statusCode != 200) throw Exception('Amenities request failed');
+      {
+        final list = jsonDecode(response.body)['data'] as List<dynamic>;
+        final raw = await SharedPreference.readStr('place_offer');
+        final saved = raw == null || raw.isEmpty ? <dynamic>[] : (jsonDecode(raw)['place_offer'] as List);
         final selectedIds = saved.map((e) => e['id']?.toString()).toSet();
         if (!mounted) return;
 
@@ -96,6 +94,10 @@ class _State extends State<CustomerPlacesOffer> {
       }
     } catch (e) {
       CommonUtilities.showLog("Error fetching Data: $e");
+      if (mounted) setState(() {
+        isShimmerLoading = false;
+        _loadError = 'Could not load amenities.';
+      });
     }
   }
 
@@ -146,7 +148,12 @@ class _State extends State<CustomerPlacesOffer> {
                       isShimmerLoading == true ? buildShimmer(context):
                       Expanded(
                         flex: 9,
-                        child: getList(context),
+                        child: _loadError == null ? getList(context) : Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(_loadError!),
+                            TextButton.icon(onPressed: fetchData, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+                          ]),
+                        ),
                       ),
 
                       Container(
@@ -409,13 +416,27 @@ class _State extends State<CustomerPlacesOffer> {
   /// Image Layout.
   Widget getImage(VenueTypeModel model, BuildContext context)
   {
+    const additionalIcons = <String, IconData>{
+      'monitored_parking': Icons.local_parking,
+      'water': Icons.water_drop_outlined,
+      'changing': Icons.checkroom,
+      'restrooms': Icons.wc,
+      'seating': Icons.chair_outlined,
+      'charging': Icons.ev_station_outlined,
+      'cafe': Icons.local_cafe_outlined,
+      'wheelchair': Icons.accessible,
+      'fire_safety': Icons.local_fire_department_outlined,
+      'waiting': Icons.event_seat_outlined,
+    };
     return Container(
       alignment: Alignment.centerLeft,
       margin: const EdgeInsets.fromLTRB(10, 5, 2, 0),
       child: Container(
         width: 28,
         height: 28,
-        child: Image.asset(
+        child: additionalIcons.containsKey(model.type)
+            ? Icon(additionalIcons[model.type], size: 28, color: AppColors.darkBlack)
+            : Image.asset(
           setTypeImages(model),
           fit: BoxFit.cover,
         ),

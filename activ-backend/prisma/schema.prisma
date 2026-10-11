@@ -7,6 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
+model partner_amenity_catalog {
+  id         String  @id
+  title      String
+  type       String  @unique
+  active     Boolean @default(true)
+  sort_order Int
+}
+
 model bookings {
   id                           String                        @id @db.Uuid
   public_code                  String                        @unique

@@ -67,7 +67,7 @@ class SharedPreference
   {
     // prefs = await SharedPreferences.getInstance();
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setString(key, value);
+    await prefs.setString(key, value);
   }
 
   static getStringValuesSF(String key) async
@@ -84,7 +84,7 @@ class SharedPreference
   static clearSF() async
   {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.clear();
+    await prefs.clear();
   }
 
   static remove(String key) async

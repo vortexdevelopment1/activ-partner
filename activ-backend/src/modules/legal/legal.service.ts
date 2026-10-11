@@ -190,6 +190,12 @@ export class LegalService {
       for (let i = 0; i < totalPages; i++) {
         doc.switchToPage(range.start + i);
 
+        // Footer text has an explicit width, so PDFKit still checks page bounds.
+        // Allow the reserved footer area without changing body pagination.
+        const bottomMargin = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
+        try {
+
         const footerY = doc.page.height - 40;
 
         doc.strokeColor('#e0e6f0').lineWidth(0.5)
@@ -210,6 +216,9 @@ export class LegalService {
             margin, footerY,
             { width: usableW, align: 'right', lineBreak: false },
           );
+        } finally {
+          doc.page.margins.bottom = bottomMargin;
+        }
       }
 
       doc.flushPages();

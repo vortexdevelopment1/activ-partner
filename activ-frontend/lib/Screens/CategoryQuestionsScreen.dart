@@ -121,7 +121,7 @@ class _State extends State<CategoryQuestionsScreen> {
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, dynamic> _answers = {};
 
-  int currentStep = onboardingActivitiesStep;
+  int currentStep = onboardingQuestionsStep;
   final int totalSteps = totalSetup;
 
   // ─── Composite key helper ─────────────────────────────────────────────────
@@ -180,7 +180,8 @@ class _State extends State<CategoryQuestionsScreen> {
         final questions = data
             .map((e) => _Question.fromJson(e as Map<String, dynamic>))
             .where((q) => q.isActive &&
-                q.questionText.trim().toLowerCase() != 'court surface')
+                !{'court surface', 'equipment available'}.contains(
+                    q.questionText.trim().toLowerCase()))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -249,7 +250,7 @@ class _State extends State<CategoryQuestionsScreen> {
         }
       }
 
-      if (widget.reviewMode) {
+      {
         final raw = await SharedPreference.readStr('activity_questions_display');
         if (!mounted) return;
         final saved = raw == null || raw.isEmpty ? <dynamic>[] : jsonDecode(raw) as List;
@@ -381,13 +382,11 @@ class _State extends State<CategoryQuestionsScreen> {
         });
       }
 
-      // Persist for review screen — append if not first category
+      // Replace this activity's answers while preserving the other activities.
       List<dynamic> existingList = [];
-      if (widget.reviewMode || widget.categoryIndex > 1) {
-        final existingRaw = checkString(await SharedPreference.readStr('activity_questions_display'));
-        if (existingRaw.isNotEmpty) {
-          existingList = jsonDecode(existingRaw) as List<dynamic>;
-        }
+      final existingRaw = checkString(await SharedPreference.readStr('activity_questions_display'));
+      if (existingRaw.isNotEmpty) {
+        existingList = jsonDecode(existingRaw) as List<dynamic>;
       }
       final categoryId = widget.currentCategory['id']?.toString() ?? '';
       final titles = displayList.map((q) => q['categoryTitle']).toSet();
@@ -807,8 +806,6 @@ class _State extends State<CategoryQuestionsScreen> {
 
                           // Step bar
                           getStepBarCount(progress, currentStep, totalSteps),
-                          getActivityStepLabel(
-                              widget.categoryIndex, widget.totalCategories, 3),
 
                           // Title
                           Container(

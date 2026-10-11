@@ -1,5 +1,6 @@
 import { LegalService } from './legal.service';
 import { LegalContentType } from './entities/legal-content.entity';
+import { PDFDocument } from 'pdf-lib';
 
 describe('legal content on the current database schema', () => {
   const type = LegalContentType.TERMS_AND_CONDITIONS;
@@ -77,5 +78,20 @@ describe('legal content on the current database schema', () => {
     const result = await service.generateLegalPdfExport(type);
     expect(result.filename).toBe('activ-terms-and-conditions.pdf');
     expect(Buffer.from(result.base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    const pdf = await PDFDocument.load(Buffer.from(result.base64, 'base64'));
+    expect(pdf.getPageCount()).toBe(1);
+  });
+
+  it('does not add footer-only pages to a multi-page agreement', async () => {
+    prisma.content_documents.findFirst.mockResolvedValue({
+      ...document,
+      body: Array.from({ length: 120 }, (_, index) =>
+        `Clause ${index + 1}: The partner shall maintain accurate venue details and honour confirmed bookings.`
+      ).join('\n\n'),
+    });
+    const result = await service.generateLegalPdfExport(type);
+    const pdf = await PDFDocument.load(Buffer.from(result.base64, 'base64'));
+    expect(pdf.getPageCount()).toBeGreaterThan(1);
+    expect(pdf.getPageCount()).toBeLessThan(10);
   });
 });

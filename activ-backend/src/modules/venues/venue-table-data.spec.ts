@@ -11,12 +11,15 @@ describe('relational venue data', () => {
       partner_service_categories: { findMany: jest.fn(async () => [{ id: 'category', name: 'Badminton', slug: 'badminton' }]) },
       activities: { findMany: jest.fn(async () => []) }, $transaction: jest.fn(async (callback) => callback(tx)) };
     const service = Object.assign(Object.create(VenuesService.prototype), { prisma });
+    const amenities = ['Parking', 'Monitored Parking', 'Drinking Water', 'Changing Rooms',
+      'Restrooms', 'Seating Area', 'Charging Stations', 'Caf\u00e9', 'Wheelchair Support',
+      'Fire Safety', 'Waiting Area'];
     await service.create({ name: 'Arena', latitude: 22, longitude: 75, categoryIds: ['category'],
-      amenities: ['Parking', 'Parking'], openingTime: '09:00', rules: 'No food',
+      amenities: [...amenities, 'Parking'], openingTime: '09:00', rules: 'No food',
       services: [{ name: 'Court A', pricePerHour: 123.45, capacity: 4, imageUrl: '/court.jpg' }] }, 'partner');
     expect(tx.venues.create.mock.calls[0][0].data).not.toHaveProperty('metadata');
     expect(tx.partner_venue_profiles.create.mock.calls[0][0].data).toMatchObject({ opening_time: '09:00', rules: 'No food' });
-    expect(tx.partner_venue_amenities.createMany.mock.calls[0][0].data).toHaveLength(1);
+    expect(tx.partner_venue_amenities.createMany.mock.calls[0][0].data.map((row) => row.title)).toEqual(amenities);
     const activity = tx.partner_venue_services.create.mock.calls[0][0].data;
     expect(activity).toMatchObject({ title: 'Court A', price_per_hour_paise: 12345n, capacity: 4 });
     expect(activity).not.toHaveProperty('onboarding_data');
@@ -59,8 +62,20 @@ describe('relational venue data', () => {
     expect(() => availabilityRows('venue', 'category', { Someday: [] })).toThrow(BadRequestException);
   });
 
+  it('rejects duplicate, overlapping and reversed ranges but permits adjacent ranges', () => {
+    const range = { open: '09:00 AM', close: '07:00 PM', slotDurationMinutes: 60 };
+    for (const other of [range, { open: '10:00', close: '20:00' }, { open: '08:00', close: '20:00' }]) {
+      expect(() => availabilityRows('venue', 'category', { Monday: [range, other] })).toThrow(BadRequestException);
+    }
+    expect(() => availabilityRows('venue', 'category', { Monday: [{ open: '19:00', close: '09:00' }] })).toThrow(BadRequestException);
+    expect(() => availabilityRows('venue', 'category', { Monday: [{ open: '09:00', close: '09:15', slotDurationMinutes: 30 }] })).toThrow(BadRequestException);
+    expect(availabilityRows('venue', 'category', { Monday: [range, { open: '19:00', close: '20:00' }] })).toHaveLength(2);
+    expect(availabilityRows('venue', 'category', { Monday: [range], Tuesday: [range] })).toHaveLength(2);
+  });
+
   it('updates only requested categories, including clearing a closed schedule', async () => {
-    const tx = { partner_venue_availability: { deleteMany: jest.fn(), createMany: jest.fn() } };
+    const tx = { partner_venue_availability: { deleteMany: jest.fn(), createMany: jest.fn() },
+      partner_venue_services: { updateMany: jest.fn() } };
     const prisma = { venues: { findUnique: jest.fn(async () => ({ id: 'venue', partner_id: 'partner', status: 'PUBLISHED', metadata: { availability: 'stale' } })) },
       partner_venue_services: { findMany: jest.fn(async () => [{ service_category_id: 'badminton' }]) },
       partner_venue_availability: { findMany: jest.fn(async () => []) },
@@ -71,6 +86,11 @@ describe('relational venue data', () => {
       venue_id: 'venue', service_category_id: { in: ['badminton'] },
     } });
     expect(tx.partner_venue_availability.createMany).not.toHaveBeenCalled();
+    await service.setAvailability('venue', { badminton: { Monday: [{ open: '09:00', close: '19:00', slotDurationMinutes: '30' }] } }, 'partner');
+    expect(tx.partner_venue_services.updateMany).toHaveBeenCalledWith({
+      where: { venue_id: 'venue', service_category_id: 'badminton', status: { not: 'ARCHIVED' } },
+      data: { min_duration_minutes: 30 },
+    });
     await expect(service.setAvailability('venue', { foreign: {} }, 'partner')).rejects.toThrow(BadRequestException);
   });
 

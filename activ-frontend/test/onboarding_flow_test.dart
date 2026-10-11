@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:activ_app/Screens/ContactSupportFormScreen.dart';
+import 'package:activ_app/Screens/HelpSupportScreen.dart';
 import 'package:activ_app/Screens/ActivityReviewScreen.dart';
 import 'package:activ_app/Screens/LegalInformationScreen.dart';
 import 'package:activ_app/Screens/VenuePhotoListViewScreen.dart';
@@ -14,6 +15,7 @@ import 'package:activ_app/Screens/GetStartedScreen.dart';
 import 'package:activ_app/Screens/LoginScreen.dart';
 import 'package:activ_app/Screens/MobileNumberScreen.dart';
 import 'package:activ_app/Screens/Menu/MenuScreen.dart';
+import 'package:activ_app/Screens/Menu/SettingsScreen.dart';
 import 'package:activ_app/Screens/Home/VenueInfoScreen.dart';
 import 'package:activ_app/Screens/Home/HomeScreen.dart';
 import 'package:activ_app/Screens/Home/dashboard_setup_cards.dart';
@@ -26,8 +28,11 @@ import 'package:activ_app/Screens/OTPVerificationScreen.dart';
 import 'package:activ_app/Screens/ReviewVenueDetailsScreen.dart';
 import 'package:activ_app/Screens/ReviewSignAgreement.dart';
 import 'package:activ_app/Screens/TellUsAboutScreen.dart';
+import 'package:activ_app/Screens/CustomerPlacesOffer.dart';
+import 'package:activ_app/Screens/VenueTimingScreen.dart';
 import 'package:activ_app/Screens/ListActivityTypeScreen.dart';
 import 'package:activ_app/Screens/VenuePhotoUploadScreen.dart';
+import 'package:activ_app/Screens/VenueScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +42,33 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _DocumentSourcePicker extends ImagePicker {
+  final List<ImageSource> sources = [];
+  @override
+  Future<XFile?> pickImage({required ImageSource source, double? maxWidth,
+    double? maxHeight, int? imageQuality, CameraDevice preferredCameraDevice = CameraDevice.rear,
+    bool requestFullMetadata = true}) async {
+    sources.add(source);
+    return null;
+  }
+}
+
+class _DocumentPdfPicker extends FilePicker {
+  int calls = 0;
+  @override
+  Future<FilePickerResult?> pickFiles({String? dialogTitle, String? initialDirectory,
+    FileType type = FileType.any, List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading, bool allowCompression = false,
+    int compressionQuality = 0, bool allowMultiple = false, bool withData = false,
+    bool withReadStream = false, bool lockParentWindow = false, bool readSequential = false}) async {
+    calls++;
+    expect(type, FileType.custom);
+    expect(allowedExtensions, ['pdf']);
+    expect(withData, isTrue);
+    return null;
+  }
+}
 
 class _OversizedPhotoPicker extends ImagePicker {
   final XFile photo =
@@ -971,6 +1003,135 @@ void main() {
     });
   }
 
+  testWidgets('legal document Browse offers camera gallery and PDF sources', (tester) async {
+    final images = _DocumentSourcePicker();
+    final files = _DocumentPdfPicker();
+    await showScreen(tester, LegalInformationScreen(imagePicker: images, filePicker: files));
+    for (final source in ['Camera', 'Gallery', 'Choose File (PDF)']) {
+      await tester.ensureVisible(find.text('Browse').first);
+      await tester.tap(find.text('Browse').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Gallery'), findsOneWidget);
+      expect(find.text('Choose File (PDF)'), findsOneWidget);
+      await tester.tap(find.text(source));
+      await tester.pumpAndSettle();
+    }
+    expect(images.sources, [ImageSource.camera, ImageSource.gallery]);
+    expect(files.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful account deletion clears onboarding data and returns to registration', (tester) async {
+    VenuePhotoListViewScreen.cachedImagesByCategory['old-category'] = [Uint8List(1)];
+    SharedPreferences.setMockInitialValues({'jwt_token': 'token', 'owner_full_name': 'Old owner', 'venue_details': '{"venue_name":"Old venue"}'});
+    final client = MockClient((request) async {
+      expect(request.method, 'DELETE');
+      expect(request.url.path, endsWith('/partners/account'));
+      return http.Response('{"message":"Account deleted successfully"}', 200);
+    });
+    addTearDown(client.close);
+    await showScreen(tester, SettingsScreen(client: client));
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getKeys(), isEmpty);
+    expect(VenuePhotoListViewScreen.cachedImagesByCategory, isEmpty);
+    expect(find.byType(GetStartedScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('onboarding timing keeps step eight, saves slot size and rejects repeated ranges', (tester) async {
+    String? toast;
+    const channel = MethodChannel('PonnamKarthik/fluttertoast');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      toast = call.arguments['msg'] as String?;
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    await showScreen(tester, const VenueTimingScreen(activityId: 'venue', categoryId: 'basketball', categoryTitle: 'Basketball'));
+    expect(find.text('8/10'), findsOneWidget);
+    expect(find.textContaining('Configuring Activity'), findsNothing);
+    expect(find.text('Slot size'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30 minutes').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Mon'));
+    await tester.tap(find.text('Mon'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add time slot'));
+    await tester.tap(find.text('Add time slot'));
+    await tester.pumpAndSettle();
+    final dynamic state = tester.state(find.byType(VenueTimingScreen));
+    expect(state.buildVenueTiming()['Monday'][0]['slotDurationMinutes'], '30');
+    await tester.ensureVisible(find.text('Add time slot'));
+    await tester.tap(find.text('Add time slot'));
+    await tester.pumpAndSettle();
+    expect(state.timings['Mon'].timeSlots[1], {'open': '', 'close': ''});
+    state.timings['Mon'].timeSlots[1] = {'open': '09:00 AM', 'close': '07:00 PM'};
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(toast, 'Time ranges for Mon must not overlap or repeat.');
+    expect(find.byType(VenueTimingScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('24 amenities load and new selections persist when reopened', (tester) async {
+    final titles = ['Free Parking', 'First Aid Kit', 'WiFi', 'Air Conditioned',
+      'Locker Room', 'Lounge Room', 'Personal Training', 'Fencing',
+      'Proper Lighting', 'Shower Room', 'Sound System', 'Childcare',
+      'Surveillance cameras', 'Rental Equipments', 'Monitored Parking',
+      'Drinking Water', 'Changing Rooms', 'Restrooms', 'Seating Area',
+      'Charging Stations', 'Caf\u00e9', 'Wheelchair Support', 'Fire Safety', 'Waiting Area'];
+    SharedPreferences.setMockInitialValues({
+      'place_offer': jsonEncode({'place_offer': [{'id': '22', 'title': 'Wheelchair Support'}]}),
+    });
+    final client = MockClient((request) async {
+      expect(request.url.path, endsWith('/amenities/active'));
+      return http.Response(jsonEncode({'data': [
+        for (var i = 0; i < titles.length; i++)
+          {'id': '${i + 1}', 'title': titles[i], 'type': 'parking', 'active': true},
+      ]}), 200);
+    });
+    addTearDown(client.close);
+    await showScreen(tester, CustomerPlacesOffer(client: client));
+    expect(tester.widget<GridView>(find.byType(GridView)).childrenDelegate.estimatedChildCount, 24);
+    await tester.scrollUntilVisible(find.text('Fire Safety'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Fire Safety'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    final selected = jsonDecode(prefs.getString('place_offer')!)['place_offer'] as List;
+    expect(selected.map((item) => item['title']), containsAll(['Wheelchair Support', 'Fire Safety']));
+    await showScreen(tester, CustomerPlacesOffer(client: client));
+    await tester.scrollUntilVisible(find.text('Fire Safety'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Fire Safety'));
+    await tester.pumpAndSettle();
+    final restored = jsonDecode(prefs.getString('place_offer')!)['place_offer'] as List;
+    expect(restored.map((item) => item['title']), ['Wheelchair Support']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('onboarding profile preserves saved fields when reopened', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'phoneCode': '+91',
+      'userMobileNumber': '98-0123-4567',
+      'owner_full_name': 'Virat Kohli',
+      'owner_email': 'virat.kohli@gmail.com',
+      'same_as_owner_number_checked': 'true',
+    });
+    for (var visit = 0; visit < 2; visit++) {
+      await showScreen(tester, const TellUsAboutScreen());
+      expect(find.text('Virat'), findsOneWidget);
+      expect(find.text('Kohli'), findsOneWidget);
+      expect(find.text('virat.kohli@gmail.com'), findsOneWidget);
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   for (final size in [
     const Size(430, 1056),
     const Size(360, 740),
@@ -1578,12 +1739,14 @@ void main() {
     expect(find.text('+91 98-7654-3210'), findsOneWidget);
     expect(find.text('Sports Arena Complex'), findsOneWidget);
     expect(find.text('12%'), findsOneWidget);
-    expect(find.text('88'), findsOneWidget);
+    expect(find.text('Your earnings'), findsNothing);
+    expect(find.text('Net amount'), findsNothing);
+    expect(find.text('88'), findsNothing);
     expect(find.text('Free Parking'), findsOneWidget);
     expect(find.text('Badminton'), findsOneWidget);
     expect(find.text('Tennis'), findsOneWidget);
     expect(find.text('Box Cricket'), findsOneWidget);
-    expect(find.text('7/7'), findsOneWidget);
+    expect(find.text('10/10'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await capture(tester, 'venue-review-430x2342');
     await tester.tap(find.text('Learn more about how commissions work'));
@@ -1835,9 +1998,11 @@ void main() {
           tester.element(find.byType(ActivityReviewScreen)));
     });
     await tester.pumpAndSettle();
-    expect(find.text('5/7'), findsOneWidget);
+    expect(find.text('9/10'), findsOneWidget);
+    expect(find.text('Configuring Activity'), findsOneWidget);
+    expect(find.text('Cover Photo'), findsOneWidget);
     expect(find.text('Configuring Activity 1 of 2 \u2014 Step 4/4'),
-        findsOneWidget);
+        findsNothing);
     expect(find.text('Badminton'), findsOneWidget);
     expect(find.text('Photos'), findsOneWidget);
     expect(find.text('Number of Courts'), findsOneWidget);
@@ -1968,7 +2133,7 @@ void main() {
     }
   });
 
-  testWidgets('reference layouts render with empty fields and masked phone',
+  testWidgets('reference layouts render with empty fields and formatted phone',
       (tester) async {
     await showScreen(tester, const LoginScreen());
     expect(find.byType(TextFormField), findsNWidgets(2));
@@ -1981,10 +2146,12 @@ void main() {
         isTrue);
     await capture(tester, 'login-430x932');
     await showScreen(tester, const OTPVerificationScreen());
-    expect(find.text('We sent a code to +91-xx-xxxx-4567'), findsOneWidget);
-    expect(find.text('Edit Number'), findsNothing);
+    expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
+    expect(find.text('Edit Number'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
+    expect(find.text('Resend OTP in 40s'), findsOneWidget);
     for (var i = 0; i < 4; i++) {
-      expect(tester.getSize(digit(i)), const Size(44, 44));
+      expect(tester.getSize(digit(i)), const Size(50, 50));
       expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
     }
     expect(tester.getTopLeft(find.byKey(const Key('otp-submit'))).dy,
@@ -2027,10 +2194,76 @@ void main() {
     await tester.tap(find.byKey(const Key('mobile-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(OTPVerificationScreen), findsOneWidget);
-    expect(find.text('We sent a code to +91-xx-xxxx-4567'), findsOneWidget);
+    expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
     expect(
         (await SharedPreferences.getInstance()).getString('userMobileNumber'),
         '98-7654-4567');
+  });
+
+  testWidgets('notification preferences scroll without moving save button', (tester) async {
+    for (final scale in [1.0, 1.5]) {
+      final client = MockClient((request) async => http.Response('{"data":{}}', 200));
+      await showScreen(tester, NotificationPreferencesScreen(client: client),
+          size: const Size(320, 568), textScale: scale);
+      expect(tester.takeException(), isNull);
+      final save = find.text('Save Preferences');
+      final savePosition = tester.getTopLeft(save);
+      await tester.scrollUntilVisible(find.text('Promotional Messages'), 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getTopLeft(save), savePosition);
+      expect(find.text('Promotional Messages').hitTestable(), findsOneWidget);
+      final promoSwitch = find.byType(Switch).last;
+      await tester.ensureVisible(promoSwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(promoSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(promoSwitch).value, isTrue);
+    }
+  });
+
+  testWidgets('callback form scrolls to time picker with fixed submit button', (tester) async {
+    for (final keyboardHeight in [0.0, 220.0]) {
+      await showScreen(tester, const RequestCallbackScreen(),
+          size: const Size(320, 568), textScale: 1.5,
+          keyboardHeight: keyboardHeight);
+      expect(tester.takeException(), isNull);
+      final submit = find.text('Request Call Back');
+      final position = tester.getTopLeft(submit);
+      final timeField = find.byWidgetPredicate((widget) =>
+          widget is TextField && widget.decoration?.hintText == 'Select time');
+      await tester.scrollUntilVisible(timeField, 150,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getTopLeft(submit), position);
+      expect(timeField.hitTestable(), findsOneWidget);
+      await tester.tap(timeField);
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(TimePickerDialog))).pop();
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('mobile top Back opens login from root and unrelated route', (tester) async {
+    for (final hasPrevious in [false, true]) {
+      await showScreen(tester, hasPrevious
+          ? const Scaffold(body: Text('Previous screen'))
+          : const MobileNumberScreen());
+      if (hasPrevious) {
+        tester.state<NavigatorState>(find.byType(Navigator).first).push(
+          MaterialPageRoute(builder: (_) => const MobileNumberScreen()));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byTooltip('Back to login'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('mobile-back-login')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(MobileNumberScreen), findsNothing);
+      expect(tester.state<NavigatorState>(find.byType(Navigator).first).canPop(), isFalse);
+    }
   });
 
   testWidgets('mobile request prevents repeats and keeps screen on failure',
@@ -2279,7 +2512,7 @@ void main() {
     expect(answers['environment'], ['Indoor', 'Floodlights']);
   });
 
-  testWidgets('activity questions hide Court Surface and show third sub-step',
+  testWidgets('activity questions match step eight and hide equipment and sub-step',
       (tester) async {
     Map<String, dynamic>? submitted;
     final routes = _Routes();
@@ -2308,6 +2541,13 @@ void main() {
                   'isRequired': false,
                   'options': ['Standard', 'Premium']
                 },
+                {
+                  'id': 'equipment',
+                  'questionText': 'Equipment Available',
+                  'questionType': 'multiselect',
+                  'isRequired': false,
+                  'options': ['Balls', 'Rackets']
+                },
               ]
             }),
             200);
@@ -2327,9 +2567,10 @@ void main() {
         routes: routes);
     expect(find.text('Court Surface'), findsNothing);
     expect(find.byType(DropdownButton<String>), findsOneWidget);
-    expect(find.text('4/7'), findsOneWidget);
+    expect(find.text('8/10'), findsOneWidget);
+    expect(find.text('Equipment Available'), findsNothing);
     expect(find.text('Configuring Activity 2 of 3 \u2014 Step 3/4'),
-        findsOneWidget);
+        findsNothing);
     await capture(tester, 'activity-questions-step3-430x932');
     await tester.enterText(
         find.byType(TextFormField), 'A spacious squash court.');
@@ -2338,6 +2579,7 @@ void main() {
     expect(submitted, isNotNull);
     final answers = submitted!['answers'] as List<dynamic>;
     expect(answers.any((item) => item['questionId'] == 'surface'), isFalse);
+    expect(answers.any((item) => item['questionId'] == 'equipment'), isFalse);
     expect(answers.any((item) => item['questionId'] == 'description'), isTrue);
   });
 
@@ -2411,6 +2653,65 @@ void main() {
     await tester.enterText(digit(3), '');
     await tester.pump();
     expect(tester.widget<TextField>(digit(2)).focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('OTP resend countdown sends current phone and resets code',
+      (tester) async {
+    var calls = 0;
+    await showScreen(tester, OTPVerificationScreen(client: MockClient((request) async {
+      calls++;
+      expect(request.url.path, endsWith('/request-otp'));
+      expect(jsonDecode(request.body), {'phone': '9876544567'});
+      return http.Response('{}', 200);
+    })));
+    expect(find.byKey(const Key('otp-resend')), findsNothing);
+    await tester.enterText(digit(0), '1234');
+    await tester.pump(const Duration(seconds: 40));
+    await tester.tap(find.byKey(const Key('otp-resend')));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.text('Resend OTP in 40s'), findsOneWidget);
+    for (var i = 0; i < 4; i++) {
+      expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
+    }
+  });
+
+  testWidgets('venue Back from root opens profile and saves partial draft', (tester) async {
+    await showScreen(tester, const VenueScreen());
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.first, 'My venue');
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+    expect(find.byType(VenueScreen), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(jsonDecode(prefs.getString('venue_details')!)['venue_name'], 'My venue');
+  });
+
+  testWidgets('venue system Back from root opens profile', (tester) async {
+    await showScreen(tester, const VenueScreen());
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+  });
+
+  testWidgets('venue Back returns to existing previous route', (tester) async {
+    await showScreen(tester, const TellUsAboutScreen());
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.push(MaterialPageRoute(builder: (_) => const VenueScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+    expect(navigator.canPop(), isFalse);
+  });
+
+  testWidgets('OTP Edit Number returns to number entry', (tester) async {
+    await showScreen(tester, const OTPVerificationScreen());
+    await tester.tap(find.byKey(const Key('otp-edit-number')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MobileNumberScreen), findsOneWidget);
+    expect(find.byType(OTPVerificationScreen), findsNothing);
   });
 
   testWidgets('incomplete OTP does not call verification API', (tester) async {
