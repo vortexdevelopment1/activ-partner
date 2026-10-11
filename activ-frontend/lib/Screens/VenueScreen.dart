@@ -44,7 +44,7 @@ class _State extends State<VenueScreen> {
   List<Map<String, dynamic>> _placeSuggestions = [];
   bool _showSuggestions = false;
   Timer? _searchDebounce;
-  static const String _mapsApiKey = 'AIzaSyB8CL4cLELFreHWPY_NnmjwCo_mWS7T6Ng';
+  String get _mapsApiKey => GOOGLE_MAPS_API_KEY;
 
   List<StateModel> stateNameResultList = [];
 

@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 import '../../../Beans/activity_model.dart';
 import '../../../api_calling/api_constant.dart';
 import '../../../api_calling/api_request.dart';
-import '../ManagePricingScreen.dart';
 import '../ManageSlotsScreen.dart';
 import 'DirectBookSlotScreen.dart';
 
@@ -36,7 +35,7 @@ class ActivityManagementScreen extends StatefulWidget {
 class _ActivityManagementState extends State<ActivityManagementScreen> {
   late final http.Client _client;
   Map<String, dynamic> _data = {};
-  bool _loading = true, _saving = false, _expanded = false, _changed = false;
+  bool _loading = true, _saving = false, _changed = false;
   String? _error;
   String _reason = 'Maintenance / Repair';
   final _otherReason = TextEditingController();
@@ -190,27 +189,85 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
       return;
     }
     if (await _save({'isActive': false, 'reason': reason}) && mounted) {
-      setState(() => _expanded = false);
       _message('Bookings paused. Existing bookings are preserved.');
     }
   }
 
   Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-              title: const Text('Delete Activity?'),
-              content: const Text(
-                  'New bookings will stop immediately. Existing bookings will be honored.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel')),
-                TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Delete Activity',
-                        style: TextStyle(color: Colors.red)))
-              ],
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        builder: (context) => SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                      width: 54,
+                      height: 5,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFDADADA),
+                          borderRadius: BorderRadius.circular(99))),
+                  const SizedBox(height: 36),
+                  Container(
+                      width: 78,
+                      height: 78,
+                      decoration: const BoxDecoration(
+                          color: Color(0xFFFFEFEF), shape: BoxShape.circle),
+                      child: const Icon(Icons.delete_outline,
+                          color: Colors.redAccent, size: 42)),
+                  const SizedBox(height: 28),
+                  const Text('Delete Activity?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontFamily: 'FontBold',
+                          fontSize: 22,
+                          color: Colors.redAccent)),
+                  const SizedBox(height: 22),
+                  const Text(
+                      'This will permanently delete this activity and all associated data including bookings history, slot configurations and images. This action cannot be undone.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontFamily: 'FontRegular',
+                          fontSize: 14,
+                          height: 1.45,
+                          color: Color(0xFF777777))),
+                  const SizedBox(height: 34),
+                  Row(children: [
+                    Expanded(
+                        child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            style: ElevatedButton.styleFrom(
+                                elevation: 0,
+                                minimumSize: const Size(0, 56),
+                                backgroundColor: const Color(0xFFFFF8C8),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10))),
+                            child: const Text('Cancel',
+                                style: TextStyle(
+                                    fontFamily: 'FontBold', fontSize: 16)))),
+                    const SizedBox(width: 18),
+                    Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                                elevation: 0,
+                                minimumSize: const Size(0, 56),
+                                backgroundColor: const Color(0xFF1F1F1F),
+                                foregroundColor: const Color(0xFFD8F34A),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10))),
+                            child: const Text('Delete Activity',
+                                style: TextStyle(
+                                    fontFamily: 'FontBold', fontSize: 16)))),
+                  ]),
+                ]),
+              ),
             ));
     if (confirmed == true && await _save({}, delete: true) && mounted) {
       Navigator.pop(context, true);
@@ -218,20 +275,6 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _slots() async {
-    final mode = await showModalBottomSheet<String>(
-        context: context,
-        builder: (context) => SafeArea(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              ListTile(
-                  leading: const Icon(Icons.calendar_month_outlined),
-                  title: const Text('Manage Slots'),
-                  onTap: () => Navigator.pop(context, 'slots')),
-              ListTile(
-                  leading: const Icon(Icons.payments_outlined),
-                  title: const Text('Manage Pricing'),
-                  onTap: () => Navigator.pop(context, 'pricing')),
-            ])));
-    if (mode == null || !mounted) return;
     final scoped = _ActivityClient(
         _client,
         _data['venueId']?.toString() ?? widget.venueId,
@@ -241,9 +284,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     await Navigator.push(
         context,
         MaterialPageRoute<void>(
-            builder: (_) => mode == 'slots'
-                ? ManageSlotsScreen(client: scoped)
-                : ManagePricingScreen(client: scoped)));
+            builder: (_) => ManageSlotsScreen(client: scoped)));
     if (mounted) {
       _changed = true;
       await _load();
@@ -251,74 +292,11 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _information() async {
-    final name = TextEditingController(text: _name);
-    final description = TextEditingController(text: _description);
-    final amenities = TextEditingController(
-        text: (_data['amenities'] as List? ??
-                widget.activity.placeOffer
-                    .whereType<Map>()
-                    .map((e) => e['title'])
-                    .toList())
-            .join(', '));
-    final form = GlobalKey<FormState>();
-    final values = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.viewInsetsOf(context).bottom + 24),
-        child: SafeArea(
-            child: SingleChildScrollView(
-                child: Form(
-                    key: form,
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _text('Activity Information', size: 20, bold: true),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                              controller: name,
-                              maxLength: 200,
-                              decoration: const InputDecoration(
-                                  labelText: 'Activity name'),
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                      ? 'Enter an activity name'
-                                      : null),
-                          TextFormField(
-                              controller: description,
-                              maxLines: 3,
-                              maxLength: 5000,
-                              decoration: const InputDecoration(
-                                  labelText: 'Description')),
-                          TextFormField(
-                              controller: amenities,
-                              decoration: const InputDecoration(
-                                  labelText: 'Amenities',
-                                  hintText: 'Parking, WiFi')),
-                          const SizedBox(height: 20),
-                          _button('Save Changes', () {
-                            if (form.currentState!.validate()) {
-                              Navigator.pop(context, {
-                                'name': name.text.trim(),
-                                'description': description.text.trim(),
-                                'amenities': amenities.text
-                                    .split(',')
-                                    .map((e) => e.trim())
-                                    .where((e) => e.isNotEmpty)
-                                    .toList(),
-                              });
-                            }
-                          }),
-                        ])))),
-      ),
-    );
-    // Modal fields remain mounted until the closing animation finishes.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    name.dispose();
-    description.dispose();
-    amenities.dispose();
+    final values = await Navigator.push<Map<String, dynamic>>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => _ActivityInfoPage(
+                activity: widget.activity, data: _data, name: _name)));
     if (values != null && mounted) await _save(values);
   }
 
@@ -391,6 +369,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
       context,
       MaterialPageRoute<void>(
           builder: (_) => _ImagesPage(
+              activityName: _name,
               load: () => _images,
               upload: _upload,
               remove: _removeImage,
@@ -413,51 +392,19 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     if (mounted) await _load();
   }
 
-  void _allBookings() => _sheet('Recent Bookings',
-      _items('bookings').map(_booking).toList(), 'No bookings yet');
-  void _reviews() => _sheet(
-      'Review & Ratings',
-      _items('reviews')
-          .map((review) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _text(review['name']?.toString() ?? 'Customer', bold: true),
-                    Row(
-                        children: List.generate(
-                            5,
-                            (i) => Icon(
-                                i < (review['rating'] as num? ?? 0)
-                                    ? Icons.star
-                                    : Icons.star_border,
-                                size: 20,
-                                color: Colors.amber))),
-                    _text(review['body']?.toString() ?? '', color: Colors.grey),
-                  ])))
-          .toList(),
-      'No reviews yet');
+  void _allBookings() => Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+          builder: (_) => _BookingsPage(
+              bookings: _items('bookings'),
+              activityName: _name,
+              currency: _currency)));
 
-  void _sheet(String title, List<Widget> children, String empty) =>
-      showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          builder: (context) => SafeArea(
-              child: SizedBox(
-                  height: MediaQuery.sizeOf(context).height * .8,
-                  child: Column(children: [
-                    ListTile(
-                        title: _text(title, size: 20, bold: true),
-                        trailing: IconButton(
-                            tooltip: 'Close',
-                            icon: const Icon(Icons.close),
-                            onPressed: () => Navigator.pop(context))),
-                    Expanded(
-                        child: ListView(
-                            padding: const EdgeInsets.all(20),
-                            children:
-                                children.isEmpty ? [_text(empty)] : children)),
-                  ]))));
+  void _reviews() => Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+          builder: (_) => _ReviewsPage(
+              activityName: _name, reviews: _items('reviews'))));
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -502,27 +449,19 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                   child: _stat(
                                       'Total Booking',
                                       _data['bookingCount']?.toString() ??
-                                          '\u2014',
+                                          '0',
                                       Icons.calendar_month_outlined)),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 16),
                               Expanded(
                                   child: _stat(
                                       'Total Earning',
                                       _data['earnings'] == null
-                                          ? '\u2014'
+                                          ? _currency.format(0)
                                           : _currency.format(num.tryParse(
                                                   _data['earnings']
                                                       .toString()) ??
                                               0),
                                       Icons.home_outlined)),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                  child: _stat(
-                                      'Occupancy',
-                                      _data['occupancy'] == null
-                                          ? '\u2014'
-                                          : '${_data['occupancy']}%',
-                                      Icons.meeting_room_outlined)),
                             ]),
                             if (_loading)
                               const Padding(
@@ -718,9 +657,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
     return Padding(
         padding: const EdgeInsets.only(bottom: 14),
-        child: _panel(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: () => _bookingDetails(booking),
+                child: _panel(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
           Row(children: [
             Expanded(
                 child: _text(booking['customerName']?.toString() ?? 'Customer',
@@ -729,7 +674,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           ]),
           const SizedBox(height: 8),
           _text(
-              '${booking['activity'] ?? _name}  |  ${date == null ? '\u2014' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
+              '${booking['activity'] ?? _name}  |  ${date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
               color: Colors.grey,
               size: 12),
           const SizedBox(height: 12),
@@ -737,8 +682,76 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               '${_currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)}${booking['participants'] == null ? '' : '  |  ${booking['participants']} persons'}',
               bold: true,
               size: 16),
-        ])));
+        ])))));
   }
+
+  void _bookingDetails(Map<String, dynamic> booking) {
+    final status = booking['status']?.toString() ?? 'Upcoming';
+    final date =
+        DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              titlePadding: const EdgeInsets.fromLTRB(24, 22, 12, 8),
+              contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              title: Row(children: [
+                const Expanded(
+                    child: Text('Booking details',
+                        style:
+                            TextStyle(fontFamily: 'FontBold', fontSize: 20))),
+                IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close))
+              ]),
+              content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                _detailSection('Customer information', [
+                  ('Full Name', booking['customerName']?.toString() ?? 'Customer'),
+                  ('Status', status),
+                ]),
+                const Divider(height: 30),
+                _detailSection('Booking information', [
+                  ('Activity', booking['activity']?.toString() ?? _name),
+                  ('Date', date == null ? '0' : DateFormat('dd MMM yyyy').format(date)),
+                  ('Time', date == null ? '0' : DateFormat('hh:mm a').format(date)),
+                  ('Persons', booking['participants']?.toString() ?? '0'),
+                  ('Amount', _currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)),
+                ]),
+              ])),
+            ));
+  }
+
+  Widget _detailSection(String title, List<(String, String)> items) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _text(title, bold: true, size: 16),
+          const SizedBox(height: 18),
+          for (var i = 0; i < items.length; i += 2)
+            Padding(
+                padding: EdgeInsets.only(
+                    bottom: i + 2 < items.length ? 18 : 0),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: _detailItem(items[i].$1, items[i].$2)),
+                  const SizedBox(width: 28),
+                  Expanded(
+                      child: i + 1 < items.length
+                          ? _detailItem(items[i + 1].$1, items[i + 1].$2)
+                          : const SizedBox.shrink()),
+                ])),
+        ],
+      );
+
+  Widget _detailItem(String label, String value) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _text(label, color: Colors.grey, size: 13),
+        const SizedBox(height: 5),
+        _text(value, bold: true, size: 15),
+      ]);
 
   Widget _statusPanel() => _panel(
           child:
@@ -761,9 +774,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               size: 12),
           const SizedBox(height: 12),
           OutlinedButton(
-              onPressed: _canControl && !_saving
-                  ? () => setState(() => _expanded = !_expanded)
-                  : null,
+              onPressed:
+                  _canControl && !_saving ? _showPauseReasonSheet : null,
               style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.redAccent,
                   side: const BorderSide(color: Colors.redAccent),
@@ -775,89 +787,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     const Expanded(
                         child: Text('Activity Control',
                             style: TextStyle(fontFamily: 'FontRegular'))),
-                    Icon(_expanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down)
+                    const Icon(Icons.keyboard_arrow_down)
                   ]))),
-          if (_expanded) ...[
-            const SizedBox(height: 14),
-            Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: _border),
-                    borderRadius: BorderRadius.circular(5),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 6,
-                          offset: Offset(0, 3))
-                    ]),
-                child: Column(children: [
-                  ..._reasons.map((reason) => Semantics(
-                      selected: _reason == reason.$1,
-                      button: true,
-                      child: InkWell(
-                        onTap: _saving
-                            ? null
-                            : () => setState(() => _reason = reason.$1),
-                        child: Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                                color: _reason == reason.$1
-                                    ? const Color(0xFFF6EBFF)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(6)),
-                            child: Row(children: [
-                              Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                      color: _purple,
-                                      borderRadius: BorderRadius.circular(7)),
-                                  child: Icon(reason.$3,
-                                      color: Colors.white, size: 21)),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                    _text(reason.$1, bold: true, size: 12),
-                                    _text(reason.$2,
-                                        size: 10, color: Colors.grey.shade700),
-                                  ])),
-                            ])),
-                      ))),
-                  if (_reason == 'Other')
-                    TextField(
-                        controller: _otherReason,
-                        maxLength: 500,
-                        decoration: const InputDecoration(labelText: 'Reason')),
-                  const SizedBox(height: 24),
-                  Row(children: [
-                    Expanded(
-                        child: OutlinedButton(
-                            onPressed: _saving
-                                ? null
-                                : () => setState(() => _expanded = false),
-                            style: OutlinedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFFF8DC),
-                                foregroundColor: Colors.black,
-                                minimumSize: const Size(0, 48),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8))),
-                            child: const Text('Cancel',
-                                style: TextStyle(fontFamily: 'FontBold')))),
-                    const SizedBox(width: 14),
-                    Expanded(
-                        flex: 2,
-                        child: _button(_saving ? 'Pausing...' : 'Pause Booking',
-                            _saving ? null : _pause))
-                  ]),
-                  const SizedBox(height: 10),
-                ])),
-          ],
         ] else if (_canControl)
           _button(_saving ? 'Resuming...' : 'Resume Booking',
               _saving ? null : () => _save({'isActive': true})),
@@ -865,12 +796,150 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         _text('What happens next?', bold: true),
         const SizedBox(height: 20),
         _effect(Icons.calendar_today_outlined,
-            'New bookings will be blocked during the inactive period'),
+            'Upcoming bookings will be blocked during inactive period'),
         _effect(Icons.visibility_off_outlined,
-            'Activity will be hidden from search & discovery'),
+            'Venue will be hidden from search & discovery'),
         _effect(
             Icons.notifications_none, 'ACTIV team may reach out if required'),
       ]));
+
+  Future<void> _showPauseReasonSheet() async {
+    await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        builder: (sheetContext) => StatefulBuilder(
+            builder: (sheetContext, setSheetState) => SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        28,
+                        12,
+                        28,
+                        22 + MediaQuery.viewInsetsOf(sheetContext).bottom),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                          width: 54,
+                          height: 5,
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFDADADA),
+                              borderRadius: BorderRadius.circular(99))),
+                      const SizedBox(height: 24),
+                      Align(
+                          alignment: Alignment.centerLeft,
+                          child: _text('Select Pause Reason',
+                              bold: true, size: 18)),
+                      const SizedBox(height: 16),
+                      Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: _border),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: Column(children: [
+                            ..._reasons.map((reason) => Semantics(
+                                selected: _reason == reason.$1,
+                                button: true,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: _saving
+                                      ? null
+                                      : () {
+                                          setSheetState(
+                                              () => _reason = reason.$1);
+                                          setState(() {});
+                                        },
+                                  child: Container(
+                                      padding: const EdgeInsets.all(7),
+                                      decoration: BoxDecoration(
+                                          color: _reason == reason.$1
+                                              ? const Color(0xFFF3E6FF)
+                                              : Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                      child: Row(children: [
+                                        Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                                color: _purple,
+                                                borderRadius:
+                                                    BorderRadius.circular(9)),
+                                            child: Icon(reason.$3,
+                                                color: Colors.white,
+                                                size: 27)),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                            child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                              _text(reason.$1,
+                                                  bold: true, size: 14),
+                                              const SizedBox(height: 2),
+                                              _text(reason.$2,
+                                                  size: 10,
+                                                  color: Colors.grey.shade700),
+                                            ])),
+                                      ])),
+                                ))),
+                            if (_reason == 'Other') ...[
+                              const SizedBox(height: 8),
+                              TextField(
+                                  controller: _otherReason,
+                                  maxLength: 500,
+                                  decoration: InputDecoration(
+                                      hintText: 'Enter reason',
+                                      counterText: '',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 12),
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          borderSide: const BorderSide(
+                                              color: _border)))),
+                            ],
+                          ])),
+                      const SizedBox(height: 22),
+                      Row(children: [
+                        Expanded(
+                            child: OutlinedButton(
+                                onPressed: _saving
+                                    ? null
+                                    : () => Navigator.pop(sheetContext),
+                                style: OutlinedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFFF8DC),
+                                    foregroundColor: Colors.black,
+                                    minimumSize: const Size(0, 56),
+                                    side:
+                                        const BorderSide(color: Colors.black),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10))),
+                                child: const Text('Cancel',
+                                    style:
+                                        TextStyle(fontFamily: 'FontBold')))),
+                        const SizedBox(width: 20),
+                        Expanded(
+                            flex: 2,
+                            child: _button(
+                                _saving ? 'Pausing...' : 'Pause Booking',
+                                _saving
+                                    ? null
+                                    : () {
+                                        Navigator.pop(sheetContext);
+                                        _pause();
+                                      }))
+                      ]),
+                    ]),
+                  ),
+                )));
+  }
 
   Widget _effect(IconData icon, String text) => Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -954,6 +1023,283 @@ Widget _button(String label, VoidCallback? onPressed) => SizedBox(
         child: Text(label,
             style: const TextStyle(fontFamily: 'FontBold', fontSize: 15))));
 
+class _ActivityInfoPage extends StatefulWidget {
+  const _ActivityInfoPage(
+      {required this.activity, required this.data, required this.name});
+
+  final ActivityModel activity;
+  final Map<String, dynamic> data;
+  final String name;
+
+  @override
+  State<_ActivityInfoPage> createState() => _ActivityInfoPageState();
+}
+
+class _ActivityInfoPageState extends State<_ActivityInfoPage> {
+  late final TextEditingController _description;
+  late final TextEditingController _totalCourts;
+  late final TextEditingController _courtType;
+  late Set<String> _playingEnvironment;
+  late Set<String> _equipmentAvailable;
+  late Set<String> _coachingAvailable;
+  late Set<String> _recommendedFor;
+
+  static const _playingOptions = [
+    'Indoor',
+    'Outdoor',
+    'Air Conditioned',
+    'Covered',
+    'Floodlights',
+    'Spectator Seating',
+  ];
+  static const _equipmentOptions = [
+    'Equipment Provided',
+    'Rental Equipment',
+    'Protective Gear',
+    'Training Gear',
+  ];
+  static const _coachingOptions = [
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Kids',
+    'Personal',
+  ];
+  static const _recommendedOptions = [
+    'Beginners',
+    'Casual',
+    'Competitive',
+    'Kids',
+    'Corporate',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _description = TextEditingController(
+        text: _readString('description', fallback: widget.activity.description));
+    _totalCourts = TextEditingController(
+        text: _readString('numberOfCourt',
+            fallback: widget.activity.numberOfCourt));
+    _courtType = TextEditingController(
+        text: _readString('courtType', fallback: widget.activity.flooringType));
+    _playingEnvironment = _readList('playingEnvironment',
+        fallback: widget.activity.physicalSetup);
+    _equipmentAvailable =
+        _readList('equipmentAvailable', fallback: widget.activity.equipmentProvided);
+    _coachingAvailable = _readList('coachingAvailable');
+    _recommendedFor =
+        _readList('recommendedFor', fallback: widget.activity.activitySuited);
+  }
+
+  @override
+  void dispose() {
+    _description.dispose();
+    _totalCourts.dispose();
+    _courtType.dispose();
+    super.dispose();
+  }
+
+  String _readString(String key, {String fallback = ''}) {
+    final value = widget.data[key]?.toString();
+    if (value != null && value.trim().isNotEmpty) return value;
+    return fallback;
+  }
+
+  Set<String> _readList(String key, {String fallback = ''}) {
+    final value = widget.data[key];
+    if (value is List) {
+      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toSet();
+    }
+    if (fallback.trim().isEmpty) return {};
+    return fallback
+        .split(RegExp(r'[,|]'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+  }
+
+  void _save() {
+    Navigator.pop(context, {
+      'description': _description.text.trim(),
+      'numberOfCourt': _totalCourts.text.trim(),
+      'courtType': _courtType.text.trim(),
+      'playingEnvironment': _playingEnvironment.toList(),
+      'equipmentAvailable': _equipmentAvailable.toList(),
+      'coachingAvailable': _coachingAvailable.toList(),
+      'recommendedFor': _recommendedFor.toList(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      backgroundColor: _background,
+      body: SafeArea(
+          child: Center(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(children: [
+                    Expanded(
+                        child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(28, 28, 28, 28),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(children: [
+                                    Material(
+                                        color: Colors.white,
+                                        shape: const CircleBorder(),
+                                        elevation: 2,
+                                        child: IconButton(
+                                            tooltip: 'Back',
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            icon: const Icon(Icons.arrow_back,
+                                                size: 22))),
+                                    const SizedBox(width: 18),
+                                    Expanded(
+                                        child: _text('Update Activity Details',
+                                            bold: true, size: 24)),
+                                  ]),
+                                  const SizedBox(height: 44),
+                                  _text(widget.name, bold: true, size: 26),
+                                  const SizedBox(height: 6),
+                                  _text('Provide Activity Specific Details',
+                                      size: 16),
+                                  const SizedBox(height: 28),
+                                  _fieldLabel('Activity Description', required: true),
+                                  _input(
+                                      controller: _description,
+                                      maxLines: 5,
+                                      maxLength: 5000),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Total Courts'),
+                                  _input(
+                                      controller: _totalCourts,
+                                      keyboardType: TextInputType.number),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Court Type'),
+                                  _input(controller: _courtType),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Playing Environment'),
+                                  _checkPanel(
+                                      options: _playingOptions,
+                                      values: _playingEnvironment,
+                                      onChanged: (next) => setState(
+                                          () => _playingEnvironment = next)),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Equipment Available'),
+                                  _checkPanel(
+                                      options: _equipmentOptions,
+                                      values: _equipmentAvailable,
+                                      onChanged: (next) => setState(
+                                          () => _equipmentAvailable = next)),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Coaching Available'),
+                                  _checkPanel(
+                                      options: _coachingOptions,
+                                      values: _coachingAvailable,
+                                      onChanged: (next) => setState(
+                                          () => _coachingAvailable = next)),
+                                  const SizedBox(height: 22),
+                                  _fieldLabel('Recommended For'),
+                                  _checkPanel(
+                                      options: _recommendedOptions,
+                                      values: _recommendedFor,
+                                      onChanged: (next) => setState(
+                                          () => _recommendedFor = next)),
+                                ]))),
+                    Container(
+                        color: _background,
+                        padding: EdgeInsets.fromLTRB(
+                            28, 16, 28, 16 + MediaQuery.paddingOf(context).bottom),
+                        child: _button('Save Changes', _save)),
+                  ])))),
+    );
+
+  Widget _fieldLabel(String label, {bool required = false}) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+          text: TextSpan(
+              text: label,
+              style: const TextStyle(
+                  fontFamily: 'FontRegular',
+                  fontSize: 15,
+                  color: Color(0xFF202020)),
+              children: [
+            if (required)
+              const TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: Colors.redAccent)),
+          ])));
+
+  Widget _input(
+          {required TextEditingController controller,
+          int maxLines = 1,
+          int? maxLength,
+          TextInputType? keyboardType}) =>
+      TextField(
+          controller: controller,
+          maxLines: maxLines,
+          maxLength: maxLength,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontFamily: 'FontRegular', fontSize: 15),
+          decoration: InputDecoration(
+              counterText: '',
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _border)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _purple))));
+
+  Widget _checkPanel(
+          {required List<String> options,
+          required Set<String> values,
+          required ValueChanged<Set<String>> onChanged}) =>
+      Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _border),
+              borderRadius: BorderRadius.circular(8)),
+          child: Column(
+              children: options
+                  .map((option) => InkWell(
+                      onTap: () {
+                        final next = {...values};
+                        next.contains(option)
+                            ? next.remove(option)
+                            : next.add(option);
+                        onChanged(next);
+                      },
+                      child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          child: Row(children: [
+                            _checkBox(values.contains(option)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _text(option, size: 15)),
+                          ]))))
+                  .toList()));
+
+  Widget _checkBox(bool checked) => AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+          color: checked ? _purple : Colors.white,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: checked ? _purple : _border, width: 2)),
+      child:
+          checked ? const Icon(Icons.check, color: Colors.white, size: 14) : null);
+}
+
 // Keep the existing slot and pricing editors while selecting this activity's data.
 class _ActivityClient extends http.BaseClient {
   _ActivityClient(this.client, this.venueId, this.categoryId);
@@ -992,12 +1338,439 @@ class _ActivityClient extends http.BaseClient {
   }
 }
 
+class _BookingsPage extends StatefulWidget {
+  const _BookingsPage({
+    required this.bookings,
+    required this.activityName,
+    required this.currency,
+  });
+
+  final List<Map<String, dynamic>> bookings;
+  final String activityName;
+  final NumberFormat currency;
+
+  @override
+  State<_BookingsPage> createState() => _BookingsPageState();
+}
+
+class _BookingsPageState extends State<_BookingsPage> {
+  final _search = TextEditingController();
+  String _tab = 'All';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    final now = DateTime.now();
+    final query = _search.text.trim().toLowerCase();
+    return widget.bookings.where((booking) {
+      final startsAt =
+          DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+      final status = booking['status']?.toString() ?? 'Upcoming';
+      final isPast = startsAt != null && startsAt.isBefore(now) ||
+          ['Completed', 'Canceled', 'No Show'].contains(status);
+      final tabMatch = switch (_tab) {
+        'Upcoming' => !isPast,
+        'Past' => isPast,
+        _ => true,
+      };
+      if (!tabMatch) return false;
+      if (query.isEmpty) return true;
+      final haystack = [
+        booking['id'],
+        booking['customerName'],
+        booking['activity'],
+        status,
+      ].map((item) => item?.toString().toLowerCase() ?? '').join(' ');
+      return haystack.contains(query);
+    }).toList();
+  }
+
+  int get _completedCount => widget.bookings
+      .where((booking) => booking['status']?.toString() == 'Completed')
+      .length;
+
+  num get _revenue => widget.bookings.fold<num>(
+      0,
+      (sum, booking) =>
+          sum + (num.tryParse(booking['amount']?.toString() ?? '') ?? 0));
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(28, 28, 28, 32),
+                children: [
+                  Row(children: [
+                    Material(
+                        color: Colors.white,
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        child: IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back, size: 22))),
+                    const SizedBox(width: 18),
+                    Expanded(
+                        child: _text('Manage bookings', bold: true, size: 22)),
+                  ]),
+                  const SizedBox(height: 30),
+                  Row(children: [
+                    Expanded(
+                        child: _summaryCard('Total Bookings',
+                            widget.bookings.length.toString(),
+                            Icons.calendar_today_outlined)),
+                    const SizedBox(width: 18),
+                    Expanded(
+                        child: _summaryCard('Total Revenue',
+                            widget.currency.format(_revenue), Icons.currency_rupee,
+                            iconColor: _purple)),
+                  ]),
+                  const SizedBox(height: 18),
+                  FractionallySizedBox(
+                      widthFactor: .5,
+                      alignment: Alignment.centerLeft,
+                      child: _summaryCard('Completed',
+                          _completedCount.toString(), Icons.check_circle_outline,
+                          iconColor: Colors.green)),
+                  const SizedBox(height: 24),
+                  _tabs(),
+                  const SizedBox(height: 18),
+                  _searchField(),
+                  const SizedBox(height: 56),
+                  if (_filtered.isEmpty)
+                    Center(
+                        child: _text('No bookings found.',
+                            color: Colors.grey.shade600, size: 14))
+                  else
+                    ..._filtered
+                        .map((booking) => _bookingCard(context, booking)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _summaryCard(String title, String value, IconData icon,
+          {Color iconColor = const Color(0xFF202124)}) =>
+      Container(
+          height: 124,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _border),
+              borderRadius: BorderRadius.circular(16)),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: _text(title, size: 14)),
+              Icon(icon, color: iconColor, size: 22),
+            ]),
+            const Spacer(),
+            _text(value, bold: true, size: 24),
+          ]));
+
+  Widget _tabs() => Container(
+      height: 64,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _border),
+          borderRadius: BorderRadius.circular(12)),
+      child: Row(
+          children: ['All', 'Upcoming', 'Past']
+              .map((tab) => Expanded(
+                      child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => setState(() => _tab = tab),
+                    child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                            color: _tab == tab ? _purple : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8)),
+                        child: _text(tab,
+                            bold: _tab == tab,
+                            color: _tab == tab ? Colors.white : Colors.black,
+                            size: 15)),
+                  )))
+              .toList()));
+
+  Widget _searchField() => TextField(
+      controller: _search,
+      onChanged: (_) => setState(() {}),
+      style: const TextStyle(fontFamily: 'FontRegular', fontSize: 14),
+      decoration: InputDecoration(
+          hintText: 'Search by name, booking id...',
+          hintStyle:
+              const TextStyle(fontFamily: 'FontRegular', color: Colors.grey),
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _border)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _purple))));
+
+  Widget _bookingCard(BuildContext context, Map<String, dynamic> booking) {
+    final status = booking['status']?.toString() ?? 'Upcoming';
+    final date =
+        DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final color = switch (status) {
+      'Canceled' => const Color(0xFF7D9291),
+      'No Show' => Colors.redAccent,
+      'Completed' => _purple,
+      _ => Colors.orange,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showDetails(context, booking),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                    child: _text(
+                        booking['customerName']?.toString() ?? 'Customer',
+                        bold: true,
+                        size: 16)),
+                _badge(status, color),
+              ]),
+              const SizedBox(height: 10),
+              _text(
+                  '${widget.activityName}  |  ${date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
+                  color: Colors.grey,
+                  size: 13),
+              const SizedBox(height: 14),
+              _text(
+                  '${widget.currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)}  |  ${booking['participants']?.toString() ?? '0'} persons',
+                  bold: true,
+                  size: 18),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context, Map<String, dynamic> booking) {
+    final date =
+        DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              title: Row(children: [
+                const Expanded(
+                    child: Text('Booking details',
+                        style:
+                            TextStyle(fontFamily: 'FontBold', fontSize: 20))),
+                IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close))
+              ]),
+              content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    _bookingDetailSection('Customer information', [
+                      ('Full Name', booking['customerName']?.toString() ?? 'Customer'),
+                      ('Status', booking['status']?.toString() ?? 'Upcoming'),
+                    ]),
+                    const Divider(height: 30),
+                    _bookingDetailSection('Booking information', [
+                      ('Activity', widget.activityName),
+                      ('Date',
+                          date == null ? '0' : DateFormat('dd MMM yyyy').format(date)),
+                      ('Time',
+                          date == null ? '0' : DateFormat('hh:mm a').format(date)),
+                      ('Persons', booking['participants']?.toString() ?? '0'),
+                      (
+                        'Amount',
+                        widget.currency.format(
+                            num.tryParse(booking['amount']?.toString() ?? '') ?? 0)
+                      ),
+                    ]),
+                  ])),
+            ));
+  }
+
+  Widget _bookingDetailSection(String title, List<(String, String)> items) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _text(title, bold: true, size: 16),
+        const SizedBox(height: 18),
+        for (var i = 0; i < items.length; i += 2)
+          Padding(
+              padding:
+                  EdgeInsets.only(bottom: i + 2 < items.length ? 18 : 0),
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: _bookingDetailItem(items[i].$1, items[i].$2)),
+                const SizedBox(width: 28),
+                Expanded(
+                    child: i + 1 < items.length
+                        ? _bookingDetailItem(items[i + 1].$1, items[i + 1].$2)
+                        : const SizedBox.shrink()),
+              ])),
+      ]);
+
+  Widget _bookingDetailItem(String label, String value) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _text(label, size: 13, color: Colors.grey),
+        const SizedBox(height: 5),
+        _text(value, bold: true, size: 15),
+      ]);
+}
+
+class _ReviewsPage extends StatelessWidget {
+  const _ReviewsPage({required this.activityName, required this.reviews});
+
+  final String activityName;
+  final List<Map<String, dynamic>> reviews;
+
+  double get rating {
+    if (reviews.isEmpty) return 0;
+    final total = reviews.fold<num>(
+        0, (sum, review) => sum + (num.tryParse(review['rating']?.toString() ?? '') ?? 0));
+    return total / reviews.length;
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
+                children: [
+                  Row(children: [
+                    Material(
+                        color: Colors.white,
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        child: IconButton(
+                            tooltip: 'Back',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back, size: 24))),
+                    const SizedBox(width: 22),
+                    Expanded(child: _text('Reviews & Ratings', bold: true, size: 28)),
+                  ]),
+                  const SizedBox(height: 28),
+                  _text(activityName, bold: true, size: 20),
+                  const SizedBox(height: 16),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                        child: _panel(
+                            child: Column(children: [
+                      _text(rating.toStringAsFixed(1), bold: true, size: 44),
+                      Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                              5,
+                              (i) => Icon(
+                                  i < rating.round()
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  color: const Color(0xFFD8F34A)))),
+                      const SizedBox(height: 8),
+                      _text('(${reviews.length} Review)', size: 14),
+                    ]))),
+                    const SizedBox(width: 18),
+                    Expanded(child: _ratingBars()),
+                  ]),
+                  const SizedBox(height: 24),
+                  if (reviews.isEmpty)
+                    Center(child: _text('No reviews yet', color: Colors.grey))
+                  else
+                    ...reviews.map(_reviewCard),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _ratingBars() => Column(
+        children: [
+          for (var star = 5; star >= 1; star--)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(children: [
+                SizedBox(width: 24, child: _text('$star', bold: true, size: 18)),
+                const Icon(Icons.star, size: 14, color: Color(0xFF202124)),
+                const SizedBox(width: 6),
+                Expanded(
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                            minHeight: 7,
+                            value: reviews.isEmpty ? 0 : .2,
+                            backgroundColor: Colors.white,
+                            color: const Color(0xFFD8F34A)))),
+              ]),
+            )
+        ],
+      );
+
+  Widget _reviewCard(Map<String, dynamic> review) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: _panel(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const CircleAvatar(
+                backgroundColor: Color(0xFFD9D9D9),
+                child: Icon(Icons.person, color: Colors.white)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _text(review['name']?.toString() ?? 'Customer',
+                    bold: true, size: 16)),
+            _text(review['createdAgo']?.toString() ?? '',
+                size: 10, color: Colors.black87),
+          ]),
+          const SizedBox(height: 8),
+          Row(
+              children: List.generate(
+                  5,
+                  (i) => Icon(
+                      i < (num.tryParse(review['rating']?.toString() ?? '') ?? 0)
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: const Color(0xFFD8F34A),
+                      size: 16))),
+          const SizedBox(height: 8),
+          _text(review['body']?.toString() ?? '', size: 13),
+        ])),
+      );
+}
+
 class _ImagesPage extends StatefulWidget {
   const _ImagesPage(
-      {required this.load,
+      {required this.activityName,
+      required this.load,
       required this.upload,
       required this.remove,
       required this.imageUrl});
+  final String activityName;
   final List<String> Function() load;
   final Future<void> Function() upload;
   final Future<void> Function(String) remove;
@@ -1020,46 +1793,120 @@ class _ImagesPageState extends State<_ImagesPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: _background,
-      appBar: AppBar(
-          title: const Text('Manage Images'), backgroundColor: _background),
       body: Column(children: [
         if (_busy) const LinearProgressIndicator(),
         Expanded(
-            child: widget.load().isEmpty
-                ? const Center(child: Text('No images yet'))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(20),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 220,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12),
-                    itemCount: widget.load().length,
-                    itemBuilder: (_, i) {
-                      final url = widget.load()[i];
-                      return ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Stack(fit: StackFit.expand, children: [
-                            Image.network(widget.imageUrl(url),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const Icon(Icons.broken_image_outlined)),
-                            Positioned(
-                                right: 4,
-                                top: 4,
-                                child: IconButton.filled(
-                                    tooltip: 'Remove image',
+            child: SafeArea(
+                bottom: false,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+                  children: [
+                    SizedBox(
+                      height: 52,
+                      child: Stack(alignment: Alignment.center, children: [
+                        Align(
+                            alignment: Alignment.centerLeft,
+                            child: Material(
+                                color: Colors.white,
+                                shape: const CircleBorder(),
+                                elevation: 2,
+                                child: IconButton(
+                                    tooltip: 'Back',
                                     onPressed: _busy
                                         ? null
-                                        : () => _run(() => widget.remove(url)),
-                                    icon: const Icon(Icons.delete_outline))),
-                          ]));
-                    })),
+                                        : () => Navigator.pop(context),
+                                    icon: const Icon(Icons.arrow_back,
+                                        size: 24)))),
+                        Center(
+                            child: _text('Update Images',
+                                bold: true, size: 28)),
+                      ]),
+                    ),
+                    const SizedBox(height: 36),
+                    Row(children: [
+                      Expanded(
+                          child:
+                              _text(widget.activityName, bold: true, size: 30)),
+                      Material(
+                          color: Colors.white,
+                          shape: const CircleBorder(),
+                          elevation: 4,
+                          child: IconButton(
+                              tooltip: 'Upload images',
+                              onPressed:
+                                  _busy ? null : () => _run(widget.upload),
+                              icon: const Icon(Icons.add,
+                                  color: _purple, size: 30))),
+                    ]),
+                    const SizedBox(height: 8),
+                    _text("Upload this activity's images", size: 17),
+                    const SizedBox(height: 8),
+                    _text('${widget.load().length} / 12 Images Uploaded',
+                        size: 15, color: _purple),
+                    const SizedBox(height: 34),
+                    if (widget.load().isEmpty)
+                      Padding(
+                          padding: const EdgeInsets.only(top: 80),
+                          child:
+                              Center(child: _text('No images yet', color: Colors.grey)))
+                    else
+                      GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  mainAxisSpacing: 34,
+                                  crossAxisSpacing: 46,
+                                  childAspectRatio: 1),
+                          itemCount: widget.load().length,
+                          itemBuilder: (_, i) {
+                            final url = widget.load()[i];
+                            return _imageSlot(url);
+                          }),
+                  ],
+                ))),
         SafeArea(
             top: false,
             child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: _button(_busy ? 'Uploading...' : 'Upload Images',
-                    _busy ? null : () => _run(widget.upload)))),
+                child: _button('Save Changes',
+                    _busy ? null : () => Navigator.pop(context)))),
       ]));
+
+  Widget _imageSlot(String url) => Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 0,
+            child: IconButton.filled(
+              tooltip: 'Remove image',
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFF7450B6),
+                foregroundColor: Colors.white,
+                fixedSize: const Size.square(44),
+              ),
+              onPressed: _busy ? null : () => _run(() => widget.remove(url)),
+              icon: const Icon(Icons.delete_outline, size: 24),
+            ),
+          ),
+          Positioned(
+            top: 82,
+            child: SizedBox(
+              width: 42,
+              height: 42,
+              child: Image.network(
+                widget.imageUrl(url),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.image_outlined,
+                  size: 28,
+                  color: Color(0xFF202124),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
 }

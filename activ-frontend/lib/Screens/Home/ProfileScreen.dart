@@ -25,7 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _uploading = false,
       _teamMember = false,
       _verified = false;
-  String _name = '', _displayName = '', _email = '', _phone = '';
+  String _name = '', _email = '', _phone = '';
   String _venuePhone = '', _avatar = '', _role = '';
   String? _error, _venueError;
 
@@ -79,7 +79,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _name = names.isNotEmpty
           ? names
           : (profile['fullName'] ?? profile['name'] ?? '').toString();
-      _displayName = (profile['businessName'] ?? _name).toString();
       _email = (profile['email'] ?? '').toString();
       _phone = (profile['phone'] ??
               profile['mobile'] ??
@@ -185,53 +184,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Column(children: [
-              Expanded(
-                  child: _loading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: Colors.black))
-                      : _error != null
-                          ? Center(
-                              child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                  Text(_error!,
-                                      textAlign: TextAlign.center,
-                                      style: _text(15)),
-                                  TextButton(
-                                      onPressed: _loadProfile,
-                                      child: const Text('Retry')),
-                                  TextButton(
-                                      onPressed: () =>
-                                          Navigator.maybePop(context),
-                                      child: const Text('Back')),
-                                ]))
-                          : ListView(
-                              padding:
-                                  const EdgeInsets.fromLTRB(20, 30, 20, 24),
-                              children: [
-                                  _header(),
-                                  const SizedBox(height: 32),
-                                  Text('Your Information',
-                                      style: _text(18, bold: true)),
-                                  const SizedBox(height: 14),
-                                  _field('Full Name', _name,
-                                      Icons.person_outline_rounded),
-                                  _field('Email Address', _email,
-                                      Icons.mail_outline_rounded),
-                                  _field('Primary Phone Number', _phone,
-                                      Icons.phone_outlined),
-                                  if (_teamMember)
-                                    _field('Role', _role, Icons.badge_outlined)
-                                  else
-                                    _field(
-                                        'Venue Primary Number',
-                                        _venueError ?? _venuePhone,
-                                        Icons.fax_outlined),
-                                  const SizedBox(height: 6),
-                                  _supportNotice(),
-                                ])),
+              Expanded(child: _body()),
               Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                   child: SizedBox(
                     width: double.infinity,
                     height: 56,
@@ -259,7 +214,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
 
-  Widget _header() => Column(children: [
+  Widget _body() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.black));
+    }
+    if (_error != null) {
+      return Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(_error!, textAlign: TextAlign.center, style: _text(15)),
+        TextButton(onPressed: _loadProfile, child: const Text('Retry')),
+        TextButton(
+            onPressed: () => Navigator.maybePop(context),
+            child: const Text('Back')),
+      ]));
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 760;
+        final tight = constraints.maxHeight < 690;
+        final mini = constraints.maxHeight < 640;
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding:
+              EdgeInsets.fromLTRB(20, mini ? 12 : (compact ? 20 : 30), 20, 22),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _header(compact: compact, tight: tight, mini: mini),
+            SizedBox(height: mini ? 18 : (compact ? 26 : 34)),
+            Text('Your Information',
+                style: _text(mini ? 18 : (compact ? 19 : 20), bold: true)),
+            SizedBox(height: mini ? 12 : (compact ? 14 : 18)),
+            _field('Full Name', _name, Icons.person_outline_rounded,
+                compact: compact, mini: false),
+            _field('Email Address', _email, Icons.mail_outline_rounded,
+                compact: compact, mini: false),
+            _field('Primary Phone Number', _phoneLabel(_phone),
+                Icons.phone_outlined,
+                compact: compact,
+                mini: false),
+            if (_teamMember)
+              _field('Role', _role, Icons.badge_outlined,
+                  compact: compact, mini: false)
+            else
+              _field(
+                  'Venue Primary Number',
+                  _venueError ?? _phoneLabel(_venuePhone),
+                  Icons.fax_outlined,
+                  compact: compact,
+                  mini: false),
+            _supportNotice(compact: compact, mini: mini),
+          ]),
+        );
+      },
+    );
+  }
+
+  String _phoneLabel(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty) return raw;
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (raw.startsWith('+')) return raw;
+    if (digits.length == 10) return '+91 $digits';
+    if (digits.length == 12 && digits.startsWith('91')) {
+      return '+91 ${digits.substring(2)}';
+    }
+    return raw;
+  }
+
+  Widget _header(
+          {required bool compact, required bool tight, required bool mini}) =>
+      Column(children: [
         Row(children: [
           Material(
               color: Colors.white,
@@ -286,7 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _teamMember ? 'Team Member Details' : 'Partner Details',
                       style: _text(24, bold: true)))),
         ]),
-        const SizedBox(height: 24),
+        SizedBox(height: mini ? 10 : (compact ? 20 : 32)),
         if (_verified) ...[
           Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -297,16 +321,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(width: 9),
                 Text('Verified Partner', style: _text(13)),
               ])),
-          const SizedBox(height: 16),
+          SizedBox(height: mini ? 6 : (compact ? 10 : 16)),
         ],
         SizedBox(
-            width: 124,
-            height: 124,
+            width: mini ? 78 : (tight ? 98 : (compact ? 108 : 124)),
+            height: mini ? 78 : (tight ? 98 : (compact ? 108 : 124)),
             child: Stack(children: [
               ClipOval(
                   child: SizedBox(
-                      width: 124,
-                      height: 124,
+                      width: mini ? 78 : (tight ? 98 : (compact ? 108 : 124)),
+                      height: mini ? 78 : (tight ? 98 : (compact ? 108 : 124)),
                       child: ColoredBox(
                           color: const Color(0xFFD0D0D0),
                           child: _avatar.isNotEmpty
@@ -343,39 +367,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : const Icon(Icons.camera_alt,
                                     color: _purple, size: 18)))),
             ])),
-        const SizedBox(height: 14),
-        Text(_displayName.isNotEmpty ? _displayName : 'Partner',
-            style: _text(20, bold: true), textAlign: TextAlign.center),
-        const SizedBox(height: 10),
-        Text(_email, style: _text(15), textAlign: TextAlign.center),
+        SizedBox(height: mini ? 8 : (compact ? 14 : 22)),
+        Text(_email,
+            style: _text(mini ? 14 : (compact ? 15 : 16)),
+            textAlign: TextAlign.center),
       ]);
 
   Widget _defaultAvatar() => const Icon(Icons.person_outline_rounded,
       size: 64, color: Color(0xFF505050), semanticLabel: 'Partner profile');
 
-  Widget _field(String label, String value, IconData icon) => Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(14),
-        constraints: const BoxConstraints(minHeight: 84),
+  Widget _field(String label, String value, IconData icon,
+          {required bool compact, required bool mini}) =>
+      Container(
+        margin: EdgeInsets.only(bottom: mini ? 7 : (compact ? 10 : 14)),
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? 18 : 20,
+            vertical: mini ? 7 : (compact ? 10 : 14)),
+        constraints: BoxConstraints(minHeight: mini ? 61 : (compact ? 74 : 86)),
         decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            color: Colors.white, borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
           Container(
-              width: 55,
-              height: 55,
+              width: mini ? 44 : (compact ? 50 : 56),
+              height: mini ? 44 : (compact ? 50 : 56),
               decoration: BoxDecoration(
                   color: const Color(0xFFD9D9D9),
                   borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 30, color: Colors.black)),
-          const SizedBox(width: 16),
+              child: Icon(icon,
+                  size: mini ? 24 : (compact ? 27 : 30),
+                  color: Colors.black)),
+          SizedBox(width: mini ? 12 : (compact ? 14 : 16)),
           Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(label, style: _text(14, color: const Color(0xFF484848))),
-                const SizedBox(height: 5),
+                Text(label,
+                    style: _text(mini ? 13 : (compact ? 14 : 15),
+                        color: const Color(0xFF484848))),
+                SizedBox(height: mini ? 2 : (compact ? 3 : 5)),
                 Text(value.isNotEmpty ? value : 'Not provided',
-                    style: _text(16, bold: true)),
+                    style: _text(mini ? 14 : (compact ? 15 : 16), bold: true),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ])),
           const SizedBox(width: 8),
           const Icon(Icons.lock_outline_rounded,
@@ -383,28 +416,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
       );
 
-  Widget _supportNotice() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+  Widget _supportNotice({required bool compact, required bool mini}) =>
+      Container(
+        margin: EdgeInsets.only(top: mini ? 3 : (compact ? 8 : 12)),
+        padding: EdgeInsets.symmetric(
+          horizontal: mini ? 12 : (compact ? 16 : 18),
+          vertical: mini ? 8 : (compact ? 14 : 18),
+        ),
         decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFA857C8))),
         child: Row(children: [
-          const Icon(Icons.headset_mic_outlined, color: _purple, size: 36),
-          const SizedBox(width: 16),
+          Icon(Icons.headset_mic_outlined,
+              color: _purple, size: mini ? 28 : 36),
+          SizedBox(width: mini ? 10 : (compact ? 14 : 16)),
           Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                 Text('Need to update your details?',
-                    style:
-                        _text(20, bold: true, color: const Color(0xFFAC69C6))),
-                const SizedBox(height: 10),
+                    style: _text(mini ? 15 : (compact ? 18 : 20),
+                        bold: true, color: const Color(0xFFAC69C6))),
+                SizedBox(height: mini ? 3 : (compact ? 6 : 10)),
                 Text(
                     'Profile details are locked after verification for security purposes. Contact support and our team will help you.',
-                    style: _text(14, color: const Color(0xFFAC69C6))
-                        .copyWith(height: 1.45)),
+                    style: _text(mini ? 11 : (compact ? 13 : 14),
+                            color: const Color(0xFFAC69C6))
+                        .copyWith(height: mini ? 1.25 : 1.35)),
               ])),
         ]),
       );
+
 }

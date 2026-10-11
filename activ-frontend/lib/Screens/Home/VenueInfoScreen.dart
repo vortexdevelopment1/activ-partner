@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     for (final field in [
       'name',
       'description',
+      'address',
       'locationUrl',
       'flatBuilding',
       'venuePhone',
@@ -40,6 +42,10 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
   Map<String, dynamic>? _request;
   String? _loadError, _submissionError;
   bool _loading = true, _submitting = false, _canEdit = true;
+  final List<Map<String, String>> _placeSuggestions = [];
+  Timer? _addressSearchDebounce;
+  bool _showPlaceSuggestions = false;
+  double? _selectedLatitude, _selectedLongitude;
   bool get _pending =>
       _request?['status']?.toString().toLowerCase() == 'pending';
   bool get _locked => _pending || !_canEdit;
@@ -64,6 +70,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
+    _addressSearchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -194,6 +201,14 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
       _submissionError = null;
     });
     try {
+      final payload = <String, dynamic>{};
+      for (final entry in _controllers.entries) {
+        final value = entry.value.text.trim();
+        if (entry.key == 'locationUrl' && value.isEmpty) continue;
+        payload[entry.key] = value;
+      }
+      if (_selectedLatitude != null) payload['latitude'] = _selectedLatitude;
+      if (_selectedLongitude != null) payload['longitude'] = _selectedLongitude;
       final token = await SharedPreference.readStr('jwt_token') ?? '';
       final response = await (widget.client?.post ?? http.post)(
         Uri.parse('$CREATE_VENUE_URL/${_venue['id']}/update-request'),
@@ -201,10 +216,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token'
         },
-        body: jsonEncode({
-          for (final entry in _controllers.entries)
-            entry.key: entry.value.text.trim()
-        }),
+        body: jsonEncode(payload),
       );
       if (!mounted) return;
       final body = _body(response.body);
@@ -264,7 +276,14 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         return 'Enter a valid phone number.';
       }
     }
+    if (key == 'address') {
+      final changedAddress = text != _initialValue('address');
+      if (changedAddress && _controllers['locationUrl']!.text.trim().isEmpty) {
+        return 'Select an address from the suggestions.';
+      }
+    }
     if (key == 'locationUrl') {
+      if (text.isEmpty) return null;
       final uri = Uri.tryParse(text);
       final host = uri?.host.toLowerCase() ?? '';
       final isGoogleMaps = host == 'maps.app.goo.gl' ||
@@ -280,6 +299,229 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     }
     return null;
   }
+
+  Future<void> _fetchPlaceSuggestions(String input) async {
+    if (input.length < 2 || GOOGLE_MAPS_API_KEY.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _placeSuggestions.clear();
+          _showPlaceSuggestions = false;
+        });
+      }
+      return;
+    }
+    try {
+      final response = await (widget.client?.post ?? http.post)(
+        Uri.parse('https://places.googleapis.com/v1/places:autocomplete'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        },
+        body: jsonEncode({
+          'input': input,
+          'includedRegionCodes': ['in'],
+        }),
+      );
+      if (!mounted || response.statusCode != 200) return;
+      final data = jsonDecode(response.body);
+      final suggestions = (data['suggestions'] as List? ?? [])
+          .map<Map<String, String>>((suggestion) {
+            final prediction = suggestion['placePrediction'] as Map?;
+            return {
+              'placeId': prediction?['placeId']?.toString() ?? '',
+              'description':
+                  (prediction?['text'] as Map?)?['text']?.toString() ?? '',
+            };
+          })
+          .where((suggestion) =>
+              suggestion['placeId']!.isNotEmpty &&
+              suggestion['description']!.isNotEmpty)
+          .take(5)
+          .toList();
+      setState(() {
+        _placeSuggestions
+          ..clear()
+          ..addAll(suggestions);
+        _showPlaceSuggestions = suggestions.isNotEmpty;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _placeSuggestions.clear();
+          _showPlaceSuggestions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectPlace(Map<String, String> suggestion) async {
+    FocusScope.of(context).unfocus();
+    final placeId = suggestion['placeId'] ?? '';
+    setState(() {
+      _controllers['address']!.text = suggestion['description'] ?? '';
+      _controllers['locationUrl']!.text =
+          'https://maps.google.com/?q=place_id:$placeId';
+      _showPlaceSuggestions = false;
+      _placeSuggestions.clear();
+      _submissionError = null;
+    });
+    if (placeId.isNotEmpty) await _fetchPlaceDetails(placeId);
+  }
+
+  Future<void> _fetchPlaceDetails(String placeId) async {
+    if (GOOGLE_MAPS_API_KEY.trim().isEmpty) return;
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse('https://places.googleapis.com/v1/places/$placeId'),
+        headers: {
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'addressComponents,location',
+        },
+      );
+      if (!mounted || response.statusCode != 200) return;
+      final data = jsonDecode(response.body);
+      final components = data['addressComponents'] as List? ?? [];
+      String city = '', state = '', pincode = '';
+      for (final component in components.whereType<Map>()) {
+        final types =
+            (component['types'] as List? ?? []).map((e) => e.toString());
+        final longName = component['longText']?.toString() ?? '';
+        if (types.contains('locality')) city = longName;
+        if (types.contains('administrative_area_level_2') && city.isEmpty) {
+          city = longName;
+        }
+        if (types.contains('administrative_area_level_1')) state = longName;
+        if (types.contains('postal_code')) pincode = longName;
+      }
+      final location = data['location'] as Map?;
+      setState(() {
+        if (city.isNotEmpty) _controllers['city']!.text = city;
+        if (state.isNotEmpty) _controllers['state']!.text = state;
+        if (pincode.isNotEmpty) _controllers['zipCode']!.text = pincode;
+        _selectedLatitude = (location?['latitude'] as num?)?.toDouble();
+        _selectedLongitude = (location?['longitude'] as num?)?.toDouble();
+      });
+    } catch (_) {}
+  }
+
+  Widget _addressField() => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text.rich(
+              TextSpan(text: 'Venue Address', children: [
+                TextSpan(
+                    text: '*',
+                    style: TextStyle(
+                        color: _locked
+                            ? const Color(0xFFFFB6AF)
+                            : AppColors.red)),
+              ]),
+              style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: _locked ? AppColors.hintColor : AppColors.darkBlack)),
+          const SizedBox(height: 8),
+          TextFormField(
+            key: const Key('venue-update-address'),
+            controller: _controllers['address'],
+            enabled: !_locked && !_submitting,
+            validator: (value) => _validate('address', value),
+            style: TextStyle(
+                fontFamily: 'OnboardingRegular',
+                fontSize: 14,
+                height: 1.4,
+                color: _locked ? AppColors.hintColor : AppColors.darkBlack),
+            keyboardType: TextInputType.streetAddress,
+            textInputAction: TextInputAction.search,
+            onChanged: (value) {
+              _controllers['locationUrl']!.clear();
+              _selectedLatitude = null;
+              _selectedLongitude = null;
+              _addressSearchDebounce?.cancel();
+              _addressSearchDebounce =
+                  Timer(const Duration(milliseconds: 450), () {
+                _fetchPlaceSuggestions(value.trim());
+              });
+              if (mounted) setState(() => _submissionError = null);
+            },
+            decoration: OnboardingStyles.inputDecoration().copyWith(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              fillColor: _locked ? const Color(0x80FFFFFF) : Colors.white,
+              suffixIcon: Icon(
+                  _controllers['locationUrl']!.text.trim().isNotEmpty
+                      ? Icons.check_circle
+                      : Icons.search,
+                  size: 24,
+                  color: _controllers['locationUrl']!.text.trim().isNotEmpty
+                      ? const Color(0xFF27AE60)
+                      : AppColors.hintColor),
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 44, minHeight: 44),
+              disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFDDE5CC))),
+            ),
+          ),
+          if (_showPlaceSuggestions)
+            Container(
+              margin: const EdgeInsets.only(top: 2),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFD7DED1)),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x1F000000),
+                        blurRadius: 6,
+                        offset: Offset(0, 2))
+                  ]),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _placeSuggestions.length,
+                separatorBuilder: (_, __) => const Divider(
+                    height: 1, thickness: 1, color: Color(0xFFE2E7DE)),
+                itemBuilder: (context, index) {
+                  final suggestion = _placeSuggestions[index];
+                  return InkWell(
+                    onTap: () => _selectPlace(suggestion),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 14),
+                      child: Row(children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 22, color: AppColors.hintColor),
+                        const SizedBox(width: 14),
+                        Expanded(
+                            child: Text(suggestion['description'] ?? '',
+                                style: const TextStyle(
+                                    fontFamily: 'OnboardingRegular',
+                                    fontSize: 15,
+                                    height: 1.35,
+                                    color: AppColors.darkBlack))),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.help_outline, size: 14, color: AppColors.hintColor),
+            const SizedBox(width: 6),
+            Expanded(
+                child: Text(
+                    'Copy & add your venue\u2019s location from Google Maps.',
+                    style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: _locked
+                            ? const Color(0xFFB3B8A2)
+                            : AppColors.hintColor))),
+          ]),
+        ]),
+      );
 
   Widget _field(String key, String label, {bool optional = false}) => Padding(
         padding: EdgeInsets.only(top: key == 'locationUrl' ? 12 : 20),
@@ -574,7 +816,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                                     color: AppColors.black1)),
                             _field('name', 'Venue Name'),
                             _field('description', 'Description'),
-                            _field('locationUrl', 'Location URL'),
+                            _addressField(),
                             _field('flatBuilding',
                                 'Flat/Building, Floor Number (optional)',
                                 optional: true),

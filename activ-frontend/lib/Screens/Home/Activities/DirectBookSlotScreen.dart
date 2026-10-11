@@ -262,20 +262,11 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   Future<void> _pickCourt() async {
     final court = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final court in _courts)
-              ListTile(
-                title: Text(court),
-                trailing: court == _selectedCourt
-                    ? const Icon(Icons.check, color: _purple)
-                    : null,
-                onTap: () => Navigator.pop(context, court),
-              ),
-          ],
-        ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _CourtPickerSheet(
+        courts: _courts,
+        selectedCourt: _selectedCourt,
       ),
     );
     if (court != null && mounted) {
@@ -371,7 +362,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                    padding: const EdgeInsets.fromLTRB(28, 30, 28, 20),
                     children: [
                       Row(children: [
                         Material(
@@ -382,28 +373,28 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                             tooltip: 'Back',
                             onPressed:
                                 _saving ? null : () => Navigator.pop(context),
-                            icon: const Icon(Icons.arrow_back, size: 28),
+                            icon: const Icon(Icons.arrow_back, size: 24),
                           ),
                         ),
-                        const SizedBox(width: 34),
+                        const SizedBox(width: 28),
                         const Expanded(
                           child: Text('Book Slots',
                               style: TextStyle(
                                   fontFamily: 'FontBold',
-                                  fontSize: 31,
+                                  fontSize: 28,
                                   color: Color(0xFF202124))),
                         ),
                       ]),
-                      const SizedBox(height: 72),
+                      const SizedBox(height: 64),
                       _label('Venue'),
                       _readonly(widget.venueName),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
                       _label('Activity'),
                       _readonly(_activityName),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
                       _label('Select Court', required: true),
                       _picker(_selectedCourt, Icons.chevron_right, _pickCourt),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
                       _label('Select Date', required: true),
                       _picker(DateFormat('dd MMMM yyyy').format(_selectedDate),
                           Icons.calendar_today_outlined, _pickDate,
@@ -414,11 +405,11 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         const SizedBox(height: 10),
                         ...slots.map(_slotTile),
                       ] else ...[
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 26),
                         const Text('No slots available for this date.',
                             style: TextStyle(
                                 fontFamily: 'FontRegular',
-                                fontSize: 14,
+                                fontSize: 15,
                                 color: Color(0xFF686868))),
                       ],
                     ],
@@ -427,22 +418,23 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                 SafeArea(
                   top: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+                    padding: const EdgeInsets.fromLTRB(28, 10, 28, 24),
                     child: SizedBox(
-                      height: 64,
+                      height: 56,
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _saving || slots.isEmpty ? null : _reserve,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1F1F1F),
                           disabledBackgroundColor: Colors.grey.shade500,
+                          disabledForegroundColor: const Color(0xFF6F6F6F),
                           foregroundColor: _lime,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(_saving ? 'Booking...' : 'Next',
                             style: const TextStyle(
-                                fontFamily: 'FontBold', fontSize: 20)),
+                                fontFamily: 'FontBold', fontSize: 18)),
                       ),
                     ),
                   ),
@@ -469,13 +461,13 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         child: InkWell(
           onTap: () => setState(() => _selectedSlot = slot),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(children: [
               Expanded(
                 child: Text(slot.label,
                     style: const TextStyle(
                         fontFamily: 'FontRegular',
-                        fontSize: 16,
+                        fontSize: 15,
                         color: Color(0xFF202124))),
               ),
               if (slot.price != null && slot.price!.isNotEmpty)
@@ -484,8 +476,9 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         fontFamily: 'FontBold',
                         fontSize: 14,
                         color: Color(0xFF202124))),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Icon(selected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 22,
                   color: selected ? _purple : const Color(0xFFB9BFC4)),
             ]),
           ),
@@ -495,7 +488,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   Widget _label(String text, {bool required = false}) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: 6),
         child: Text.rich(
           TextSpan(children: [
             TextSpan(text: text),
@@ -505,15 +498,15 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
           ]),
           style: const TextStyle(
               fontFamily: 'FontBold',
-              fontSize: 20,
+              fontSize: 18,
               color: Color(0xFF202124)),
         ),
       );
 
   Widget _readonly(String value) => Container(
-        height: 64,
+        height: 36,
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: const Color(0xFFE4E4E8),
           borderRadius: BorderRadius.circular(10),
@@ -524,7 +517,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
                 fontFamily: 'FontRegular',
-                fontSize: 18,
+                fontSize: 16,
                 color: Color(0xFF202124))),
       );
 
@@ -540,8 +533,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         child: InkWell(
           onTap: _saving ? null : onTap,
           child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            height: 50,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(children: [
               Expanded(
                 child: Text(value,
@@ -549,10 +542,10 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontFamily: 'FontRegular',
-                        fontSize: 18,
+                        fontSize: 16,
                         color: Color(0xFF202124))),
               ),
-              Icon(icon, color: iconColor, size: 30),
+              Icon(icon, color: iconColor, size: 27),
             ]),
           ),
         ),
@@ -571,4 +564,100 @@ class _BookableSlot {
   final String startTime;
   final String endTime;
   final String? price;
+}
+
+class _CourtPickerSheet extends StatelessWidget {
+  const _CourtPickerSheet({
+    required this.courts,
+    required this.selectedCourt,
+  });
+
+  final List<String> courts;
+  final String selectedCourt;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        top: false,
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .58,
+          ),
+          padding: const EdgeInsets.fromLTRB(28, 10, 28, 28),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 56,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD9D9D9),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text('Select Court',
+                  style: TextStyle(
+                      fontFamily: 'FontBold',
+                      fontSize: 20,
+                      color: Color(0xFF202124))),
+              const SizedBox(height: 18),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: courts.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final court = courts[index];
+                    final selected = court == selectedCourt;
+                    return Material(
+                      color: selected
+                          ? const Color(0xFFF6E7FF)
+                          : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: selected ? _purple : _border,
+                          width: selected ? 1.2 : 1,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context, court),
+                        child: SizedBox(
+                          height: 58,
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 22),
+                            child: Row(children: [
+                              Expanded(
+                                child: Text(court,
+                                    style: TextStyle(
+                                        fontFamily: 'FontRegular',
+                                        fontSize: 16,
+                                        color: selected
+                                            ? _purple
+                                            : const Color(0xFF202124))),
+                              ),
+                              if (selected)
+                                const Icon(Icons.check,
+                                    color: _purple, size: 24),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }

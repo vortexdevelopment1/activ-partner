@@ -72,6 +72,7 @@ class HomeScreen extends StatefulWidget {
 class _State extends State<HomeScreen> {
   String venueName = '';
   String _venueId = '';
+  String _avatar = '';
   bool _isBookingsPaused = false;
   bool _pausing = false;
   bool _isPartner = true;
@@ -142,6 +143,7 @@ class _State extends State<HomeScreen> {
     });
     _fetchVenueName();
     _loadUserPermissions();
+    _loadProfilePhoto();
   }
 
   Future<void> _loadUserPermissions() async {
@@ -201,6 +203,37 @@ class _State extends State<HomeScreen> {
     } catch (e) {
       CommonUtilities.showLog('_fetchVenueName error: $e');
       if (mounted) setState(() => _setupError = 'Unable to check setup.');
+    }
+  }
+
+  Future<void> _loadProfilePhoto() async {
+    try {
+      final token = checkString(await SharedPreference.readStr('jwt_token'));
+      if (token.isEmpty) return;
+      final userType = checkString(await SharedPreference.readStr('user_type'));
+
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(AUTH_PROFILE_URL),
+        headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final body = jsonDecode(response.body);
+      final data = body['data'];
+      if (data is! Map) return;
+      final profile = userType == 'team_member'
+          ? data['member']
+          : (data['partner'] ?? data);
+      if (profile is! Map) return;
+
+      var avatar =
+          (profile['avatarUrl'] ?? profile['profileImage'] ?? '').toString();
+      if (avatar.startsWith('/')) {
+        avatar = Uri.parse(BASE_URL).resolve(avatar).toString();
+      }
+      if (mounted) setState(() => _avatar = avatar);
+    } catch (e) {
+      CommonUtilities.showLog('_loadProfilePhoto error: $e');
     }
   }
 
@@ -355,31 +388,57 @@ class _State extends State<HomeScreen> {
 
   // ── Top bar ───────────────────────────────────────────────────────────────────
 
+  Widget _buildHomeAvatar() {
+    Widget fallback() => Image.asset(
+          'assets/ic_profile_logo.png',
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0AAEEF),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person, color: Colors.white, size: 20),
+          ),
+        );
+
+    return ClipOval(
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: _avatar.isNotEmpty
+            ? Image.network(
+                _avatar,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => fallback(),
+              )
+            : fallback(),
+      ),
+    );
+  }
+
   Widget _buildTopBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           InkWell(
-            onTap: () =>
-                CommonUtilities.NavigateWithPush(context, MenuScreen()),
-            child: ClipOval(
-              child: Image.asset(
-                'assets/ic_profile_logo.png',
-                width: 36,
-                height: 36,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0AAEEF),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.person, color: Colors.white, size: 20),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (context, animation1, animation2) =>
+                      MenuScreen(),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
                 ),
-              ),
-            ),
+              );
+              if (mounted) _loadProfilePhoto();
+            },
+            child: _buildHomeAvatar(),
           ),
           const Spacer(),
           Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
@@ -627,7 +686,8 @@ class _State extends State<HomeScreen> {
           subtitle: 'Manage venue bookings',
           image: 'assets/ic_manage_booking.png',
           onTap: _permBooking
-              ? () => CommonUtilities.NavigateWithPush(context, const ManageBookingsScreen())
+              ? () => CommonUtilities.NavigateWithPush(context,
+                  ManageBookingsScreen(venueId: _venueId, client: widget.client))
               : _noAccess,
         ),
         _actionCard(
@@ -855,7 +915,8 @@ class _State extends State<HomeScreen> {
         const Spacer(),
         InkWell(
           onTap: _permBooking
-              ? () => CommonUtilities.NavigateWithPush(context, const ManageBookingsScreen())
+              ? () => CommonUtilities.NavigateWithPush(context,
+                  ManageBookingsScreen(venueId: _venueId, client: widget.client))
               : _noAccess,
           child: const Text('View all →',
               style: TextStyle(

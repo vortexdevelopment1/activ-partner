@@ -1,4 +1,10 @@
-import { IsArray, IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class ManageActivityDto {
   @IsOptional()
@@ -15,6 +21,36 @@ export class ManageActivityDto {
   @IsArray()
   @IsString({ each: true })
   amenities?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  numberOfCourt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  courtType?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  playingEnvironment?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  equipmentAvailable?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  coachingAvailable?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recommendedFor?: string[];
 
   @IsOptional()
   @IsBoolean()

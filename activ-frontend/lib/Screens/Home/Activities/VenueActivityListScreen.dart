@@ -153,14 +153,12 @@ class _State extends State<VenueActivityListScreen> {
       .toList();
 
   String totalMetric(String key, {bool money = false}) {
-    if (activities.any((a) => activityInfo[a.activityId]?[key] == null)) {
-      return '\u2014';
-    }
     final total = activities.fold<num>(
         0,
         (sum, a) =>
             sum +
-            (num.tryParse(activityInfo[a.activityId]![key].toString()) ?? 0));
+            (num.tryParse(activityInfo[a.activityId]?[key]?.toString() ?? '') ??
+                0));
     return money ? currency.format(total) : total.toInt().toString();
   }
 
@@ -231,20 +229,20 @@ class _State extends State<VenueActivityListScreen> {
               Expanded(
                   child: summaryTile(
                       'Total Activities',
-                      isLoading ? '\u2014' : activities.length.toString(),
+                      isLoading ? '0' : activities.length.toString(),
                       'Active, Draft & Pending')),
               const SizedBox(width: 10),
               Expanded(
                   child: summaryTile(
                       'Total Booking',
-                      isLoading ? '\u2014' : totalMetric('bookings'),
+                      isLoading ? '0' : totalMetric('bookings'),
                       'All Activities')),
               const SizedBox(width: 10),
               Expanded(
                   child: summaryTile(
                       'Total Earning',
                       isLoading
-                          ? '\u2014'
+                          ? currency.format(0)
                           : totalMetric('earnings', money: true),
                       'All Activities')),
             ]),
@@ -268,9 +266,9 @@ class _State extends State<VenueActivityListScreen> {
                               child: InkWell(
                                 onTap: () =>
                                     setState(() => selectedFilter = filter),
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(999),
                                 child: Container(
-                                  height: 28,
+                                  height: 34,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
                                       color: selectedFilter == filter
@@ -279,22 +277,22 @@ class _State extends State<VenueActivityListScreen> {
                                       border: Border.all(
                                           color: selectedFilter == filter
                                               ? purple
-                                              : const Color(0xFF87916B)),
-                                      borderRadius: BorderRadius.circular(6)),
+                                              : Colors.black,
+                                          width: 1.2),
+                                      borderRadius: BorderRadius.circular(999)),
                                   child: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Padding(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 3),
+                                              horizontal: 10),
                                           child: Text(filter,
                                               style: TextStyle(
-                                                  fontFamily: 'FontRegular',
-                                                  fontSize: 12,
+                                                  fontFamily: 'FontBold',
+                                                  fontSize: 13,
                                                   color:
                                                       selectedFilter == filter
                                                           ? Colors.white
-                                                          : const Color(
-                                                              0xFF545A48))))),
+                                                          : Colors.black)))),
                                 ),
                               ),
                             ),
@@ -338,14 +336,15 @@ class _State extends State<VenueActivityListScreen> {
                                   physics:
                                       const AlwaysScrollableScrollPhysics(),
                                   padding:
-                                      const EdgeInsets.fromLTRB(32, 0, 32, 12),
+                                      const EdgeInsets.fromLTRB(32, 0, 32, 28),
                                   itemCount: visible.length,
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: 10),
                                   itemBuilder: (_, i) =>
                                       activityCard(visible[i])))),
           Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              padding: EdgeInsets.fromLTRB(
+                  24, 10, 24, 16 + MediaQuery.paddingOf(context).bottom),
               child: SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -414,7 +413,8 @@ class _State extends State<VenueActivityListScreen> {
         .firstOrNull;
     final first = activity.images.whereType<Map>().firstOrNull;
     final url = (cover?['url'] ?? first?['url'])?.toString();
-    final earnings = num.tryParse(info['earnings']?.toString() ?? '');
+    final bookings = num.tryParse(info['bookings']?.toString() ?? '') ?? 0;
+    final earnings = num.tryParse(info['earnings']?.toString() ?? '') ?? 0;
     final fallback = Image.asset('assets/ic_cock.png', fit: BoxFit.contain);
     return Material(
       color: Colors.white,
@@ -477,7 +477,7 @@ class _State extends State<VenueActivityListScreen> {
                           Expanded(
                               child: metric(
                                   'Booking',
-                                  Text(info['bookings']?.toString() ?? '\u2014',
+                                  Text(bookings.toInt().toString(),
                                       style: const TextStyle(
                                           fontFamily: 'FontBold',
                                           fontSize: 15,
@@ -489,9 +489,7 @@ class _State extends State<VenueActivityListScreen> {
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
                                       child: Text(
-                                          earnings == null
-                                              ? '\u2014'
-                                              : currency.format(earnings),
+                                          currency.format(earnings),
                                           style: const TextStyle(
                                               fontFamily: 'FontBold',
                                               fontSize: 11))))),

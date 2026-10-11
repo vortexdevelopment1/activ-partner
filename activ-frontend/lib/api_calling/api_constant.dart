@@ -31,6 +31,12 @@ String get DEPLOYED_API_URL => const bool.hasEnvironment('API_URL')
     : dotenv.isInitialized
         ? dotenv.env['API_URL'] ?? ''
         : '';
+String get GOOGLE_MAPS_API_KEY =>
+    const bool.hasEnvironment('GOOGLE_MAPS_API_KEY')
+        ? const String.fromEnvironment('GOOGLE_MAPS_API_KEY')
+        : dotenv.isInitialized
+            ? dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''
+            : '';
 
 String BASE_URL =
     (DEPLOYED_API_URL.trim().isNotEmpty ? DEPLOYED_API_URL : LOCAL_API_URL)
