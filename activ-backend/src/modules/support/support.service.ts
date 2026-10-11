@@ -1,9 +1,5 @@
 import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CallbackRequest } from './entities/callback-request.entity';
-import { SupportEmail } from './entities/support-email.entity';
 import { CreateCallbackRequestDto } from './dto/create-callback-request.dto';
 import { UpdateCallbackRequestDto } from './dto/update-callback-request.dto';
 import { CreateSupportEmailDto } from './dto/create-support-email.dto';
@@ -17,10 +13,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class SupportService {
   constructor(
-    @InjectRepository(CallbackRequest)
-    private readonly callbackRepo: Repository<CallbackRequest>,
-    @InjectRepository(SupportEmail)
-    private readonly emailRepo: Repository<SupportEmail>,
     private readonly mailService: MailService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly prisma: PrismaService,
@@ -73,40 +65,56 @@ export class SupportService {
   async findAll(
     pagination: PaginationDto,
     status?: CallbackStatus,
-  ): Promise<[CallbackRequest[], number]> {
-    const qb = this.callbackRepo.createQueryBuilder('cb').orderBy('cb.createdAt', 'DESC');
-
-    if (status) {
-      qb.andWhere('cb.status = :status', { status });
-    }
-
-    if (pagination.search) {
-      qb.andWhere(
-        '(cb.partnerName ILIKE :search OR cb.email ILIKE :search OR cb.phone ILIKE :search OR cb.venueName ILIKE :search)',
-        { search: `%${pagination.search}%` },
-      );
-    }
-
-    qb.skip(pagination.skip).take(pagination.limit);
-
-    return qb.getManyAndCount();
+  ): Promise<[any[], number]> {
+    const where: any = {
+      ...(status ? { status: this.toPartnerRequestStatus(status) } : {}),
+      ...(pagination.search
+        ? {
+            OR: [
+              { subject: { contains: pagination.search, mode: 'insensitive' } },
+              { notes: { contains: pagination.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.partner_callback_requests.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.limit,
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.partner_callback_requests.count({ where }),
+    ]);
+    return [items, total];
   }
 
-  async findOne(id: string): Promise<CallbackRequest> {
-    const request = await this.callbackRepo.findOne({ where: { id } });
+  async findOne(id: string) {
+    const request = await this.prisma.partner_callback_requests.findUnique({
+      where: { id },
+    });
     if (!request) throw new NotFoundException('Callback request not found');
     return request;
   }
 
-  async update(id: string, dto: UpdateCallbackRequestDto): Promise<CallbackRequest> {
-    const request = await this.findOne(id);
-    Object.assign(request, dto);
-    return this.callbackRepo.save(request);
+  async update(id: string, dto: UpdateCallbackRequestDto) {
+    await this.findOne(id);
+    return this.prisma.partner_callback_requests.update({
+      where: { id },
+      data: {
+        ...(dto.status ? { status: this.toPartnerRequestStatus(dto.status) } : {}),
+        ...(dto.adminNotes ? { notes: dto.adminNotes } : {}),
+        ...(dto.status === CallbackStatus.RESOLVED || dto.status === CallbackStatus.CLOSED
+          ? { resolved_at: new Date() }
+          : {}),
+        updated_at: new Date(),
+      },
+    });
   }
 
   async remove(id: string): Promise<void> {
-    const request = await this.findOne(id);
-    await this.callbackRepo.remove(request);
+    await this.findOne(id);
+    await this.prisma.partner_callback_requests.delete({ where: { id } });
   }
 
   // ─── Support Email ────────────────────────────────────────────────────────
@@ -158,37 +166,59 @@ export class SupportService {
   async findAllEmails(
     pagination: PaginationDto,
     status?: CallbackStatus,
-  ): Promise<[SupportEmail[], number]> {
-    const qb = this.emailRepo.createQueryBuilder('se').orderBy('se.createdAt', 'DESC');
-
-    if (status) {
-      qb.andWhere('se.status = :status', { status });
-    }
-
-    if (pagination.search) {
-      qb.andWhere('(se.subject ILIKE :search OR se.message ILIKE :search)', {
-        search: `%${pagination.search}%`,
-      });
-    }
-
-    qb.skip(pagination.skip).take(pagination.limit);
-    return qb.getManyAndCount();
+  ): Promise<[any[], number]> {
+    const where: any = {
+      ...(status ? { status: this.toPartnerRequestStatus(status) } : {}),
+      ...(pagination.search
+        ? {
+            OR: [
+              { subject: { contains: pagination.search, mode: 'insensitive' } },
+              { message: { contains: pagination.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.partner_support_requests.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.limit,
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.partner_support_requests.count({ where }),
+    ]);
+    return [items, total];
   }
 
-  async findOneEmail(id: string): Promise<SupportEmail> {
-    const email = await this.emailRepo.findOne({ where: { id } });
+  async findOneEmail(id: string) {
+    const email = await this.prisma.partner_support_requests.findUnique({
+      where: { id },
+    });
     if (!email) throw new NotFoundException('Support email not found');
     return email;
   }
 
-  async updateEmail(id: string, dto: UpdateSupportEmailDto): Promise<SupportEmail> {
-    const email = await this.findOneEmail(id);
-    Object.assign(email, dto);
-    return this.emailRepo.save(email);
+  async updateEmail(id: string, dto: UpdateSupportEmailDto) {
+    await this.findOneEmail(id);
+    return this.prisma.partner_support_requests.update({
+      where: { id },
+      data: {
+        ...(dto.status ? { status: this.toPartnerRequestStatus(dto.status) } : {}),
+        ...(dto.adminNotes ? { message: dto.adminNotes } : {}),
+        ...(dto.status === CallbackStatus.RESOLVED || dto.status === CallbackStatus.CLOSED
+          ? { resolved_at: new Date() }
+          : {}),
+        updated_at: new Date(),
+      },
+    });
   }
 
   async removeEmail(id: string): Promise<void> {
-    const email = await this.findOneEmail(id);
-    await this.emailRepo.remove(email);
+    await this.findOneEmail(id);
+    await this.prisma.partner_support_requests.delete({ where: { id } });
+  }
+
+  private toPartnerRequestStatus(status: CallbackStatus) {
+    return status.toUpperCase() as any;
   }
 }

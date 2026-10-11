@@ -6,6 +6,7 @@ import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:intl/intl.dart';
 
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
@@ -47,6 +48,7 @@ class _BookingItem {
   final String amount;
   final String persons;
   final String status;
+  final DateTime? startsAt;
 
   const _BookingItem({
     required this.name,
@@ -56,6 +58,7 @@ class _BookingItem {
     required this.amount,
     required this.persons,
     required this.status,
+    this.startsAt,
   });
 }
 
@@ -83,51 +86,24 @@ class _State extends State<HomeScreen> {
   bool _isApproved = false;
   bool _needsPricing = false, _needsTeam = false;
   String? _setupError;
+  bool _dashboardLoading = false;
 
   // ── Dummy stats ──────────────────────────────────────────────────────────────
-  final List<_StatItem> _approvedStats = const [
-    _StatItem(
-      label: 'Bookings',
-      value: '252',
-      change: '+12.5% vs last month',
-      positive: true,
-      icon: Icons.calendar_today_outlined,
-      iconColor: Color(0xFF9E9E9E),
-    ),
-    _StatItem(
-      label: 'Revenue',
-      value: '₹53,475.88',
-      change: '+12.5% vs last month',
-      positive: true,
-      icon: Icons.currency_rupee,
-      iconColor: Color(0xFF7C3AED),
-    ),
-    _StatItem(
-      label: 'Availability',
-      value: '89%',
-      change: '-2.5% vs last month',
-      positive: false,
-      icon: Icons.access_time,
-      iconColor: Color(0xFF16A34A),
-    ),
-    _StatItem(
-      label: 'Avg Rating',
-      value: '4.8',
-      change: '+1.2 vs last month',
-      positive: true,
-      icon: Icons.star_border,
-      iconColor: Color(0xFFF59E0B),
-    ),
-  ];
-
-  final List<_StatItem> _newVenueStats = const [
-    _StatItem(label: 'Bookings', value: '0', change: '0% vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
-    _StatItem(label: 'Revenue', value: '₹0.00', change: '0% vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
+  List<_StatItem> _approvedStats = const [
+    _StatItem(label: 'Bookings', value: '0', change: '0 vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
+    _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
     _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
     _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
   ];
 
-  final List<_BookingItem> _bookings = const [];
+  final List<_StatItem> _newVenueStats = const [
+    _StatItem(label: 'Bookings', value: '0', change: '0% vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
+    _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
+    _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
+    _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
+  ];
+
+  List<_BookingItem> _bookings = const [];
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -187,8 +163,18 @@ class _State extends State<HomeScreen> {
             _needsPricing = dashboardNeedsPricing(Map<String, dynamic>.from(venue));
             _setupError = null;
           });
+          if (venue is Map) {
+            await _loadDashboardData(Map<String, dynamic>.from(venue), token);
+          }
         } else if (mounted) {
-          setState(() { _isApproved = false; _needsPricing = false; _needsTeam = false; _setupError = null; });
+          setState(() {
+            _isApproved = false;
+            _needsPricing = false;
+            _needsTeam = false;
+            _setupError = null;
+            _approvedStats = _emptyStats();
+            _bookings = const [];
+          });
         }
         if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
           final team = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL),
@@ -204,6 +190,142 @@ class _State extends State<HomeScreen> {
       CommonUtilities.showLog('_fetchVenueName error: $e');
       if (mounted) setState(() => _setupError = 'Unable to check setup.');
     }
+  }
+
+  List<_StatItem> _emptyStats() => const [
+        _StatItem(label: 'Bookings', value: '0', change: '0 vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
+        _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
+        _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
+        _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
+      ];
+
+  Future<void> _loadDashboardData(
+      Map<String, dynamic> venue, String token) async {
+    if (_dashboardLoading) return;
+    if (mounted) setState(() => _dashboardLoading = true);
+    try {
+      final services = venue['services'] is List ? venue['services'] as List : const [];
+      final recent = <_BookingItem>[];
+      final occupancies = <num>[];
+      final ratings = <num>[];
+      var bookingCount = 0;
+      num revenue = 0;
+
+      for (final service in services.whereType<Map>()) {
+        final serviceId = (service['id'] ??
+                service['activityId'] ??
+                service['activity_id'])
+            ?.toString();
+        if (serviceId == null || serviceId.isEmpty) continue;
+        final response = await (widget.client?.get ?? http.get)(
+          Uri.parse('$BASE_URL/venues/activities/$serviceId/management'),
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 15));
+        final body = jsonDecode(response.body);
+        if (response.statusCode == 403) continue;
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception(body['message'] ?? 'Unable to load dashboard.');
+        }
+        final data = body['data'] is Map ? body['data'] as Map : const {};
+        final activityName = data['name']?.toString() ??
+            service['name']?.toString() ??
+            service['title']?.toString() ??
+            'Activity';
+        bookingCount += _asInt(data['bookingCount']);
+        revenue += _asNum(data['earnings']);
+        final occupancy = _asNullableNum(data['occupancy']);
+        if (occupancy != null) occupancies.add(occupancy);
+
+        final reviews = data['reviews'] is List ? data['reviews'] as List : const [];
+        for (final review in reviews.whereType<Map>()) {
+          final rating = _asNullableNum(review['rating']);
+          if (rating != null) ratings.add(rating);
+        }
+
+        final bookings = data['bookings'] is List ? data['bookings'] as List : const [];
+        for (final booking in bookings.whereType<Map>()) {
+          recent.add(_bookingFromManagement(
+            Map<String, dynamic>.from(booking),
+            activityName,
+          ));
+        }
+      }
+
+      recent.sort((a, b) {
+        final ad = a.startsAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bd = b.startsAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bd.compareTo(ad);
+      });
+
+      final avgOccupancy = occupancies.isEmpty
+          ? 0
+          : (occupancies.reduce((a, b) => a + b) / occupancies.length).round();
+      final avgRating = ratings.isEmpty
+          ? 0
+          : ratings.reduce((a, b) => a + b) / ratings.length;
+
+      if (!mounted) return;
+      setState(() {
+        _approvedStats = [
+          _StatItem(label: 'Bookings', value: '$bookingCount', change: 'Live data', positive: true, icon: Icons.calendar_today_outlined, iconColor: const Color(0xFF9E9E9E)),
+          _StatItem(label: 'Revenue', value: _formatMoney(revenue), change: 'Live data', positive: true, icon: Icons.currency_rupee, iconColor: const Color(0xFF7C3AED)),
+          _StatItem(label: 'Availability', value: '$avgOccupancy%', change: 'Next 7 days', positive: true, icon: Icons.access_time, iconColor: const Color(0xFF16A34A)),
+          _StatItem(label: 'Avg Rating', value: avgRating.toStringAsFixed(1), change: '${ratings.length} reviews', positive: true, icon: Icons.star_border, iconColor: const Color(0xFFF59E0B)),
+        ];
+        _bookings = recent.take(3).toList();
+      });
+    } catch (e) {
+      CommonUtilities.showLog('_loadDashboardData error: $e');
+      if (mounted) setState(() => _setupError = 'Unable to load dashboard.');
+    } finally {
+      if (mounted) setState(() => _dashboardLoading = false);
+    }
+  }
+
+  _BookingItem _bookingFromManagement(
+      Map<String, dynamic> json, String fallbackActivity) {
+    final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
+    final local = startsAt?.toLocal();
+    final participants = _asInt(json['participants']);
+    return _BookingItem(
+      name: json['customerName']?.toString() ?? 'Customer',
+      service: json['activity']?.toString() ?? fallbackActivity,
+      date: local == null ? '' : DateFormat('dd MMM yyyy').format(local),
+      time: local == null ? '' : DateFormat('hh:mm a').format(local),
+      amount: _formatMoney(_asNum(json['amount'])),
+      persons: '$participants ${participants == 1 ? 'person' : 'persons'}',
+      status: _displayStatus(json['status']?.toString()),
+      startsAt: startsAt,
+    );
+  }
+
+  String _displayStatus(String? value) {
+    final normalized = (value ?? '').trim().toLowerCase();
+    if (normalized == 'cancelled' || normalized == 'canceled') return 'Canceled';
+    if (normalized == 'no_show' || normalized == 'no show') return 'No Show';
+    if (normalized.isEmpty) return 'Upcoming';
+    return normalized
+        .split(RegExp(r'[_\s]+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
+  }
+
+  String _formatMoney(num value) {
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '\u20b9',
+      decimalDigits: value % 1 == 0 ? 0 : 2,
+    ).format(value);
+  }
+
+  int _asInt(dynamic value) => _asNum(value).round();
+
+  num _asNum(dynamic value) => _asNullableNum(value) ?? 0;
+
+  num? _asNullableNum(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString() ?? '');
   }
 
   Future<void> _loadProfilePhoto() async {
@@ -288,6 +410,15 @@ class _State extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close,
+                        color: AppColors.darkBlack, size: 22),
+                    tooltip: 'Close',
+                  ),
+                ),
                 SizedBox(
                   width: 204,
                   height: 180,

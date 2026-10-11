@@ -1,47 +1,54 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Review } from './entities/review.entity';
-import { VenueService } from '../venues/entities/venue-service.entity';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class ReviewsService {
-  constructor(
-    @InjectRepository(Review)
-    private readonly reviewRepository: Repository<Review>,
-    @InjectRepository(VenueService)
-    private readonly serviceRepository: Repository<VenueService>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async getServiceReviews(serviceId: string, currentUserId: string, isAdmin: boolean) {
-    const service = await this.serviceRepository.findOne({
+  async getServiceReviews(
+    serviceId: string,
+    currentUserId: string,
+    isAdmin: boolean,
+  ) {
+    const service = await this.prisma.partner_venue_services.findUnique({
       where: { id: serviceId },
-      relations: ['venue'],
+      include: { venues: true },
     });
     if (!service) throw new NotFoundException('Activity not found');
-    if (!isAdmin && service.venue.partnerId !== currentUserId) {
-      throw new ForbiddenException('You can only view reviews for your own activities');
+    if (!isAdmin && service.venues.partner_id !== currentUserId) {
+      throw new ForbiddenException(
+        'You can only view reviews for your own activities',
+      );
     }
 
-    const totalReviews = await this.reviewRepository.count({ where: { serviceId } });
+    const reviews = service.facility_id
+      ? await this.prisma.reviews.findMany({
+          where: {
+            bookings: {
+              slots: { facility_id: service.facility_id },
+            },
+          },
+          include: { users: true },
+          orderBy: { created_at: 'desc' },
+          take: 20,
+        })
+      : [];
 
-    const avgResult = await this.reviewRepository
-      .createQueryBuilder('review')
-      .select('AVG(review.rating)', 'avg')
-      .where('review.serviceId = :serviceId', { serviceId })
-      .getRawOne();
-    const averageRating = avgResult?.avg ? Math.round(parseFloat(avgResult.avg) * 10) / 10 : 0;
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews
+      ? Math.round(
+          (reviews.reduce((sum, review) => sum + review.rating, 0) /
+            totalReviews) *
+            10,
+        ) / 10
+      : 0;
 
-    const distributionRaw = await this.reviewRepository
-      .createQueryBuilder('review')
-      .select('review.rating', 'rating')
-      .addSelect('COUNT(*)', 'count')
-      .where('review.serviceId = :serviceId', { serviceId })
-      .groupBy('review.rating')
-      .getRawMany();
-    const countsByStar = new Map(distributionRaw.map((d) => [Number(d.rating), Number(d.count)]));
     const distribution = [5, 4, 3, 2, 1].map((stars) => {
-      const count = countsByStar.get(stars) || 0;
+      const count = reviews.filter((review) => review.rating === stars).length;
       return {
         stars,
         count,
@@ -49,23 +56,19 @@ export class ReviewsService {
       };
     });
 
-    const recent = await this.reviewRepository.find({
-      where: { serviceId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
-      take: 20,
-    });
-
     return {
       averageRating,
       totalReviews,
       distribution,
-      items: recent.map((r) => ({
-        id: r.id,
-        userName: (r.user?.fullName || '').trim() || r.user?.email || 'Customer',
-        rating: r.rating,
-        comment: r.comment,
-        createdAt: r.createdAt,
+      items: reviews.map((review) => ({
+        id: review.id,
+        userName:
+          (review.users.name || '').trim() ||
+          review.users.email ||
+          'Customer',
+        rating: review.rating,
+        comment: review.body,
+        createdAt: review.created_at,
       })),
     };
   }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -38,9 +39,17 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   late String _selectedCourt;
   _BookableSlot? _selectedSlot;
   bool _saving = false;
+  bool _loadingSlots = false;
+  String? _slotError;
+  List<_BookableSlot>? _serverSlots;
 
   String get _activityName =>
       widget.activityData['name']?.toString() ?? widget.activity.title;
+
+  String get _serviceId =>
+      widget.activityData['id']?.toString() ??
+      widget.activityData['activityId']?.toString() ??
+      widget.activity.activityId;
 
   List<String> get _courts {
     final count = int.tryParse(widget.activity.numberOfCourt) ??
@@ -52,6 +61,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   List<_BookableSlot> get _slots {
+    if (_serverSlots != null) return _serverSlots!;
     final day = DateFormat('EEEE').format(_selectedDate).toLowerCase();
     final raw = _readTimingForSelectedActivity();
     final matches = <_BookableSlot>[];
@@ -87,6 +97,57 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     super.initState();
     _selectedDate = DateTime.now();
     _selectedCourt = _courts.first;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
+  }
+
+  bool get _hasAvailableSlot => _slots.any((slot) => slot.isAvailable);
+
+  Future<void> _loadSlots() async {
+    if (!mounted || _serviceId.isEmpty || widget.venueId.isEmpty) return;
+    setState(() {
+      _loadingSlots = true;
+      _slotError = null;
+    });
+    try {
+      final token = await SharedPreference.readStr('jwt_token');
+      if (token == null || token.isEmpty) {
+        throw Exception('Please sign in again.');
+      }
+      final uri = Uri.parse(
+              '$BASE_URL/venues/${widget.venueId}/activities/$_serviceId/slots')
+          .replace(queryParameters: {
+        'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+        'court': _selectedCourt,
+      });
+      final response = await (widget.client?.get ?? http.get)(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      final body = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(body['message'] ?? 'Unable to load slots.');
+      }
+      final data = body['data'] is Map ? body['data'] as Map : const {};
+      final slots = data['slots'] is List ? data['slots'] as List : const [];
+      if (!mounted) return;
+      setState(() {
+        _serverSlots = slots
+            .whereType<Map>()
+            .where((slot) => slot['status']?.toString() != 'not_operational')
+            .map((slot) => _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
+            .toList();
+        _selectedSlot = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverSlots = null;
+        _slotError = error.toString().replaceFirst('Exception: ', '');
+        _selectedSlot = null;
+      });
+    } finally {
+      if (mounted) setState(() => _loadingSlots = false);
+    }
   }
 
   dynamic _readTimingForSelectedActivity() {
@@ -185,10 +246,24 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                 TextFormField(
                   controller: phone,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone number'),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Enter phone number'
-                      : null,
+                  maxLength: 10,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number',
+                    prefixText: '+91 ',
+                    counterText: '',
+                  ),
+                  validator: (value) {
+                    final digits = value?.replaceAll(RegExp(r'\D'), '') ?? '';
+                    if (digits.isEmpty) return 'Enter phone number';
+                    if (digits.length != 10) {
+                      return 'Enter a valid 10 digit phone number';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -203,9 +278,11 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                   child: ElevatedButton(
                     onPressed: () {
                       if (!form.currentState!.validate()) return;
+                      final phoneDigits =
+                          phone.text.replaceAll(RegExp(r'\D'), '');
                       Navigator.pop(context, {
                         'participantName': name.text.trim(),
-                        'participantPhone': phone.text.trim(),
+                        'participantPhone': '+91$phoneDigits',
                         if (email.text.trim().isNotEmpty)
                           'participantEmail': email.text.trim(),
                       });
@@ -257,6 +334,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       _selectedDate = date;
       _selectedSlot = null;
     });
+    await _loadSlots();
   }
 
   Future<void> _pickCourt() async {
@@ -274,11 +352,12 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         _selectedCourt = court;
         _selectedSlot = null;
       });
+      await _loadSlots();
     }
   }
 
   Future<void> _reserve() async {
-    if (_selectedSlot == null) {
+    if (_selectedSlot == null || !_selectedSlot!.isAvailable) {
       _message('Please select a slot.');
       return;
     }
@@ -317,6 +396,9 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         if (!mounted) return;
         _message('Slot booked successfully.');
         Navigator.pop(context);
+      } else if (response.statusCode == 409) {
+        await _loadSlots();
+        throw Exception('That slot is already reserved. Please choose another slot.');
       } else {
         throw Exception(_errorMessage(response.body));
       }
@@ -403,11 +485,28 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         const SizedBox(height: 30),
                         _label('Select Slot', required: true),
                         const SizedBox(height: 10),
+                        if (_loadingSlots)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: LinearProgressIndicator(),
+                          ),
+                        if (_slotError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(_slotError!,
+                                style: const TextStyle(
+                                    fontFamily: 'FontRegular',
+                                    fontSize: 13,
+                                    color: Color(0xFFFF6B6B))),
+                          ),
                         ...slots.map(_slotTile),
                       ] else ...[
                         const SizedBox(height: 26),
-                        const Text('No slots available for this date.',
-                            style: TextStyle(
+                        Text(
+                            _loadingSlots
+                                ? 'Loading slots...'
+                                : 'No slots available for this date.',
+                            style: const TextStyle(
                                 fontFamily: 'FontRegular',
                                 fontSize: 15,
                                 color: Color(0xFF686868))),
@@ -423,7 +522,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                       height: 56,
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _saving || slots.isEmpty ? null : _reserve,
+                        onPressed:
+                            _saving || !_hasAvailableSlot ? null : _reserve,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1F1F1F),
                           disabledBackgroundColor: Colors.grey.shade500,
@@ -452,24 +552,45 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: selected ? const Color(0xFFF6EBFF) : Colors.white,
+        color: !slot.isAvailable
+            ? const Color(0xFFF3F3F3)
+            : selected
+                ? const Color(0xFFF6EBFF)
+                : Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: selected ? _purple : _border),
+          side: BorderSide(
+              color: selected
+                  ? _purple
+                  : slot.isAvailable
+                      ? _border
+                      : const Color(0xFFD0D0D0)),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => setState(() => _selectedSlot = slot),
+          onTap: slot.isAvailable
+              ? () => setState(() => _selectedSlot = slot)
+              : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(children: [
               Expanded(
                 child: Text(slot.label,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontFamily: 'FontRegular',
                         fontSize: 15,
-                        color: Color(0xFF202124))),
+                        color: slot.isAvailable
+                            ? const Color(0xFF202124)
+                            : const Color(0xFF8A8A8A))),
               ),
+              if (!slot.isAvailable) ...[
+                Text(slot.statusLabel,
+                    style: const TextStyle(
+                        fontFamily: 'FontBold',
+                        fontSize: 12,
+                        color: Color(0xFF8A8A8A))),
+                const SizedBox(width: 8),
+              ],
               if (slot.price != null && slot.price!.isNotEmpty)
                 Text('\u20b9 ${slot.price}',
                     style: const TextStyle(
@@ -477,9 +598,18 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         fontSize: 14,
                         color: Color(0xFF202124))),
               const SizedBox(width: 8),
-              Icon(selected ? Icons.check_circle : Icons.circle_outlined,
+              Icon(
+                  !slot.isAvailable
+                      ? Icons.block
+                      : selected
+                          ? Icons.check_circle
+                          : Icons.circle_outlined,
                   size: 22,
-                  color: selected ? _purple : const Color(0xFFB9BFC4)),
+                  color: !slot.isAvailable
+                      ? const Color(0xFF9A9A9A)
+                      : selected
+                          ? _purple
+                          : const Color(0xFFB9BFC4)),
             ]),
           ),
         ),
@@ -558,12 +688,33 @@ class _BookableSlot {
     required this.startTime,
     required this.endTime,
     this.price,
+    this.status = 'available',
   });
 
   final String label;
   final String startTime;
   final String endTime;
   final String? price;
+  final String status;
+
+  bool get isAvailable => status == 'available';
+
+  String get statusLabel => switch (status) {
+        'walk_in_reserved' => 'Reserved',
+        'activ_booking' => 'Booked',
+        _ => 'Unavailable',
+      };
+
+  factory _BookableSlot.fromStatus(Map<String, dynamic> json) {
+    final start = json['startTime']?.toString() ?? '';
+    final end = json['endTime']?.toString() ?? '';
+    return _BookableSlot(
+      label: '$start - $end',
+      startTime: start,
+      endTime: end,
+      status: json['status']?.toString() ?? 'available',
+    );
+  }
 }
 
 class _CourtPickerSheet extends StatelessWidget {

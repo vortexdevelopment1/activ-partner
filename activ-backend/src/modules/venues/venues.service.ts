@@ -5,19 +5,17 @@ import {
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In, DataSource, IsNull, Not } from "typeorm";
-import { Category } from "../categories/entities/category.entity";
+import type { Category } from "../categories/entities/category.entity";
 import * as bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import type * as runtime from "@prisma/client/runtime/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { Venue } from "./entities/venue.entity";
-import { VenueImage } from "./entities/venue-image.entity";
-import { VenueService } from "./entities/venue-service.entity";
-import { VenueAnswer } from "./entities/venue-answer.entity";
+import type { Venue } from "./entities/venue.entity";
+import type { VenueImage } from "./entities/venue-image.entity";
+import type { VenueService } from "./entities/venue-service.entity";
+import type { VenueAnswer } from "./entities/venue-answer.entity";
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { UpdateVenueDto } from "./dto/update-venue.dto";
 import { VenueApprovalDto } from "./dto/venue-approval.dto";
@@ -30,9 +28,8 @@ import { VenueServiceStatus } from "../../common/enums/venue-service-status.enum
 import { UserRole } from "../../common/enums/user-role.enum";
 import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
-import { Partner } from "../partners/entities/partner.entity";
+import type { Partner } from "../partners/entities/partner.entity";
 import { MailService } from "../mail/mail.service";
-import { Booking } from "../bookings/entities/booking.entity";
 import { QuestionsService } from "../questions/questions.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/entities/notification.entity";
@@ -45,7 +42,6 @@ import {
 } from "./entities/venue-update-request.entity";
 import { SubmitVenueUpdateDto } from "./dto/submit-venue-update.dto";
 import { ReviewVenueUpdateDto } from "./dto/review-venue-update.dto";
-import { WalkInReservation } from "./entities/walk-in-reservation.entity";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
@@ -54,27 +50,8 @@ import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 @Injectable()
 export class VenuesService {
   constructor(
-    @InjectRepository(Venue)
-    private readonly venueRepository: Repository<Venue>,
-    @InjectRepository(VenueImage)
-    private readonly venueImageRepository: Repository<VenueImage>,
-    @InjectRepository(VenueService)
-    private readonly venueServiceRepository: Repository<VenueService>,
-    @InjectRepository(VenueAnswer)
-    private readonly venueAnswerRepository: Repository<VenueAnswer>,
-    @InjectRepository(Partner)
-    private readonly partnerRepository: Repository<Partner>,
-    @InjectRepository(Category)
-    private readonly categoryRepository: Repository<Category>,
-    @InjectRepository(Booking)
-    private readonly bookingRepository: Repository<Booking>,
     private readonly mailService: MailService,
-    private readonly dataSource: DataSource,
     private readonly questionsService: QuestionsService,
-    @InjectRepository(VenueUpdateRequest)
-    private readonly venueUpdateRequestRepo: Repository<VenueUpdateRequest>,
-    @InjectRepository(WalkInReservation)
-    private readonly walkInRepository: Repository<WalkInReservation>,
     private readonly notificationsService: NotificationsService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly pushNotificationsService: PushNotificationsService,
@@ -2112,7 +2089,11 @@ export class VenuesService {
             where,
             orderBy: { starts_at: "desc" },
             take: 100,
-            include: { users: { select: { name: true } }, slots: true },
+            include: {
+              users: { select: { name: true } },
+              slots: true,
+              booking_attempts: { select: { quantity: true } },
+            },
           }),
           this.prisma.reviews.findMany({
             where: { bookings: where, status: "PUBLISHED" },
@@ -2184,6 +2165,7 @@ export class VenuesService {
                   ? "Rescheduled"
                   : "Pending Payment",
         amount: Number(b.total_paise) / 100,
+        participants: b.booking_attempts?.quantity ?? 1,
       })),
       reviews: reviews.map((r) => ({
         id: r.id,
@@ -2815,61 +2797,66 @@ export class VenuesService {
     date: string,
     court?: string,
   ) {
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId },
-      relations: ["venue"],
+    const service = await this.prisma.partner_venue_services.findFirst({
+      where: { id: serviceId, venue_id: venueId },
+      include: { venues: true },
     });
     if (!service) throw new NotFoundException("Activity not found");
-    if (service.venue.partnerId !== partnerId)
+    if (service.venues.partner_id !== partnerId)
       throw new ForbiddenException("Access denied");
-    if (service.status !== VenueServiceStatus.APPROVED)
+    if (service.status !== "APPROVED")
       throw new BadRequestException(
         "Activity must be approved to manage walk-in slots",
       );
 
-    const slotDurationMinutes = service.minDuration || 60;
-    const venue = service.venue;
+    const slotDurationMinutes = service.min_duration_minutes || 60;
 
     // Get operational windows for the date's day of week
     const dayName = new Date(date + "T00:00:00")
       .toLocaleDateString("en-US", { weekday: "long" })
       .toLowerCase();
-    const categorySchedule: any[] =
-      venue.availability?.[service.categoryId] || [];
-    const dayEntry = categorySchedule.find(
-      (d: any) => d.day?.toLowerCase() === dayName,
-    );
+    const availability = await this.prisma.partner_venue_availability.findMany({
+      where: {
+        venue_id: venueId,
+        service_category_id: service.service_category_id,
+        day: dayName,
+      },
+      orderBy: { sort_order: "asc" },
+    });
 
     const operationalWindows: Array<{ open: number; close: number }> = [];
-    if (dayEntry?.slots?.length) {
-      for (const slot of dayEntry.slots) {
-        const openStr = slot.open ?? slot.openTime;
-        const closeStr = slot.close ?? slot.closeTime;
-        if (openStr && closeStr) {
-          operationalWindows.push({
-            open: this.timeToMinutes(openStr),
-            close: this.timeToMinutes(closeStr),
-          });
-        }
-      }
+    for (const slot of availability) {
+      operationalWindows.push({
+        open: this.timeToMinutes(slot.open_time),
+        close: this.timeToMinutes(slot.close_time),
+      });
     }
 
     // ACTIV bookings for this service+date
-    const activBookings = await this.bookingRepository
-      .createQueryBuilder("b")
-      .select(["b.startTime", "b.endTime"])
-      .where("b.serviceId = :serviceId", { serviceId })
-      .andWhere("b.bookingDate = :date", { date })
-      .andWhere("b.status != 'cancelled'")
-      .getMany();
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+    const activBookings = service.facility_id
+      ? await this.prisma.bookings.findMany({
+          where: {
+            status: { not: "CANCELLED" },
+            starts_at: { lt: dayEnd },
+            slots: {
+              facility_id: service.facility_id,
+              ends_at: { gt: dayStart },
+            },
+          },
+          include: { slots: true },
+        })
+      : [];
 
     // Walk-in reservations for this service+date+court
-    const walkIns = await this.walkInRepository.find({
+    const walkIns = await this.prisma.partner_walk_in_reservations.findMany({
       where: {
-        venueServiceId: serviceId,
-        date,
-        status: "reserved" as const,
-        court: court ?? IsNull(),
+        venue_service_id: serviceId,
+        status: "RESERVED",
+        starts_at: { lt: dayEnd },
+        ends_at: { gt: dayStart },
+        notes: court ? { contains: `Court: ${court}` } : undefined,
       },
     });
 
@@ -2900,8 +2887,8 @@ export class VenuesService {
       }
 
       const hasActivBooking = activBookings.some((b) => {
-        const bStart = this.timeToMinutes(b.startTime);
-        const bEnd = this.timeToMinutes(b.endTime);
+        const bStart = this.dateTimeToMinutes(b.slots.starts_at);
+        const bEnd = this.dateTimeToMinutes(b.slots.ends_at);
         return startMin < bEnd && endMin > bStart;
       });
       if (hasActivBooking) {
@@ -2910,11 +2897,8 @@ export class VenuesService {
       }
 
       const matchedWalkIn = walkIns.find((w) =>
-        w.slots.some((s) => {
-          const wStart = this.timeToMinutes(s.startTime);
-          const wEnd = this.timeToMinutes(s.endTime);
-          return startMin < wEnd && endMin > wStart;
-        }),
+        startMin < this.dateTimeToMinutes(w.ends_at) &&
+        endMin > this.dateTimeToMinutes(w.starts_at),
       );
       if (matchedWalkIn) {
         slots.push({
@@ -2934,9 +2918,26 @@ export class VenuesService {
       date,
       court: court ?? null,
       slotDurationMinutes,
-      courts: service.courts ?? [],
+      courts: this.courtsFromOnboardingData(service.onboarding_data),
       slots,
     };
+  }
+
+  private dateTimeToMinutes(value: Date): number {
+    return value.getUTCHours() * 60 + value.getUTCMinutes();
+  }
+
+  private courtsFromOnboardingData(value: unknown): string[] {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const data = value as Record<string, unknown>;
+    const courts = data.courts;
+    if (Array.isArray(courts)) return courts.map(String);
+    const totalCourts = Number(data.numberOfCourt ?? data.totalCourts ?? 0);
+    if (!Number.isFinite(totalCourts) || totalCourts <= 0) return [];
+    return Array.from(
+      { length: totalCourts },
+      (_, index) => `Court ${String(index + 1).padStart(2, "0")}`,
+    );
   }
 
   async createWalkIn(
@@ -2944,36 +2945,38 @@ export class VenuesService {
     serviceId: string,
     partnerId: string,
     dto: CreateWalkInReservationDto,
-  ): Promise<WalkInReservation> {
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId },
-      relations: ["venue"],
+  ): Promise<any> {
+    const service = await this.prisma.partner_venue_services.findFirst({
+      where: { id: serviceId, venue_id: venueId },
+      include: { venues: true },
     });
     if (!service) throw new NotFoundException("Activity not found");
-    if (service.venue.partnerId !== partnerId)
+    if (service.venues.partner_id !== partnerId)
       throw new ForbiddenException("Access denied");
-    if (service.status !== VenueServiceStatus.APPROVED)
+    if (service.status !== "APPROVED")
       throw new BadRequestException("Activity must be approved");
 
     // Conflict check against existing reserved walk-ins for same court+date
-    const existing = await this.walkInRepository.find({
+    const requestedSlots = dto.slots.map((slot) => ({
+      ...slot,
+      startsAt: this.walkInDateTime(dto.date, slot.startTime),
+      endsAt: this.walkInDateTime(dto.date, slot.endTime),
+    }));
+    const dayStart = new Date(`${dto.date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${dto.date}T23:59:59.999Z`);
+    const existing = await this.prisma.partner_walk_in_reservations.findMany({
       where: {
-        venueServiceId: serviceId,
-        date: dto.date,
-        status: "reserved" as const,
-        court: dto.court ?? IsNull(),
+        venue_service_id: serviceId,
+        status: "RESERVED",
+        starts_at: { lt: dayEnd },
+        ends_at: { gt: dayStart },
+        notes: dto.court ? { contains: `Court: ${dto.court}` } : undefined,
       },
     });
 
     for (const res of existing) {
-      for (const newSlot of dto.slots) {
-        const nStart = this.timeToMinutes(newSlot.startTime);
-        const nEnd = this.timeToMinutes(newSlot.endTime);
-        const conflict = res.slots.some((s) => {
-          const eStart = this.timeToMinutes(s.startTime);
-          const eEnd = this.timeToMinutes(s.endTime);
-          return nStart < eEnd && nEnd > eStart;
-        });
+      for (const newSlot of requestedSlots) {
+        const conflict = newSlot.startsAt < res.ends_at && newSlot.endsAt > res.starts_at;
         if (conflict)
           throw new ConflictException(
             "One or more selected slots are already walk-in reserved",
@@ -2981,7 +2984,34 @@ export class VenuesService {
       }
     }
 
-    const reservation = this.walkInRepository.create({
+    const notes = [
+      dto.court ? `Court: ${dto.court}` : null,
+      dto.participantEmail ? `Email: ${dto.participantEmail}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    const reservations = await this.prisma.$transaction(
+      requestedSlots.map((slot) =>
+        this.prisma.partner_walk_in_reservations.create({
+          data: {
+            id: randomUUID(),
+            partner_id: partnerId,
+            venue_id: venueId,
+            facility_id: service.facility_id,
+            venue_service_id: serviceId,
+            participant_name: dto.participantName,
+            participant_phone_e164: dto.participantPhone,
+            starts_at: slot.startsAt,
+            ends_at: slot.endsAt,
+            status: "RESERVED",
+            notes: notes.join("\n") || null,
+            updated_at: new Date(),
+          },
+        }),
+      ),
+    );
+
+    return {
+      id: reservations[0]?.id,
       venueServiceId: serviceId,
       venueId,
       partnerId,
@@ -2992,9 +3022,12 @@ export class VenuesService {
       participantPhone: dto.participantPhone,
       participantEmail: dto.participantEmail ?? null,
       status: "reserved",
-    });
+      reservations,
+    };
+  }
 
-    return this.walkInRepository.save(reservation);
+  private walkInDateTime(date: string, time: string): Date {
+    return new Date(`${date}T${time}:00.000Z`);
   }
 
   async getWalkIns(
@@ -3002,22 +3035,23 @@ export class VenuesService {
     serviceId: string,
     partnerId: string,
     date?: string,
-  ): Promise<WalkInReservation[]> {
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId },
-      relations: ["venue"],
+  ): Promise<any[]> {
+    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const dayStart = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
+    const dayEnd = date ? new Date(`${date}T23:59:59.999Z`) : undefined;
+    const reservations = await this.prisma.partner_walk_in_reservations.findMany({
+      where: {
+        venue_service_id: serviceId,
+        status: "RESERVED",
+        ...(dayStart && dayEnd
+          ? { starts_at: { lt: dayEnd }, ends_at: { gt: dayStart } }
+          : {}),
+      },
+      orderBy: [{ starts_at: "asc" }, { created_at: "asc" }],
     });
-    if (!service) throw new NotFoundException("Activity not found");
-    if (service.venue.partnerId !== partnerId)
-      throw new ForbiddenException("Access denied");
-
-    const where: any = { venueServiceId: serviceId, status: "reserved" };
-    if (date) where.date = date;
-
-    return this.walkInRepository.find({
-      where,
-      order: { date: "ASC", createdAt: "ASC" },
-    });
+    return reservations.map((reservation) =>
+      this.mapWalkInReservation(reservation),
+    );
   }
 
   async getWalkIn(
@@ -3025,20 +3059,13 @@ export class VenuesService {
     serviceId: string,
     reservationId: string,
     partnerId: string,
-  ): Promise<WalkInReservation> {
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId },
-      relations: ["venue"],
-    });
-    if (!service) throw new NotFoundException("Activity not found");
-    if (service.venue.partnerId !== partnerId)
-      throw new ForbiddenException("Access denied");
-
-    const reservation = await this.walkInRepository.findOne({
-      where: { id: reservationId, venueServiceId: serviceId },
+  ): Promise<any> {
+    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const reservation = await this.prisma.partner_walk_in_reservations.findFirst({
+      where: { id: reservationId, venue_service_id: serviceId },
     });
     if (!reservation) throw new NotFoundException("Reservation not found");
-    return reservation;
+    return this.mapWalkInReservation(reservation);
   }
 
   async releaseWalkIn(
@@ -3046,23 +3073,59 @@ export class VenuesService {
     serviceId: string,
     reservationId: string,
     partnerId: string,
-  ): Promise<WalkInReservation> {
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId },
-      relations: ["venue"],
-    });
-    if (!service) throw new NotFoundException("Activity not found");
-    if (service.venue.partnerId !== partnerId)
-      throw new ForbiddenException("Access denied");
-
-    const reservation = await this.walkInRepository.findOne({
-      where: { id: reservationId, venueServiceId: serviceId },
+  ): Promise<any> {
+    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const reservation = await this.prisma.partner_walk_in_reservations.findFirst({
+      where: { id: reservationId, venue_service_id: serviceId },
     });
     if (!reservation) throw new NotFoundException("Reservation not found");
-    if (reservation.status === "released")
+    if (reservation.status !== "RESERVED")
       throw new BadRequestException("Reservation is already released");
 
-    reservation.status = "released";
-    return this.walkInRepository.save(reservation);
+    const released = await this.prisma.partner_walk_in_reservations.update({
+      where: { id: reservation.id },
+      data: { status: "CANCELLED", updated_at: new Date() },
+    });
+    return this.mapWalkInReservation(released);
+  }
+
+  private async assertOwnedVenueService(
+    venueId: string,
+    serviceId: string,
+    partnerId: string,
+  ) {
+    const service = await this.prisma.partner_venue_services.findFirst({
+      where: { id: serviceId, venue_id: venueId },
+      include: { venues: true },
+    });
+    if (!service) throw new NotFoundException("Activity not found");
+    if (service.venues.partner_id !== partnerId)
+      throw new ForbiddenException("Access denied");
+    return service;
+  }
+
+  private mapWalkInReservation(reservation: any) {
+    const notes = String(reservation.notes ?? "");
+    const courtMatch = notes.match(/^Court: (.+)$/m);
+    const emailMatch = notes.match(/^Email: (.+)$/m);
+    return {
+      id: reservation.id,
+      venueServiceId: reservation.venue_service_id,
+      venueId: reservation.venue_id,
+      partnerId: reservation.partner_id,
+      court: courtMatch?.[1] ?? null,
+      date: reservation.starts_at.toISOString().slice(0, 10),
+      slots: [
+        {
+          startTime: this.minutesToTime(this.dateTimeToMinutes(reservation.starts_at)),
+          endTime: this.minutesToTime(this.dateTimeToMinutes(reservation.ends_at)),
+        },
+      ],
+      participantName: reservation.participant_name,
+      participantPhone: reservation.participant_phone_e164,
+      participantEmail: emailMatch?.[1] ?? null,
+      status: reservation.status.toLowerCase(),
+      createdAt: reservation.created_at,
+    };
   }
 }

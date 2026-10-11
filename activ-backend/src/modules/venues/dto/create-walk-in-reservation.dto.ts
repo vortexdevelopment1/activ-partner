@@ -46,6 +46,9 @@ export class CreateWalkInReservationDto {
   @ApiProperty({ example: '+91 98000 00000' })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\+?[1-9]\d{9,14}$/, {
+    message: 'participantPhone must be a valid phone number',
+  })
   participantPhone: string;
 
   @ApiPropertyOptional({ example: 'virat@example.com' })

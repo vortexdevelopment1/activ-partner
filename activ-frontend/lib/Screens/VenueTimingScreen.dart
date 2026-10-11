@@ -6,6 +6,7 @@ import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -81,7 +82,15 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   int currentStep = onboardingQuestionsStep;
   int _slotDurationMinutes = 60;
+  final TextEditingController _slotCapacityController =
+      TextEditingController(text: '1');
   final int totalSteps = totalSetup;
+
+  @override
+  void dispose() {
+    _slotCapacityController.dispose();
+    super.dispose();
+  }
 
   void nextStep() {
     if (currentStep < totalSteps) {
@@ -187,6 +196,12 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   }
 
   bool _validateTimings() {
+    final capacity = int.tryParse(_slotCapacityController.text.trim());
+    if (capacity == null || capacity <= 0) {
+      _showError("Please enter users per slot");
+      return false;
+    }
+
     for (var day in selectedDays) {
       var slots = timings[day]!.timeSlots;
       final ranges = <List<DateTime>>[];
@@ -284,20 +299,20 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                           getSkipNote(),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(15, 12, 15, 10),
-                            child: DropdownButtonFormField<int>(
-                              value: _slotDurationMinutes,
+                            child: TextFormField(
+                              controller: _slotCapacityController,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               decoration: const InputDecoration(
                                 labelText: 'Slot size',
+                                hintText: 'Users per slot',
+                                helperText: 'Enter how many users can book one slot',
                                 border: OutlineInputBorder(),
                                 filled: true,
                                 fillColor: Colors.white,
                               ),
-                              items: [30, 60, 90, 120].map((minutes) => DropdownMenuItem(
-                                value: minutes, child: Text('$minutes minutes'),
-                              )).toList(),
-                              onChanged: (value) {
-                                if (value != null) setState(() => _slotDurationMinutes = value);
-                              },
                             ),
                           ),
 
@@ -910,6 +925,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
           return {
             "open": slot["open"] ?? "-",
             "close": slot["close"] ?? "-",
+            "capacity": _slotCapacityController.text.trim(),
             "slotDurationMinutes": _slotDurationMinutes.toString(),
           };
         }).toList();
