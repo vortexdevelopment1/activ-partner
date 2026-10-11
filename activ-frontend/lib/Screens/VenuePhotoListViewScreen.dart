@@ -46,7 +46,7 @@ class _State extends State<VenuePhotoListViewScreen> {
   late List<XFile> _images;
   late List<Uint8List> _imageBytes;
   int? _coverIndex = 0; // by default first image is cover
-  int currentStep = onboardingActivitiesStep;
+  int currentStep = onboardingPhotosStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {

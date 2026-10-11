@@ -11,14 +11,15 @@ const NO_DATA_FOUND = "No data found please click here to refresh";
 const NO_INTERNET = "No Internet";
 const LOADING = "";
 
-const totalSetup = 7;
-const onboardingProfileStep = 1;
-const onboardingVenueStep = 2;
-const onboardingAmenitiesStep = 3;
-const onboardingActivitiesStep = 4;
-const onboardingActivityReviewStep = 5;
-const onboardingLegalStep = 6;
-const onboardingReviewStep = 7;
+const totalSetup = 10;
+const onboardingProfileStep = 3;
+const onboardingVenueStep = 4;
+const onboardingAmenitiesStep = 5;
+const onboardingActivitiesStep = 6;
+const onboardingPhotosStep = 7;
+const onboardingActivityReviewStep = 7;
+const onboardingLegalStep = 8;
+const onboardingReviewStep = 9;
 
 String get LOCAL_API_URL => const bool.hasEnvironment('LOCAL_API_URL')
     ? const String.fromEnvironment('LOCAL_API_URL')

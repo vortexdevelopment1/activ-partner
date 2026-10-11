@@ -46,7 +46,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     setState(() => _photoError = message);
   }
 
-  int currentStep = onboardingActivitiesStep;
+  int currentStep = onboardingPhotosStep;
   final int totalSteps = totalSetup;
 
   void nextStep() {

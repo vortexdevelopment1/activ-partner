@@ -73,6 +73,12 @@ export class OtpService {
 
       if (result?.type === 'success') return true;
 
+      const message = String(result?.message ?? '').toLowerCase();
+      if (message.includes('already verified')) {
+        this.logger.warn(`MSG91 reports ${mobile} was already verified; continuing local OTP completion.`);
+        return true;
+      }
+
       this.logger.warn(`MSG91 OTP verify failed for ${mobile}: ${JSON.stringify(result)}`);
       return false;
     } catch (error) {

@@ -345,11 +345,34 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
-    const account = await this.prisma.$transaction(async (tx) => {
-      await tx.otp_challenges.update({
-        where: { id: challenge.id },
+    const staffMember = await this.teamService.findByPhone(phone);
+    if (staffMember) {
+      const claimed = await this.prisma.otp_challenges.updateMany({
+        where: {
+          id: challenge.id,
+          consumed_at: null,
+          expires_at: { gt: new Date() },
+        },
         data: { consumed_at: new Date() },
       });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('Invalid or expired OTP.');
+      }
+      return this.completeTeamMemberLogin(staffMember);
+    }
+
+    const account = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.otp_challenges.updateMany({
+        where: {
+          id: challenge.id,
+          consumed_at: null,
+          expires_at: { gt: new Date() },
+        },
+        data: { consumed_at: new Date() },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('Invalid or expired OTP.');
+      }
 
       let user = await tx.users.findUnique({ where: { phone_e164: phone } });
       if (!user) {
@@ -388,10 +411,11 @@ export class AuthService {
       }
 
       return { user, link };
+    }, {
+      maxWait: 10000,
+      timeout: 15000,
     });
 
-    const staffMember = await this.teamService.findByPhone(phone);
-    if (staffMember) return this.completeTeamMemberLogin(staffMember);
     return this.buildPartnerAuthResponse(
       account.link.partners,
       account.user,
