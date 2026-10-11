@@ -231,8 +231,14 @@ class _State extends State<ListActivityTypeScreen> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
         final venueId = body['data']?['id']?.toString() ?? body['data']?['_id']?.toString() ?? "";
+        final venueName = body['data']?['name']?.toString() ??
+            venueDetails["venue_name"]?.toString() ??
+            "";
         if (venueId.isNotEmpty) {
           await SharedPreference.addStringToSF("venue_id", venueId);
+        }
+        if (venueName.isNotEmpty) {
+          await SharedPreference.addStringToSF("venue_name", venueName);
         }
         if (!mounted) return;
         final first = selectedCategories.first;

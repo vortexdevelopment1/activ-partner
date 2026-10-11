@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
+import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LoginScreen.dart';
@@ -17,16 +21,71 @@ class ContactSupportScreen extends StatefulWidget {
 class _State extends State<ContactSupportScreen> {
 
   String _venueId = '';
+  String _venueName = '';
 
   @override
   void initState() {
     super.initState();
-    _loadVenueId();
+    _loadVenueInfo();
   }
 
-  Future<void> _loadVenueId() async {
+  Future<void> _loadVenueInfo() async {
     final id = checkString(await SharedPreference.readStr("venue_id"));
-    if (mounted) setState(() => _venueId = id);
+    var name = checkString(await SharedPreference.readStr("venue_name"));
+    if (name.isEmpty) {
+      name = _venueNameFromDraft(
+        checkString(await SharedPreference.readStr("venue_details")),
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _venueId = id;
+        _venueName = name;
+      });
+    }
+    if (name.isEmpty) await _loadVenueNameFromApi(id);
+  }
+
+  String _venueNameFromDraft(String value) {
+    if (value.isEmpty) return '';
+    try {
+      final data = jsonDecode(value);
+      if (data is Map) {
+        return checkString(data['venue_name']?.toString());
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<void> _loadVenueNameFromApi(String selectedId) async {
+    try {
+      final token = checkString(await SharedPreference.readStr('jwt_token'));
+      if (token.isEmpty) return;
+      final response = await http.get(
+        Uri.parse(MY_VENUES_URL),
+        headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final data = jsonDecode(response.body)['data'];
+      final items = data is Map
+          ? (data['items'] ?? data['venues'] ?? data['data'] ?? [])
+          : [];
+      if (items is! List || items.isEmpty) return;
+      final venue = selectedId.isNotEmpty
+          ? items.cast<dynamic>().firstWhere(
+              (item) => item is Map && item['id']?.toString() == selectedId,
+              orElse: () => items.first,
+            )
+          : items.first;
+      if (venue is! Map) return;
+      final name = checkString(venue['name']?.toString());
+      if (name.isNotEmpty) {
+        await SharedPreference.addStringToSF('venue_name', name);
+        if (mounted) setState(() => _venueName = name);
+      }
+    } catch (e) {
+      CommonUtilities.showLog('_loadVenueNameFromApi error: $e');
+    }
   }
 
   @override
@@ -98,7 +157,7 @@ class _State extends State<ContactSupportScreen> {
 
                                     getText(),
 
-                                    getSubText(_venueId)
+                                    getSubText(_venueName, _venueId)
 
 
                                   ],
@@ -177,8 +236,10 @@ class _State extends State<ContactSupportScreen> {
     );
   }
 
-  Widget getSubText(String venueId)
+  Widget getSubText(String venueName, String venueId)
   {
+    final venueLabel =
+        venueName.isNotEmpty ? venueName : (venueId.isNotEmpty ? "#$venueId" : "your venue");
     return Container(
       alignment: Alignment.center,
       margin: EdgeInsets.fromLTRB(0, 15, 0, 10),
@@ -194,7 +255,7 @@ class _State extends State<ContactSupportScreen> {
           children: [
             TextSpan(text: "Your venue registration "),
             TextSpan(
-              text: "#$venueId", // dynamic id
+              text: venueLabel,
               style: TextStyle(
                 color: AppColors.black,   // different color
                 fontFamily: 'FontSemiBold',

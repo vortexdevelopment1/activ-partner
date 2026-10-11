@@ -273,10 +273,15 @@ class _State extends State<OTPVerificationScreen> {
             items.isNotEmpty ? (items.first['status']?.toString() ?? '') : '';
         final String firstVenueId =
             items.isNotEmpty ? (items.first['id']?.toString() ?? '') : '';
+        final String firstVenueName =
+            items.isNotEmpty ? (items.first['name']?.toString() ?? '') : '';
 
         if (total == 1 && firstStatus == 'pending') {
           if (firstVenueId.isNotEmpty) {
             await SharedPreference.addStringToSF("venue_id", firstVenueId);
+          }
+          if (firstVenueName.isNotEmpty) {
+            await SharedPreference.addStringToSF("venue_name", firstVenueName);
           }
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
