@@ -17,9 +17,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import * as fs from 'fs';
+import { memoryStorage } from 'multer';
 import { VenuesService } from './venues.service';
 import { CreateVenueDto } from './dto/create-venue.dto';
 import { ManageActivityDto } from './dto/manage-activity.dto';
@@ -42,12 +40,16 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VenueStatus } from '../../common/enums/venue-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @ApiTags('Venues')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('venues')
 export class VenuesController {
-  constructor(private readonly venuesService: VenuesService) {}
+  constructor(
+    private readonly venuesService: VenuesService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   // ============ Partner Endpoints ============
 
@@ -72,17 +74,7 @@ export class VenuesController {
       { name: 'gstinDoc', maxCount: 1 },
     ],
     {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const path = './uploads/legal';
-          if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-          cb(null, path);
-        },
-        filename: (_req, file, cb) => {
-          const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `legal-${unique}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
     },
   ))
   @ApiBody({
@@ -105,7 +97,6 @@ export class VenuesController {
     @Body() body: { aadhaarName?: string; aadhaarNumber?: string; panNumber?: string; gstNumber?: string; gstName?: string },
     @UploadedFiles() files: { panCard?: Express.Multer.File[]; aadhaarCard?: Express.Multer.File[]; gstinDoc?: Express.Multer.File[] },
   ) {
-    const baseUrl = process.env.APP_URL || '';
     const legalData: any = {};
     if (body.aadhaarName !== undefined)   legalData.aadhaarName   = body.aadhaarName;
     if (body.aadhaarNumber !== undefined) legalData.aadhaarNumber = body.aadhaarNumber;
@@ -113,9 +104,9 @@ export class VenuesController {
     if (body.gstNumber !== undefined)     legalData.gstNumber     = body.gstNumber;
     if (body.gstName !== undefined)       legalData.gstName       = body.gstName;
 
-    if (files?.panCard?.[0])    legalData.panCardUrl    = `${baseUrl}/uploads/legal/${files.panCard[0].filename}`;
-    if (files?.aadhaarCard?.[0]) legalData.aadhaarCardUrl = `${baseUrl}/uploads/legal/${files.aadhaarCard[0].filename}`;
-    if (files?.gstinDoc?.[0])   legalData.gstinDocUrl   = `${baseUrl}/uploads/legal/${files.gstinDoc[0].filename}`;
+    if (files?.panCard?.[0])    legalData.panCardUrl    = await this.cloudinaryService.uploadFile(files.panCard[0], 'activ/legal', 'auto');
+    if (files?.aadhaarCard?.[0]) legalData.aadhaarCardUrl = await this.cloudinaryService.uploadFile(files.aadhaarCard[0], 'activ/legal', 'auto');
+    if (files?.gstinDoc?.[0])   legalData.gstinDocUrl   = await this.cloudinaryService.uploadFile(files.gstinDoc[0], 'activ/legal', 'auto');
 
     const isAdmin = user.role === UserRole.ADMIN;
     const data = await this.venuesService.saveLegalInfo(id, user.id, legalData, isAdmin);
@@ -364,17 +355,7 @@ export class VenuesController {
   })
   @UseInterceptors(FilesInterceptor('images', 12, {
     limits: { fileSize: 5 * 1024 * 1024 },
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const path = './uploads/services';
-        if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-        cb(null, path);
-      },
-      filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `service-${unique}${extname(file.originalname)}`);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async uploadServiceImages(
     @Param('venueId', ParseUUIDPipe) venueId: string,
@@ -382,8 +363,7 @@ export class VenuesController {
     @UploadedFiles() files: Express.Multer.File[],
     @Body() body: { serviceName: string; categoryId?: string; amenities?: string },
   ) {
-    const baseUrl = process.env.APP_URL || '';
-    const urls = (files || []).map((f) => `${baseUrl}/uploads/services/${f.filename}`);
+    const urls = await this.cloudinaryService.uploadFiles(files, 'activ/services', 'image');
 
     let amenities: string[] | undefined;
     if (body.amenities) {
@@ -513,17 +493,7 @@ export class VenuesController {
     },
   })
   @UseInterceptors(FilesInterceptor('images', 12, {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const path = './uploads/services';
-        if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-        cb(null, path);
-      },
-      filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `activity-${unique}${extname(file.originalname)}`);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async submitFullActivity(
     @Param('venueId', ParseUUIDPipe) venueId: string,
@@ -536,8 +506,7 @@ export class VenuesController {
       throw new BadRequestException('action must be "draft" or "submit"');
     }
 
-    const baseUrl = process.env.APP_URL || '';
-    const imageUrls = (files || []).map((f) => `${baseUrl}/uploads/services/${f.filename}`);
+    const imageUrls = await this.cloudinaryService.uploadFiles(files, 'activ/services', 'image');
 
     const parseJsonArray = (raw?: string): any[] => {
       if (!raw) return [];
@@ -617,25 +586,14 @@ export class VenuesController {
     },
   })
   @UseInterceptors(FilesInterceptor('images', 10, {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const path = './uploads/services';
-        if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-        cb(null, path);
-      },
-      filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `activity-${unique}${extname(file.originalname)}`);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async uploadActivityImages(
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
     @CurrentUser() user: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    const baseUrl = process.env.APP_URL || '';
-    const urls = (files || []).map((f) => `${baseUrl}/uploads/services/${f.filename}`);
+    const urls = await this.cloudinaryService.uploadFiles(files, 'activ/services', 'image');
     const data = await this.venuesService.uploadActivityImages(serviceId, urls, user.id);
     return { message: 'Activity images uploaded successfully', data };
   }

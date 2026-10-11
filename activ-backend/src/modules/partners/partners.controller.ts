@@ -17,9 +17,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
-import * as fs from 'fs';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { PartnersService } from './partners.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
@@ -34,13 +33,17 @@ import { Partner } from './entities/partner.entity';
 import { GstVerificationStatus } from './entities/gst-verification-request.entity';
 import { SubmitGstVerificationDto } from './dto/submit-gst-verification.dto';
 import { ReviewGstVerificationDto } from './dto/review-gst-verification.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @ApiTags('Partners')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('partners')
 export class PartnersController {
-  constructor(private readonly partnersService: PartnersService) {}
+  constructor(
+    private readonly partnersService: PartnersService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Post()
   @Roles(UserRole.ADMIN)
@@ -88,24 +91,14 @@ export class PartnersController {
     },
   })
   @UseInterceptors(FileInterceptor('avatar', {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const dir = './uploads/avatars';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-      },
-      filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `avatar-${unique}${extname(file.originalname)}`);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async updateAvatar(
     @CurrentUser() partner: Partner,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Avatar image file is required');
-    const avatarUrl = `${process.env.APP_URL || ''}/uploads/avatars/${file.filename}`;
+    const avatarUrl = await this.cloudinaryService.uploadFile(file, 'activ/avatars', 'image');
     const data = await this.partnersService.updateAvatar(partner.id, avatarUrl);
     return { message: 'Avatar updated successfully', data };
   }
@@ -139,17 +132,7 @@ export class PartnersController {
       { name: 'gstinDoc', maxCount: 1 },
     ],
     {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = './uploads/legal';
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `legal-${unique}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
     },
   ))
   async updateLegal(
@@ -157,7 +140,6 @@ export class PartnersController {
     @Body() body: { aadhaarName?: string; aadhaarNumber?: string; panNumber?: string; gstNumber?: string; gstName?: string },
     @UploadedFiles() files: { panCard?: Express.Multer.File[]; aadhaarCard?: Express.Multer.File[]; gstinDoc?: Express.Multer.File[] },
   ) {
-    const baseUrl = process.env.APP_URL || '';
     const fields: Record<string, string> = {};
 
     if (body.aadhaarName)   fields.aadhaarName   = body.aadhaarName;
@@ -165,9 +147,9 @@ export class PartnersController {
     if (body.panNumber)     fields.panNumber     = body.panNumber;
     if (body.gstNumber)     fields.gstNumber     = body.gstNumber;
     if (body.gstName)       fields.gstName       = body.gstName;
-    if (files?.panCard?.[0])     fields.panCardUrl     = `${baseUrl}/uploads/legal/${files.panCard[0].filename}`;
-    if (files?.aadhaarCard?.[0]) fields.aadhaarCardUrl = `${baseUrl}/uploads/legal/${files.aadhaarCard[0].filename}`;
-    if (files?.gstinDoc?.[0])    fields.gstinDocUrl    = `${baseUrl}/uploads/legal/${files.gstinDoc[0].filename}`;
+    if (files?.panCard?.[0])     fields.panCardUrl     = await this.cloudinaryService.uploadFile(files.panCard[0], 'activ/legal', 'auto');
+    if (files?.aadhaarCard?.[0]) fields.aadhaarCardUrl = await this.cloudinaryService.uploadFile(files.aadhaarCard[0], 'activ/legal', 'auto');
+    if (files?.gstinDoc?.[0])    fields.gstinDocUrl    = await this.cloudinaryService.uploadFile(files.gstinDoc[0], 'activ/legal', 'auto');
 
     const data = await this.partnersService.updateLegalInfo(partner.id, fields);
     return { message: 'Legal information updated successfully', data };
@@ -253,17 +235,7 @@ export class PartnersController {
   })
   @UseInterceptors(
     FileInterceptor('gstDoc', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = './uploads/gst-docs';
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `gst-${unique}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         const allowed = ['.jpg', '.jpeg', '.png', '.pdf'];
         if (!allowed.includes(extname(file.originalname).toLowerCase())) {
@@ -279,6 +251,10 @@ export class PartnersController {
     @Body() dto: SubmitGstVerificationDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
+    if (file) {
+      (file as Express.Multer.File & { cloudinaryUrl?: string }).cloudinaryUrl =
+        await this.cloudinaryService.uploadFile(file, 'activ/gst-docs', 'auto');
+    }
     const data = await this.partnersService.submitGstVerification(partner.id, dto, file);
     return { message: 'GST verification request submitted successfully', data };
   }

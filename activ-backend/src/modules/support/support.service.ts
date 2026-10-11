@@ -10,6 +10,7 @@ import { UpdateSupportEmailDto } from './dto/update-support-email.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { MailService } from '../mail/mail.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class SupportService {
@@ -19,6 +20,7 @@ export class SupportService {
     @InjectRepository(SupportEmail)
     private readonly emailRepo: Repository<SupportEmail>,
     private readonly mailService: MailService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async createCallback(dto: CreateCallbackRequestDto, partnerId?: string): Promise<CallbackRequest> {
@@ -86,7 +88,7 @@ export class SupportService {
     file?: Express.Multer.File,
   ): Promise<SupportEmail> {
     const attachmentUrl = file
-      ? `${process.env.APP_URL || ''}/uploads/support-attachments/${file.filename}`
+      ? await this.cloudinaryService.uploadFile(file, 'activ/support-attachments', 'auto')
       : null;
     const attachmentOriginalName = file ? file.originalname : null;
 

@@ -14,9 +14,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
-import * as fs from 'fs';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -33,12 +32,16 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @ApiTags('Bank Accounts')
 @ApiBearerAuth()
 @Controller('bank-accounts')
 export class BankAccountsController {
-  constructor(private readonly bankAccountsService: BankAccountsService) {}
+  constructor(
+    private readonly bankAccountsService: BankAccountsService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   // ─── Partner ────────────────────────────────────────────────────────────────
 
@@ -69,26 +72,14 @@ export class BankAccountsController {
         ? null : new BadRequestException('Only JPG, JPEG, PNG and PDF files are allowed'),
         allowed.includes(extname(file.originalname).toLowerCase()));
     },
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const dir = './uploads/bank-docs';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-      },
-      filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `cheque-${unique}${extname(file.originalname)}`);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async submit(
     @CurrentUser() user: any,
     @Body() dto: SubmitBankAccountDto,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const cancelledChequeUrl = file
-      ? `${process.env.APP_URL || ''}/uploads/bank-docs/${file.filename}`
-      : undefined;
+    const cancelledChequeUrl = await this.cloudinaryService.uploadFile(file, 'activ/bank-docs', 'auto');
 
     const data = await this.bankAccountsService.submit(user.id, dto, cancelledChequeUrl);
     return { message: 'Bank account submitted for verification', data };

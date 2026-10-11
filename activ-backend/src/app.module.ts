@@ -6,6 +6,7 @@ import * as path from 'path';
 
 import { getTypeOrmCompatibilityConfig } from './config/database.config';
 import { PrismaModule } from './prisma/prisma.module';
+import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { MailModule } from './modules/mail/mail.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
@@ -47,6 +48,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       ],
     }),
     PrismaModule,
+    CloudinaryModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) =>

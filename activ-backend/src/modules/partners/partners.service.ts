@@ -340,7 +340,7 @@ export class PartnersService {
     }
 
     const gstDocUrl = gstDocFile
-      ? `${process.env.APP_URL || ''}/uploads/gst-docs/${gstDocFile.filename}`
+      ? ((gstDocFile as Express.Multer.File & { cloudinaryUrl?: string }).cloudinaryUrl ?? null)
       : null;
 
     const request = this.gstVerificationRepo.create({ partnerId, ...dto, gstDocUrl });

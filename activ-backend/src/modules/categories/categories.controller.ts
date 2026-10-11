@@ -15,9 +15,7 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import * as fs from 'fs';
+import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -28,26 +26,18 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
-const categoryImageStorage = diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = './uploads/categories';
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `category-${uniqueSuffix}${extname(file.originalname)}`);
-  },
-});
+const categoryImageStorage = memoryStorage();
 
 @ApiTags('Categories')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('categories')
 export class CategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(
+    private readonly categoriesService: CategoriesService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Post()
   @ApiBearerAuth()
@@ -60,8 +50,7 @@ export class CategoriesController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (file) {
-      const baseUrl = process.env.APP_URL || '';
-      createCategoryDto.imageUrl = `${baseUrl}/uploads/categories/${file.filename}`;
+      createCategoryDto.imageUrl = await this.cloudinaryService.uploadFile(file, 'activ/categories', 'image');
     }
     const data = await this.categoriesService.create(createCategoryDto);
     return { message: 'Category created successfully', data };
@@ -113,8 +102,7 @@ export class CategoriesController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (file) {
-      const baseUrl = process.env.APP_URL || '';
-      updateCategoryDto.imageUrl = `${baseUrl}/uploads/categories/${file.filename}`;
+      updateCategoryDto.imageUrl = await this.cloudinaryService.uploadFile(file, 'activ/categories', 'image');
     }
     const data = await this.categoriesService.update(id, updateCategoryDto);
     return { message: 'Category updated successfully', data };

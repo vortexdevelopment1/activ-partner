@@ -15,9 +15,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
-import * as fs from 'fs';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { SupportService } from './support.service';
 import { CreateCallbackRequestDto } from './dto/create-callback-request.dto';
@@ -120,17 +119,7 @@ export class SupportController {
   })
   @UseInterceptors(
     FileInterceptor('attachment', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = './uploads/support-attachments';
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `support-${unique}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         const allowed = ['.jpg', '.jpeg', '.png', '.pdf'];
         if (!allowed.includes(extname(file.originalname).toLowerCase())) {
