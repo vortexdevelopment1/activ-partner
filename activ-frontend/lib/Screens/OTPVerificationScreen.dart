@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:activ_app/Style/app_colors.dart';
@@ -12,6 +13,8 @@ import 'ContactSupportScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
+import 'CommonCode.dart';
+import 'MobileNumberScreen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   const OTPVerificationScreen({super.key, this.client});
@@ -30,6 +33,9 @@ class _State extends State<OTPVerificationScreen> {
   String phoneCode = "", userMobileNumber = "", enterOTP = "";
 
   bool _isSubmitting = false;
+  bool _isResending = false;
+  int _resendSeconds = 40;
+  Timer? _resendTimer;
 
   @override
   void initState() {
@@ -46,6 +52,70 @@ class _State extends State<OTPVerificationScreen> {
       _focusNodes.add(node);
     }
     _loadPhone();
+    _startResendCountdown();
+  }
+
+  void _startResendCountdown() {
+    _resendTimer?.cancel();
+    _resendSeconds = 40;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _resendSeconds--);
+      if (_resendSeconds == 0) timer.cancel();
+    });
+  }
+
+  Future<void> _resendOtp() async {
+    if (_resendSeconds > 0 ||
+        _isResending ||
+        _isSubmitting ||
+        userMobileNumber.isEmpty) return;
+    setState(() => _isResending = true);
+    try {
+      final response = await (widget.client?.post ?? http.post)(
+        Uri.parse(REQUEST_OTP_URL),
+        headers: {'accept': '*/*', 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': userMobileNumber.replaceAll(RegExp(r'\D'), ''),
+        }),
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        for (final controller in _controllers) {
+          controller.clear();
+        }
+        _startResendCountdown();
+        _focusNodes.first.requestFocus();
+        _showMessage(context, 'OTP sent successfully.');
+      } else {
+        final body = jsonDecode(response.body);
+        _showMessage(
+            context,
+            body['message']?.toString() ??
+                'Failed to resend OTP. Please try again.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage(context, 'Network error. Please check your connection.');
+      }
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
+  }
+
+  void _editNumber() {
+    if (_isSubmitting || _isResending) return;
+    FocusScope.of(context).unfocus();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => MobileNumberScreen(client: widget.client),
+      ));
+    }
   }
 
   Future<void> _loadPhone() async {
@@ -58,19 +128,21 @@ class _State extends State<OTPVerificationScreen> {
     });
   }
 
-  String get _maskedPhone {
+  String get _formattedPhone {
     final digits = userMobileNumber.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return '';
-    final suffix =
-        digits.length > 4 ? digits.substring(digits.length - 4) : digits;
     final prefix = phoneCode.isEmpty
         ? ''
         : '${phoneCode.startsWith('+') ? phoneCode : '+$phoneCode'}-';
-    return '${prefix}xx-xxxx-$suffix';
+    final number = digits.length == 10
+        ? '${digits.substring(0, 2)}-${digits.substring(2, 6)}-${digits.substring(6)}'
+        : digits;
+    return '$prefix$number';
   }
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     for (var c in _controllers) {
       c.dispose();
     }
@@ -98,7 +170,7 @@ class _State extends State<OTPVerificationScreen> {
   }
 
   void _submit() {
-    if (!_isSubmitting && validation(context)) {
+    if (!_isSubmitting && !_isResending && validation(context)) {
       FocusScope.of(context).unfocus();
       handleOTP();
     }
@@ -289,11 +361,13 @@ class _State extends State<OTPVerificationScreen> {
                 children: [
                   const OnboardingLogo(),
                   const SizedBox(height: 16),
+                  getStepBarCount(2 / totalSetup, 2, totalSetup),
+                  const SizedBox(height: 18),
                   const Text('Verify your number',
                       style: OnboardingStyles.heading),
                   const SizedBox(height: 6),
                   Text(
-                    'We sent a code to $_maskedPhone',
+                    'We sent a code to $_formattedPhone',
                     key: const Key('otp-phone'),
                     style: OnboardingStyles.body
                         .copyWith(fontSize: 16, color: AppColors.black1),
@@ -302,7 +376,9 @@ class _State extends State<OTPVerificationScreen> {
                   const Text('Enter the 4 digit one-time code'),
                   const SizedBox(height: 8),
                   LayoutBuilder(builder: (context, constraints) {
-                    final gap = ((constraints.maxWidth - 44 * otpLength) /
+                    final boxSize =
+                        (constraints.maxWidth / 6.6).clamp(40.0, 50.0);
+                    final gap = ((constraints.maxWidth - boxSize * otpLength) /
                             (otpLength - 1))
                         .clamp(0.0, 20.0);
                     return Row(
@@ -311,8 +387,8 @@ class _State extends State<OTPVerificationScreen> {
                         padding: EdgeInsets.only(
                             right: index == otpLength - 1 ? 0 : gap),
                         child: SizedBox(
-                          width: 44,
-                          height: 44,
+                          width: boxSize,
+                          height: boxSize,
                           child: Focus(
                             onKeyEvent: (_, event) {
                               if (event is KeyDownEvent &&
@@ -331,8 +407,10 @@ class _State extends State<OTPVerificationScreen> {
                               key: Key('otp-digit-$index'),
                               controller: _controllers[index],
                               focusNode: _focusNodes[index],
-                              enabled: !_isSubmitting,
+                              enabled: !_isSubmitting && !_isResending,
                               textAlign: TextAlign.center,
+                              expands: true,
+                              maxLines: null,
                               keyboardType: TextInputType.number,
                               textInputAction: index == otpLength - 1
                                   ? TextInputAction.done
@@ -344,13 +422,22 @@ class _State extends State<OTPVerificationScreen> {
                                 FilteringTextInputFormatter.digitsOnly,
                                 LengthLimitingTextInputFormatter(otpLength),
                               ],
-                              style: OnboardingStyles.body,
-                              cursorColor: AppColors.gray1,
+                              style:
+                                  OnboardingStyles.body.copyWith(fontSize: 24),
+                              cursorColor: AppColors.purple,
                               decoration:
                                   OnboardingStyles.inputDecoration().copyWith(
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                contentPadding: EdgeInsets.zero,
+                                constraints:
+                                    BoxConstraints.tightFor(height: boxSize),
+                                filled: false,
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.gray1, width: 2),
+                                ),
                               ),
+                              textAlignVertical: TextAlignVertical.center,
                               onChanged: (value) =>
                                   onChangedValue(value, index),
                               onSubmitted: (_) => _submit(),
@@ -360,6 +447,26 @@ class _State extends State<OTPVerificationScreen> {
                       );
                     }));
                   }),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _resendSeconds > 0
+                        ? Text('Resend OTP in ${_resendSeconds}s',
+                            key: const Key('otp-countdown'))
+                        : TextButton(
+                            key: const Key('otp-resend'),
+                            onPressed: _isResending || _isSubmitting
+                                ? null
+                                : _resendOtp,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              foregroundColor: AppColors.darkBlack,
+                              textStyle: OnboardingStyles.body,
+                            ),
+                            child: Text(
+                                _isResending ? 'Sending OTP...' : 'Resend OTP'),
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -375,12 +482,35 @@ class _State extends State<OTPVerificationScreen> {
                     offset: Offset(0, -2)),
               ],
             ),
-            child: OnboardingButton(
-              key: const Key('otp-submit'),
-              label: 'Verify',
-              loading: _isSubmitting,
-              onPressed: _submit,
-            ),
+            child: Row(children: [
+              Expanded(
+                  flex: 3,
+                  child: TextButton(
+                    key: const Key('otp-edit-number'),
+                    onPressed:
+                        _isSubmitting || _isResending ? null : _editNumber,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      foregroundColor: AppColors.darkBlack,
+                      textStyle: const TextStyle(
+                        fontFamily: 'OnboardingSemibold',
+                        fontSize: 18,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    child:
+                        const Text('Edit Number', textAlign: TextAlign.center),
+                  )),
+              const SizedBox(width: 16),
+              Expanded(
+                  flex: 6,
+                  child: OnboardingButton(
+                    key: const Key('otp-submit'),
+                    label: 'Verify',
+                    loading: _isSubmitting,
+                    onPressed: _isResending ? null : _submit,
+                  )),
+            ]),
           ),
         ],
       ),

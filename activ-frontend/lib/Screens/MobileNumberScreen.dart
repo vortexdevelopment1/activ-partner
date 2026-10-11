@@ -103,13 +103,12 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
   }
 
   void _openLogin() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
-    }
+    if (_isSubmitting) return;
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => LoginScreen(client: widget.client)),
+      (_) => false,
+    );
   }
 
   @override
@@ -117,6 +116,23 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
     return OnboardingScaffold(
       child: Column(
         children: [
+          SizedBox(
+            height: 48,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: IconButton(
+                  key: const Key('mobile-back-login'),
+                  tooltip: 'Back to login',
+                  onPressed: _isSubmitting ? null : _openLogin,
+                  color: Colors.black,
+                  iconSize: 28,
+                  icon: const Icon(Icons.arrow_back),
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
@@ -126,7 +142,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: IntrinsicHeight(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 56, 20, 50),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 50),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [

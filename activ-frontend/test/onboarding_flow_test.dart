@@ -31,6 +31,7 @@ import 'package:activ_app/Screens/CustomerPlacesOffer.dart';
 import 'package:activ_app/Screens/VenueTimingScreen.dart';
 import 'package:activ_app/Screens/ListActivityTypeScreen.dart';
 import 'package:activ_app/Screens/VenuePhotoUploadScreen.dart';
+import 'package:activ_app/Screens/VenueScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,33 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _DocumentSourcePicker extends ImagePicker {
+  final List<ImageSource> sources = [];
+  @override
+  Future<XFile?> pickImage({required ImageSource source, double? maxWidth,
+    double? maxHeight, int? imageQuality, CameraDevice preferredCameraDevice = CameraDevice.rear,
+    bool requestFullMetadata = true}) async {
+    sources.add(source);
+    return null;
+  }
+}
+
+class _DocumentPdfPicker extends FilePicker {
+  int calls = 0;
+  @override
+  Future<FilePickerResult?> pickFiles({String? dialogTitle, String? initialDirectory,
+    FileType type = FileType.any, List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading, bool allowCompression = false,
+    int compressionQuality = 0, bool allowMultiple = false, bool withData = false,
+    bool withReadStream = false, bool lockParentWindow = false, bool readSequential = false}) async {
+    calls++;
+    expect(type, FileType.custom);
+    expect(allowedExtensions, ['pdf']);
+    expect(withData, isTrue);
+    return null;
+  }
+}
 
 class _OversizedPhotoPicker extends ImagePicker {
   final XFile photo =
@@ -973,6 +1001,25 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('legal document Browse offers camera gallery and PDF sources', (tester) async {
+    final images = _DocumentSourcePicker();
+    final files = _DocumentPdfPicker();
+    await showScreen(tester, LegalInformationScreen(imagePicker: images, filePicker: files));
+    for (final source in ['Camera', 'Gallery', 'Choose File (PDF)']) {
+      await tester.ensureVisible(find.text('Browse').first);
+      await tester.tap(find.text('Browse').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Gallery'), findsOneWidget);
+      expect(find.text('Choose File (PDF)'), findsOneWidget);
+      await tester.tap(find.text(source));
+      await tester.pumpAndSettle();
+    }
+    expect(images.sources, [ImageSource.camera, ImageSource.gallery]);
+    expect(files.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('successful account deletion clears onboarding data and returns to registration', (tester) async {
     VenuePhotoListViewScreen.cachedImagesByCategory['old-category'] = [Uint8List(1)];
@@ -2085,7 +2132,7 @@ void main() {
     }
   });
 
-  testWidgets('reference layouts render with empty fields and masked phone',
+  testWidgets('reference layouts render with empty fields and formatted phone',
       (tester) async {
     await showScreen(tester, const LoginScreen());
     expect(find.byType(TextFormField), findsNWidgets(2));
@@ -2098,10 +2145,12 @@ void main() {
         isTrue);
     await capture(tester, 'login-430x932');
     await showScreen(tester, const OTPVerificationScreen());
-    expect(find.text('We sent a code to +91-xx-xxxx-4567'), findsOneWidget);
-    expect(find.text('Edit Number'), findsNothing);
+    expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
+    expect(find.text('Edit Number'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
+    expect(find.text('Resend OTP in 40s'), findsOneWidget);
     for (var i = 0; i < 4; i++) {
-      expect(tester.getSize(digit(i)), const Size(44, 44));
+      expect(tester.getSize(digit(i)), const Size(50, 50));
       expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
     }
     expect(tester.getTopLeft(find.byKey(const Key('otp-submit'))).dy,
@@ -2144,10 +2193,29 @@ void main() {
     await tester.tap(find.byKey(const Key('mobile-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(OTPVerificationScreen), findsOneWidget);
-    expect(find.text('We sent a code to +91-xx-xxxx-4567'), findsOneWidget);
+    expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
     expect(
         (await SharedPreferences.getInstance()).getString('userMobileNumber'),
         '98-7654-4567');
+  });
+
+  testWidgets('mobile top Back opens login from root and unrelated route', (tester) async {
+    for (final hasPrevious in [false, true]) {
+      await showScreen(tester, hasPrevious
+          ? const Scaffold(body: Text('Previous screen'))
+          : const MobileNumberScreen());
+      if (hasPrevious) {
+        tester.state<NavigatorState>(find.byType(Navigator).first).push(
+          MaterialPageRoute(builder: (_) => const MobileNumberScreen()));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byTooltip('Back to login'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('mobile-back-login')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(MobileNumberScreen), findsNothing);
+      expect(tester.state<NavigatorState>(find.byType(Navigator).first).canPop(), isFalse);
+    }
   });
 
   testWidgets('mobile request prevents repeats and keeps screen on failure',
@@ -2537,6 +2605,65 @@ void main() {
     await tester.enterText(digit(3), '');
     await tester.pump();
     expect(tester.widget<TextField>(digit(2)).focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('OTP resend countdown sends current phone and resets code',
+      (tester) async {
+    var calls = 0;
+    await showScreen(tester, OTPVerificationScreen(client: MockClient((request) async {
+      calls++;
+      expect(request.url.path, endsWith('/request-otp'));
+      expect(jsonDecode(request.body), {'phone': '9876544567'});
+      return http.Response('{}', 200);
+    })));
+    expect(find.byKey(const Key('otp-resend')), findsNothing);
+    await tester.enterText(digit(0), '1234');
+    await tester.pump(const Duration(seconds: 40));
+    await tester.tap(find.byKey(const Key('otp-resend')));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.text('Resend OTP in 40s'), findsOneWidget);
+    for (var i = 0; i < 4; i++) {
+      expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
+    }
+  });
+
+  testWidgets('venue Back from root opens profile and saves partial draft', (tester) async {
+    await showScreen(tester, const VenueScreen());
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.first, 'My venue');
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+    expect(find.byType(VenueScreen), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(jsonDecode(prefs.getString('venue_details')!)['venue_name'], 'My venue');
+  });
+
+  testWidgets('venue system Back from root opens profile', (tester) async {
+    await showScreen(tester, const VenueScreen());
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+  });
+
+  testWidgets('venue Back returns to existing previous route', (tester) async {
+    await showScreen(tester, const TellUsAboutScreen());
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.push(MaterialPageRoute(builder: (_) => const VenueScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TellUsAboutScreen), findsOneWidget);
+    expect(navigator.canPop(), isFalse);
+  });
+
+  testWidgets('OTP Edit Number returns to number entry', (tester) async {
+    await showScreen(tester, const OTPVerificationScreen());
+    await tester.tap(find.byKey(const Key('otp-edit-number')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MobileNumberScreen), findsOneWidget);
+    expect(find.byType(OTPVerificationScreen), findsNothing);
   });
 
   testWidgets('incomplete OTP does not call verification API', (tester) async {

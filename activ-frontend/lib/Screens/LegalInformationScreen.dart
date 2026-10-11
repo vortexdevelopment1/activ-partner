@@ -10,6 +10,7 @@ import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../Style/app_size.dart';
@@ -23,7 +24,9 @@ import 'package:file_picker/file_picker.dart';
 
 
 class LegalInformationScreen extends StatefulWidget {
-  const LegalInformationScreen({super.key});
+  const LegalInformationScreen({super.key, this.imagePicker, this.filePicker});
+  final ImagePicker? imagePicker;
+  final FilePicker? filePicker;
 
   @override
   State<LegalInformationScreen> createState() => _State();
@@ -44,7 +47,7 @@ class _State extends State<LegalInformationScreen> {
   String? img_url = "";
   File? _thumbnailImage;
   File? _image;
-  final _picker = ImagePicker();
+  late final _picker = widget.imagePicker ?? ImagePicker();
   File? fileImage;
   File? originalFileImage;
 
@@ -1691,17 +1694,51 @@ class _State extends State<LegalInformationScreen> {
   }
 
   Future<void> _pickDocument(String documentType) async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFFF7F2FA),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.camera_alt, size: 28), title: const Text('Camera'),
+            onTap: () => Navigator.pop(sheetContext, 'camera')),
+          ListTile(leading: const Icon(Icons.photo_library, size: 28), title: const Text('Gallery'),
+            onTap: () => Navigator.pop(sheetContext, 'gallery')),
+          ListTile(leading: const Icon(Icons.insert_drive_file, size: 28), title: const Text('Choose File (PDF)'),
+            onTap: () => Navigator.pop(sheetContext, 'file')),
+        ]),
+      ),
+    );
+    if (!mounted || source == null) return;
+    try {
+      if (source != 'file') {
+        final image = await _picker.pickImage(source: source == 'camera' ? ImageSource.camera : ImageSource.gallery);
+        if (image == null || !mounted) return;
+        if (await image.length() > 5 * 1024 * 1024) {
+          if (mounted) CommonUtilities.createSnackBar(context, 'Each document must be 5 MB or smaller.');
+          return;
+        }
+        final bytes = await image.readAsBytes();
+        final extension = image.name.split('.').last.toLowerCase();
+        _setDocument(documentType, PlatformFile(name: image.name, size: bytes.length,
+            bytes: bytes, path: kIsWeb ? null : image.path), extension: extension);
+        return;
+      }
+      final result = await (widget.filePicker ?? FilePicker.platform).pickFiles(
       type: FileType.custom,
-      //allowedExtensions: ['pdf'],
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      allowedExtensions: ['pdf'],
       withData: true, // required on Flutter Web to populate PlatformFile.bytes
     );
+      if (result != null && mounted) _setDocument(documentType, result.files.single);
+    } catch (_) {
+      if (mounted) CommonUtilities.createSnackBar(context, 'Unable to open the selected document source. Please check permissions and try again.');
+    }
+  }
 
-    if (result != null) {
-      final platformFile = result.files.single;
+  void _setDocument(String documentType, PlatformFile platformFile, {String? extension}) {
+      if (!mounted) return;
 
-      final ext = platformFile.extension?.toLowerCase() ?? '';
+      final ext = extension ?? platformFile.extension?.toLowerCase() ?? '';
       if (!['pdf', 'jpg', 'jpeg', 'png'].contains(ext)) {
         if (!mounted) return;
         CommonUtilities.createSnackBar(context, 'Please upload a file in PDF, JPG, or PNG format.');
@@ -1710,18 +1747,21 @@ class _State extends State<LegalInformationScreen> {
 
       // Use bytes directly (web) or read from file path (mobile/desktop)
       Uint8List? fileBytes = platformFile.bytes;
-      File? file;
+      File? file = !kIsWeb && platformFile.path != null ? File(platformFile.path!) : null;
       // Only use dart:io File on non-web where bytes may be null
-      if (fileBytes == null && platformFile.path != null) {
-        file = File(platformFile.path!);
+      if (fileBytes == null && file != null) {
         fileBytes = file.readAsBytesSync();
       }
       final int fileLength = fileBytes?.length ?? 0;
+      if (fileLength == 0 || fileLength > 5 * 1024 * 1024) {
+        CommonUtilities.createSnackBar(context, 'Each document must be a non-empty file of 5 MB or smaller.');
+        return;
+      }
 
       setState(() {
         if(documentType == "panCard")
         {
-          panCardFileExtension = platformFile.extension;
+          panCardFileExtension = ext;
           _pickedPanCardFile = file;
           _panCardBytes = fileBytes;
           _filePanCardName = platformFile.name;
@@ -1729,7 +1769,7 @@ class _State extends State<LegalInformationScreen> {
         }
         else if(documentType == "aadhaarCard")
         {
-          aadhaarCardFileExtension = platformFile.extension;
+          aadhaarCardFileExtension = ext;
           _pickedAadhaarCardFile = file;
           _aadhaarCardBytes = fileBytes;
           _fileAadhaarCardName = platformFile.name;
@@ -1737,14 +1777,13 @@ class _State extends State<LegalInformationScreen> {
         }
         else if(documentType == "gstINCard")
         {
-          gstInCardFileExtension = platformFile.extension;
+          gstInCardFileExtension = ext;
           _pickedGSTINCardFile = file;
           _gstinCardBytes = fileBytes;
           _fileGSTINCardName = platformFile.name;
           _fileGSTINCardSize = _getFileSize(fileLength, 2);
         }
       });
-    }
   }
 
   /// File Size readable format.

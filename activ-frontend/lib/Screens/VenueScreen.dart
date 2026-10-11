@@ -18,6 +18,7 @@ import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'CurvePopupDesign.dart';
 import 'CustomerPlacesOffer.dart';
+import 'TellUsAboutScreen.dart';
 
 class VenueScreen extends StatefulWidget {
   const VenueScreen({super.key, this.reviewMode = false});
@@ -51,6 +52,7 @@ class _State extends State<VenueScreen> {
 
   bool isButtonEnabled = false;
   bool isChecked = false;
+  bool _isGoingBack = false;
   String phoneCode = "", userMobileNumber = "";
 
   double _commissionPct = 10.0;
@@ -151,12 +153,54 @@ class _State extends State<VenueScreen> {
     super.dispose();
   }
 
+  Future<void> _saveDraft() async {
+    await SharedPreference.addStringToSF('venue_details', jsonEncode({
+      'venue_name': venueNameController.text.trim(),
+      'venue_description': descriptionController.text.trim(),
+      'venue_location_url': _selectedPlaceUrl,
+      'venue_search_address': venueAddressSearchController.text.trim(),
+      'venue_address': addressController.text.trim(),
+      'venue_area': areaController.text.trim(),
+      'venue_city': cityController.text.trim(),
+      'venue_state': stateController.text.trim(),
+      'venue_pin_code': pinCodeController.text.trim(),
+      'venue_latitude': _selectedLat,
+      'venue_longitude': _selectedLon,
+    }));
+    await SharedPreference.addStringToSF('venue_commission', _commissionPct.toString());
+  }
+
+  Future<void> _goBack() async {
+    if (_isGoingBack) return;
+    _isGoingBack = true;
+    FocusScope.of(context).unfocus();
+    try {
+      if (!widget.reviewMode) await _saveDraft();
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+      } else {
+        navigator.pushReplacement(MaterialPageRoute(
+          builder: (_) => TellUsAboutScreen(),
+        ));
+      }
+    } finally {
+      _isGoingBack = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
 
     double progress = currentStep / totalSteps;
 
-    return Container(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _goBack();
+      },
+      child: Container(
       child: Stack(
         children: [
           /*To Set Top Header Color*/
@@ -468,10 +512,7 @@ class _State extends State<VenueScreen> {
                                       Expanded(
                                           flex: 3,
                                           child: InkWell(
-                                              onTap: ()
-                                              {
-                                                Navigator.pop(context);
-                                              },
+                                              onTap: _goBack,
                                               child: getBackButton(context, "Back", "venueScreen"))
                                       ),
 
@@ -488,25 +529,7 @@ class _State extends State<VenueScreen> {
                                                 {
                                                 });*/
 
-                                                // JSON object
-                                                Map<String, dynamic> venueDetails = {
-                                                  "venue_name": venueNameController.text.toString().trim(),
-                                                  "venue_description": descriptionController.text.toString().trim(),
-                                                  "venue_location_url": _selectedPlaceUrl,
-                                                  "venue_search_address": venueAddressSearchController.text.trim(),
-                                                  "venue_address": addressController.text.toString().trim(),
-                                                  "venue_area": areaController.text.toString().trim(),
-                                                  "venue_city": cityController.text.toString().trim(),
-                                                  "venue_state": stateController.text.toString().trim(),
-                                                  "venue_pin_code": pinCodeController.text.toString().trim(),
-                                                  "venue_latitude": _selectedLat,
-                                                  "venue_longitude": _selectedLon,
-                                                };
-                                                // Convert to String
-                                                String jsonString = jsonEncode(venueDetails);
-                                                // Save in SharedPreferences
-                                                await SharedPreference.addStringToSF("venue_details", checkString(jsonString));
-                                                await SharedPreference.addStringToSF("venue_commission", _commissionPct.toString());
+                                                await _saveDraft();
                                                 String venueDetailsSave = checkString(await SharedPreference.readStr("venue_details"));
                                                 CommonUtilities.showLog("Saved operate_value => $venueDetailsSave");
 
@@ -539,7 +562,7 @@ class _State extends State<VenueScreen> {
           )
         ],
       ),
-    );
+    ));
   }
 
 
