@@ -1054,20 +1054,6 @@ export class VenuesService {
         "Schedule category does not belong to this venue",
       );
     }
-<<<<<<< HEAD
-    const rows = categories.flatMap((id) =>
-      availabilityRows(venueId, id, venueTiming[id]),
-    );
-    await this.prisma.$transaction(async (tx) => {
-      await tx.partner_venue_availability.deleteMany({
-        where: {
-          venue_id: venueId,
-          service_category_id: { in: categories },
-        },
-      });
-      if (rows.length)
-        await tx.partner_venue_availability.createMany({ data: rows });
-=======
     const rows = categories.flatMap((id) => availabilityRows(venueId, id, venueTiming[id]));
     const durations = categories.map((id) => {
       const values = [...new Set(Object.values(venueTiming[id]).flat()
@@ -1087,7 +1073,6 @@ export class VenuesService {
           data: { min_duration_minutes: duration.minutes },
         });
       }
->>>>>>> origin/main
     });
     const availability = mapVenueAvailability(
       await this.prisma.partner_venue_availability.findMany({
