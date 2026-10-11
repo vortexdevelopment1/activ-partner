@@ -480,8 +480,10 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
         text: _submitting ? 'Requesting...' : 'Request Call Back',
         onPressed: _submitting ? null : _submit,
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
+      child: SingleChildScrollView(
+        key: const Key('callback-form-scroll'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:activ_app/Screens/ContactSupportFormScreen.dart';
+import 'package:activ_app/Screens/HelpSupportScreen.dart';
 import 'package:activ_app/Screens/ActivityReviewScreen.dart';
 import 'package:activ_app/Screens/LegalInformationScreen.dart';
 import 'package:activ_app/Screens/VenuePhotoListViewScreen.dart';
@@ -2197,6 +2198,53 @@ void main() {
     expect(
         (await SharedPreferences.getInstance()).getString('userMobileNumber'),
         '98-7654-4567');
+  });
+
+  testWidgets('notification preferences scroll without moving save button', (tester) async {
+    for (final scale in [1.0, 1.5]) {
+      final client = MockClient((request) async => http.Response('{"data":{}}', 200));
+      await showScreen(tester, NotificationPreferencesScreen(client: client),
+          size: const Size(320, 568), textScale: scale);
+      expect(tester.takeException(), isNull);
+      final save = find.text('Save Preferences');
+      final savePosition = tester.getTopLeft(save);
+      await tester.scrollUntilVisible(find.text('Promotional Messages'), 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getTopLeft(save), savePosition);
+      expect(find.text('Promotional Messages').hitTestable(), findsOneWidget);
+      final promoSwitch = find.byType(Switch).last;
+      await tester.ensureVisible(promoSwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(promoSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(promoSwitch).value, isTrue);
+    }
+  });
+
+  testWidgets('callback form scrolls to time picker with fixed submit button', (tester) async {
+    for (final keyboardHeight in [0.0, 220.0]) {
+      await showScreen(tester, const RequestCallbackScreen(),
+          size: const Size(320, 568), textScale: 1.5,
+          keyboardHeight: keyboardHeight);
+      expect(tester.takeException(), isNull);
+      final submit = find.text('Request Call Back');
+      final position = tester.getTopLeft(submit);
+      final timeField = find.byWidgetPredicate((widget) =>
+          widget is TextField && widget.decoration?.hintText == 'Select time');
+      await tester.scrollUntilVisible(timeField, 150,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getTopLeft(submit), position);
+      expect(timeField.hitTestable(), findsOneWidget);
+      await tester.tap(timeField);
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(TimePickerDialog))).pop();
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('mobile top Back opens login from root and unrelated route', (tester) async {

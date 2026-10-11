@@ -301,7 +301,8 @@ class _NotificationPreferencesScreenState
       ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
+          : SingleChildScrollView(
+              key: const Key('notification-preferences-scroll'),
               padding: const EdgeInsets.fromLTRB(28, 18, 28, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
