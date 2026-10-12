@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Trash2,
   RefreshCw,
+  FileText,
 } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { Badge } from '../../components/ui/Badge';
@@ -28,6 +29,35 @@ import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import type { Venue, VenueAnswer } from '../../types';
 
+const API_URL =
+  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
+  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ||
+  '';
+
+const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
+
+const assetUrl = (src?: string | null) => {
+  const value = src?.trim();
+  if (!value) return '';
+  const resolved = /^(https?:|data:|blob:)/i.test(value)
+    ? value
+    : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
+  if (
+    /^https?:\/\/res\.cloudinary\.com\//i.test(resolved) &&
+    /\.pdf(?:[?#].*)?$/i.test(resolved) &&
+    resolved.includes('/image/upload/')
+  ) {
+    return resolved.replace('/image/upload/', '/raw/upload/');
+  }
+  return resolved;
+};
+
+const questionLabel = (answer: VenueAnswer) => {
+  const question = typeof answer.question === 'object' ? (answer.question as any) : null;
+  const label = question?.questionText ?? question?.question ?? question?.title ?? question?.label;
+  return typeof label === 'string' && label.trim().length > 0 ? label.trim() : null;
+};
+
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
     <div className="flex gap-3">
@@ -36,19 +66,34 @@ const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, va
     </div>
   ) : null;
 
-const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, src }) =>
-  src ? (
+const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, src }) => {
+  const resolvedSrc = assetUrl(src);
+  const isPdf = /\.pdf(?:[?#].*)?$/i.test(resolvedSrc);
+  return resolvedSrc ? (
     <div>
       <p className="text-xs text-gray-400 mb-1.5">{label}</p>
-      <a href={src} target="_blank" rel="noreferrer">
+      {isPdf ? (
+        <a
+          href={resolvedSrc}
+          target="_blank"
+          rel="noreferrer"
+          className="flex w-full max-w-xs items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600"
+        >
+          <FileText size={22} />
+          Open PDF
+        </a>
+      ) : (
+        <a href={resolvedSrc} target="_blank" rel="noreferrer">
         <img
-          src={src}
+          src={resolvedSrc}
           alt={label}
           className="w-full max-w-xs rounded-lg border border-gray-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
         />
-      </a>
+        </a>
+      )}
     </div>
   ) : null;
+};
 
 export const VenueDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -368,9 +413,9 @@ export const VenueDetail: React.FC = () => {
                     className="p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex items-start gap-4">
-                      {svc.imageUrl && (
+                      {assetUrl((svc as any).coverImageUrl ?? svc.imageUrl) && (
                         <img
-                          src={svc.imageUrl}
+                          src={assetUrl((svc as any).coverImageUrl ?? svc.imageUrl)}
                           alt={svc.name}
                           className="w-14 h-14 object-cover rounded-lg shrink-0"
                         />
@@ -378,9 +423,11 @@ export const VenueDetail: React.FC = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-medium text-gray-900 text-sm">{svc.name}</p>
-                          <p className="text-sm font-semibold text-primary-700 shrink-0">
-                            ₹{svc.pricePerHour}/hr
-                          </p>
+                          {svc.pricePerHour != null && (
+                            <p className="text-sm font-semibold text-primary-700 shrink-0">
+                              ₹{svc.pricePerHour}/hr
+                            </p>
+                          )}
                         </div>
                         {svc.description && (
                           <p className="text-xs text-gray-500 mt-0.5">{svc.description}</p>
@@ -401,7 +448,7 @@ export const VenueDetail: React.FC = () => {
                         {(svc as any).imageUrls.map((url: string, i: number) => (
                           <img
                             key={i}
-                            src={url}
+                            src={assetUrl(url)}
                             alt={`${svc.name} ${i + 1}`}
                             className="w-full aspect-square object-cover rounded-md"
                           />
@@ -446,7 +493,7 @@ export const VenueDetail: React.FC = () => {
                     className="relative aspect-video rounded-lg overflow-hidden bg-gray-100"
                   >
                     <img
-                      src={img.imageUrl}
+                      src={assetUrl(img.imageUrl)}
                       alt={img.caption ?? 'Venue photo'}
                       className="w-full h-full object-cover"
                     />
@@ -482,11 +529,12 @@ export const VenueDetail: React.FC = () => {
                     </div>
                     <div className="space-y-3">
                       {group.answers.map((ans) => {
-                        const q = typeof ans.question === 'object' ? (ans.question as any) : null;
+                        const label = questionLabel(ans);
+                        if (!label) return null;
                         return (
                           <div key={ans.id} className="text-sm">
                             <p className="text-gray-500 text-xs">
-                              {q?.questionText ?? ans.questionId}
+                              {label}
                             </p>
                             <p className="text-gray-900 mt-0.5">
                               {Array.isArray(ans.answer)
@@ -567,7 +615,7 @@ export const VenueDetail: React.FC = () => {
                     {cat.icon && <span className="text-xl">{cat.icon}</span>}
                     {cat.imageUrl && (
                       <img
-                        src={cat.imageUrl}
+                        src={assetUrl(cat.imageUrl)}
                         alt={cat.name}
                         className="w-7 h-7 rounded-md object-cover"
                       />

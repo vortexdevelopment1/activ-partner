@@ -302,10 +302,19 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   Future<void> _upload() async {
     try {
+      final currentCount = _images.length;
+      if (currentCount >= 12) {
+        _message('You can upload a maximum of 12 images. Remove an image before adding more.');
+        return;
+      }
       final photos = await ImagePicker().pickMultiImage(imageQuality: 85);
       if (photos.isEmpty || !mounted) return;
       if (photos.length > 10) {
         _message('Select up to 10 images at a time.');
+        return;
+      }
+      if (currentCount + photos.length > 12) {
+        _message('You can upload ${12 - currentCount} more image${12 - currentCount == 1 ? '' : 's'}.');
         return;
       }
       setState(() => _saving = true);
@@ -1841,8 +1850,13 @@ class _ImagesPageState extends State<_ImagesPage> {
                     const SizedBox(height: 8),
                     _text("Upload this activity's images", size: 17),
                     const SizedBox(height: 8),
-                    _text('${widget.load().length} / 12 Images Uploaded',
-                        size: 15, color: _purple),
+                    _text(
+                        '${widget.load().length} / 12 Images Uploaded'
+                        '${widget.load().length > 12 ? ' - remove ${widget.load().length - 12}' : ''}',
+                        size: 15,
+                        color: widget.load().length > 12
+                            ? Colors.redAccent
+                            : _purple),
                     const SizedBox(height: 34),
                     if (widget.load().isEmpty)
                       Padding(
@@ -1856,9 +1870,9 @@ class _ImagesPageState extends State<_ImagesPage> {
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
-                                  mainAxisSpacing: 34,
-                                  crossAxisSpacing: 46,
-                                  childAspectRatio: 1),
+                                  mainAxisSpacing: 18,
+                                  crossAxisSpacing: 18,
+                                  childAspectRatio: .78),
                           itemCount: widget.load().length,
                           itemBuilder: (_, i) {
                             final url = widget.load()[i];
@@ -1875,35 +1889,48 @@ class _ImagesPageState extends State<_ImagesPage> {
       ]));
 
   Widget _imageSlot(String url) => Stack(
-        alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
-          Positioned(
-            top: 0,
-            child: IconButton.filled(
-              tooltip: 'Remove image',
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFF7450B6),
-                foregroundColor: Colors.white,
-                fixedSize: const Size.square(44),
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE1E7D2)),
+                ),
+                child: Image.network(
+                  widget.imageUrl(url),
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(
+                      Icons.image_outlined,
+                      size: 34,
+                      color: Color(0xFF202124),
+                    ),
+                  ),
+                ),
               ),
-              onPressed: _busy ? null : () => _run(() => widget.remove(url)),
-              icon: const Icon(Icons.delete_outline, size: 24),
             ),
           ),
           Positioned(
-            top: 82,
-            child: SizedBox(
-              width: 42,
-              height: 42,
-              child: Image.network(
-                widget.imageUrl(url),
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.image_outlined,
-                  size: 28,
-                  color: Color(0xFF202124),
+            top: 8,
+            right: 8,
+            child: Material(
+              color: const Color(0xFF7450B6),
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: IconButton(
+                tooltip: 'Remove image',
+                style: IconButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  fixedSize: const Size.square(42),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
+                onPressed: _busy ? null : () => _run(() => widget.remove(url)),
+                icon: const Icon(Icons.delete_outline, size: 24),
               ),
             ),
           ),

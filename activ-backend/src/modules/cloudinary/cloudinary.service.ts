@@ -12,9 +12,9 @@ export class CloudinaryService {
   private readonly apiSecret: string;
 
   constructor(config: ConfigService) {
-    this.cloudName = config.get<string>('CLOUDINARY_CLOUD_NAME') || config.get<string>('CLOUD_NAME') || '';
-    this.apiKey = config.get<string>('CLOUDINARY_API_KEY') || config.get<string>('API_KEY') || '';
-    this.apiSecret = config.get<string>('CLOUDINARY_API_SECRET') || config.get<string>('API_SECRET') || '';
+    this.cloudName = (config.get<string>('CLOUDINARY_CLOUD_NAME') || config.get<string>('CLOUD_NAME') || '').trim();
+    this.apiKey = (config.get<string>('CLOUDINARY_API_KEY') || config.get<string>('API_KEY') || '').trim();
+    this.apiSecret = (config.get<string>('CLOUDINARY_API_SECRET') || config.get<string>('API_SECRET') || '').trim();
   }
 
   get isConfigured(): boolean {
@@ -36,6 +36,7 @@ export class CloudinaryService {
       );
     }
 
+    const uploadResourceType = this.resourceTypeForFile(file, resourceType);
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = this.sign({ folder, timestamp });
     const form = new (globalThis as any).FormData();
@@ -46,7 +47,7 @@ export class CloudinaryService {
     form.append('signature', signature);
 
     const response = await (globalThis as any).fetch(
-      `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`,
+      `https://api.cloudinary.com/v1_1/${this.cloudName}/${uploadResourceType}/upload`,
       { method: 'POST', body: form },
     );
 
@@ -67,6 +68,18 @@ export class CloudinaryService {
   ): Promise<string[]> {
     if (!files?.length) return [];
     return Promise.all(files.map((file) => this.uploadFile(file, folder, resourceType))) as Promise<string[]>;
+  }
+
+  private resourceTypeForFile(
+    file: Express.Multer.File,
+    requested: CloudinaryResourceType,
+  ): CloudinaryResourceType {
+    if (requested !== 'auto') return requested;
+    const name = file.originalname?.toLowerCase() ?? '';
+    if (file.mimetype === 'application/pdf' || name.endsWith('.pdf')) {
+      return 'raw';
+    }
+    return requested;
   }
 
   private sign(params: Record<string, string>): string {

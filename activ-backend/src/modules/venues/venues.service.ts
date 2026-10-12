@@ -2068,6 +2068,37 @@ export class VenuesService {
     return service;
   }
 
+  private normalizeQuestionLabel(value: unknown): string {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  private answerAsText(value: unknown): string {
+    if (Array.isArray(value)) return value.map(String).join(", ");
+    if (value == null) return "";
+    return String(value);
+  }
+
+  private answerAsList(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    if (typeof value === "string") {
+      return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return value == null ? [] : [String(value)];
+  }
+
+  private valueOrFallback<T>(value: unknown, fallback: T): unknown | T {
+    if (Array.isArray(value)) return value.length > 0 ? value : fallback;
+    if (typeof value === "string") return value.trim() ? value : fallback;
+    return value ?? fallback;
+  }
+
   async getActivityManagement(serviceId: string, partnerId: string) {
     const service = await this.findManagedActivity(serviceId, partnerId);
     const activityDetails =
@@ -2076,6 +2107,67 @@ export class VenuesService {
       !Array.isArray(service.onboarding_data)
         ? (service.onboarding_data as Record<string, unknown>)
         : {};
+    const savedAnswers = await this.prisma.partner_venue_answers.findMany({
+      where: {
+        venue_id: service.venue_id,
+        OR: [
+          { venue_service_id: service.id },
+          {
+            venue_service_id: null,
+            partner_service_questions: {
+              service_category_id: service.service_category_id,
+            },
+          },
+        ],
+      },
+      include: { partner_service_questions: true },
+      orderBy: { updated_at: "asc" },
+    });
+    const answersByLabel = new Map<string, unknown>();
+    for (const answer of savedAnswers) {
+      const label = this.normalizeQuestionLabel(
+        answer.partner_service_questions?.question,
+      );
+      if (label) answersByLabel.set(label, answer.answer);
+    }
+    const answerFor = (labels: string[]) => {
+      for (const label of labels) {
+        if (answersByLabel.has(this.normalizeQuestionLabel(label))) {
+          return answersByLabel.get(this.normalizeQuestionLabel(label));
+        }
+      }
+      return undefined;
+    };
+    const activityDescription = answerFor(["Activity Description"]);
+    const activityCount = answerFor([
+      "Total Courts",
+      "Total Turfs",
+      "Total Nets",
+      "Total Arenas",
+      "Total Tables",
+      "Total Fields",
+      "Number of Courts",
+    ]);
+    const activityType = answerFor([
+      "Court Type",
+      "Court Surface",
+      "Pitch Type",
+      "Pitch Surface",
+      "Turf Type",
+      "Field Type",
+      "Table Type",
+      "Lane Type",
+      "Range Type",
+      "Arena Type",
+      "Activity Type",
+    ]);
+    const playingEnvironment = answerFor([
+      "Playing Environment",
+      "Environment",
+    ]);
+    const equipmentAvailable = answerFor(["Equipment Available", "Equipment"]);
+    const coachingAvailable = answerFor(["Coaching Available", "Coaching"]);
+    const recommendedFor = answerFor(["Recommended For"]);
     const facilityId = service.facility_id;
     const where = { slots: { facility_id: facilityId! } };
     const [count, revenue, bookings, reviews, occupancy] = facilityId
@@ -2118,7 +2210,12 @@ export class VenuesService {
       venueId: service.venue_id,
       categoryId: service.service_category_id,
       name: service.title,
-      description: service.description ?? "",
+      description: this.answerAsText(
+        this.valueOrFallback(
+          activityDetails.description,
+          activityDescription ?? service.description,
+        ),
+      ),
       status: service.status.toLowerCase(),
       isActive: service.is_active,
       imageUrls: service.partner_venue_images.map((image) => image.url),
@@ -2129,12 +2226,33 @@ export class VenuesService {
       amenities: service.partner_service_amenities.map(
         (amenity) => amenity.title,
       ),
-      numberOfCourt: activityDetails.numberOfCourt ?? "",
-      courtType: activityDetails.courtType ?? "",
-      playingEnvironment: activityDetails.playingEnvironment ?? [],
-      equipmentAvailable: activityDetails.equipmentAvailable ?? [],
-      coachingAvailable: activityDetails.coachingAvailable ?? [],
-      recommendedFor: activityDetails.recommendedFor ?? [],
+      numberOfCourt: this.answerAsText(
+        this.valueOrFallback(activityDetails.numberOfCourt, activityCount),
+      ),
+      courtType: this.answerAsText(
+        this.valueOrFallback(activityDetails.courtType, activityType),
+      ),
+      playingEnvironment: this.answerAsList(
+        this.valueOrFallback(
+          activityDetails.playingEnvironment,
+          playingEnvironment,
+        ),
+      ),
+      equipmentAvailable: this.answerAsList(
+        this.valueOrFallback(
+          activityDetails.equipmentAvailable,
+          equipmentAvailable,
+        ),
+      ),
+      coachingAvailable: this.answerAsList(
+        this.valueOrFallback(
+          activityDetails.coachingAvailable,
+          coachingAvailable,
+        ),
+      ),
+      recommendedFor: this.answerAsList(
+        this.valueOrFallback(activityDetails.recommendedFor, recommendedFor),
+      ),
       bookingCount: facilityId ? count : null,
       earnings: facilityId
         ? Number(revenue?._sum.total_paise ?? 0) / 100

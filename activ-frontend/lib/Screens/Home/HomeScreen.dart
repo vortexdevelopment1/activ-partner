@@ -12,7 +12,6 @@ import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../CommonCode.dart';
-import '../ContactSupportFormScreen.dart';
 import '../Menu/MenuScreen.dart';
 import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
@@ -421,14 +420,14 @@ class _State extends State<HomeScreen> {
                 ),
                 SizedBox(
                   width: 204,
-                  height: 180,
-                  child: Image.asset('assets/reviewing.png'),
+                  height: 120,
+                  child: Image.asset('assets/logo.png', fit: BoxFit.contain),
                 ),
                 const SizedBox(height: 5),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'Thank you for joining Activ App!🎉 Your request has been received and is currently under review. Our admin team will verify it soon.',
+                    'Welcome to ACTIV Partner! Your account is approved and your dashboard is ready. You can now manage bookings, pricing, slots, and your team from here.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
@@ -443,10 +442,8 @@ class _State extends State<HomeScreen> {
                   child: InkWell(
                     onTap: () {
                       Navigator.pop(ctx);
-                      CommonUtilities.NavigateWithPush(
-                          context, ContactSupportFormScreen());
                     },
-                    child: getButtonBlack(context, 'Contact Us', 'HomeScreen'),
+                    child: getButtonBlack(context, 'Get Started', 'HomeScreen'),
                   ),
                 ),
               ],

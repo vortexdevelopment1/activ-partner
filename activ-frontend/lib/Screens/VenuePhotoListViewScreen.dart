@@ -19,6 +19,7 @@ class VenuePhotoListViewScreen extends StatefulWidget {
   static List<Uint8List> cachedImageBytes = [];
   static final Map<String, List<Uint8List>> cachedImagesByCategory = {};
   static final Map<String, int> cachedCoverIndexByCategory = {};
+  static WidgetBuilder? returnToReviewBuilder;
 
   final List<XFile> images;
   final List<Uint8List> imageBytes;
@@ -117,6 +118,7 @@ class _State extends State<VenuePhotoListViewScreen> {
     if (_images.isEmpty)
     {
       CommonUtilities.callVenueImagesClear = "yes";
+      VenuePhotoListViewScreen.returnToReviewBuilder = null;
       Navigator.pop(context);
     }
   }
@@ -373,6 +375,7 @@ class _State extends State<VenuePhotoListViewScreen> {
                                           child: InkWell(
                                               onTap: ()
                                               {
+                                                VenuePhotoListViewScreen.returnToReviewBuilder = null;
                                                 Navigator.pop(context);
                                               },
                                               child: getBackButton(context, "Back", "venuePhoto"))
@@ -456,17 +459,26 @@ class _State extends State<VenuePhotoListViewScreen> {
                                                   ];
                                                 }
                                                 if (!mounted) return;
-                                                CommonUtilities.NavigateWithPush(
-                                                  context,
-                                                  CategoryQuestionsScreen(
-                                                    venueId: venueId,
-                                                    currentCategory: widget.currentCategory,
-                                                    remainingCategories: widget.remainingCategories,
-                                                    categoryIndex: widget.categoryIndex,
-                                                    totalCategories: widget.totalCategories,
-                                                    accumulatedTimings: widget.accumulatedTimings,
-                                                  ),
-                                                );
+                                                final reviewBuilder = VenuePhotoListViewScreen.returnToReviewBuilder;
+                                                if (reviewBuilder != null) {
+                                                  VenuePhotoListViewScreen.returnToReviewBuilder = null;
+                                                  CommonUtilities.NavigateWithPushReplacment(
+                                                    context,
+                                                    reviewBuilder(context),
+                                                  );
+                                                } else {
+                                                  CommonUtilities.NavigateWithPush(
+                                                    context,
+                                                    CategoryQuestionsScreen(
+                                                      venueId: venueId,
+                                                      currentCategory: widget.currentCategory,
+                                                      remainingCategories: widget.remainingCategories,
+                                                      categoryIndex: widget.categoryIndex,
+                                                      totalCategories: widget.totalCategories,
+                                                      accumulatedTimings: widget.accumulatedTimings,
+                                                    ),
+                                                  );
+                                                }
                                               } else {
                                                 final msg = (response.data is Map) ? response.data['message']?.toString() : null;
                                                 CommonUtilities.createSnackBar(context, msg ?? "Image upload failed.");

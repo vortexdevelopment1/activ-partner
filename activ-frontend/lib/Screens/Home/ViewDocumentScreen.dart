@@ -180,7 +180,7 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
 
   Future<void> _viewDocument(String url) async {
     try {
-      final uri = Uri.parse(BASE_URL).resolve(url);
+      final uri = _documentUri(url);
       if (!['http', 'https'].contains(uri.scheme) ||
           !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         throw Exception('Cannot open document');
@@ -191,6 +191,17 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
             context, 'Unable to open this document.');
       }
     }
+  }
+
+  Uri _documentUri(String url) {
+    final resolved = Uri.parse(BASE_URL).resolve(url.trim());
+    if (resolved.host.endsWith('cloudinary.com') &&
+        resolved.path.toLowerCase().endsWith('.pdf') &&
+        resolved.path.contains('/image/upload/')) {
+      return resolved.replace(
+          path: resolved.path.replaceFirst('/image/upload/', '/raw/upload/'));
+    }
+    return resolved;
   }
 
   TextStyle _text(double size,

@@ -434,7 +434,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _branch = TextEditingController();
   String? _type;
   PlatformFile? _cheque;
-  bool _saving = false, _lookingUp = false;
+  bool _saving = false, _lookingUp = false, _showValidation = false;
   Timer? _debounce;
 
   @override
@@ -454,12 +454,20 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   }
 
   void _ifscChanged(String code) {
+    _validateLive();
     _debounce?.cancel();
     setState(() => _lookingUp = false);
     if (RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(code.toUpperCase())) {
       _debounce = Timer(
           const Duration(milliseconds: 400), () => _lookup(code.toUpperCase()));
     }
+  }
+
+  void _validateLive() {
+    if (!_showValidation) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _form.currentState?.validate();
+    });
   }
 
   Future<void> _lookup(String code) async {
@@ -474,6 +482,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
         final data = jsonDecode(response.body);
         _bank.text = (data['BANK'] ?? '').toString();
         _branch.text = (data['BRANCH'] ?? '').toString();
+        _validateLive();
       }
     } catch (_) {
       /* Bank and branch remain editable if lookup is unavailable. */
@@ -513,6 +522,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   }
 
   Future<void> _submit() async {
+    setState(() => _showValidation = true);
     if (!_form.currentState!.validate()) return;
     if (_cheque == null) {
       CommonUtilities.createSnackBar(
@@ -603,7 +613,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                     : TextCapitalization.words,
                 inputFormatters:
                     numeric ? [FilteringTextInputFormatter.digitsOnly] : null,
-                onChanged: ifsc ? _ifscChanged : null,
+                onChanged: ifsc ? _ifscChanged : (_) => _validateLive(),
                 validator: validator ??
                     (value) => required && (value ?? '').trim().isEmpty
                         ? 'Enter $label.'
@@ -620,6 +630,9 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Form(
               key: _form,
+              autovalidateMode: _showValidation
+                  ? AutovalidateMode.always
+                  : AutovalidateMode.disabled,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -630,13 +643,15 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                     _field('Account Number', '1234567890', _number,
                         numeric: true,
                         validator: (value) =>
-                            RegExp(r'^[0-9]{6,20}$').hasMatch(value ?? '')
+                            RegExp(r'^[0-9]{6,20}$')
+                                    .hasMatch((value ?? '').trim())
                                 ? null
                                 : 'Enter a valid account number.'),
                     _field('Confirm Account Number', '1234567890', _confirm,
                         numeric: true,
                         validator: (value) =>
-                            (value ?? '').isEmpty || value != _number.text
+                            (value ?? '').trim().isEmpty ||
+                                    value?.trim() != _number.text.trim()
                                 ? 'Account numbers do not match.'
                                 : null),
                     _field('IFSC Code', 'HDFC0001234', _ifsc,
@@ -660,7 +675,10 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                             .toList(),
                         onChanged: _saving
                             ? null
-                            : (value) => setState(() => _type = value),
+                            : (value) {
+                                setState(() => _type = value);
+                                _validateLive();
+                              },
                         validator: (value) =>
                             value == null ? 'Select an account type.' : null),
                     const SizedBox(height: 14),

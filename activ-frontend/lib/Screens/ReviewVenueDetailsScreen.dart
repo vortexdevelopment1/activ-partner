@@ -7,9 +7,9 @@ import 'package:http/http.dart' as http;
 import '../Style/app_colors.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import 'CategoryQuestionsScreen.dart';
 import 'CommonCode.dart';
 import 'CustomerPlacesOffer.dart';
+import 'ListActivityTypeScreen.dart';
 import 'ReviewSignAgreement.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
@@ -241,7 +241,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
         MaterialPageRoute<void>(builder: (_) => ReviewSignAgreement(client: widget.client)));
   }
 
-  Future<void> _editActivity(Map<String, dynamic> activity, int index) async {
+  Future<void> _editActivity() async {
     if (saving) return;
     final id = await SharedPreference.readStr('venue_id') ?? '';
     if (!mounted) return;
@@ -253,16 +253,9 @@ class _State extends State<ReviewVenueDetailsScreen> {
     await Navigator.push(
         context,
         MaterialPageRoute<bool>(
-            builder: (_) => CategoryQuestionsScreen(
+            builder: (_) => ListActivityTypeScreen(
                   reviewMode: true,
                   client: widget.client,
-                  venueId: id,
-                  currentCategory: activity,
-                  categoryIndex: index + 1,
-                  totalCategories: activities.length,
-                  accumulatedTimings: categoryTimings
-                      .where((e) => e['id'] != activity['id'])
-                      .toList(),
                 )));
     if (mounted) await _loadData();
   }
@@ -579,7 +572,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 style: const TextStyle(
                     fontSize: 14, color: AppColors.hintColor, height: 1.4)),
           ]);
-          final edit = _editButton(() => _editActivity(activity, index));
+          final edit = _editButton(_editActivity);
           return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

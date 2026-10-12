@@ -14,6 +14,7 @@ describe('activity management on the current schema', () => {
     prisma = {
       partner_venue_services: { findUnique: jest.fn(async () => record),
         findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data) },
+      partner_venue_answers: { findMany: jest.fn(async () => []) },
       slots: { findMany: jest.fn(async () => [{ id: 'slot' }]), updateMany: jest.fn(),
         aggregate: jest.fn(async () => ({ _sum: { capacity: 10, booked_quantity: 4 } })) },
       bookings: { count: jest.fn(async () => 2),
@@ -42,6 +43,40 @@ describe('activity management on the current schema', () => {
     expect(result).toMatchObject({ bookingCount: 2, earnings: 1250, occupancy: 40 });
     expect(result.bookings[0]).toMatchObject({ amount: 1250, customerName: 'Customer', status: 'Upcoming' });
     expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('hydrates editable details from saved onboarding answers when activity data is empty', async () => {
+    record.service_category_id = 'cricket-turf';
+    record.description = 'Cricket turf bookings';
+    prisma.partner_venue_answers.findMany.mockResolvedValueOnce([
+      { answer: 'This is activity description', partner_service_questions: { question: 'Activity Description' } },
+      { answer: '10', partner_service_questions: { question: 'Total Turfs' } },
+      { answer: 'Artificial Turf', partner_service_questions: { question: 'Pitch Type' } },
+      { answer: ['Indoor', 'Covered'], partner_service_questions: { question: 'Playing Environment' } },
+    ]);
+
+    const result = await service.getActivityManagement('activity', 'partner');
+
+    expect(prisma.partner_venue_answers.findMany).toHaveBeenCalledWith({
+      where: {
+        venue_id: 'venue',
+        OR: [
+          { venue_service_id: 'activity' },
+          {
+            venue_service_id: null,
+            partner_service_questions: { service_category_id: 'cricket-turf' },
+          },
+        ],
+      },
+      include: { partner_service_questions: true },
+      orderBy: { updated_at: 'asc' },
+    });
+    expect(result).toMatchObject({
+      description: 'This is activity description',
+      numberOfCourt: '10',
+      courtType: 'Artificial Turf',
+      playingEnvironment: ['Indoor', 'Covered'],
+    });
   });
 
   it('does not load unrelated bookings for activities without a facility', async () => {

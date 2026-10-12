@@ -893,6 +893,7 @@ void main() {
     'id': 'venue-1',
     'name': 'Sports Arena Complex',
     'description': 'Premium multi-sports facility with professional coaching.',
+    'venue_address': 'Vijay Nagar, Indore, Madhya Pradesh',
     'locationUrl': 'https://maps.app.goo.gl/B9zJmCugWfHug5a36',
     'flatBuilding': '202, 2nd floor',
     'venuePhone': '+919876543210',
@@ -1249,6 +1250,13 @@ void main() {
     expect(
         tester.widget<TextFormField>(venueField('venuePhone')).controller?.text,
         '+919876543210');
+    expect(
+        tester
+            .widget<TextFormField>(find.byKey(
+                const Key('venue-update-address')))
+            .controller
+            ?.text,
+        'Vijay Nagar, Indore, Madhya Pradesh');
     expect(
         tester
             .widget<TextField>(find.descendant(
@@ -1840,7 +1848,7 @@ void main() {
     }
   });
 
-  testWidgets('activity edit restores answers and preserves other activities',
+  testWidgets('activity edit starts from activity selection before questions',
       (tester) async {
     seedVenueReview();
     final prefs = await SharedPreferences.getInstance();
@@ -1878,6 +1886,32 @@ void main() {
             }),
             200);
       }
+      if (request.url.path.contains('/categories/active')) {
+        return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'badminton',
+                  'name': 'Badminton',
+                  'description': 'Indoor shuttle play arena',
+                  'isActive': true
+                },
+                {
+                  'id': 'tennis',
+                  'name': 'Tennis',
+                  'description': 'Outdoor or indoor court space',
+                  'isActive': true
+                },
+                {
+                  'id': 'cricket',
+                  'name': 'Box Cricket',
+                  'description': 'Enclosed mini cricket arena',
+                  'isActive': true
+                },
+              ]
+            }),
+            200);
+      }
       return http.Response(
           jsonEncode({
             'data': [
@@ -1907,19 +1941,15 @@ void main() {
     await tester
         .tap(find.descendant(of: row, matching: find.byType(TextButton)));
     await tester.pumpAndSettle();
+    expect(find.byType(ListActivityTypeScreen), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller?.text,
         'Existing badminton description');
     expect(
         tester.widgetList<Checkbox>(find.byType(Checkbox)).first.value, isTrue);
-    await tester.enterText(
-        find.byType(TextField).first, 'Updated badminton description');
-    await tester.tap(find.text('Next'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ReviewVenueDetailsScreen), findsOneWidget);
-    expect(find.text('Updated badminton description'), findsOneWidget);
-    expect(find.text('Existing tennis description'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -2087,6 +2117,8 @@ void main() {
 
   testWidgets('review edit links return to the selected activity screens',
       (tester) async {
+    VenuePhotoListViewScreen.returnToReviewBuilder = null;
+    addTearDown(() => VenuePhotoListViewScreen.returnToReviewBuilder = null);
     const steps = [
       'upload1',
       'photos1',
@@ -2129,6 +2161,16 @@ void main() {
               ? 'questions1'
               : 'timings1';
       expect(find.text(expected), findsOneWidget);
+      if (section == 'Photos') {
+        final reviewBuilder = VenuePhotoListViewScreen.returnToReviewBuilder;
+        expect(reviewBuilder, isNotNull);
+        final returnedReview =
+            reviewBuilder!(tester.element(find.text(expected)));
+        expect(returnedReview, isA<ActivityReviewScreen>());
+        expect(
+            (returnedReview as ActivityReviewScreen).initialActivityIndex, 0);
+        VenuePhotoListViewScreen.returnToReviewBuilder = null;
+      }
       expect(tester.takeException(), isNull);
     }
   });

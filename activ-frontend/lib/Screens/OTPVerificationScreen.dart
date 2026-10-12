@@ -13,7 +13,6 @@ import 'ContactSupportScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
-import 'CommonCode.dart';
 import 'MobileNumberScreen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
@@ -366,8 +365,6 @@ class _State extends State<OTPVerificationScreen> {
                 children: [
                   const OnboardingLogo(),
                   const SizedBox(height: 16),
-                  getStepBarCount(2 / totalSetup, 2, totalSetup),
-                  const SizedBox(height: 18),
                   const Text('Verify your number',
                       style: OnboardingStyles.heading),
                   const SizedBox(height: 6),

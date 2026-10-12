@@ -75,9 +75,43 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     super.dispose();
   }
 
-  String _initialValue(String key) => key == 'venuePhone'
-      ? (_venue['venuePhone'] ?? _venue['phone'] ?? '').toString()
-      : (_venue[key] ?? '').toString();
+  String _firstVenueValue(List<String> keys) {
+    for (final key in keys) {
+      final value = _venue[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+    return '';
+  }
+
+  String _initialValue(String key) {
+    switch (key) {
+      case 'name':
+        return _firstVenueValue(['name', 'venue_name']);
+      case 'description':
+        return _firstVenueValue(['description', 'venue_description']);
+      case 'address':
+        return _firstVenueValue(['address', 'venue_address', 'venueAddress']);
+      case 'locationUrl':
+        return _firstVenueValue(
+            ['locationUrl', 'location_url', 'venue_location_url']);
+      case 'flatBuilding':
+        return _firstVenueValue(
+            ['flatBuilding', 'address_line_2', 'venue_area']);
+      case 'venuePhone':
+        return _firstVenueValue(
+            ['venuePhone', 'phone', 'venue_phone', 'contact_phone_e164']);
+      case 'city':
+        return _firstVenueValue(['city', 'venue_city']);
+      case 'state':
+        return _firstVenueValue(['state', 'venue_state']);
+      case 'zipCode':
+        return _firstVenueValue(['zipCode', 'postal_code', 'venue_pin_code']);
+      default:
+        return _firstVenueValue([key]);
+    }
+  }
 
   Map<String, dynamic> _body(String raw) {
     final decoded = jsonDecode(raw);

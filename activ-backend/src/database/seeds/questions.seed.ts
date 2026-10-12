@@ -28,6 +28,10 @@ const RECOMMENDED_FOR_OPTIONS = [
   'Kids',
   'Corporate',
 ];
+const TYPE_OPTIONS: Record<string, readonly string[]> = {
+  'Pitch Type': ['Natural Turf', 'Artificial Turf', 'Matting', 'Concrete'],
+  'Pitch Surface': ['Artificial Turf', 'Matting', 'Concrete'],
+};
 
 const ACTIVITY_CONFIG: Record<string, [string, string]> = {
   'Pickle Ball': ['Total Courts', 'Court Surface'],
@@ -76,6 +80,7 @@ const buildQuestions = (
   activityName: string,
 ) => {
   const now = new Date();
+  const typeOptions = TYPE_OPTIONS[typeLabel] ?? [];
   const definitions = activityName === 'Basketball' ? [
     ['Activity Description', QuestionType.TEXTAREA, true, []],
     ['Total Arenas', QuestionType.NUMBER, false, []],
@@ -89,7 +94,7 @@ const buildQuestions = (
   ] as const : [
     ['Activity Description', QuestionType.TEXTAREA, true, []],
     [capacityLabel, QuestionType.NUMBER, false, []],
-    [typeLabel, QuestionType.SELECT, false, []],
+    [typeLabel, QuestionType.SELECT, false, typeOptions],
     ['Playing Environment', QuestionType.MULTISELECT, false, PLAYING_ENV_OPTIONS],
     ['Equipment Available', QuestionType.MULTISELECT, false, []],
     ['Coaching Available', QuestionType.MULTISELECT, false, COACHING_OPTIONS],
@@ -110,7 +115,7 @@ const buildQuestions = (
 
 export async function seedQuestions(prisma: PrismaClient, activityNames?: readonly string[]) {
   let inserted = 0;
-  let skipped = 0;
+  let updated = 0;
 
   for (const [activityName, [capacityLabel, typeLabel]] of Object.entries(
     ACTIVITY_CONFIG,
@@ -129,11 +134,6 @@ export async function seedQuestions(prisma: PrismaClient, activityNames?: readon
       where: { service_category_id: category.id },
     });
 
-    if (existingCount > 0 && activityName !== 'Basketball') {
-      skipped++;
-      continue;
-    }
-
     const definitions = buildQuestions(category.id, capacityLabel, typeLabel, activityName);
     const existing = existingCount > 0
       ? await prisma.partner_service_questions.findMany({ where: { service_category_id: category.id } })
@@ -144,14 +144,16 @@ export async function seedQuestions(prisma: PrismaClient, activityNames?: readon
       if (!question) {
         missing.push(definition);
       } else {
+        const updateData = {
+          sort_order: definition.sort_order,
+          ...((!Array.isArray(question.options) || question.options.length === 0) && definition.options.length > 0
+            ? { options: definition.options } : {}),
+        };
         await prisma.partner_service_questions.update({
           where: { id: question.id },
-          data: {
-            sort_order: definition.sort_order,
-            ...((!Array.isArray(question.options) || question.options.length === 0) && definition.options.length > 0
-              ? { options: definition.options } : {}),
-          },
+          data: updateData,
         });
+        updated++;
       }
     }
     const result = missing.length > 0
@@ -160,5 +162,5 @@ export async function seedQuestions(prisma: PrismaClient, activityNames?: readon
     inserted += result.count;
   }
 
-  console.log(`Questions inserted: ${inserted}; categories skipped: ${skipped}`);
+  console.log(`Questions inserted: ${inserted}; questions updated: ${updated}`);
 }

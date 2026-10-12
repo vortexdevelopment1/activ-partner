@@ -47,3 +47,39 @@ describe('Basketball question catalogue', () => {
     }
   });
 });
+
+describe('Cricket question catalogue', () => {
+  it('adds pitch type options to existing cricket turf questions with empty options', async () => {
+    const questions: any[] = [
+      { id: 'description', question: 'Activity Description', options: [], sort_order: 1 },
+      { id: 'total-turfs', question: 'Total Turfs', options: [], sort_order: 2 },
+      { id: 'pitch-type', question: 'Pitch Type', options: [], sort_order: 3 },
+    ];
+    const prisma = {
+      partner_service_categories: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'cricket-turf-category' }),
+      },
+      partner_service_questions: {
+        count: jest.fn(async () => questions.length),
+        findMany: jest.fn(async () => questions),
+        update: jest.fn(async ({ where, data }) => {
+          Object.assign(questions.find((question) => question.id === where.id), data);
+        }),
+        createMany: jest.fn(async ({ data }) => {
+          questions.push(...data);
+          return { count: data.length };
+        }),
+      },
+    };
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await seedQuestions(prisma as any, ['Cricket Turf']);
+
+      expect(questions.find((question) => question.question === 'Pitch Type').options)
+        .toEqual(['Natural Turf', 'Artificial Turf', 'Matting', 'Concrete']);
+      expect(prisma.partner_service_questions.createMany).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});

@@ -17,12 +17,14 @@ class ActivityReviewScreen extends StatefulWidget {
   final String activityId;
   final Map<String, dynamic> venueTimingMap;
   final List<Map<String, dynamic>> categoryTimings;
+  final int initialActivityIndex;
 
   const ActivityReviewScreen({
     super.key,
     required this.activityId,
     this.venueTimingMap = const {},
     this.categoryTimings = const [],
+    this.initialActivityIndex = 0,
   });
 
   @override
@@ -70,6 +72,10 @@ class _State extends State<ActivityReviewScreen> {
   @override
   void initState() {
     super.initState();
+    _activityIndex = widget.initialActivityIndex.clamp(
+      0,
+      _activities.length - 1,
+    ) as int;
     _loadQuestions();
   }
 
@@ -118,6 +124,22 @@ class _State extends State<ActivityReviewScreen> {
   }
 
   void _edit(int screensBack) {
+    if (screensBack == 3) {
+      final activityId = widget.activityId;
+      final venueTimingMap = Map<String, dynamic>.from(widget.venueTimingMap);
+      final categoryTimings = widget.categoryTimings
+          .map((timing) => Map<String, dynamic>.from(timing))
+          .toList();
+      final activityIndex = _activityIndex;
+      VenuePhotoListViewScreen.returnToReviewBuilder = (_) =>
+          ActivityReviewScreen(
+            activityId: activityId,
+            venueTimingMap: venueTimingMap,
+            categoryTimings: categoryTimings,
+            initialActivityIndex: activityIndex,
+          );
+    }
+
     // Each configured activity contributes upload, preview, questions and timings.
     final count = screensBack + 4 * (_activities.length - 1 - _activityIndex);
     final navigator = Navigator.of(context);

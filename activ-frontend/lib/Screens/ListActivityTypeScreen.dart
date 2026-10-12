@@ -13,13 +13,19 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/progress_bar/progress_bar_new.dart';
 import '../Beans/venue_type_model.dart';
 import '../api_calling/api_request.dart';
+import 'CategoryQuestionsScreen.dart';
 import 'CommonCode.dart';
 import 'VenuePhotoUploadScreen.dart';
 import 'onboarding_widgets.dart';
 
 class ListActivityTypeScreen extends StatefulWidget {
-  const ListActivityTypeScreen({super.key, this.client});
+  const ListActivityTypeScreen({
+    super.key,
+    this.client,
+    this.reviewMode = false,
+  });
   final http.Client? client;
+  final bool reviewMode;
   @override
   _State createState() => _State();
 }
@@ -264,6 +270,50 @@ class _State extends State<ListActivityTypeScreen> {
     }
   }
 
+  Future<void> _continueReviewActivityFlow() async {
+    final venueId = checkString(await SharedPreference.readStr("venue_id"));
+    final operateValueStr = checkString(await SharedPreference.readStr("operate_value"));
+    List<Map<String, dynamic>> selectedCategories = [];
+
+    if (operateValueStr.isNotEmpty) {
+      final decoded = jsonDecode(operateValueStr);
+      if (decoded is List) {
+        selectedCategories = decoded
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } else if (decoded is Map) {
+        selectedCategories = [Map<String, dynamic>.from(decoded)];
+      }
+    }
+
+    if (venueId.isEmpty) {
+      if (!mounted) return;
+      CommonUtilities.createSnackBar(context, 'Venue not found. Please try again.');
+      return;
+    }
+
+    if (selectedCategories.isEmpty) {
+      if (!mounted) return;
+      CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
+      return;
+    }
+
+    if (!mounted) return;
+    final first = selectedCategories.first;
+    final rest = selectedCategories.sublist(1);
+    CommonUtilities.NavigateWithPush(
+      context,
+      CategoryQuestionsScreen(
+        venueId: venueId,
+        currentCategory: first,
+        remainingCategories: rest,
+        categoryIndex: 1,
+        totalCategories: selectedCategories.length,
+        accumulatedTimings: const [],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -417,7 +467,11 @@ class _State extends State<ListActivityTypeScreen> {
                                   child: InkWell(
                                       onTap: () {
                                         if (isActivitySelected) {
-                                          createVenue();
+                                          if (widget.reviewMode) {
+                                            _continueReviewActivityFlow();
+                                          } else {
+                                            createVenue();
+                                          }
                                         } else {
                                           CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
                                         }
@@ -427,7 +481,15 @@ class _State extends State<ListActivityTypeScreen> {
                                         child: OnboardingButton(label: 'Next', borderRadius: 8,
                                           disabledBackgroundColor: AppColors.gray2,
                                           disabledForegroundColor: AppColors.gray1,
-                                          onPressed: isActivitySelected ? createVenue : null),
+                                          onPressed: isActivitySelected
+                                              ? () {
+                                                  if (widget.reviewMode) {
+                                                    _continueReviewActivityFlow();
+                                                  } else {
+                                                    createVenue();
+                                                  }
+                                                }
+                                              : null),
                                       )
                                   ),
                                 )
@@ -537,10 +599,15 @@ class _State extends State<ListActivityTypeScreen> {
       ),
       child: InkWell(
         onTap: () async {
-          // Limit selection to 1 category during initial onboarding
+          // Limit selection to 1 category. In review mode, choosing a new
+          // activity replaces the previous one instead of blocking the tap.
           if (!model.isSelected) {
             final alreadySelected = resultList.any((item) => item.isSelected);
-            if (alreadySelected) {
+            if (alreadySelected && widget.reviewMode) {
+              for (final item in resultList) {
+                item.isSelected = false;
+              }
+            } else if (alreadySelected) {
               CommonUtilities.createSnackBar(context,
                   "Only 1 activity type allowed now. You can add more after your account is approved.");
               return;

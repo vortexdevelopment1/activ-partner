@@ -110,6 +110,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
           final venues =
               _venuesFromData(jsonDecode(venuesResponse.body)['data']);
+          if (venues.isNotEmpty) {
+            _verified = true;
+          }
           final matching =
               venues.where((venue) => _idOf(venue) == selectedId?.toString());
           final venue = matching.isNotEmpty
@@ -319,7 +322,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.verified, color: Color(0xFF19BC45), size: 13),
                 const SizedBox(width: 9),
-                Text('Verified Partner', style: _text(13)),
+                Text('Verified', style: _text(13, bold: true)),
               ])),
           SizedBox(height: mini ? 6 : (compact ? 10 : 16)),
         ],
