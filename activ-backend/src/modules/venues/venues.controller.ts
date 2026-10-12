@@ -31,6 +31,7 @@ import { CreateVenueActivityDto } from './dto/create-venue-activity.dto';
 import { SetActivityAmenitiesDto } from './dto/set-activity-amenities.dto';
 import { ActivityApprovalDto } from './dto/activity-approval.dto';
 import { CreateWalkInReservationDto } from './dto/create-walk-in-reservation.dto';
+import { AdminVenuesQueryDto } from './dto/admin-venues-query.dto';
 import { VenueUpdateRequestStatus } from './entities/venue-update-request.entity';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -868,22 +869,21 @@ export class VenuesController {
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get all venues (Admin only)' })
-  @ApiQuery({ name: 'status', enum: VenueStatus, required: false })
-  @ApiQuery({ name: 'categoryId', required: false })
-  async findAll(
-    @Query() pagination: PaginationDto,
-    @Query('status') status?: VenueStatus,
-    @Query('categoryId') categoryId?: string,
-  ) {
-    const [venues, total] = await this.venuesService.findAll(pagination, status, categoryId);
+  async findAll(@Query() query: AdminVenuesQueryDto) {
+    const [venues, total] = await this.venuesService.findAll(
+      query,
+      query.status,
+      query.categoryId,
+      query.partnerId,
+    );
     return {
       message: 'Venues fetched successfully',
       data: {
         items: venues,
         total,
-        page: pagination.page,
-        limit: pagination.limit,
-        totalPages: Math.ceil(total / pagination.limit),
+        page: query.page,
+        limit: query.limit,
+        totalPages: Math.ceil(total / query.limit),
       },
     };
   }

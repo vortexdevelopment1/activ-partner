@@ -12,6 +12,12 @@ import { PendingActivity } from '../../types';
 
 const LIMIT = 15;
 
+const activityCategoryName = (activity: PendingActivity) =>
+  activity.category?.name ?? activity.name ?? '—';
+
+const activitySubmittedAt = (activity: PendingActivity) =>
+  activity.submittedAt ?? activity.updatedAt ?? activity.createdAt;
+
 export const ActivityApprovalList: React.FC = () => {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -127,7 +133,7 @@ export const ActivityApprovalList: React.FC = () => {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-1.5">
                         <Tag size={13} className="text-gray-400" />
-                        <span className="text-gray-700">{activity.category?.name ?? '—'}</span>
+                        <span className="text-gray-700">{activityCategoryName(activity)}</span>
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -138,8 +144,8 @@ export const ActivityApprovalList: React.FC = () => {
                       )}
                     </td>
                     <td className="px-5 py-4 text-gray-500">
-                      {activity.submittedAt
-                        ? new Date(activity.submittedAt).toLocaleDateString('en-IN', {
+                      {activitySubmittedAt(activity)
+                        ? new Date(activitySubmittedAt(activity)).toLocaleDateString('en-IN', {
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',
@@ -215,13 +221,13 @@ export const ActivityApprovalList: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Category</p>
-                <p className="text-gray-900">{detailTarget.category?.name ?? '—'}</p>
+                <p className="text-gray-900">{activityCategoryName(detailTarget)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Submitted On</p>
                 <p className="text-gray-900">
-                  {detailTarget.submittedAt
-                    ? new Date(detailTarget.submittedAt).toLocaleString('en-IN')
+                  {activitySubmittedAt(detailTarget)
+                    ? new Date(activitySubmittedAt(detailTarget)).toLocaleString('en-IN')
                     : '—'}
                 </p>
               </div>

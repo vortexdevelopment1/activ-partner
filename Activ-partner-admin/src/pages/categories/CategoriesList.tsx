@@ -65,13 +65,38 @@ export const CategoriesList: React.FC = () => {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const fd = new FormData();
-      fd.append('isActive', String(!isActive));
-      return categoriesApi.update(id, fd);
+    mutationFn: ({ id }: { id: string; isActive: boolean }) => categoriesApi.toggleStatus(id),
+    onMutate: async ({ id, isActive }) => {
+      await queryClient.cancelQueries({ queryKey: ['categories'] });
+      const previous = queryClient.getQueryData(['categories']);
+
+      queryClient.setQueryData(['categories'], (current: any) => {
+        const items = current?.data?.data?.items;
+        if (!Array.isArray(items)) return current;
+        return {
+          ...current,
+          data: {
+            ...current.data,
+            data: {
+              ...current.data.data,
+              items: items.map((category: Category) =>
+                category.id === id ? { ...category, isActive: !isActive } : category,
+              ),
+            },
+          },
+        };
+      });
+
+      return { previous, nextActive: !isActive };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories'] }),
-    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed'),
+    onSuccess: (_res, _vars, context) => {
+      success(`Category ${context?.nextActive ? 'enabled' : 'disabled'} successfully`);
+    },
+    onError: (err: any, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['categories'], context.previous);
+      error(err?.response?.data?.message ?? 'Failed to update category status');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['categories'] }),
   });
 
   const handleFormSubmit = async (
@@ -188,6 +213,7 @@ export const CategoriesList: React.FC = () => {
                     onClick={() =>
                       toggleMutation.mutate({ id: cat.id, isActive: cat.isActive })
                     }
+                    disabled={toggleMutation.isPending}
                     className="flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-amber-600 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
                   >
                     {cat.isActive ? (

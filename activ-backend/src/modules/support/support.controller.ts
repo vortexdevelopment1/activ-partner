@@ -23,6 +23,7 @@ import { CreateCallbackRequestDto } from './dto/create-callback-request.dto';
 import { UpdateCallbackRequestDto } from './dto/update-callback-request.dto';
 import { CreateSupportEmailDto } from './dto/create-support-email.dto';
 import { UpdateSupportEmailDto } from './dto/update-support-email.dto';
+import { CallbackQueryDto } from './dto/callback-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -52,17 +53,16 @@ export class SupportController {
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get all callback requests (Admin only)' })
-  @ApiQuery({ name: 'status', enum: CallbackStatus, required: false })
-  async findAll(@Query() pagination: PaginationDto, @Query('status') status?: CallbackStatus) {
-    const [items, total] = await this.supportService.findAll(pagination, status);
+  async findAll(@Query() query: CallbackQueryDto) {
+    const [items, total] = await this.supportService.findAll(query, query.status);
     return {
       message: 'Callback requests fetched successfully',
       data: {
         items,
         total,
-        page: pagination.page,
-        limit: pagination.limit,
-        totalPages: Math.ceil(total / pagination.limit),
+        page: query.page,
+        limit: query.limit,
+        totalPages: Math.ceil(total / query.limit),
       },
     };
   }

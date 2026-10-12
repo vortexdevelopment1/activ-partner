@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ArrowRight, Building2, Plus } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { Badge } from '../../components/ui/Badge';
@@ -21,6 +21,8 @@ const tabStatus: Record<Tab, string | undefined> = {
 
 export const VenuesList: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const partnerId = searchParams.get('partnerId') || undefined;
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -28,12 +30,13 @@ export const VenuesList: React.FC = () => {
   const limit = 15;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['venues', search, page],
+    queryKey: ['venues', search, page, partnerId],
     queryFn: () =>
       venuesApi.getAll({
         search: search || undefined,
         page,
         limit,
+        partnerId,
       }),
   });
 
@@ -50,7 +53,9 @@ export const VenuesList: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Venues</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Review and approve partner venue submissions
+            {partnerId
+              ? 'Viewing venues for the selected partner'
+              : 'Review and approve partner venue submissions'}
           </p>
         </div>
         <div className="flex items-center gap-2">

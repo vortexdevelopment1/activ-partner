@@ -86,7 +86,7 @@ export class SupportService {
       }),
       this.prisma.partner_callback_requests.count({ where }),
     ]);
-    return [items, total];
+    return [items.map((item) => this.mapCallbackRequest(item)), total];
   }
 
   async findOne(id: string) {
@@ -94,22 +94,28 @@ export class SupportService {
       where: { id },
     });
     if (!request) throw new NotFoundException('Callback request not found');
-    return request;
+    return this.mapCallbackRequest(request);
   }
 
   async update(id: string, dto: UpdateCallbackRequestDto) {
-    await this.findOne(id);
-    return this.prisma.partner_callback_requests.update({
+    const current = await this.prisma.partner_callback_requests.findUnique({
+      where: { id },
+    });
+    if (!current) throw new NotFoundException('Callback request not found');
+    const updated = await this.prisma.partner_callback_requests.update({
       where: { id },
       data: {
         ...(dto.status ? { status: this.toPartnerRequestStatus(dto.status) } : {}),
-        ...(dto.adminNotes ? { notes: dto.adminNotes } : {}),
+        ...(dto.adminNotes !== undefined
+          ? { notes: this.withAdminNotes(current.notes, dto.adminNotes) }
+          : {}),
         ...(dto.status === CallbackStatus.RESOLVED || dto.status === CallbackStatus.CLOSED
           ? { resolved_at: new Date() }
           : {}),
         updated_at: new Date(),
       },
     });
+    return this.mapCallbackRequest(updated);
   }
 
   async remove(id: string): Promise<void> {
@@ -218,7 +224,78 @@ export class SupportService {
     await this.prisma.partner_support_requests.delete({ where: { id } });
   }
 
+  private mapCallbackRequest(request: any) {
+    const fields = this.parseCallbackNotes(request.notes);
+    const preferredAt = request.preferred_at
+      ? new Date(request.preferred_at)
+      : null;
+    return {
+      id: request.id,
+      partnerId: request.partner_id,
+      partnerName: fields.Partner || this.nameFromSubject(request.subject),
+      email: fields.Email || '',
+      phone: fields.Phone || '',
+      venueName: fields.Venue || '',
+      city: fields.City || '',
+      callbackDate:
+        fields['Preferred date'] ||
+        (preferredAt && !Number.isNaN(preferredAt.getTime())
+          ? preferredAt.toISOString().slice(0, 10)
+          : ''),
+      callbackTime:
+        fields['Preferred time'] ||
+        (preferredAt && !Number.isNaN(preferredAt.getTime())
+          ? preferredAt.toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+          : ''),
+      query: fields.Query || '',
+      status: this.fromPartnerRequestStatus(request.status),
+      adminNotes: fields.AdminNotes || null,
+      createdAt: request.created_at,
+      updatedAt: request.updated_at,
+    };
+  }
+
+  private parseCallbackNotes(notes?: string | null): Record<string, string> {
+    const result: Record<string, string> = {};
+    const adminLines: string[] = [];
+    for (const line of (notes || '').split('\n')) {
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      if (match) {
+        result[match[1].trim()] = match[2].trim();
+      } else if (line.trim()) {
+        adminLines.push(line);
+      }
+    }
+    if (adminLines.length) result.AdminNotes = adminLines.join('\n');
+    return result;
+  }
+
+  private withAdminNotes(existingNotes: string | null | undefined, adminNotes: string) {
+    const lines = (existingNotes || '')
+      .split('\n')
+      .filter((line) =>
+        /^(Partner|Venue|City|Phone|Email|Preferred date|Preferred time|Query):/.test(line),
+      );
+    if (adminNotes.trim()) lines.push(adminNotes.trim());
+    return lines.join('\n');
+  }
+
+  private nameFromSubject(subject?: string | null) {
+    return (subject || '').replace(/^Callback request from\s+/i, '').trim();
+  }
+
   private toPartnerRequestStatus(status: CallbackStatus) {
+    if (status === CallbackStatus.CANCELLED) return 'CLOSED' as any;
     return status.toUpperCase() as any;
+  }
+
+  private fromPartnerRequestStatus(status: string) {
+    if (status === 'CLOSED') return 'cancelled';
+    if (status === 'CONTACTED') return 'in_progress';
+    return status.toLowerCase();
   }
 }

@@ -4,4 +4,5 @@ export enum CallbackStatus {
   CONTACTED = 'contacted',
   RESOLVED = 'resolved',
   CLOSED = 'closed',
+  CANCELLED = 'cancelled',
 }

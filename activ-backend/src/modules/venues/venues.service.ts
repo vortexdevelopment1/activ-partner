@@ -493,6 +493,7 @@ export class VenuesService {
     pagination: PaginationDto,
     status?: VenueStatus,
     categoryId?: string,
+    partnerId?: string,
   ) {
     const statusMap: Record<string, "DRAFT" | "PUBLISHED" | "ARCHIVED"> = {
       draft: "DRAFT",
@@ -503,6 +504,7 @@ export class VenuesService {
     };
     const where: any = {};
     if (status) where.status = statusMap[status] || undefined;
+    if (partnerId) where.partner_id = partnerId;
     if (pagination.search) {
       where.OR = [
         { name: { contains: pagination.search, mode: "insensitive" } },
@@ -928,10 +930,17 @@ export class VenuesService {
           id: service.id,
           venueId: service.venue_id,
           categoryId: service.service_category_id,
+          category: service.partner_service_categories
+            ? {
+                id: service.partner_service_categories.id,
+                name: service.partner_service_categories.name,
+                description: service.partner_service_categories.description,
+              }
+            : null,
           name: service.title,
           createdAt: service.created_at,
           updatedAt: service.updated_at,
-          submittedAt: service.submitted_at,
+          submittedAt: service.submitted_at ?? service.updated_at ?? service.created_at,
           approvedAt: service.approved_at,
           rejectionReason: service.rejection_reason,
           description: service.description,

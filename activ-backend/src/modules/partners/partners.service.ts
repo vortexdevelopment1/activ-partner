@@ -26,6 +26,7 @@ import { AdminNotificationsService } from '../admin-notifications/admin-notifica
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 import { PrismaService } from '../../prisma/prisma.service';
 import { deletePartnerAccount } from './delete-partner-account';
+import { PartnerStatus } from '../../generated/prisma/client';
 
 @Injectable()
 export class PartnersService {
@@ -141,7 +142,52 @@ export class PartnersService {
     return partner;
   }
 
-  async update(id: string, updatePartnerDto: UpdatePartnerDto): Promise<Partner> {
+  private mapPrismaPartner(partner: any) {
+    const profile = partner.partner_business_profiles;
+    const owner = partner.partner_users?.[0]?.users;
+    const names = (owner?.name || '').trim().split(/\s+/);
+    return {
+      id: partner.id,
+      userId: owner?.id ?? null,
+      firstName: names[0] || null,
+      lastName: names.slice(1).join(' ') || null,
+      email: owner?.email ?? profile?.email ?? null,
+      phone: owner?.phone_e164 ?? profile?.phone_e164 ?? null,
+      businessName: profile?.business_name ?? partner.legal_name,
+      businessAddress: profile?.address_line_1 ?? null,
+      city: profile?.city ?? null,
+      state: profile?.state ?? null,
+      zipCode: profile?.postal_code ?? null,
+      gstNumber: profile?.gst_number ?? null,
+      panNumber: profile?.pan_number ?? null,
+      isVerified: profile?.kyc_status === 'APPROVED',
+      isActive: partner.status === PartnerStatus.ACTIVE,
+      status: partner.status.toLowerCase(),
+      venueCount: partner._count?.venues ?? 0,
+      createdAt: partner.created_at,
+      updatedAt: partner.updated_at,
+    };
+  }
+
+  async update(id: string, updatePartnerDto: UpdatePartnerDto): Promise<any> {
+    if (updatePartnerDto.isActive !== undefined) {
+      const partner = await this.prisma.partners.update({
+        where: { id },
+        data: {
+          status: updatePartnerDto.isActive
+            ? PartnerStatus.ACTIVE
+            : PartnerStatus.SUSPENDED,
+          updated_at: new Date(),
+        },
+        include: {
+          partner_business_profiles: true,
+          partner_users: { include: { users: true } },
+          _count: { select: { venues: true } },
+        },
+      });
+      return this.mapPrismaPartner(partner);
+    }
+
     const partner = await this.findOne(id);
     Object.assign(partner, updatePartnerDto);
     return this.partnerRepository.save(partner);
@@ -191,10 +237,12 @@ export class PartnersService {
     await this.partnerRepository.remove(partner);
   }
 
-  async toggleStatus(id: string): Promise<Partner> {
-    const partner = await this.findOne(id);
-    partner.isActive = !partner.isActive;
-    return this.partnerRepository.save(partner);
+  async toggleStatus(id: string): Promise<any> {
+    const current = await this.prisma.partners.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException(`Partner with id ${id} not found`);
+    return this.update(id, {
+      isActive: current.status !== PartnerStatus.ACTIVE,
+    });
   }
 
   async verify(id: string): Promise<Partner> {
