@@ -386,6 +386,7 @@ class _State extends State<ListActivityTypeScreen> {
         categoryIndex: 1,
         totalCategories: selectedCategories.length,
         accumulatedTimings: const [],
+        reviewMode: true,
       ),
     );
   }

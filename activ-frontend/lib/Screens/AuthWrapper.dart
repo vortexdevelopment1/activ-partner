@@ -12,6 +12,7 @@ import '../api_calling/api_request.dart';
 import 'ContactSupportScreen.dart';
 import 'GetStartedScreen.dart';
 import 'Home/HomeScreen.dart' show HomeScreen;
+import 'LegalInformationScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
 
@@ -120,6 +121,9 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  static const String _pendingLegalCameraDocumentTypeKey =
+      'pending_legal_camera_document_type';
+
   bool isLoading = true;
   Widget _destination = GetStartedScreen();
 
@@ -141,6 +145,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       // Check user type saved at login
       final userType = await SharedPreference.readStr("user_type") ?? "";
+      final pendingLegalCameraDocument =
+          await SharedPreference.readStr(_pendingLegalCameraDocumentTypeKey);
+
+      if (userType != "team_member" &&
+          pendingLegalCameraDocument != null &&
+          pendingLegalCameraDocument.isNotEmpty) {
+        _finish(const LegalInformationScreen());
+        return;
+      }
 
       // Team members: just validate token is still alive, then go to HomeScreen
       if (userType == "team_member") {

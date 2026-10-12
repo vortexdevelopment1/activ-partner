@@ -90,7 +90,7 @@ class SharedPreference
   static remove(String key) async
   {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.remove(key);
+    await prefs.remove(key);
   }
 
   static Future<String?> readStr(keys) async {

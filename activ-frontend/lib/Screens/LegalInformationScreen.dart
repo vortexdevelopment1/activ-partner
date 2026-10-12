@@ -33,6 +33,8 @@ class LegalInformationScreen extends StatefulWidget {
 }
 
 class _State extends State<LegalInformationScreen> {
+  static const String _pendingCameraDocumentTypeKey =
+      'pending_legal_camera_document_type';
 
   TextEditingController fullNameController = TextEditingController();
   TextEditingController aadhaarNumberController = TextEditingController();
@@ -97,6 +99,7 @@ class _State extends State<LegalInformationScreen> {
   @override
   void initState() {
     super.initState();
+    _recoverPendingCameraDocument();
   }
 
   getData() async
@@ -1712,7 +1715,14 @@ class _State extends State<LegalInformationScreen> {
     if (!mounted || source == null) return;
     try {
       if (source != 'file') {
+        if (source == 'camera') {
+          await SharedPreference.addStringToSF(
+              _pendingCameraDocumentTypeKey, documentType);
+        }
         final image = await _picker.pickImage(source: source == 'camera' ? ImageSource.camera : ImageSource.gallery);
+        if (source == 'camera') {
+          await SharedPreference.remove(_pendingCameraDocumentTypeKey);
+        }
         if (image == null || !mounted) return;
         if (await image.length() > 5 * 1024 * 1024) {
           if (mounted) CommonUtilities.createSnackBar(context, 'Each document must be 5 MB or smaller.');
@@ -1731,7 +1741,50 @@ class _State extends State<LegalInformationScreen> {
     );
       if (result != null && mounted) _setDocument(documentType, result.files.single);
     } catch (_) {
+      if (source == 'camera') {
+        await SharedPreference.remove(_pendingCameraDocumentTypeKey);
+      }
       if (mounted) CommonUtilities.createSnackBar(context, 'Unable to open the selected document source. Please check permissions and try again.');
+    }
+  }
+
+  Future<void> _recoverPendingCameraDocument() async {
+    final documentType =
+        checkString(await SharedPreference.readStr(_pendingCameraDocumentTypeKey));
+    if (documentType.isEmpty) return;
+
+    try {
+      final lostData = await _picker.retrieveLostData();
+      await SharedPreference.remove(_pendingCameraDocumentTypeKey);
+      if (!mounted || lostData.isEmpty || lostData.file == null) return;
+
+      final image = lostData.file!;
+      if (await image.length() > 5 * 1024 * 1024) {
+        if (mounted) {
+          CommonUtilities.createSnackBar(
+              context, 'Each document must be 5 MB or smaller.');
+        }
+        return;
+      }
+      final bytes = await image.readAsBytes();
+      final extension = image.name.split('.').last.toLowerCase();
+      _setDocument(
+        documentType,
+        PlatformFile(
+          name: image.name,
+          size: bytes.length,
+          bytes: bytes,
+          path: kIsWeb ? null : image.path,
+        ),
+        extension: extension,
+      );
+    } catch (e) {
+      await SharedPreference.remove(_pendingCameraDocumentTypeKey);
+      CommonUtilities.showLog('Legal document camera recovery error: $e');
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+            context, 'Unable to restore the captured document. Please try again.');
+      }
     }
   }
 
