@@ -16,7 +16,7 @@ Restart Vite after changing `.env`; rebuild for production changes.
 These variables are public in the browser bundle. Keep passwords and private
 keys in the backend environment only. Local `.env` files are ignored by Git.
 
-## Vercel Deployment
+## Vercel Deployment 
 
 Set the project Root Directory to `Activ-partner-admin`, the framework to Vite,
 the build command to `npm run build`, and the output directory to `dist`.
