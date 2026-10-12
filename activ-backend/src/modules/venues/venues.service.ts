@@ -101,6 +101,25 @@ export class VenuesService {
     const now = new Date();
     const venueId = randomUUID();
     const contactPhone = venueData.venuePhone || venueData.phone || null;
+    const existingDraft = await this.prisma.venues.findFirst({
+      where: {
+        partner_id: partnerId,
+        status: "DRAFT",
+        name: { equals: venueData.name, mode: "insensitive" },
+        partner_venue_profiles: {
+          address_line_1: venueData.venueAddress || venueData.address || null,
+        },
+      },
+      orderBy: { submitted_at: "desc" },
+    });
+
+    if (existingDraft) {
+      return this.update(
+        existingDraft.id,
+        createVenueDto as UpdateVenueDto,
+        { id: partnerId, role: UserRole.PARTNER },
+      );
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.venues.create({
@@ -1468,6 +1487,7 @@ export class VenuesService {
     userRole?: string,
     categoryId?: string,
     amenities?: string[],
+    replaceImages = false,
   ): Promise<any> {
     const venue = await this.prisma.venues.findUnique({
       where: { id: venueId },
@@ -1533,7 +1553,12 @@ export class VenuesService {
         },
       });
     }
-    return this.uploadActivityImages(service.id, newUrls, venue.partner_id);
+    return this.uploadActivityImages(
+      service.id,
+      newUrls,
+      venue.partner_id,
+      replaceImages,
+    );
   }
 
   async setServiceCover(
@@ -2491,10 +2516,16 @@ export class VenuesService {
     serviceId: string,
     newUrls: string[],
     partnerId: string,
+    replaceImages = false,
   ): Promise<any> {
     const service = await this.findManagedActivity(serviceId, partnerId);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM partner_venue_services WHERE id = ${serviceId}::uuid FOR UPDATE`;
+      if (replaceImages) {
+        await tx.partner_venue_images.deleteMany({
+          where: { venue_service_id: serviceId },
+        });
+      }
       const images = await tx.partner_venue_images.findMany({
         where: { venue_service_id: serviceId },
         orderBy: { sort_order: "asc" },

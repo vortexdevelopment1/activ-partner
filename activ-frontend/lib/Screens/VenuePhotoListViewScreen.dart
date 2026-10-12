@@ -28,6 +28,8 @@ class VenuePhotoListViewScreen extends StatefulWidget {
   final int categoryIndex;
   final int totalCategories;
   final List<Map<String, dynamic>> accumulatedTimings;
+  final int initialCoverIndex;
+  final bool replaceOnlyCurrentCategory;
 
   const VenuePhotoListViewScreen({
     super.key,
@@ -38,6 +40,8 @@ class VenuePhotoListViewScreen extends StatefulWidget {
     this.categoryIndex = 1,
     this.totalCategories = 1,
     this.accumulatedTimings = const [],
+    this.initialCoverIndex = 0,
+    this.replaceOnlyCurrentCategory = false,
   });
 
   @override
@@ -72,6 +76,9 @@ class _State extends State<VenuePhotoListViewScreen> {
     super.initState();
     _images = List.from(widget.images);
     _imageBytes = List.from(widget.imageBytes);
+    _coverIndex = _imageBytes.isEmpty
+        ? null
+        : widget.initialCoverIndex.clamp(0, _imageBytes.length - 1) as int;
   }
 
 
@@ -422,6 +429,9 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               if (categoryId.isNotEmpty) {
                                                 formData.fields.add(MapEntry('categoryId', categoryId));
                                               }
+                                              if (widget.replaceOnlyCurrentCategory) {
+                                                formData.fields.add(const MapEntry('replaceImages', 'true'));
+                                              }
                                               for (int i = 0; i < _images.length; i++) {
                                                 final fileName = _images[i].name.isNotEmpty ? _images[i].name : "image_$i.jpg";
                                                 formData.files.add(MapEntry(
@@ -444,13 +454,19 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               Navigator.of(context).pop(); // close loader
 
                                               if (response.statusCode == 201) {
-                                                if (widget.categoryIndex == 1) {
+                                                if (widget.categoryIndex == 1 &&
+                                                    !widget.replaceOnlyCurrentCategory) {
                                                   VenuePhotoListViewScreen.cachedImagesByCategory.clear();
                                                   VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
                                                 }
                                                 VenuePhotoListViewScreen.cachedImagesByCategory[widget.currentCategory['id'].toString()] = List.from(_imageBytes);
                                                 VenuePhotoListViewScreen.cachedCoverIndexByCategory[widget.currentCategory['id'].toString()] = _coverIndex ?? 0;
-                                                if (widget.categoryIndex == 1) {
+                                                if (widget.replaceOnlyCurrentCategory) {
+                                                  VenuePhotoListViewScreen.cachedImageBytes = [
+                                                    for (final bytes in VenuePhotoListViewScreen.cachedImagesByCategory.values)
+                                                      ...bytes,
+                                                  ];
+                                                } else if (widget.categoryIndex == 1) {
                                                   VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
                                                 } else {
                                                   VenuePhotoListViewScreen.cachedImageBytes = [

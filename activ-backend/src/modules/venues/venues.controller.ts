@@ -349,6 +349,7 @@ export class VenuesController {
         serviceName: { type: 'string', example: 'Badminton' },
         categoryId: { type: 'string', format: 'uuid', description: 'Category UUID — sets category_id on the service' },
         amenities: { type: 'string', description: 'JSON string array e.g. ["Free Parking","WiFi"]' },
+        replaceImages: { type: 'string', example: 'true', description: 'When true, replace existing service images instead of appending' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
       },
     },
@@ -361,7 +362,7 @@ export class VenuesController {
     @Param('venueId', ParseUUIDPipe) venueId: string,
     @CurrentUser() user: any,
     @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: { serviceName: string; categoryId?: string; amenities?: string },
+    @Body() body: { serviceName: string; categoryId?: string; amenities?: string; replaceImages?: string },
   ) {
     const urls = await this.cloudinaryService.uploadFiles(files, 'activ/services', 'image');
 
@@ -375,7 +376,16 @@ export class VenuesController {
       }
     }
 
-    const data = await this.venuesService.uploadServiceImages(venueId, body.serviceName, urls, user.id, user.role, body.categoryId, amenities);
+    const data = await this.venuesService.uploadServiceImages(
+      venueId,
+      body.serviceName,
+      urls,
+      user.id,
+      user.role,
+      body.categoryId,
+      amenities,
+      body.replaceImages === 'true',
+    );
     return { message: 'Service images uploaded successfully', data };
   }
 

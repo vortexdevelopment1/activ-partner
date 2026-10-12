@@ -9,6 +9,7 @@ import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LegalInformationScreen.dart';
 import 'VenuePhotoListViewScreen.dart';
+import 'VenuePhotoUploadScreen.dart';
 import 'onboarding_widgets.dart';
 
 const _editColor = Color(0xFFA634FF);
@@ -138,6 +139,35 @@ class _State extends State<ActivityReviewScreen> {
             categoryTimings: categoryTimings,
             initialActivityIndex: activityIndex,
           );
+      final categoryId = _activity['id']?.toString() ?? '';
+      final initialPhotos = VenuePhotoListViewScreen
+              .cachedImagesByCategory[categoryId] ??
+          (_activities.length == 1
+              ? VenuePhotoListViewScreen.cachedImageBytes
+              : <Uint8List>[]);
+      final initialCoverIndex =
+          VenuePhotoListViewScreen.cachedCoverIndexByCategory[categoryId] ?? 0;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => VenuePhotoUploadScreen(
+            currentCategory: {
+              ..._activity,
+              'id': categoryId,
+              'name': _title,
+              'title': _title,
+            },
+            remainingCategories: const [],
+            categoryIndex: _activityIndex + 1,
+            totalCategories: _activities.length,
+            accumulatedTimings: widget.categoryTimings,
+            initialImageBytes: List<Uint8List>.from(initialPhotos),
+            initialCoverIndex: initialCoverIndex,
+            replaceOnlyCurrentCategory: true,
+          ),
+        ),
+      );
+      return;
     }
 
     // Each configured activity contributes upload, preview, questions and timings.

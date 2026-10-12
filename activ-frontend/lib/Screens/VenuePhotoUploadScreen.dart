@@ -20,6 +20,9 @@ class VenuePhotoUploadScreen extends StatefulWidget {
   final int totalCategories;
   final List<Map<String, dynamic>> accumulatedTimings;
   final ImagePicker? imagePicker;
+  final List<Uint8List> initialImageBytes;
+  final int initialCoverIndex;
+  final bool replaceOnlyCurrentCategory;
 
   const VenuePhotoUploadScreen({
     super.key,
@@ -29,6 +32,9 @@ class VenuePhotoUploadScreen extends StatefulWidget {
     this.totalCategories = 1,
     this.accumulatedTimings = const [],
     this.imagePicker,
+    this.initialImageBytes = const [],
+    this.initialCoverIndex = 0,
+    this.replaceOnlyCurrentCategory = false,
   });
 
   @override
@@ -40,6 +46,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   final List<Uint8List> _imageBytes = [];
   late final ImagePicker _picker = widget.imagePicker ?? ImagePicker();
   String? _photoError;
+  int _coverIndex = 0;
 
   void _showPhotoError(String message) {
     if (!mounted) return;
@@ -48,6 +55,25 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
   int currentStep = onboardingPhotosStep;
   final int totalSteps = totalSetup;
+
+  @override
+  void initState() {
+    super.initState();
+    _coverIndex = widget.initialCoverIndex;
+    if (widget.initialImageBytes.isNotEmpty) {
+      _imageBytes.addAll(widget.initialImageBytes);
+      _selectedImages.addAll(List.generate(
+        widget.initialImageBytes.length,
+        (index) => XFile.fromData(
+          widget.initialImageBytes[index],
+          name: 'existing_photo_${index + 1}.jpg',
+          mimeType: 'image/jpeg',
+        ),
+      ));
+      _coverIndex = _coverIndex.clamp(0, _imageBytes.length - 1) as int;
+      _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
+    }
+  }
 
   void nextStep() {
     if (currentStep < totalSteps) {
@@ -144,6 +170,8 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       categoryIndex: widget.categoryIndex,
       totalCategories: widget.totalCategories,
       accumulatedTimings: widget.accumulatedTimings,
+      initialCoverIndex: _coverIndex,
+      replaceOnlyCurrentCategory: widget.replaceOnlyCurrentCategory,
     ))).then((_) {
       if (mounted) refresh();
     });
@@ -510,6 +538,11 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                         setState(() {
                                                           _selectedImages.removeAt(index);
                                                           _imageBytes.removeAt(index);
+                                                          if (_coverIndex == index) {
+                                                            _coverIndex = 0;
+                                                          } else if (index < _coverIndex) {
+                                                            _coverIndex -= 1;
+                                                          }
                                                         });
                                                         _updateButtonStatus();
                                                       },

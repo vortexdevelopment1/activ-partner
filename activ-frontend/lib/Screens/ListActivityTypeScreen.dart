@@ -61,6 +61,7 @@ class _State extends State<ListActivityTypeScreen> {
   int currentStep = onboardingActivitiesStep;
   bool isActivitySelected = false;
   bool isShimmerLoading = false;
+  bool _savingVenue = false;
   final int totalSteps = totalSetup;
 
   void nextStep() {
@@ -146,7 +147,9 @@ class _State extends State<ListActivityTypeScreen> {
 
 
   void createVenue() async {
+    if (_savingVenue) return;
     final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
+    final existingVenueId = checkString(await SharedPreference.readStr("venue_id"));
 
     // Read venue details saved from VenueScreen
     final venueDetailsStr = checkString(await SharedPreference.readStr("venue_details"));
@@ -199,44 +202,74 @@ class _State extends State<ListActivityTypeScreen> {
     }
 
     if (!mounted) return;
+    setState(() => _savingVenue = true);
     ProgressBarNew().showLoader(context);
 
     try {
-      final response = await http.post(
+      final payload = {
+        "categoryIds": categoryIds,
+        "name": venueDetails["venue_name"] ?? "",
+        "description": venueDetails["venue_description"] ?? "",
+        "address": venueDetails["venue_address"] ?? "",
+        "flatBuilding": venueDetails["venue_area"] ?? "",
+        "city": venueDetails["venue_city"] ?? "",
+        "state": venueDetails["venue_state"] ?? "",
+        "zipCode": venueDetails["venue_pin_code"] ?? "",
+        "locationUrl": venueDetails["venue_location_url"] ?? "",
+        "latitude": venueDetails["venue_latitude"],
+        "longitude": venueDetails["venue_longitude"],
+        "phone": ownerPhone,
+        "venuePhone": venuePhone,
+        "amenities": amenities,
+        "commission": commissionPct,
+      };
+      final response = existingVenueId.isEmpty
+          ? await (widget.client?.post(
         Uri.parse(CREATE_VENUE_URL),
         headers: {
           'accept': '*/*',
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $jwtToken',
         },
-        body: jsonEncode({
-          "categoryIds": categoryIds,
-          "name": venueDetails["venue_name"] ?? "",
-          "description": venueDetails["venue_description"] ?? "",
-          "address": venueDetails["venue_address"] ?? "",
-          "flatBuilding": venueDetails["venue_area"] ?? "",
-          "city": venueDetails["venue_city"] ?? "",
-          "state": venueDetails["venue_state"] ?? "",
-          "zipCode": venueDetails["venue_pin_code"] ?? "",
-          "locationUrl": venueDetails["venue_location_url"] ?? "",
-          "latitude": venueDetails["venue_latitude"],
-          "longitude": venueDetails["venue_longitude"],
-          "phone": ownerPhone,
-          "venuePhone": venuePhone,
-          "amenities": amenities,
-          "commission": commissionPct,
-        }),
-      );
+        body: jsonEncode(payload),
+      ) ?? http.post(
+        Uri.parse(CREATE_VENUE_URL),
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwtToken',
+        },
+        body: jsonEncode(payload),
+      ))
+          : await (widget.client?.patch(
+        Uri.parse("$CREATE_VENUE_URL/$existingVenueId"),
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwtToken',
+        },
+        body: jsonEncode(payload),
+      ) ?? http.patch(
+        Uri.parse("$CREATE_VENUE_URL/$existingVenueId"),
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwtToken',
+        },
+        body: jsonEncode(payload),
+      ));
 
       if (!mounted) return;
       Navigator.pop(context); // dismiss loader
 
-      CommonUtilities.showLog("Create Venue status: ${response.statusCode}");
-      CommonUtilities.showLog("Create Venue response: ${response.body}");
+      CommonUtilities.showLog("Save Venue status: ${response.statusCode}");
+      CommonUtilities.showLog("Save Venue response: ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
-        final venueId = body['data']?['id']?.toString() ?? body['data']?['_id']?.toString() ?? "";
+        final venueId = body['data']?['id']?.toString() ??
+            body['data']?['_id']?.toString() ??
+            existingVenueId;
         final venueName = body['data']?['name']?.toString() ??
             venueDetails["venue_name"]?.toString() ??
             "";
@@ -265,15 +298,19 @@ class _State extends State<ListActivityTypeScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // dismiss loader
-      CommonUtilities.showLog("Create Venue error: $e");
+      CommonUtilities.showLog("Save Venue error: $e");
       CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+    } finally {
+      if (mounted) setState(() => _savingVenue = false);
     }
   }
 
   Future<void> _continueReviewActivityFlow() async {
     final venueId = checkString(await SharedPreference.readStr("venue_id"));
+    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
     final operateValueStr = checkString(await SharedPreference.readStr("operate_value"));
     List<Map<String, dynamic>> selectedCategories = [];
+    List<String> categoryIds = [];
 
     if (operateValueStr.isNotEmpty) {
       final decoded = jsonDecode(operateValueStr);
@@ -285,6 +322,10 @@ class _State extends State<ListActivityTypeScreen> {
         selectedCategories = [Map<String, dynamic>.from(decoded)];
       }
     }
+    categoryIds = selectedCategories
+        .map((e) => e["id"]?.toString() ?? "")
+        .where((id) => id.isNotEmpty)
+        .toList();
 
     if (venueId.isEmpty) {
       if (!mounted) return;
@@ -292,9 +333,44 @@ class _State extends State<ListActivityTypeScreen> {
       return;
     }
 
-    if (selectedCategories.isEmpty) {
+    if (selectedCategories.isEmpty || categoryIds.isEmpty) {
       if (!mounted) return;
       CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
+      return;
+    }
+
+    ProgressBarNew().showLoader(context);
+    try {
+      final response = await (widget.client?.patch ?? http.patch)(
+        Uri.parse('$CREATE_VENUE_URL/$venueId'),
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwtToken',
+        },
+        body: jsonEncode({'categoryIds': categoryIds}),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        dynamic body;
+        try {
+          body = jsonDecode(response.body);
+        } catch (_) {
+          body = null;
+        }
+        final message = body is Map
+            ? body['message'] ?? 'Could not update selected activity.'
+            : 'Could not update selected activity.';
+        CommonUtilities.createSnackBar(
+            context, message is List ? message.join(', ') : message.toString());
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      CommonUtilities.showLog('Review activity sync error: $e');
+      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
       return;
     }
 
@@ -466,6 +542,7 @@ class _State extends State<ListActivityTypeScreen> {
                                   flex: 7,
                                   child: InkWell(
                                       onTap: () {
+                                        if (_savingVenue) return;
                                         if (isActivitySelected) {
                                           if (widget.reviewMode) {
                                             _continueReviewActivityFlow();
@@ -481,7 +558,7 @@ class _State extends State<ListActivityTypeScreen> {
                                         child: OnboardingButton(label: 'Next', borderRadius: 8,
                                           disabledBackgroundColor: AppColors.gray2,
                                           disabledForegroundColor: AppColors.gray1,
-                                          onPressed: isActivitySelected
+                                          onPressed: isActivitySelected && !_savingVenue
                                               ? () {
                                                   if (widget.reviewMode) {
                                                     _continueReviewActivityFlow();
