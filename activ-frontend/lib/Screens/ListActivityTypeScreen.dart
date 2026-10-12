@@ -306,6 +306,16 @@ class _State extends State<ListActivityTypeScreen> {
   }
 
   Future<void> _continueReviewActivityFlow() async {
+    if (_savingVenue) return;
+    setState(() => _savingVenue = true);
+    try {
+      await _runReviewActivityFlow();
+    } finally {
+      if (mounted) setState(() => _savingVenue = false);
+    }
+  }
+
+  Future<void> _runReviewActivityFlow() async {
     final venueId = checkString(await SharedPreference.readStr("venue_id"));
     final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
     final operateValueStr = checkString(await SharedPreference.readStr("operate_value"));
@@ -377,9 +387,8 @@ class _State extends State<ListActivityTypeScreen> {
     if (!mounted) return;
     final first = selectedCategories.first;
     final rest = selectedCategories.sublist(1);
-    CommonUtilities.NavigateWithPush(
-      context,
-      CategoryQuestionsScreen(
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CategoryQuestionsScreen(
         venueId: venueId,
         currentCategory: first,
         remainingCategories: rest,
@@ -387,8 +396,12 @@ class _State extends State<ListActivityTypeScreen> {
         totalCategories: selectedCategories.length,
         accumulatedTimings: const [],
         reviewMode: true,
-      ),
+        client: widget.client,
+      )),
     );
+    if (mounted && saved == true) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override

@@ -1878,7 +1878,9 @@ void main() {
           },
         ]));
     final client = MockClient((request) async {
-      if (request.method == 'POST') return http.Response('{}', 200);
+      if (request.method == 'POST' || request.method == 'PATCH') {
+        return http.Response('{}', 200);
+      }
       if (request.url.path.contains('commission')) {
         return http.Response(
             jsonEncode({
@@ -1951,6 +1953,20 @@ void main() {
     expect(
         tester.widgetList<Checkbox>(find.byType(Checkbox)).first.value, isTrue);
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ListActivityTypeScreen), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Updated badminton description');
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CategoryQuestionsScreen), findsNothing);
+    expect(find.byType(ListActivityTypeScreen), findsNothing);
+    expect(find.byType(ReviewVenueDetailsScreen), findsOneWidget);
+    final answers = jsonDecode(prefs.getString('activity_questions_display')!) as List;
+    expect(answers.any((answer) => answer['answer'] == 'Updated badminton description'), isTrue);
   });
 
   testWidgets('Get Started logo stays small across viewport widths',
