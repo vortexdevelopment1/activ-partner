@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
+import '../Style/activity_logos.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
@@ -199,8 +200,15 @@ class _State extends State<ReviewVenueDetailsScreen> {
         body: jsonEncode({
           'name': venue['venue_name'] ?? '',
           'description': venue['venue_description'] ?? '',
-          'address': venue['venue_address'] ?? '',
-          'flatBuilding': venue['venue_area'] ?? '',
+          'address': (venue['venue_search_address'] ?? '').toString().trim().isNotEmpty
+              ? venue['venue_search_address']
+              : venue['venue_address'] ?? '',
+          'flatBuilding': [
+            if ((venue['venue_search_address'] ?? '').toString().trim().isNotEmpty)
+              venue['venue_address'],
+            venue['venue_area'],
+          ].where((value) => value != null && value.toString().trim().isNotEmpty)
+              .map((value) => value.toString().trim()).join(', '),
           'city': venue['venue_city'] ?? '',
           'state': venue['venue_state'] ?? '',
           'zipCode': venue['venue_pin_code'] ?? '',
@@ -328,11 +336,15 @@ class _State extends State<ReviewVenueDetailsScreen> {
 
   Widget _venueDetails() {
     final address = [
+      if ((venue['venue_search_address'] ?? '').toString().trim().isNotEmpty)
+        'venue_search_address',
       'venue_address',
       'venue_area',
-      'venue_city',
-      'venue_state',
-      'venue_pin_code'
+      if ((venue['venue_search_address'] ?? '').toString().trim().isEmpty) ...[
+        'venue_city',
+        'venue_state',
+        'venue_pin_code'
+      ]
     ]
         .map((key) => venue[key]?.toString() ?? '')
         .where((e) => e.trim().isNotEmpty)
@@ -528,17 +540,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
             ]),
       onEdit: () => _editSection(CustomerPlacesOffer(reviewMode: true)));
 
-  String _activityImage(String title) {
-    final lower = title.toLowerCase();
-    if (lower.contains('badminton') ||
-        lower.contains('tennis') ||
-        lower.contains('squash')) return 'assets/ic_cock.png';
-    if (lower.contains('football')) return 'assets/ic_football.png';
-    if (lower.contains('swim')) return 'assets/ic_pool.png';
-    if (lower.contains('gym')) return 'assets/ic_gym.png';
-    if (lower.contains('yoga')) return 'assets/ic_yoga.png';
-    return 'assets/ic_other.png';
-  }
+  String _activityImage(String title) => activityLogoAsset(title);
 
   String _activityDescription(Map<String, dynamic> activity) {
     for (final q in questions) {

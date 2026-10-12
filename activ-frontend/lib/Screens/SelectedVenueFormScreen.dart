@@ -39,15 +39,65 @@ class Question {
     this.helperText = '',
   });
 
+  static String _normalizedType(dynamic rawType) {
+    final type = rawType?.toString().trim().toLowerCase() ?? '';
+    return switch (type) {
+      'dropdown' || 'single_select' || 'single-select' => 'select',
+      'multi_select' || 'multi-select' => 'multiselect',
+      'long_text' || 'long-text' => 'textarea',
+      'integer' || 'numeric' => 'number',
+      _ => type.isEmpty ? 'text' : type,
+    };
+  }
+
+  static List<String> _parseOptions(dynamic rawOptions, String questionText) {
+    final options = <String>[];
+
+    void add(dynamic value) {
+      if (value == null) return;
+      if (value is Map) {
+        add(value['label'] ?? value['name'] ?? value['title'] ?? value['value']);
+        return;
+      }
+      final option = value.toString().trim();
+      if (option.isNotEmpty && !options.contains(option)) options.add(option);
+    }
+
+    if (rawOptions is List) {
+      for (final item in rawOptions) {
+        add(item);
+      }
+    } else if (rawOptions is String) {
+      for (final item in rawOptions.split(RegExp(r'[,|]'))) {
+        add(item);
+      }
+    }
+
+    if (options.isNotEmpty) return options;
+
+    final text = questionText.trim().toLowerCase();
+    if (text == 'pitch type') {
+      return const ['Turf', 'Matting', 'Cement', 'Natural Grass', 'Astro Turf'];
+    }
+    if (text == 'pitch surface' || text == 'court surface') {
+      return const ['Wooden', 'Synthetic', 'Concrete', 'Grass', 'Clay'];
+    }
+    if (text == 'court type') {
+      return const ['Full Court', 'Half Court', 'Practice Court'];
+    }
+    if (text == 'playing environment') {
+      return const ['Indoor', 'Outdoor', 'Air Conditioned', 'Covered', 'Floodlights', 'Spectator Seating'];
+    }
+    return const [];
+  }
+
   factory Question.fromJson(Map<String, dynamic> json) {
+    final questionText = json['questionText']?.toString() ?? '';
     return Question(
       id: json['id']?.toString() ?? '',
-      questionText: json['questionText']?.toString() ?? '',
-      questionType: json['questionType']?.toString() ?? 'text',
-      options: (json['options'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      questionText: questionText,
+      questionType: _normalizedType(json['questionType']),
+      options: _parseOptions(json['options'], questionText),
       isRequired: json['isRequired'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       order: (json['order'] as num?)?.toInt() ?? 0,
@@ -97,8 +147,7 @@ class _State extends State<SelectedVenueFormScreen> {
   // ─── API call ──────────────────────────────────────────────────────────────
 
   Future<void> _fetchQuestions() async {
-    final operateValueStr =
-        checkString(await SharedPreference.readStr("operate_value"));
+    final operateValueStr = checkString(await SharedPreference.readStr("operate_value"));
     String categoryId = '';
     if (operateValueStr.isNotEmpty) {
       final decoded = jsonDecode(operateValueStr);
@@ -115,8 +164,7 @@ class _State extends State<SelectedVenueFormScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage =
-              'Category not found. Please go back and select an activity type.';
+          _errorMessage = 'Category not found. Please go back and select an activity type.';
         });
       }
       return;
@@ -140,11 +188,7 @@ class _State extends State<SelectedVenueFormScreen> {
         } else {
           data = [];
         }
-        final questions = data
-            .map((e) => Question.fromJson(e as Map<String, dynamic>))
-            .where((q) => q.isActive)
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final questions = data.map((e) => Question.fromJson(e as Map<String, dynamic>)).where((q) => q.isActive).toList()..sort((a, b) => a.order.compareTo(b.order));
 
         // Create text controllers for text-based question types
         for (final q in questions) {
@@ -187,12 +231,9 @@ class _State extends State<SelectedVenueFormScreen> {
     for (final q in _questions) {
       if (!q.isRequired) continue;
       final answer = _getAnswer(q);
-      final isEmpty = answer == null ||
-          (answer is String && answer.isEmpty) ||
-          (answer is List && answer.isEmpty);
+      final isEmpty = answer == null || (answer is String && answer.isEmpty) || (answer is List && answer.isEmpty);
       if (isEmpty) {
-        CommonUtilities.createSnackBar(
-            context, 'Please fill in: ${q.questionText}');
+        CommonUtilities.createSnackBar(context, 'Please fill in: ${q.questionText}');
         return false;
       }
     }
@@ -216,10 +257,8 @@ class _State extends State<SelectedVenueFormScreen> {
     }
 
     // Persist locally (for review screen)
-    await SharedPreference.addStringToSF(
-        "activity_questions", jsonEncode(allAnswers));
-    await SharedPreference.addStringToSF(
-        "activity_questions_display", jsonEncode(displayList));
+    await SharedPreference.addStringToSF("activity_questions", jsonEncode(allAnswers));
+    await SharedPreference.addStringToSF("activity_questions_display", jsonEncode(displayList));
 
     // Read required values
     final venueId = checkString(await SharedPreference.readStr("venue_id"));
@@ -260,20 +299,17 @@ class _State extends State<SelectedVenueFormScreen> {
       CommonUtilities.showLog('Submit answers response: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        CommonUtilities.NavigateWithPush(
-            context, VenueTimingScreen(activityId: widget.activityId));
+        CommonUtilities.NavigateWithPush(context, VenueTimingScreen(activityId: widget.activityId));
       } else {
         final body = jsonDecode(response.body);
         final msg = body['message'] ?? 'Failed to save answers. Please try again.';
-        CommonUtilities.createSnackBar(
-            context, msg is List ? msg.join(', ') : msg.toString());
+        CommonUtilities.createSnackBar(context, msg is List ? msg.join(', ') : msg.toString());
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog('❌ Submit answers error: $e');
-      CommonUtilities.createSnackBar(
-          context, 'Network error. Please check your connection.');
+      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
     }
   }
 
@@ -327,8 +363,7 @@ class _State extends State<SelectedVenueFormScreen> {
     );
   }
 
-  Widget _buildTextField(Question q,
-      {int maxLines = 1, bool isNumber = false}) {
+  Widget _buildTextField(Question q, {int maxLines = 1, bool isNumber = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -344,10 +379,8 @@ class _State extends State<SelectedVenueFormScreen> {
             controller: _textControllers[q.id],
             textInputAction: TextInputAction.next,
             textCapitalization: TextCapitalization.sentences,
-            keyboardType:
-                isNumber ? TextInputType.number : TextInputType.text,
-            inputFormatters:
-                isNumber ? [FilteringTextInputFormatter.digitsOnly] : [],
+            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+            inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : [],
             cursorColor: AppColors.cursorBlack,
             maxLines: maxLines,
             style: TextStyle(
@@ -356,9 +389,7 @@ class _State extends State<SelectedVenueFormScreen> {
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
-              hintText: q.placeholder.isNotEmpty
-                  ? q.placeholder
-                  : 'Enter ${q.questionText.toLowerCase()}',
+              hintText: q.placeholder.isNotEmpty ? q.placeholder : 'Enter ${q.questionText.toLowerCase()}',
               hintStyle: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'FontRegular',
@@ -387,7 +418,8 @@ class _State extends State<SelectedVenueFormScreen> {
   }
 
   Widget _buildDropdown(Question q) {
-    final selected = _answers[q.id] as String?;
+    final rawSelected = _answers[q.id] as String?;
+    final selected = q.options.contains(rawSelected) ? rawSelected : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -422,7 +454,7 @@ class _State extends State<SelectedVenueFormScreen> {
                         child: Text(opt),
                       ))
                   .toList(),
-              onChanged: (val) => setState(() => _answers[q.id] = val),
+              onChanged: q.options.isEmpty ? null : (val) => setState(() => _answers[q.id] = val),
             ),
           ),
         ),
@@ -526,8 +558,7 @@ class _State extends State<SelectedVenueFormScreen> {
             );
             if (picked != null) {
               setState(() {
-                _answers[q.id] =
-                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                _answers[q.id] = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
               });
             }
           },
@@ -543,15 +574,11 @@ class _State extends State<SelectedVenueFormScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  dateStr ??
-                      (q.placeholder.isNotEmpty
-                          ? q.placeholder
-                          : 'Select a date'),
+                  dateStr ?? (q.placeholder.isNotEmpty ? q.placeholder : 'Select a date'),
                   style: TextStyle(
                     fontSize: AppSize.size_14,
                     fontFamily: 'FontRegular',
-                    color:
-                        dateStr != null ? AppColors.darkBlack : AppColors.hintColor,
+                    color: dateStr != null ? AppColors.darkBlack : AppColors.hintColor,
                   ),
                 ),
                 const Icon(Icons.calendar_today_outlined, size: 18),
@@ -582,114 +609,106 @@ class _State extends State<SelectedVenueFormScreen> {
     double progress = currentStep / totalSteps;
 
     return Stack(
-        children: [
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(height: 100, color: AppColors.yellowTop),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(height: 100, color: AppColors.white),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.max,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            margin:
-                                const EdgeInsets.fromLTRB(15, 0, 15, 0),
-                            child: ListView(
-                              children: [
-                                getActivIcon(),
-                                getStepBar(progress),
-                                getText(),
-                                getSubText(),
-                                if (_isLoading)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                        vertical: 40),
-                                    child: Center(
-                                        child:
-                                            CircularProgressIndicator()),
-                                  )
-                                else if (_errorMessage.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 40),
-                                    child: Center(
-                                      child: Text(
-                                        _errorMessage,
-                                        style: TextStyle(
-                                          fontSize: AppSize.size_14,
-                                          fontFamily: 'FontRegular',
-                                          color: AppColors.black1,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  ..._questions
-                                      .map(_buildQuestionWidget),
-                                const SizedBox(height: 10),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // Bottom bar
-                        Container(
-                          margin: const EdgeInsets.only(top: 10),
-                          child: Column(
+      children: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: Container(height: 100, color: AppColors.yellowTop),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(height: 100, color: AppColors.white),
+        ),
+        SafeArea(
+          top: true,
+          bottom: true,
+          left: false,
+          right: false,
+          child: Scaffold(
+            body: Container(
+              decoration: context.getYellowGradient,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.max,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
+                          child: ListView(
                             children: [
-                              bottomBarShadow(),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: InkWell(
-                                      onTap: () => Navigator.pop(context),
-                                      child: getBackButton(
-                                          context, "Back", "tellUsAbout"),
+                              getActivIcon(),
+                              getStepBar(progress),
+                              getText(),
+                              getSubText(),
+                              if (_isLoading)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 40),
+                                  child: Center(child: CircularProgressIndicator()),
+                                )
+                              else if (_errorMessage.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 40),
+                                  child: Center(
+                                    child: Text(
+                                      _errorMessage,
+                                      style: TextStyle(
+                                        fontSize: AppSize.size_14,
+                                        fontFamily: 'FontRegular',
+                                        color: AppColors.black1,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
-                                  Expanded(
-                                    flex: 7,
-                                    child: InkWell(
-                                      onTap: () {
-                                        if (_isLoading) return;
-                                        if (_validate(context)) {
-                                          _submitAnswers();
-                                        }
-                                      },
-                                      child: getButtonBlack(
-                                          context, "Next", "tellUsAbout"),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                )
+                              else
+                                ..._questions.map(_buildQuestionWidget),
+                              const SizedBox(height: 10),
                             ],
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
+                      ),
+
+                      // Bottom bar
+                      Container(
+                        margin: const EdgeInsets.only(top: 10),
+                        child: Column(
+                          children: [
+                            bottomBarShadow(),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: InkWell(
+                                    onTap: () => Navigator.pop(context),
+                                    child: getBackButton(context, "Back", "tellUsAbout"),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 7,
+                                  child: InkWell(
+                                    onTap: () {
+                                      if (_isLoading) return;
+                                      if (_validate(context)) {
+                                        _submitAnswers();
+                                      }
+                                    },
+                                    child: getButtonBlack(context, "Next", "tellUsAbout"),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
-        ],
+        ),
+      ],
     );
   }
 

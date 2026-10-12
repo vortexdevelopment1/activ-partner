@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:activ_app/Style/activity_logos.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
@@ -210,8 +210,15 @@ class _State extends State<ListActivityTypeScreen> {
         "categoryIds": categoryIds,
         "name": venueDetails["venue_name"] ?? "",
         "description": venueDetails["venue_description"] ?? "",
-        "address": venueDetails["venue_address"] ?? "",
-        "flatBuilding": venueDetails["venue_area"] ?? "",
+        "address": (venueDetails["venue_search_address"] ?? '').toString().trim().isNotEmpty
+            ? venueDetails["venue_search_address"]
+            : venueDetails["venue_address"] ?? "",
+        "flatBuilding": [
+          if ((venueDetails["venue_search_address"] ?? '').toString().trim().isNotEmpty)
+            venueDetails["venue_address"],
+          venueDetails["venue_area"],
+        ].where((value) => value != null && value.toString().trim().isNotEmpty)
+            .map((value) => value.toString().trim()).join(', '),
         "city": venueDetails["venue_city"] ?? "",
         "state": venueDetails["venue_state"] ?? "",
         "zipCode": venueDetails["venue_pin_code"] ?? "",
@@ -741,25 +748,7 @@ class _State extends State<ListActivityTypeScreen> {
 
 
   String setTypeImages(VenueTypeModel model) {
-    if (model.type == "pool") {
-      return "assets/ic_pool.png";
-    } else if (model.type == "gym") {
-      return "assets/ic_gym.png";
-    } else if (model.type == "court") {
-      return "assets/ic_cock.png";
-    } else if (model.type == "football") {
-      return "assets/ic_football.png";
-    } else if (model.type == "yoga") {
-      return "assets/ic_yoga.png";
-    } else if (model.type == "arts") {
-      return "assets/ic_arts.png";
-    } else if (model.type == "dance") {
-      return "assets/ic_dance.png";
-    } else if (model.type == "others") {
-      return "assets/ic_other.png";
-    } else {
-      return "assets/ic_pool.png";
-    }
+    return activityLogoAsset(model.title);
   }
 
 
@@ -771,40 +760,11 @@ class _State extends State<ListActivityTypeScreen> {
       margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
       width: 46,
       height: 59,
-      child: model.image.isNotEmpty
-          ? CachedNetworkImage(
-              imageUrl: model.image,
-              fit: BoxFit.contain,
-              placeholder: (context, url) => const SizedBox(),
-              errorWidget: (context, url, error) => _activityArtwork(model),
-            )
-          : _activityArtwork(model),
+      child: _activityArtwork(model),
     );
   }
 
   Widget _activityArtwork(VenueTypeModel model) {
-    final name = model.type;
-    if (name == 'badminton' || name == 'court') {
-      return Image.asset('assets/ic_cock.png', fit: BoxFit.contain);
-    }
-    if (name.contains('football') || name == 'teqball') {
-      return Image.asset('assets/ic_football.png', fit: BoxFit.contain);
-    }
-    if (name == 'basketball') {
-      return const Icon(Icons.sports_basketball, size: 46, color: Color(0xFFCC842B));
-    }
-    if ({'tennis', 'padel', 'pickle ball', 'pickleball', 'squash', 'table tennis'}.contains(name)) {
-      return const Icon(Icons.sports_tennis, size: 46, color: Color(0xFF65A6A1));
-    }
-    if (name == 'hockey') {
-      return const Icon(Icons.sports_hockey, size: 46, color: AppColors.black1);
-    }
-    if (name.contains('cricket')) {
-      return const Icon(Icons.sports_cricket, size: 46, color: AppColors.green);
-    }
-    if (name == 'volleyball') {
-      return const Icon(Icons.sports_volleyball, size: 46, color: Color(0xFFCC842B));
-    }
     return Image.asset(setTypeImages(model), fit: BoxFit.contain);
   }
 

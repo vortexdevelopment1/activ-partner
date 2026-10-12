@@ -795,10 +795,10 @@ class _State extends State<ContactSupportFormScreen> {
     );
   }
 
-  customAlertDialog(BuildContext buildContext, String message)
+  Future<void> customAlertDialog(BuildContext buildContext, String message) async
   {
-    showDialog(
-      context: context,
+    final confirmed = await showDialog<bool>(
+      context: buildContext,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Material(
@@ -863,8 +863,7 @@ class _State extends State<ContactSupportFormScreen> {
                           child: InkWell(
                             onTap: ()
                             {
-                              Navigator.pop(context);
-                              //Navigator.pop(context);
+                              Navigator.pop(context, true);
                             },
                             child: Container(
                               padding: const EdgeInsets.fromLTRB(30, 13, 30, 13),
@@ -892,6 +891,9 @@ class _State extends State<ContactSupportFormScreen> {
         );
       },
     );
+    if (confirmed == true && mounted) {
+      Navigator.of(this.context).pop();
+    }
   }
 
   bool validation(BuildContext context)

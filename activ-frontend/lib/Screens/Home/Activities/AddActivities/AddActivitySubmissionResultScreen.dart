@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../../Style/app_colors.dart';
+import '../../../../Style/activity_logos.dart';
 import '../../../../Style/app_size.dart';
 import '../../../../Utills/common_utilities.dart';
 import '../../../../api_calling/api_request.dart';
@@ -136,7 +137,7 @@ class _AddActivitySubmissionResultScreenState
                   color: const Color(0xFFF6F1FD),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.sports_tennis, color: AppColors.purple, size: 44),
+                child: Image.asset(activityLogoAsset(_title), fit: BoxFit.contain),
               ),
               const SizedBox(width: 16),
               Expanded(

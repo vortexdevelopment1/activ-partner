@@ -21,6 +21,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
+import { activityLogoUrl } from '../../utils/activityLogos';
 import { Badge } from '../../components/ui/Badge';
 import { ApproveModal } from './ApproveModal';
 import { RejectModal } from './RejectModal';
@@ -42,13 +43,6 @@ const assetUrl = (src?: string | null) => {
   const resolved = /^(https?:|data:|blob:)/i.test(value)
     ? value
     : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
-  if (
-    /^https?:\/\/res\.cloudinary\.com\//i.test(resolved) &&
-    /\.pdf(?:[?#].*)?$/i.test(resolved) &&
-    resolved.includes('/image/upload/')
-  ) {
-    return resolved.replace('/image/upload/', '/raw/upload/');
-  }
   return resolved;
 };
 
@@ -519,7 +513,7 @@ export const VenueDetail: React.FC = () => {
                   <div key={group.catId}>
                     {/* Category header — always show so admin knows which category each Q&A belongs to */}
                     <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-gray-100">
-                      {group.catIcon && <span className="text-base">{group.catIcon}</span>}
+                      <img src={activityLogoUrl(group.catName)} alt="" className="w-7 h-7 object-contain" />
                       <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
                         {group.catName}
                       </span>
@@ -612,14 +606,7 @@ export const VenueDetail: React.FC = () => {
               <div className="space-y-2">
                 {allCategories.map((cat: any, i: number) => (
                   <div key={cat.id ?? i} className="flex items-center gap-2">
-                    {cat.icon && <span className="text-xl">{cat.icon}</span>}
-                    {cat.imageUrl && (
-                      <img
-                        src={assetUrl(cat.imageUrl)}
-                        alt={cat.name}
-                        className="w-7 h-7 rounded-md object-cover"
-                      />
-                    )}
+                    <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain" />
                     <div>
                       <p className="font-medium text-gray-900 text-sm">{cat.name}</p>
                       {cat.description && (

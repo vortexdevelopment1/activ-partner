@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:activ_app/Style/activity_logos.dart';
 
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
@@ -320,25 +321,7 @@ class _State extends State<AddListActivityTypeScreen> {
 
 
   String setTypeImages(VenueTypeModel model) {
-    if (model.type == "pool") {
-      return "assets/ic_pool.png";
-    } else if (model.type == "gym") {
-      return "assets/ic_gym.png";
-    } else if (model.type == "court") {
-      return "assets/ic_cock.png";
-    } else if (model.type == "football") {
-      return "assets/ic_football.png";
-    } else if (model.type == "yoga") {
-      return "assets/ic_yoga.png";
-    } else if (model.type == "arts") {
-      return "assets/ic_arts.png";
-    } else if (model.type == "dance") {
-      return "assets/ic_dance.png";
-    } else if (model.type == "others") {
-      return "assets/ic_other.png";
-    } else {
-      return "assets/ic_pool.png";
-    }
+    return activityLogoAsset(model.title);
   }
 
 
@@ -353,7 +336,7 @@ class _State extends State<AddListActivityTypeScreen> {
           height: 59,
           child: Image.asset(
             setTypeImages(model),
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
           ),
         ),
     );

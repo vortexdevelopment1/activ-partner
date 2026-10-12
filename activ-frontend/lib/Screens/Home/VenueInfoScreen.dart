@@ -92,7 +92,16 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
       case 'description':
         return _firstVenueValue(['description', 'venue_description']);
       case 'address':
-        return _firstVenueValue(['address', 'venue_address', 'venueAddress']);
+        final address = _firstVenueValue([
+          'address', 'venue_address', 'venueAddress', 'address_line_1',
+          'venue_search_address'
+        ]);
+        if (address.trim().isNotEmpty) return address;
+        return ['flatBuilding', 'city', 'state', 'zipCode']
+            .map(_initialValue)
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .join(', ');
       case 'locationUrl':
         return _firstVenueValue(
             ['locationUrl', 'location_url', 'venue_location_url']);
@@ -466,6 +475,8 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                 height: 1.4,
                 color: _locked ? AppColors.hintColor : AppColors.darkBlack),
             keyboardType: TextInputType.streetAddress,
+            minLines: 1,
+            maxLines: 3,
             textInputAction: TextInputAction.search,
             onChanged: (value) {
               _controllers['locationUrl']!.clear();

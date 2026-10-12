@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { categoriesApi } from '../../api/categories.api';
+import { activityLogoUrl } from '../../utils/activityLogos';
 import { CategoryForm } from './CategoryForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
@@ -134,17 +135,11 @@ export const CategoriesList: React.FC = () => {
             >
               {/* Image */}
               <div className="h-36 bg-gray-50 relative">
-                {cat.imageUrl ? (
-                  <img
-                    src={cat.imageUrl}
-                    alt={cat.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl">
-                    {cat.icon ?? '🏷️'}
-                  </div>
-                )}
+                <img
+                  src={activityLogoUrl(cat.name)}
+                  alt={cat.name}
+                  className="w-full h-full object-contain p-4"
+                />
                 {/* Active badge */}
                 <span
                   className={`absolute top-2 right-2 text-xs font-medium px-2 py-0.5 rounded-full ${

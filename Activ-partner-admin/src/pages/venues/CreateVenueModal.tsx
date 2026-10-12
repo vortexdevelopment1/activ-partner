@@ -7,6 +7,7 @@ import {
 import api from '../../api/axios';
 import { venuesApi } from '../../api/venues.api';
 import { categoriesApi } from '../../api/categories.api';
+import { activityLogoUrl } from '../../utils/activityLogos';
 import { partnersApi } from '../../api/partners.api';
 import { questionsApi } from '../../api/questions.api';
 import { useToast } from '../../hooks/useToast';
@@ -1127,10 +1128,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                             ? 'border-primary-500 bg-primary-50 text-primary-700'
                             : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                         }`}>
-                        {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
-                        {cat.imageUrl && !cat.icon && (
-                          <img src={cat.imageUrl} alt={cat.name} className="w-5 h-5 rounded object-cover" />
-                        )}
+                        <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain" />
                         <span className="flex-1 truncate">{cat.name}</span>
                         {selected && <Check size={13} className="text-primary-600 shrink-0" />}
                       </button>

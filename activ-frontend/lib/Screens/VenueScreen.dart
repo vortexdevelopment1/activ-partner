@@ -21,8 +21,9 @@ import 'CustomerPlacesOffer.dart';
 import 'TellUsAboutScreen.dart';
 
 class VenueScreen extends StatefulWidget {
-  const VenueScreen({super.key, this.reviewMode = false});
+  const VenueScreen({super.key, this.reviewMode = false, this.client});
   final bool reviewMode;
+  final http.Client? client;
 
   @override
   State<VenueScreen> createState() => _State();
@@ -44,6 +45,7 @@ class _State extends State<VenueScreen> {
   double? _selectedLon;
   List<Map<String, dynamic>> _placeSuggestions = [];
   bool _showSuggestions = false;
+  String? _placeSearchError;
   Timer? _searchDebounce;
   String get _mapsApiKey => GOOGLE_MAPS_API_KEY;
 
@@ -722,12 +724,17 @@ class _State extends State<VenueScreen> {
   }
 
   Future<void> _fetchPlaceSuggestions(String input) async {
-    if (input.isEmpty) {
-      setState(() { _placeSuggestions = []; _showSuggestions = false; });
+    if (!mounted) return;
+    if (input.length < 2) {
+      setState(() { _placeSuggestions = []; _showSuggestions = false; _placeSearchError = null; });
+      return;
+    }
+    if (_mapsApiKey.trim().isEmpty) {
+      setState(() => _placeSearchError = 'Location search is unavailable. Please contact support.');
       return;
     }
     try {
-      final response = await http.post(
+      final response = await (widget.client?.post ?? http.post)(
         Uri.parse('https://places.googleapis.com/v1/places:autocomplete'),
         headers: {
           'Content-Type': 'application/json',
@@ -737,23 +744,36 @@ class _State extends State<VenueScreen> {
           'input': input,
           'includedRegionCodes': ['in'],
         }),
-      );
-      if (!mounted) return;
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted || venueAddressSearchController.text.trim() != input) return;
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final suggestions = (data['suggestions'] as List? ?? [])
             .map<Map<String, dynamic>>((s) {
-              final p = s['placePrediction'];
+              final p = s['placePrediction'] as Map?;
               return {
-                'placeId': p['placeId'] as String,
-                'description': p['text']['text'] as String,
+                'placeId': p?['placeId']?.toString() ?? '',
+                'description': (p?['text'] as Map?)?['text']?.toString() ?? '',
               };
             })
+            .where((s) => s['placeId'].isNotEmpty && s['description'].isNotEmpty)
+            .take(5)
             .toList();
-        setState(() { _placeSuggestions = suggestions; _showSuggestions = suggestions.isNotEmpty; });
+        setState(() {
+          _placeSuggestions = suggestions;
+          _showSuggestions = suggestions.isNotEmpty;
+          _placeSearchError = suggestions.isEmpty ? 'No locations found. Try a more specific address.' : null;
+        });
+      } else {
+        throw const FormatException('Location search failed');
       }
     } catch (e) {
-      CommonUtilities.showLog("Places API error: $e");
+      if (!mounted || venueAddressSearchController.text.trim() != input) return;
+      setState(() {
+        _placeSuggestions = [];
+        _showSuggestions = false;
+        _placeSearchError = 'Unable to search locations. Please try again.';
+      });
     }
   }
 
@@ -894,6 +914,9 @@ class _State extends State<VenueScreen> {
                     cursorColor: AppColors.cursorBlack,
                     onChanged: (value) {
                       setState(() {
+                        _placeSuggestions = [];
+                        _showSuggestions = false;
+                        _placeSearchError = null;
                         _selectedPlaceUrl = '';
                         _selectedLat = null;
                         _selectedLon = null;
@@ -931,11 +954,24 @@ class _State extends State<VenueScreen> {
                 if (_selectedPlaceUrl.isNotEmpty)
                   const Icon(Icons.check_circle, color: Colors.green, size: 20),
                 if (_selectedPlaceUrl.isEmpty && venueAddressSearchController.text.isNotEmpty)
-                  const Icon(Icons.search, color: AppColors.hintColor, size: 20),
+                  IconButton(
+                    tooltip: 'Search locations',
+                    onPressed: () {
+                      _searchDebounce?.cancel();
+                      _fetchPlaceSuggestions(venueAddressSearchController.text.trim());
+                    },
+                    icon: const Icon(Icons.search, color: AppColors.hintColor, size: 20),
+                  ),
               ],
             ),
           ),
         ),
+        if (_placeSearchError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_placeSearchError!, style: const TextStyle(
+              fontSize: 13, color: AppColors.red)),
+          ),
         if (_showSuggestions)
           Container(
             margin: const EdgeInsets.only(top: 2),

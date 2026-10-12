@@ -194,14 +194,7 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
   }
 
   Uri _documentUri(String url) {
-    final resolved = Uri.parse(BASE_URL).resolve(url.trim());
-    if (resolved.host.endsWith('cloudinary.com') &&
-        resolved.path.toLowerCase().endsWith('.pdf') &&
-        resolved.path.contains('/image/upload/')) {
-      return resolved.replace(
-          path: resolved.path.replaceFirst('/image/upload/', '/raw/upload/'));
-    }
-    return resolved;
+    return Uri.parse(BASE_URL).resolve(url.trim());
   }
 
   TextStyle _text(double size,

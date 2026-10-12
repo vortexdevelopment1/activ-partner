@@ -45,15 +45,65 @@ class _Question {
     this.maxLength,
   });
 
+  static String _normalizedType(dynamic rawType) {
+    final type = rawType?.toString().trim().toLowerCase() ?? '';
+    return switch (type) {
+      'dropdown' || 'single_select' || 'single-select' => 'select',
+      'multi_select' || 'multi-select' => 'multiselect',
+      'long_text' || 'long-text' => 'textarea',
+      'integer' || 'numeric' => 'number',
+      _ => type.isEmpty ? 'text' : type,
+    };
+  }
+
+  static List<String> _parseOptions(dynamic rawOptions, String questionText) {
+    final options = <String>[];
+
+    void add(dynamic value) {
+      if (value == null) return;
+      if (value is Map) {
+        add(value['label'] ?? value['name'] ?? value['title'] ?? value['value']);
+        return;
+      }
+      final option = value.toString().trim();
+      if (option.isNotEmpty && !options.contains(option)) options.add(option);
+    }
+
+    if (rawOptions is List) {
+      for (final item in rawOptions) {
+        add(item);
+      }
+    } else if (rawOptions is String) {
+      for (final item in rawOptions.split(RegExp(r'[,|]'))) {
+        add(item);
+      }
+    }
+
+    if (options.isNotEmpty) return options;
+
+    final text = questionText.trim().toLowerCase();
+    if (text == 'pitch type') {
+      return const ['Turf', 'Matting', 'Cement', 'Natural Grass', 'Astro Turf'];
+    }
+    if (text == 'pitch surface' || text == 'court surface') {
+      return const ['Wooden', 'Synthetic', 'Concrete', 'Grass', 'Clay'];
+    }
+    if (text == 'court type') {
+      return const ['Full Court', 'Half Court', 'Practice Court'];
+    }
+    if (text == 'playing environment') {
+      return const ['Indoor', 'Outdoor', 'Air Conditioned', 'Covered', 'Floodlights', 'Spectator Seating'];
+    }
+    return const [];
+  }
+
   factory _Question.fromJson(Map<String, dynamic> json) {
+    final questionText = json['questionText']?.toString() ?? '';
     return _Question(
       id: json['id']?.toString() ?? '',
-      questionText: json['questionText']?.toString() ?? '',
-      questionType: json['questionType']?.toString() ?? 'text',
-      options: (json['options'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      questionText: questionText,
+      questionType: _normalizedType(json['questionType']),
+      options: _parseOptions(json['options'], questionText),
       isRequired: json['isRequired'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       order: (json['order'] as num?)?.toInt() ?? 0,
@@ -125,8 +175,7 @@ class _State extends State<CategoryQuestionsScreen> {
   final int totalSteps = totalSetup;
 
   // ─── Composite key helper ─────────────────────────────────────────────────
-  String _key(String categoryId, String questionId) =>
-      '${categoryId}_$questionId';
+  String _key(String categoryId, String questionId) => '${categoryId}_$questionId';
 
   @override
   void initState() {
@@ -158,8 +207,7 @@ class _State extends State<CategoryQuestionsScreen> {
         Uri.parse('$QUESTIONS_BY_CATEGORY_URL/$categoryId'),
       );
 
-      CommonUtilities.showLog(
-          'Questions [$categoryTitle] status: ${response.statusCode}');
+      CommonUtilities.showLog('Questions [$categoryTitle] status: ${response.statusCode}');
 
       List<_CategorySection> sections = [];
 
@@ -169,21 +217,12 @@ class _State extends State<CategoryQuestionsScreen> {
         if (decoded is List) {
           data = decoded;
         } else if (decoded is Map<String, dynamic>) {
-          data = (decoded['data'] ??
-                  decoded['questions'] ??
-                  decoded['items'] ??
-                  []) as List<dynamic>;
+          data = (decoded['data'] ?? decoded['questions'] ?? decoded['items'] ?? []) as List<dynamic>;
         } else {
           data = [];
         }
 
-        final questions = data
-            .map((e) => _Question.fromJson(e as Map<String, dynamic>))
-            .where((q) => q.isActive &&
-                !{'court surface', 'equipment available'}.contains(
-                    q.questionText.trim().toLowerCase()))
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final questions = data.map((e) => _Question.fromJson(e as Map<String, dynamic>)).where((q) => q.isActive && !{'court surface', 'equipment available'}.contains(q.questionText.trim().toLowerCase())).toList()..sort((a, b) => a.order.compareTo(b.order));
 
         sections = [
           _CategorySection(
@@ -244,8 +283,7 @@ class _State extends State<CategoryQuestionsScreen> {
       for (final section in filteredSections) {
         for (final q in section.questions) {
           if (['text', 'textarea', 'number'].contains(q.questionType)) {
-            _textControllers[_key(section.categoryId, q.id)] =
-                TextEditingController();
+            _textControllers[_key(section.categoryId, q.id)] = TextEditingController();
           }
         }
       }
@@ -255,25 +293,26 @@ class _State extends State<CategoryQuestionsScreen> {
         if (!mounted) return;
         final saved = raw == null || raw.isEmpty ? <dynamic>[] : jsonDecode(raw) as List;
         void restore(String sectionId, _Question question) {
-          final matches = saved.where((entry) =>
-              (entry['categoryId']?.toString() == categoryId ||
-                  entry['categoryTitle'] == categoryTitle || entry['categoryTitle'] == 'General') &&
-              (entry['questionId'] == question.id || entry['questionText'] == question.questionText));
+          final matches = saved.where((entry) => (entry['categoryId']?.toString() == categoryId || entry['categoryTitle'] == categoryTitle || entry['categoryTitle'] == 'General') && (entry['questionId'] == question.id || entry['questionText'] == question.questionText));
           if (matches.isEmpty) return;
           final answer = matches.last['answer'];
           final key = _key(sectionId, question.id);
           if (_textControllers.containsKey(key)) {
             _textControllers[key]!.text = answer?.toString() ?? '';
           } else {
-            if (['select', 'radio'].contains(question.questionType) &&
-                !question.options.contains(answer)) return;
+            if (['select', 'radio'].contains(question.questionType) && !question.options.contains(answer)) return;
             _answers[key] = answer is List ? answer.map((value) => value.toString()).toList() : answer;
           }
         }
+
         for (final section in filteredSections) {
-          for (final question in section.questions) { restore(section.categoryId, question); }
+          for (final question in section.questions) {
+            restore(section.categoryId, question);
+          }
         }
-        for (final question in globals) { restore('global', question); }
+        for (final question in globals) {
+          restore('global', question);
+        }
       }
       if (!mounted) return;
       setState(() {
@@ -306,17 +345,13 @@ class _State extends State<CategoryQuestionsScreen> {
   bool _validate() {
     bool checkQuestion(String categoryId, _Question q) {
       final answer = _getAnswer(categoryId, q);
-      final isEmpty = answer == null ||
-          (answer is String && answer.isEmpty) ||
-          (answer is List && answer.isEmpty);
+      final isEmpty = answer == null || (answer is String && answer.isEmpty) || (answer is List && answer.isEmpty);
       if (q.isRequired && isEmpty) {
-        CommonUtilities.createSnackBar(
-            context, 'Please fill in: ${q.questionText}');
+        CommonUtilities.createSnackBar(context, 'Please fill in: ${q.questionText}');
         return false;
       }
       if (!isEmpty && answer is String && q.minLength != null && answer.length < q.minLength!) {
-        CommonUtilities.createSnackBar(
-            context, '${q.questionText} must be at least ${q.minLength} characters.');
+        CommonUtilities.createSnackBar(context, '${q.questionText} must be at least ${q.minLength} characters.');
         return false;
       }
       return true;
@@ -390,8 +425,7 @@ class _State extends State<CategoryQuestionsScreen> {
       }
       final categoryId = widget.currentCategory['id']?.toString() ?? '';
       final titles = displayList.map((q) => q['categoryTitle']).toSet();
-      existingList.removeWhere((q) => q['categoryId'] == categoryId ||
-          (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
+      existingList.removeWhere((q) => q['categoryId'] == categoryId || (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
       existingList.addAll(displayList);
 
       final response = await (widget.client?.post ?? http.post)(
@@ -407,13 +441,11 @@ class _State extends State<CategoryQuestionsScreen> {
       if (!mounted) return;
       Navigator.pop(context); // dismiss loader
 
-      CommonUtilities.showLog(
-          'Submit answers status: ${response.statusCode}');
+      CommonUtilities.showLog('Submit answers status: ${response.statusCode}');
       CommonUtilities.showLog('Submit answers body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        await SharedPreference.addStringToSF(
-            'activity_questions_display', jsonEncode(existingList));
+        await SharedPreference.addStringToSF('activity_questions_display', jsonEncode(existingList));
         if (!mounted) return;
         if (widget.reviewMode) {
           Navigator.pop(context, true);
@@ -432,17 +464,14 @@ class _State extends State<CategoryQuestionsScreen> {
             ));
       } else {
         final body = jsonDecode(response.body);
-        final msg =
-            body['message'] ?? 'Failed to save answers. Please try again.';
-        CommonUtilities.createSnackBar(
-            context, msg is List ? msg.join(', ') : msg.toString());
+        final msg = body['message'] ?? 'Failed to save answers. Please try again.';
+        CommonUtilities.createSnackBar(context, msg is List ? msg.join(', ') : msg.toString());
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog('Submit answers error: $e');
-      CommonUtilities.createSnackBar(
-          context, 'Network error. Please check your connection.');
+      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
     }
   }
 
@@ -500,8 +529,7 @@ class _State extends State<CategoryQuestionsScreen> {
     );
   }
 
-  Widget _buildTextField(String categoryId, _Question q,
-      {int maxLines = 1, bool isNumber = false}) {
+  Widget _buildTextField(String categoryId, _Question q, {int maxLines = 1, bool isNumber = false}) {
     final k = _key(categoryId, q.id);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,12 +546,10 @@ class _State extends State<CategoryQuestionsScreen> {
             controller: _textControllers[k],
             textInputAction: TextInputAction.next,
             textCapitalization: TextCapitalization.sentences,
-            keyboardType:
-                isNumber ? TextInputType.number : TextInputType.text,
+            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
             inputFormatters: [
               if (isNumber) FilteringTextInputFormatter.digitsOnly,
-              if (q.maxLength != null)
-                LengthLimitingTextInputFormatter(q.maxLength),
+              if (q.maxLength != null) LengthLimitingTextInputFormatter(q.maxLength),
             ],
             cursorColor: AppColors.cursorBlack,
             maxLines: maxLines,
@@ -536,8 +562,8 @@ class _State extends State<CategoryQuestionsScreen> {
               hintText: q.placeholder.isNotEmpty
                   ? q.placeholder
                   : q.questionText.trim().toLowerCase() == 'activity description'
-                  ? 'Describe this activity...'
-                  : 'Enter ${q.questionText.toLowerCase()}',
+                      ? 'Describe this activity...'
+                      : 'Enter ${q.questionText.toLowerCase()}',
               hintStyle: const TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'FontRegular',
@@ -567,7 +593,8 @@ class _State extends State<CategoryQuestionsScreen> {
 
   Widget _buildDropdown(String categoryId, _Question q) {
     final k = _key(categoryId, q.id);
-    final selected = _answers[k] as String?;
+    final rawSelected = _answers[k] as String?;
+    final selected = q.options.contains(rawSelected) ? rawSelected : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -603,7 +630,7 @@ class _State extends State<CategoryQuestionsScreen> {
                         child: Text(opt),
                       ))
                   .toList(),
-              onChanged: (val) => setState(() => _answers[k] = val),
+              onChanged: q.options.isEmpty ? null : (val) => setState(() => _answers[k] = val),
             ),
           ),
         ),
@@ -709,8 +736,7 @@ class _State extends State<CategoryQuestionsScreen> {
             );
             if (picked != null && mounted) {
               setState(() {
-                _answers[k] =
-                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                _answers[k] = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
               });
             }
           },
@@ -726,16 +752,11 @@ class _State extends State<CategoryQuestionsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  dateStr ??
-                      (q.placeholder.isNotEmpty
-                          ? q.placeholder
-                          : 'Select a date'),
+                  dateStr ?? (q.placeholder.isNotEmpty ? q.placeholder : 'Select a date'),
                   style: TextStyle(
                     fontSize: AppSize.size_14,
                     fontFamily: 'FontRegular',
-                    color: dateStr != null
-                        ? AppColors.darkBlack
-                        : AppColors.hintColor,
+                    color: dateStr != null ? AppColors.darkBlack : AppColors.hintColor,
                   ),
                 ),
                 const Icon(Icons.calendar_today_outlined, size: 18),
@@ -764,10 +785,7 @@ class _State extends State<CategoryQuestionsScreen> {
   @override
   Widget build(BuildContext context) {
     final double progress = currentStep / totalSteps;
-    final bool hasNoQuestions = !_isLoading &&
-        _errorMessage.isEmpty &&
-        _globalQuestions.isEmpty &&
-        _sections.every((s) => s.questions.isEmpty);
+    final bool hasNoQuestions = !_isLoading && _errorMessage.isEmpty && _globalQuestions.isEmpty && _sections.every((s) => s.questions.isEmpty);
     // Show "General" header for global questions only when there are also
     // category-specific questions to distinguish them from.
     final bool hasCategorySpecific = _sections.any((s) => s.questions.isNotEmpty);
@@ -840,13 +858,11 @@ class _State extends State<CategoryQuestionsScreen> {
                           if (_isLoading)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
-                              child:
-                                  Center(child: CircularProgressIndicator()),
+                              child: Center(child: CircularProgressIndicator()),
                             )
                           else if (_errorMessage.isNotEmpty)
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 40),
+                              padding: const EdgeInsets.symmetric(vertical: 40),
                               child: Center(
                                 child: Text(
                                   _errorMessage,
@@ -876,20 +892,15 @@ class _State extends State<CategoryQuestionsScreen> {
                             )
                           else ...[
                             // Category-specific questions
-                            ..._sections
-                                .where((s) => s.questions.isNotEmpty)
-                                .expand((section) => [
-                                      _buildSectionHeader(
-                                          section.categoryTitle),
-                                      ...section.questions.map(
-                                        (q) => _buildQuestionWidget(
-                                            section.categoryId, q),
-                                      ),
-                                    ]),
+                            ..._sections.where((s) => s.questions.isNotEmpty).expand((section) => [
+                                  _buildSectionHeader(section.categoryTitle),
+                                  ...section.questions.map(
+                                    (q) => _buildQuestionWidget(section.categoryId, q),
+                                  ),
+                                ]),
                             // Global questions — shown once, at the bottom
                             if (_globalQuestions.isNotEmpty) ...[
-                              if (showCategoryHeaders)
-                                _buildSectionHeader('General'),
+                              if (showCategoryHeaders) _buildSectionHeader('General'),
                               ..._globalQuestions.map(
                                 (q) => _buildQuestionWidget('global', q),
                               ),
@@ -912,8 +923,7 @@ class _State extends State<CategoryQuestionsScreen> {
                             flex: 3,
                             child: InkWell(
                               onTap: () => Navigator.pop(context),
-                              child: getBackButton(
-                                  context, "Back", "categoryQuestions"),
+                              child: getBackButton(context, "Back", "categoryQuestions"),
                             ),
                           ),
                           Expanded(
@@ -925,8 +935,7 @@ class _State extends State<CategoryQuestionsScreen> {
                                   _submitAnswers();
                                 }
                               },
-                              child: getButtonBlack(
-                                  context, "Next", "categoryQuestions"),
+                              child: getButtonBlack(context, "Next", "categoryQuestions"),
                             ),
                           ),
                         ],

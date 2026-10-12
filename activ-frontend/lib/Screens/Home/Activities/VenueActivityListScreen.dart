@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../Beans/activity_model.dart';
+import '../../../Style/activity_logos.dart';
 import '../../../api_calling/api_request.dart';
 import '../../../api_calling/api_constant.dart';
 import '../../StringExtensions.dart';
@@ -81,6 +82,10 @@ class _State extends State<VenueActivityListScreen> {
             'earnings': service['earnings'],
           };
           final categoryId = service['categoryId'];
+          final category = (venue['categories'] as List? ?? [])
+              .whereType<Map>()
+              .where((item) => item['id'] == categoryId)
+              .firstOrNull;
           final title = service['name']?.toString() ?? 'Activity';
           final timing = <String, dynamic>{};
           final days = service['availability'] ??
@@ -100,7 +105,8 @@ class _State extends State<VenueActivityListScreen> {
           }
           result.add(ActivityModel.fromJson({
             'activity_id': service['id'],
-            'operate_value': {'id': categoryId, 'title': title},
+            'operate_value': {'id': categoryId, 'title': title,
+              'categoryName': category?['name']},
             'activity_status': 'true',
             'description': service['description'] ?? '',
             'images': [
@@ -415,7 +421,9 @@ class _State extends State<VenueActivityListScreen> {
     final url = (cover?['url'] ?? first?['url'])?.toString();
     final bookings = num.tryParse(info['bookings']?.toString() ?? '') ?? 0;
     final earnings = num.tryParse(info['earnings']?.toString() ?? '') ?? 0;
-    final fallback = Image.asset('assets/ic_cock.png', fit: BoxFit.contain);
+    final fallback = Image.asset(activityLogoAsset(activity.title,
+        category: activity.operateValue['categoryName']?.toString()),
+        fit: BoxFit.contain);
     return Material(
       color: Colors.white,
       shape: RoundedRectangleBorder(
