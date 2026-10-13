@@ -42,6 +42,9 @@ class _State extends State<ReviewVenueDetailsScreen> {
   int _loadVersion = 0;
 
   String get city => venue['venue_city']?.toString() ?? '';
+  String get commissionLabel => commissionPct == null
+      ? '-'
+      : '${commissionPct!.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
 
   dynamic _decode(String? raw, dynamic fallback) {
     if (raw == null || raw.isEmpty) return fallback;
@@ -141,7 +144,8 @@ class _State extends State<ReviewVenueDetailsScreen> {
     try {
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse(
-            '$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(requestCity)}'),
+            '$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(requestCity)}')
+            .replace(queryParameters: {'state': venue['venue_state']?.toString() ?? ''}),
         headers: {'accept': '*/*'},
       );
       if (!mounted || version != _loadVersion) return;
@@ -438,7 +442,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
               title: const Text('Commission Structure'),
               content: Text(commissionPct == null
                   ? 'The commission rate for your venue is currently unavailable. Please try refreshing the rate.'
-                  : 'The commission for your venue in $city is ${commissionPct!.toStringAsFixed(0)}% per booking. Rates vary by city.'),
+                  : 'The commission for your venue in $city is $commissionLabel per booking. Rates vary by city.'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -451,9 +455,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
         _commissionRow(
             'For your venue in ${city.isEmpty ? 'your city' : city}',
             'Standard rate',
-            commissionPct == null
-                ? '-'
-                : '${commissionPct!.toStringAsFixed(0)}%',
+            commissionLabel,
             'Per booking'),
         const Divider(height: 24, color: AppColors.gray),
         if (commissionError != null)

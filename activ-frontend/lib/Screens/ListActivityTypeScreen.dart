@@ -23,9 +23,11 @@ class ListActivityTypeScreen extends StatefulWidget {
     super.key,
     this.client,
     this.reviewMode = false,
+    this.initialCategoryId,
   });
   final http.Client? client;
   final bool reviewMode;
+  final String? initialCategoryId;
   @override
   _State createState() => _State();
 }
@@ -392,6 +394,10 @@ class _State extends State<ListActivityTypeScreen> {
     }
 
     if (!mounted) return;
+    final preferredIndex = selectedCategories.indexWhere((category) => category['id']?.toString() == widget.initialCategoryId);
+    if (preferredIndex > 0) {
+      selectedCategories.insert(0, selectedCategories.removeAt(preferredIndex));
+    }
     final first = selectedCategories.first;
     final rest = selectedCategories.sublist(1);
     final saved = await Navigator.of(context).push<bool>(

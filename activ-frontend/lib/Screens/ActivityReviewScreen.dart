@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LegalInformationScreen.dart';
+import 'ListActivityTypeScreen.dart';
 import 'VenuePhotoListViewScreen.dart';
 import 'VenuePhotoUploadScreen.dart';
 import 'onboarding_widgets.dart';
@@ -19,6 +21,7 @@ class ActivityReviewScreen extends StatefulWidget {
   final Map<String, dynamic> venueTimingMap;
   final List<Map<String, dynamic>> categoryTimings;
   final int initialActivityIndex;
+  final http.Client? client;
 
   const ActivityReviewScreen({
     super.key,
@@ -26,6 +29,7 @@ class ActivityReviewScreen extends StatefulWidget {
     this.venueTimingMap = const {},
     this.categoryTimings = const [],
     this.initialActivityIndex = 0,
+    this.client,
   });
 
   @override
@@ -36,6 +40,7 @@ class _State extends State<ActivityReviewScreen> {
   List<Map<String, dynamic>> _questions = [];
   int _activityIndex = 0;
   final _scrollController = ScrollController();
+  List<Map<String, dynamic>>? _editedActivities;
   static const _days = [
     'Monday',
     'Tuesday',
@@ -47,6 +52,7 @@ class _State extends State<ActivityReviewScreen> {
   ];
 
   List<Map<String, dynamic>> get _activities {
+    if (_editedActivities != null) return _editedActivities!;
     if (widget.categoryTimings.isNotEmpty) return widget.categoryTimings;
     final titles = _questions
         .map((q) => q['categoryTitle']?.toString() ?? '')
@@ -124,11 +130,42 @@ class _State extends State<ActivityReviewScreen> {
     }
   }
 
-  void _edit(int screensBack) {
+  Future<void> _edit(int screensBack) async {
+    if (screensBack == 2) {
+      final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => ListActivityTypeScreen(
+          reviewMode: true,
+          initialCategoryId: _activity['id']?.toString(),
+          client: widget.client,
+        ),
+      ));
+      if (!mounted || saved != true) return;
+      await _loadQuestions();
+      final raw = await SharedPreference.readStr('operate_value');
+      if (!mounted || raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      final selected = decoded is List ? decoded.whereType<Map>().toList() : <Map>[];
+      if (selected.isEmpty) return;
+      final currentId = _activity['id'];
+      final previous = _activities;
+      setState(() {
+        _editedActivities = selected.map((category) {
+          final existing = previous.where((entry) => entry['id'] == category['id']);
+          return <String, dynamic>{
+            ...Map<String, dynamic>.from(category),
+            'timing': existing.isEmpty ? <String, dynamic>{} : existing.first['timing'],
+          };
+        }).toList();
+        final selectedIndex = _editedActivities!.indexWhere((entry) => entry['id'] == currentId);
+        _activityIndex = selectedIndex < 0 ? 0 : selectedIndex;
+      });
+      await SharedPreference.addStringToSF('activity_review_timings', jsonEncode(_editedActivities));
+      return;
+    }
     if (screensBack == 3) {
       final activityId = widget.activityId;
       final venueTimingMap = Map<String, dynamic>.from(widget.venueTimingMap);
-      final categoryTimings = widget.categoryTimings
+      final categoryTimings = _activities
           .map((timing) => Map<String, dynamic>.from(timing))
           .toList();
       final activityIndex = _activityIndex;
@@ -138,6 +175,7 @@ class _State extends State<ActivityReviewScreen> {
             venueTimingMap: venueTimingMap,
             categoryTimings: categoryTimings,
             initialActivityIndex: activityIndex,
+            client: widget.client,
           );
       final categoryId = _activity['id']?.toString() ?? '';
       final initialPhotos = VenuePhotoListViewScreen
@@ -160,7 +198,7 @@ class _State extends State<ActivityReviewScreen> {
             remainingCategories: const [],
             categoryIndex: _activityIndex + 1,
             totalCategories: _activities.length,
-            accumulatedTimings: widget.categoryTimings,
+            accumulatedTimings: _activities,
             initialImageBytes: List<Uint8List>.from(initialPhotos),
             initialCoverIndex: initialCoverIndex,
             replaceOnlyCurrentCategory: true,

@@ -194,9 +194,16 @@ export const VenueDetail: React.FC = () => {
   const amenities: string[] = Array.isArray(venue.amenities) ? venue.amenities : [];
 
   // All categories (multi-category support)
-  const allCategories: any[] = Array.isArray(venue.categories) && venue.categories.length > 0
+  const listedCategories: any[] = Array.isArray(venue.categories) && venue.categories.length > 0
     ? venue.categories
     : category ? [category] : [];
+  const selectedCategoryIds = new Set((venue.services ?? [])
+    .filter((service) => String(service.status) !== 'archived')
+    .map((service) => service.categoryId));
+  const allCategories = listedCategories.filter((category, index, items) =>
+    (!Array.isArray(venue.services) || selectedCategoryIds.has(category.id)) &&
+    items.findIndex((item) => item.id === category.id) === index,
+  );
 
   // Group answers by their question's categoryId, looked up from allCategories
   const answerGroups: { catId: string; catName: string; catIcon?: string; answers: VenueAnswer[] }[] = [];
@@ -605,12 +612,12 @@ export const VenueDetail: React.FC = () => {
               </h3>
               <div className="space-y-2">
                 {allCategories.map((cat: any, i: number) => (
-                  <div key={cat.id ?? i} className="flex items-center gap-2">
-                    <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain" />
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{cat.name}</p>
+                  <div key={cat.id ?? i} className="flex items-start gap-2">
+                    <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 text-sm break-words">{cat.name}</p>
                       {cat.description && (
-                        <p className="text-xs text-gray-500">{cat.description}</p>
+                        <p className="text-xs text-gray-500 break-words">{cat.description}</p>
                       )}
                     </div>
                   </div>

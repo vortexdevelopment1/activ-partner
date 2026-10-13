@@ -46,6 +46,7 @@ import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto
 import { PrismaService } from "../../prisma/prisma.service";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
 import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
+import { CommissionService } from "../commission/commission.service";
 
 @Injectable()
 export class VenuesService {
@@ -56,6 +57,7 @@ export class VenuesService {
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly pushNotificationsService: PushNotificationsService,
     private readonly prisma: PrismaService,
+    private readonly commissionService: CommissionService,
   ) {}
 
   async create(
@@ -121,6 +123,10 @@ export class VenuesService {
       );
     }
 
+    const { commissionPercentage } = await this.commissionService.getCommissionByCity(
+      venueData.city ?? '', venueData.state,
+    );
+
     await this.prisma.$transaction(async (tx) => {
       await tx.venues.create({
         data: {
@@ -132,7 +138,7 @@ export class VenuesService {
           longitude: venueData.longitude,
           status: "DRAFT",
           policy_version: "v1",
-          commission_percent: venueData.commission ?? null,
+          commission_percent: commissionPercentage,
         },
       });
 
@@ -243,6 +249,7 @@ export class VenuesService {
       categoryIds,
       categories: categories.map(({ id, name, slug }) => ({ id, name, slug })),
       ...venueData,
+      commission: commissionPercentage,
       status: VenueStatus.DRAFT,
       createdAt: now,
       updatedAt: now,
@@ -878,7 +885,7 @@ export class VenuesService {
         businessName:
           businessProfile?.business_name ?? venue.partners.legal_name,
       } as Partner,
-      categories: venue.partner_venue_services.map((service) => ({
+      categories: venue.partner_venue_services.filter((service) => service.status !== "ARCHIVED").map((service) => ({
         id: service.partner_service_categories.id,
         name: service.partner_service_categories.name,
         description: service.partner_service_categories.description,
@@ -1173,6 +1180,14 @@ export class VenuesService {
     }
 
     const { services, answers, categoryIds, ...venueData } = updateVenueDto;
+    const locationChanged = venueData.city !== undefined || venueData.state !== undefined;
+    const commission = currentUser.role === UserRole.PARTNER
+      ? (locationChanged || venueData.commission !== undefined)
+        ? (await this.commissionService.getCommissionByCity(
+            venueData.city ?? venue.city ?? '', venueData.state ?? venue.state,
+          )).commissionPercentage
+        : undefined
+      : venueData.commission;
     const columns: Record<string, string> = {
       name: "display_name",
       description: "description",
@@ -1208,8 +1223,8 @@ export class VenuesService {
           ...(venueData.longitude !== undefined
             ? { longitude: venueData.longitude }
             : {}),
-          ...(venueData.commission !== undefined
-            ? { commission_percent: venueData.commission }
+          ...(commission !== undefined
+            ? { commission_percent: commission }
             : {}),
         },
       });
@@ -1235,12 +1250,23 @@ export class VenuesService {
             ),
           });
       }
-      if (categoryIds?.length) {
+      if (categoryIds !== undefined) {
+        if (categoryIds.length === 0) {
+          throw new BadRequestException("At least one categoryId is required");
+        }
         const categories = await tx.partner_service_categories.findMany({
           where: { id: { in: categoryIds }, status: "APPROVED" },
         });
         if (categories.length !== new Set(categoryIds).size)
           throw new BadRequestException("Invalid categories");
+        await tx.partner_venue_services.updateMany({
+          where: {
+            venue_id: id,
+            service_category_id: { notIn: categoryIds },
+            status: { not: "ARCHIVED" },
+          },
+          data: { status: "ARCHIVED", is_active: false, updated_at: new Date() },
+        });
         for (const category of categories) {
           const existing = await tx.partner_venue_services.findFirst({
             where: {

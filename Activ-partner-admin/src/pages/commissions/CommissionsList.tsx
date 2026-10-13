@@ -27,7 +27,7 @@ export const CommissionsList: React.FC = () => {
   const total: number = data?.data?.data?.total ?? 0;
 
   const createMutation = useMutation({
-    mutationFn: (payload: { city: string; commissionPercentage: number }) =>
+    mutationFn: (payload: { city: string; state: string; commissionPercentage: number }) =>
       commissionsApi.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commissions'] });
@@ -38,7 +38,7 @@ export const CommissionsList: React.FC = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: { city?: string; commissionPercentage?: number } }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: { city?: string; state?: string; commissionPercentage?: number } }) =>
       commissionsApi.update(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commissions'] });
@@ -59,7 +59,7 @@ export const CommissionsList: React.FC = () => {
     onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to delete'),
   });
 
-  const handleSubmit = (payload: { city: string; commissionPercentage: number }) => {
+  const handleSubmit = (payload: { city: string; state: string; commissionPercentage: number }) => {
     if (editItem) {
       updateMutation.mutate({ id: editItem.id, payload });
     } else {
@@ -76,7 +76,7 @@ export const CommissionsList: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Commissions</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Manage commission percentages by city
+            Manage commission percentages by city and state
           </p>
         </div>
         <button
@@ -92,7 +92,7 @@ export const CommissionsList: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {['City', 'Commission %', 'Created', ''].map((h) => (
+              {['City', 'State', 'Commission %', 'Created', ''].map((h) => (
                 <th
                   key={h}
                   className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide"
@@ -105,13 +105,13 @@ export const CommissionsList: React.FC = () => {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={4} className="text-center py-16 text-gray-400">
+                <td colSpan={5} className="text-center py-16 text-gray-400">
                   Loading...
                 </td>
               </tr>
             ) : commissions.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-center py-16">
+                <td colSpan={5} className="text-center py-16">
                   <Percent size={32} className="mx-auto text-gray-200 mb-2" />
                   <p className="text-gray-400 text-sm">No commissions yet. Add your first one!</p>
                 </td>
@@ -121,8 +121,9 @@ export const CommissionsList: React.FC = () => {
                 <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   {/* City */}
                   <td className="px-5 py-3.5">
-                    <p className="font-medium text-gray-900">{item.city}</p>
+                    <p className="font-medium text-gray-900">{item.city || 'All cities'}</p>
                   </td>
+                  <td className="px-5 py-3.5 text-gray-600">{item.state || 'All states'}</td>
 
                   {/* Commission % */}
                   <td className="px-5 py-3.5">

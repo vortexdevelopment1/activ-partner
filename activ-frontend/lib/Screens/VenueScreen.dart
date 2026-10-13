@@ -57,8 +57,10 @@ class _State extends State<VenueScreen> {
   bool _isGoingBack = false;
   String phoneCode = "", userMobileNumber = "";
 
-  double _commissionPct = 10.0;
+  double? _commissionPct;
   bool _commissionLoading = false;
+  String? _commissionError;
+  int _commissionVersion = 0;
   bool _pincodeResolved = false;
   bool _pincodeError = false;
   Timer? _debounce;
@@ -85,6 +87,8 @@ class _State extends State<VenueScreen> {
   @override
   void initState() {
     super.initState();
+    cityController.addListener(_locationChanged);
+    stateController.addListener(_locationChanged);
     getData();
     fetchStates();
   }
@@ -113,31 +117,59 @@ class _State extends State<VenueScreen> {
     _fetchCommission(cityController.text);
   }
 
+  void _locationChanged() {
+    _debounce?.cancel();
+    _commissionVersion++;
+    setState(() {
+      _commissionPct = null;
+      _commissionError = null;
+      _commissionLoading = cityController.text.trim().isNotEmpty;
+    });
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _fetchCommission(cityController.text);
+    });
+  }
+
   Future<void> _fetchCommission(String city) async {
-    if (city.isEmpty) return;
-    setState(() => _commissionLoading = true);
-    try {
-      final response = await http.get(
-        Uri.parse('$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(city)}'),
-        headers: {'accept': '*/*'},
-      );
-      CommonUtilities.showLog("Commission status: ${response.statusCode}");
-      CommonUtilities.showLog("Commission response: ${response.body}");
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        final pct = (body['data']?['commissionPercentage'] as num?)?.toDouble();
-        if (pct != null && mounted) {
-          setState(() {
-            _commissionPct = pct;
-            _commissionLoading = false;
-          });
-          return;
-        }
-      }
-    } catch (e) {
-      CommonUtilities.showLog("Commission fetch error: $e");
+    _debounce?.cancel();
+    final version = ++_commissionVersion;
+    final requestCity = city.trim();
+    final requestState = stateController.text.trim();
+    if (requestCity.isEmpty) {
+      setState(() {
+        _commissionPct = null;
+        _commissionLoading = false;
+        _commissionError = null;
+      });
+      return;
     }
-    if (mounted) setState(() => _commissionLoading = false);
+    setState(() {
+      _commissionLoading = true;
+      _commissionPct = null;
+      _commissionError = null;
+    });
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse('$COMMISSION_BY_CITY_URL/${Uri.encodeComponent(requestCity)}')
+            .replace(queryParameters: {'state': requestState}),
+        headers: {'accept': '*/*'},
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted || version != _commissionVersion) return;
+      final body = jsonDecode(response.body);
+      final pct = double.tryParse(body['data']?['commissionPercentage']?.toString() ?? '');
+      if (response.statusCode != 200 || pct == null || !pct.isFinite || pct < 0 || pct > 100) {
+        throw const FormatException('Invalid commission response');
+      }
+      setState(() => _commissionPct = pct);
+    } catch (_) {
+      if (mounted && version == _commissionVersion) {
+        setState(() => _commissionError = 'Unable to load the commission rate.');
+      }
+    } finally {
+      if (mounted && version == _commissionVersion) {
+        setState(() => _commissionLoading = false);
+      }
+    }
   }
 
   @override
@@ -169,7 +201,7 @@ class _State extends State<VenueScreen> {
       'venue_latitude': _selectedLat,
       'venue_longitude': _selectedLon,
     }));
-    await SharedPreference.addStringToSF('venue_commission', _commissionPct.toString());
+    await SharedPreference.addStringToSF('venue_commission', _commissionPct?.toString() ?? '');
   }
 
   Future<void> _goBack() async {
@@ -379,7 +411,7 @@ class _State extends State<VenueScreen> {
                                                               child: CircularProgressIndicator(strokeWidth: 2),
                                                             )
                                                           : Text(
-                                                              "${_commissionPct.toStringAsFixed(_commissionPct == _commissionPct.truncateToDouble() ? 0 : 1)}%",
+                                                              _commissionPct == null ? '--' : "${_commissionPct!.toStringAsFixed(_commissionPct == _commissionPct!.truncateToDouble() ? 0 : 2)}%",
                                                               style: const TextStyle(
                                                                   fontSize: AppSize.size_14,
                                                                   fontFamily: 'FontMedium',
@@ -390,6 +422,12 @@ class _State extends State<VenueScreen> {
                                                             )
                                                     ],
                                                   ),
+                                                  if (_commissionError != null)
+                                                    TextButton.icon(
+                                                      onPressed: () => _fetchCommission(cityController.text),
+                                                      icon: const Icon(Icons.refresh),
+                                                      label: Text(_commissionError!),
+                                                    ),
                                                   Container(
                                                     margin: EdgeInsets.only(top: 8),
                                                     child: Row(
@@ -526,6 +564,8 @@ class _State extends State<VenueScreen> {
                                             async {
                                               if(validation(context))
                                               {
+                                                await _fetchCommission(cityController.text);
+                                                if (!mounted || _commissionPct == null || _commissionLoading) return;
                                                /* AuthService authService = AuthService();
                                                  authService.uploadFacilitiesName().then((value) async
                                                 {
@@ -1200,12 +1240,6 @@ class _State extends State<VenueScreen> {
             textCapitalization: TextCapitalization.sentences,
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
-            onChanged: (value) {
-              _debounce?.cancel();
-              _debounce = Timer(const Duration(milliseconds: 800), () {
-                _fetchCommission(value.trim());
-              });
-            },
             style: TextStyle(
               fontSize:  AppSize.size_14,
               fontFamily: 'FontRegular',

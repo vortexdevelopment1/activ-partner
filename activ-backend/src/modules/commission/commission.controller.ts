@@ -57,8 +57,8 @@ export class CommissionController {
   @Public()
   @ApiOperation({ summary: 'Get commission percentage by city name (Public). Returns default 10% if not configured.' })
   @ApiParam({ name: 'city', example: 'Mumbai', description: 'City name' })
-  async getByCity(@Param('city') city: string) {
-    const data = await this.commissionService.getCommissionByCity(city);
+  async getByCity(@Param('city') city: string, @Query('state') state?: string) {
+    const data = await this.commissionService.getCommissionByCity(city, state);
     return { message: 'Commission fetched successfully', data };
   }
 

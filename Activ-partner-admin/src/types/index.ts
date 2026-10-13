@@ -220,6 +220,7 @@ export interface Booking {
 export interface Commission {
   id: string;
   city: string;
+  state: string | null;
   commissionPercentage: number;
   createdAt: string;
   updatedAt: string;

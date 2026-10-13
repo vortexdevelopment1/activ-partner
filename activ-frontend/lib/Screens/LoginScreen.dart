@@ -63,141 +63,151 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return OnboardingScaffold(
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const OnboardingLogo(),
-                    const SizedBox(height: 40),
-                    const Text('Login to your account',
-                        style: OnboardingStyles.heading),
-                    const SizedBox(height: 26),
-                    _requiredLabel('Email Address or Phone Number'),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      key: const Key('login-identifier'),
-                      controller: emailController,
-                      enabled: !_isSubmitting,
-                      textInputAction: TextInputAction.next,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.username],
-                      style: OnboardingStyles.body,
-                      cursorColor: Colors.black,
-                      decoration: OnboardingStyles.inputDecoration(),
-                    ),
-                    const SizedBox(height: 26),
-                    _requiredLabel('Password'),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      key: const Key('login-password'),
-                      controller: passwordController,
-                      enabled: !_isSubmitting,
-                      obscureText: true,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      style: OnboardingStyles.body,
-                      cursorColor: Colors.black,
-                      decoration: OnboardingStyles.inputDecoration(),
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _link(
-                        'Forgot Password?',
-                        () => CommonUtilities.NavigateWithPush(
-                          context,
-                          ForgotPasswordScreen(
-                              emailId: emailController.text.trim(),
-                              client: widget.client),
-                        ),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    OnboardingButton(
-                      key: const Key('login-submit'),
-                      label: 'Login',
-                      loading: _isSubmitting,
-                      onPressed: _submit,
-                    ),
-                    const SizedBox(height: 32),
-                    const Row(
+      child: Stack(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 44, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                            child: Divider(color: AppColors.gray, height: 1)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('or'),
+                        const OnboardingLogo(),
+                        const SizedBox(height: 34),
+                        const Text('Login to your account',
+                            style: OnboardingStyles.heading),
+                        const SizedBox(height: 24),
+                        _requiredLabel('Email Address or Phone Number'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          key: const Key('login-identifier'),
+                          controller: emailController,
+                          enabled: !_isSubmitting,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.username],
+                          style: OnboardingStyles.body,
+                          cursorColor: Colors.black,
+                          decoration: OnboardingStyles.inputDecoration(),
                         ),
-                        Expanded(
-                            child: Divider(color: AppColors.gray, height: 1)),
+                        const SizedBox(height: 24),
+                        _requiredLabel('Password'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          key: const Key('login-password'),
+                          controller: passwordController,
+                          enabled: !_isSubmitting,
+                          obscureText: true,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.password],
+                          style: OnboardingStyles.body,
+                          cursorColor: Colors.black,
+                          decoration: OnboardingStyles.inputDecoration(),
+                          onFieldSubmitted: (_) => _submit(),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _link(
+                            'Forgot Password?',
+                            () => CommonUtilities.NavigateWithPush(
+                              context,
+                              ForgotPasswordScreen(
+                                  emailId: emailController.text.trim(),
+                                  client: widget.client),
+                            ),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        OnboardingButton(
+                          key: const Key('login-submit'),
+                          label: 'Login',
+                          loading: _isSubmitting,
+                          onPressed: _submit,
+                        ),
+                        const SizedBox(height: 30),
+                        const Row(
+                          children: [
+                            Expanded(
+                                child:
+                                    Divider(color: AppColors.gray, height: 1)),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('or'),
+                            ),
+                            Expanded(
+                                child:
+                                    Divider(color: AppColors.gray, height: 1)),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                        OnboardingButton(
+                          label: 'Login using OTP',
+                          outlined: true,
+                          onPressed: _isSubmitting ? null : _openPhoneEntry,
+                        ),
+                        const SizedBox(height: 26),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text('New to ACTIV? ',
+                                style: TextStyle(fontSize: 12)),
+                            _link('Create Account', _openPhoneEntry,
+                                fontSize: 12),
+                          ],
+                        ),
+                        const Spacer(),
+                        const SizedBox(height: 20),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              const TextSpan(
+                                  text:
+                                      'By clicking on Login, I accept the '),
+                              TextSpan(
+                                text: 'Terms & Conditions',
+                                style:
+                                    const TextStyle(color: AppColors.purple),
+                                recognizer: _termsTap,
+                              ),
+                              const TextSpan(text: ' &\n'),
+                              TextSpan(
+                                text: 'Privacy Policy',
+                                style:
+                                    const TextStyle(color: AppColors.purple),
+                                recognizer: _privacyTap,
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                          style: OnboardingStyles.body
+                              .copyWith(fontSize: 12, height: 1.7),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                    OnboardingButton(
-                      label: 'Login using OTP',
-                      outlined: true,
-                      onPressed: _isSubmitting ? null : _openPhoneEntry,
-                    ),
-                    const SizedBox(height: 28),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        const Text('New to ACTIV? ',
-                            style: TextStyle(fontSize: 12)),
-                        _link('Create Account', _openPhoneEntry, fontSize: 12),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    const Spacer(),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OnboardingSupportMenu(
-                        buttonKey: const Key('login-support'),
-                        enabled: !_isSubmitting,
-                        client: widget.client,
-                      ),
-                    ),
-                    const SizedBox(height: 42),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          const TextSpan(
-                              text: 'By clicking on Login, I accept the '),
-                          TextSpan(
-                            text: 'Terms & Conditions',
-                            style: const TextStyle(color: AppColors.purple),
-                            recognizer: _termsTap,
-                          ),
-                          const TextSpan(text: ' &\n'),
-                          TextSpan(
-                            text: 'Privacy Policy',
-                            style: const TextStyle(color: AppColors.purple),
-                            recognizer: _privacyTap,
-                          ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                      style: OnboardingStyles.body
-                          .copyWith(fontSize: 12, height: 1.7),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+          Positioned(
+            right: 20,
+            bottom: 24,
+            child: OnboardingSupportMenu(
+              buttonKey: const Key('login-support'),
+              enabled: !_isSubmitting,
+              client: widget.client,
+            ),
+          ),
+        ],
       ),
     );
   }

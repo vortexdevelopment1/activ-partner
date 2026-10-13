@@ -461,6 +461,7 @@ model partner_city_commissions {
   id             String    @id @db.Uuid
   partner_id     String?   @db.Uuid
   city_code      String
+  state_code     String?
   commission_bps Int
   effective_from DateTime
   effective_to   DateTime?
@@ -470,6 +471,7 @@ model partner_city_commissions {
 
   @@unique([city_code, partner_id, effective_from])
   @@index([city_code, effective_from, effective_to])
+  @@index([state_code])
   @@index([partner_id, effective_from])
 }
 

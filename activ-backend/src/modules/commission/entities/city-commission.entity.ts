@@ -14,6 +14,9 @@ export class CityCommission {
   @Column({ unique: true })
   city: string;
 
+  @Column({ nullable: true })
+  state: string | null;
+
   @Column({ name: 'commission_percentage', type: 'decimal', precision: 5, scale: 2 })
   commissionPercentage: number;
 

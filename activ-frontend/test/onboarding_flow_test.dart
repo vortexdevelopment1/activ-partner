@@ -1548,7 +1548,7 @@ void main() {
     await tester.tap(find.text('Unable to refresh the rate.'));
     await tester.pumpAndSettle();
     expect(find.text('12%'), findsOneWidget);
-    expect(find.text('88'), findsOneWidget);
+    expect(find.text('88'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -1620,6 +1620,7 @@ void main() {
     await tester.tap(find.descendant(of: row, matching: find.byType(TextButton)));
     await tester.pumpAndSettle();
     expect(find.byType(ListActivityTypeScreen), findsOneWidget);
+    await capture(tester, 'activity-edit-selection');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
@@ -1761,6 +1762,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('activity details Edit opens activity selection then configuration and restores answers', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'venue_id': 'venue-1',
+      'jwt_token': 'test-token',
+      'operate_value': jsonEncode([{'id': 'volleyball', 'title': 'Volleyball'}]),
+      'activity_questions_display': jsonEncode([{
+        'categoryId': 'volleyball', 'categoryTitle': 'Volleyball',
+        'questionId': 'description', 'questionText': 'Activity Description',
+        'answer': 'Existing volleyball description',
+      }]),
+    });
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/categories/active')) {
+        return http.Response(jsonEncode({'data': [
+          {'id': 'volleyball', 'name': 'Volleyball', 'isActive': true},
+          {'id': 'basketball', 'name': 'Basketball', 'isActive': true},
+        ]}), 200);
+      }
+      if (request.url.path.contains('/questions/')) {
+        expect(request.url.path, endsWith('/volleyball'));
+        return http.Response(jsonEncode({'data': [{
+          'id': 'description', 'questionText': 'Activity Description',
+          'questionType': 'textarea', 'categoryId': 'volleyball', 'isActive': true,
+        }]}), 200);
+      }
+      if (request.method == 'PATCH') {
+        expect(jsonDecode(request.body), {'categoryIds': ['volleyball']});
+      }
+      return http.Response('{}', 200);
+    });
+    await showScreen(tester, ActivityReviewScreen(
+      activityId: 'venue-1', client: client,
+      categoryTimings: const [{'id': 'volleyball', 'title': 'Volleyball', 'timing': <String, dynamic>{}}],
+    ));
+    final header = find.ancestor(of: find.text('Activity Specific Details'), matching: find.byType(Row)).first;
+    final edit = find.descendant(of: header, matching: find.byType(TextButton));
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(find.byType(ListActivityTypeScreen), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
+    await capture(tester, 'activity-edit-configuration');
+    expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, 'Existing volleyball description');
+    await tester.enterText(find.byType(TextField).first, 'Updated volleyball description');
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActivityReviewScreen), findsOneWidget);
+    expect(find.text('Updated volleyball description'), findsOneWidget);
+    await capture(tester, 'activity-edit-review');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('review edit links return to the selected activity screens', (tester) async {
     VenuePhotoListViewScreen.returnToReviewBuilder = null;
     addTearDown(() => VenuePhotoListViewScreen.returnToReviewBuilder = null);
@@ -1769,7 +1824,7 @@ void main() {
       {'id': 'a', 'title': 'Badminton', 'timing': <String, dynamic>{}},
       {'id': 'b', 'title': 'Squash', 'timing': <String, dynamic>{}},
     ]);
-    for (final section in ['Photos', 'Activity Specific Details', 'Operational Details']) {
+    for (final section in ['Photos', 'Operational Details']) {
       await showScreen(tester, const Scaffold(body: Text('upload1')));
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
       for (final step in steps.skip(1)) {
@@ -1788,11 +1843,16 @@ void main() {
           : section == 'Activity Specific Details'
               ? 'questions1'
               : 'timings1';
-      expect(find.text(expected), findsOneWidget);
+      if (section == 'Photos') {
+        expect(find.byType(VenuePhotoUploadScreen), findsOneWidget);
+        expect(tester.widget<VenuePhotoUploadScreen>(find.byType(VenuePhotoUploadScreen)).currentCategory['id'], 'a');
+      } else {
+        expect(find.text(expected), findsOneWidget);
+      }
       if (section == 'Photos') {
         final reviewBuilder = VenuePhotoListViewScreen.returnToReviewBuilder;
         expect(reviewBuilder, isNotNull);
-        final returnedReview = reviewBuilder!(tester.element(find.text(expected)));
+        final returnedReview = reviewBuilder!(tester.element(find.byType(VenuePhotoUploadScreen)));
         expect(returnedReview, isA<ActivityReviewScreen>());
         expect((returnedReview as ActivityReviewScreen).initialActivityIndex, 0);
         VenuePhotoListViewScreen.returnToReviewBuilder = null;
@@ -2282,6 +2342,71 @@ void main() {
     for (var i = 0; i < 4; i++) {
       expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
     }
+  });
+
+  testWidgets('venue commission uses city and state and shows the admin 5 percent rate', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'venue_details': jsonEncode({'venue_city': 'Mumbai', 'venue_state': 'Maharashtra'}),
+    });
+    final requests = <http.Request>[];
+    await showScreen(tester, VenueScreen(client: MockClient((request) async {
+      requests.add(request);
+      return http.Response(jsonEncode({'data': {'commissionPercentage': 5}}), 200);
+    })));
+    expect(requests.single.url.path, endsWith('/commissions/city/Mumbai'));
+    expect(requests.single.url.queryParameters['state'], 'Maharashtra');
+    await tester.scrollUntilVisible(find.text("Activ's Commission Structure"), 300, scrollable: find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first);
+    expect(find.text('5%'), findsOneWidget);
+    expect(find.text('10%'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('venue commission failures show retry instead of a static rate', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'venue_details': jsonEncode({'venue_city': 'Mumbai', 'venue_state': 'Maharashtra'}),
+    });
+    var calls = 0;
+    await showScreen(tester, VenueScreen(client: MockClient((request) async {
+      calls++;
+      return calls == 1 ? http.Response('{}', 503)
+          : http.Response(jsonEncode({'data': {'commissionPercentage': 5}}), 200);
+    })));
+    await tester.scrollUntilVisible(find.text('Unable to load the commission rate.'), 300, scrollable: find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first);
+    expect(find.text('10%'), findsNothing);
+    expect(find.text('Unable to load the commission rate.'), findsOneWidget);
+    await tester.ensureVisible(find.text('Unable to load the commission rate.'));
+    await tester.tap(find.text('Unable to load the commission rate.'));
+    await tester.pumpAndSettle();
+    expect(find.text('5%'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('venue commission ignores responses for an old state', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'venue_details': jsonEncode({'venue_city': 'Mumbai', 'venue_state': 'Maharashtra'}),
+    });
+    final stale = Completer<http.Response>();
+    final requests = <http.Request>[];
+    await tester.pumpWidget(MaterialApp(home: VenueScreen(client: MockClient((request) {
+      requests.add(request);
+      return requests.length == 1 ? stale.future
+          : Future.value(http.Response(jsonEncode({'data': {'commissionPercentage': 5.25}}), 200));
+    }))));
+    await tester.pump();
+    await tester.pump();
+    final stateField = find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.hintText == 'Select State');
+    await tester.scrollUntilVisible(stateField, 300, scrollable: find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first);
+    tester.widget<TextField>(stateField).controller!.text = 'Gujarat';
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    expect(requests.last.url.queryParameters['state'], 'Gujarat');
+    await tester.scrollUntilVisible(find.text("Activ's Commission Structure"), 100, scrollable: find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first);
+    expect(find.text('5.25%'), findsOneWidget);
+    stale.complete(http.Response(jsonEncode({'data': {'commissionPercentage': 10}}), 200));
+    await tester.pumpAndSettle();
+    expect(find.text('5.25%'), findsOneWidget);
+    expect(find.text('10%'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('venue Back from root opens profile and saves partial draft', (tester) async {
