@@ -791,6 +791,12 @@ export class VenuesService {
       },
     });
     if (!review) throw new NotFoundException(`Venue with id ${id} not found`);
+    const approver = review.approved_by
+      ? await this.prisma.users.findUnique({
+          where: { id: review.approved_by },
+          select: { name: true },
+        })
+      : null;
     const legal = review.partner_venue_legal_documents;
     return {
       ...venue,
@@ -804,6 +810,7 @@ export class VenuesService {
       submittedAt: review.submitted_at,
       approvedAt: review.approved_at,
       approvedBy: review.approved_by,
+      approvedByName: approver?.name?.trim() || null,
       rejectionReason: review.rejection_reason,
       partner: {
         ...venue.partner,

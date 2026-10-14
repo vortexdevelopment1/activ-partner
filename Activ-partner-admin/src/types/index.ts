@@ -189,6 +189,7 @@ export interface Venue {
   submittedAt?: string | null;
   approvedAt?: string;
   approvedBy?: string;
+  approvedByName?: string | null;
   isActive: boolean;
   images: VenueImage[];
   services: VenueService[];

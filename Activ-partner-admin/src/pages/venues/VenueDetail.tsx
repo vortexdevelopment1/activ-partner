@@ -655,9 +655,9 @@ export const VenueDetail: React.FC = () => {
                 </div>
               )}
               {venue.approvedBy && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Approved By</span>
-                  <span className="text-gray-700">{venue.approvedBy}</span>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-gray-400 shrink-0">Approved By</span>
+                  <span className="text-gray-700 min-w-0 text-right break-words">{venue.approvedByName?.trim() || 'Admin'}</span>
                 </div>
               )}
               <div className="flex justify-between">
