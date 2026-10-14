@@ -15,6 +15,7 @@ import { venuesApi } from '../../api/venues.api';
 import { partnersApi } from '../../api/partners.api';
 import { usersApi } from '../../api/users.api';
 import { Badge } from '../../components/ui/Badge';
+import { VenueFilters, defaultVenueFilters, type VenueFilterValues } from '../venues/VenueFilters';
 import type { Venue } from '../../types';
 
 const TABS = ['All', 'Pending', 'Approved', 'Rejected'] as const;
@@ -30,6 +31,7 @@ const tabStatus: Record<Tab, string | undefined> = {
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('Pending');
+  const [filters, setFilters] = useState<VenueFilterValues>(defaultVenueFilters);
 
   const { data: statsData } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -46,9 +48,9 @@ export const Dashboard: React.FC = () => {
     queryFn: () => usersApi.getAll({ limit: 1 }),
   });
 
-  const { data: venuesData, isLoading } = useQuery({
-    queryKey: ['venues-dashboard'],
-    queryFn: () => venuesApi.getAll({ limit: 50, page: 1 }),
+  const { data: venuesData, isLoading, isError } = useQuery({
+    queryKey: ['venues-dashboard', activeTab, filters],
+    queryFn: () => venuesApi.getAll({ ...filters, categoryId: filters.categoryId || undefined, status: tabStatus[activeTab], limit: 10, page: 1 }),
   });
 
   const stats = statsData?.data?.data ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
@@ -103,10 +105,7 @@ export const Dashboard: React.FC = () => {
     },
   ];
 
-  const allVenues: Venue[] = venuesData?.data?.data?.items ?? [];
-  const venues: Venue[] = activeTab === 'All'
-    ? allVenues.slice(0, 10)
-    : allVenues.filter((v) => v.status === tabStatus[activeTab]).slice(0, 10);
+  const venues: Venue[] = venuesData?.data?.data?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -145,15 +144,16 @@ export const Dashboard: React.FC = () => {
             <h3 className="text-sm font-semibold text-gray-900">Venue Approvals</h3>
           </div>
           <button
-            onClick={() => navigate('/venues')}
+            onClick={() => navigate(`/venues?${new URLSearchParams({ ...filters, status: tabStatus[activeTab] ?? '' })}`)}
             className="text-xs text-primary-600 font-medium flex items-center gap-1 hover:underline"
           >
             View all <ArrowRight size={12} />
           </button>
         </div>
 
+        <VenueFilters value={filters} onChange={setFilters} onReset={() => { setFilters(defaultVenueFilters); setActiveTab('All'); }} />
         {/* Tabs */}
-        <div className="flex gap-1 px-5 border-b border-gray-100">
+        <div className="flex gap-1 px-5 border-b border-gray-100 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -190,7 +190,7 @@ export const Dashboard: React.FC = () => {
                   Status
                 </th>
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">
-                  Submitted
+                  Created
                 </th>
                 <th className="px-5 py-3" />
               </tr>
@@ -202,6 +202,8 @@ export const Dashboard: React.FC = () => {
                     Loading...
                   </td>
                 </tr>
+              ) : isError ? (
+                <tr><td colSpan={7} className="text-center py-10 text-red-500">Unable to load venues. Please try again.</td></tr>
               ) : venues.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-10 text-gray-400">

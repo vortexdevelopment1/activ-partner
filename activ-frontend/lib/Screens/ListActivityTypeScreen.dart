@@ -148,8 +148,17 @@ class _State extends State<ListActivityTypeScreen> {
   }
 
 
-  void createVenue() async {
+  Future<void> createVenue() async {
     if (_savingVenue) return;
+    setState(() => _savingVenue = true);
+    try {
+      await _saveVenue();
+    } finally {
+      if (mounted) setState(() => _savingVenue = false);
+    }
+  }
+
+  Future<void> _saveVenue() async {
     final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
     final existingVenueId = checkString(await SharedPreference.readStr("venue_id"));
 
@@ -204,7 +213,6 @@ class _State extends State<ListActivityTypeScreen> {
     }
 
     if (!mounted) return;
-    setState(() => _savingVenue = true);
     ProgressBarNew().showLoader(context);
 
     try {
@@ -309,8 +317,6 @@ class _State extends State<ListActivityTypeScreen> {
       Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog("Save Venue error: $e");
       CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
-    } finally {
-      if (mounted) setState(() => _savingVenue = false);
     }
   }
 

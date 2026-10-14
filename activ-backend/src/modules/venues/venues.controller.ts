@@ -875,6 +875,7 @@ export class VenuesController {
       query.status,
       query.categoryId,
       query.partnerId,
+      query,
     );
     return {
       message: 'Venues fetched successfully',

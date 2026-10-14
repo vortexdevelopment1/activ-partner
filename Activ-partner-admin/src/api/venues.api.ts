@@ -28,7 +28,7 @@ export const venuesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; categoryId?: string; partnerId?: string }) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; categoryId?: string; partnerId?: string; city?: string; state?: string; sort?: 'newest' | 'oldest' | 'updated' }) =>
     api.get('/venues/admin/all', { params }),
   getPending: (params?: { page?: number; limit?: number }) =>
     api.get('/venues/admin/pending', { params }),

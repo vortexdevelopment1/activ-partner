@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, ArrowRight, Building2, Plus } from 'lucide-react';
+import { ArrowRight, Building2, Plus } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { Badge } from '../../components/ui/Badge';
 import { Pagination } from '../../components/ui/Pagination';
 import { CreateVenueModal } from './CreateVenueModal';
+import { VenueFilters, defaultVenueFilters, type VenueFilterValues } from './VenueFilters';
 import type { Venue } from '../../types';
 
 const TABS = ['All', 'Pending', 'Approved', 'Rejected', 'Suspended'] as const;
@@ -23,27 +24,33 @@ export const VenuesList: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const partnerId = searchParams.get('partnerId') || undefined;
-  const [activeTab, setActiveTab] = useState<Tab>('All');
-  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>(() => TABS.find((tab) => tabStatus[tab] === searchParams.get('status')) ?? 'All');
+  const [filters, setFilters] = useState<VenueFilterValues>(() => ({
+    ...defaultVenueFilters,
+    search: searchParams.get('search') ?? '',
+    categoryId: searchParams.get('categoryId') ?? '',
+    city: searchParams.get('city') ?? '',
+    state: searchParams.get('state') ?? '',
+    sort: searchParams.get('sort') === 'oldest' ? 'oldest' : searchParams.get('sort') === 'updated' ? 'updated' : 'newest',
+  }));
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const limit = 15;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['venues', search, page, partnerId],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['venues', filters, activeTab, page, partnerId],
     queryFn: () =>
       venuesApi.getAll({
-        search: search || undefined,
+        ...filters,
+        categoryId: filters.categoryId || undefined,
+        status: tabStatus[activeTab],
         page,
         limit,
         partnerId,
       }),
   });
 
-  const allVenues: Venue[] = data?.data?.data?.items ?? [];
-  const venues: Venue[] = activeTab === 'All'
-    ? allVenues
-    : allVenues.filter((v) => v.status === tabStatus[activeTab]);
+  const venues: Venue[] = data?.data?.data?.items ?? [];
   const total: number = data?.data?.data?.total ?? 0;
 
   return (
@@ -59,19 +66,6 @@ export const VenuesList: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="Search venues..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="input pl-9 w-56"
-            />
-          </div>
           <button
             onClick={() => setCreateOpen(true)}
             className="btn-primary flex items-center gap-1.5 text-sm whitespace-nowrap"
@@ -83,6 +77,9 @@ export const VenuesList: React.FC = () => {
 
       {/* Card */}
       <div className="bg-white rounded-xl border border-gray-100">
+        <VenueFilters value={filters} onChange={(next) => { setFilters(next); setPage(1); }} onReset={() => {
+          setFilters(defaultVenueFilters); setActiveTab('All'); setPage(1);
+        }} />
         {/* Tabs */}
         <div className="flex gap-1 px-5 border-b border-gray-100 overflow-x-auto">
           {TABS.map((tab) => (
@@ -105,7 +102,7 @@ export const VenuesList: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                {['Venue', 'Partner', 'Category', 'Location', 'Services', 'Status', 'Submitted', ''].map(
+                {['Venue', 'Partner', 'Category', 'Location', 'Services', 'Status', 'Created', ''].map(
                   (h) => (
                     <th
                       key={h}
@@ -124,6 +121,8 @@ export const VenuesList: React.FC = () => {
                     Loading...
                   </td>
                 </tr>
+              ) : isError ? (
+                <tr><td colSpan={8} className="text-center py-16 text-red-500">Unable to load venues. Please try again.</td></tr>
               ) : venues.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-16">

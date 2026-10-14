@@ -1031,6 +1031,38 @@ void main() {
     });
   }
 
+  testWidgets('venue creation locks immediately and edits reuse the saved ID', (tester) async {
+    for (final existingId in ['', 'venue-1']) {
+      SharedPreferences.setMockInitialValues({
+        if (existingId.isNotEmpty) 'venue_id': existingId,
+        'operate_value': jsonEncode([{'id': 'basketball', 'title': 'Basketball'}]),
+        'venue_details': jsonEncode({'venue_name': 'abc', 'venue_city': 'Indore'}),
+      });
+      final pending = Completer<http.Response>();
+      final saves = <http.Request>[];
+      final client = MockClient((request) async {
+        if (request.method == 'GET') return http.Response(jsonEncode({'data': [
+          {'id': 'basketball', 'name': 'Basketball', 'isActive': true},
+        ]}), 200);
+        saves.add(request);
+        return pending.future;
+      });
+      await showScreen(tester, ListActivityTypeScreen(client: client));
+      final button = tester.widget<OnboardingButton>(find.byWidgetPredicate((widget) => widget is OnboardingButton && widget.label == 'Next'));
+      button.onPressed!();
+      button.onPressed!();
+      await tester.pump();
+      await tester.pump();
+      expect(saves, hasLength(1));
+      expect(saves.single.method, existingId.isEmpty ? 'POST' : 'PATCH');
+      if (existingId.isNotEmpty) expect(saves.single.url.path, endsWith('/venue-1'));
+      pending.complete(http.Response(jsonEncode({'message': 'Try again'}), 503));
+      await tester.pumpAndSettle();
+      final restored = tester.widget<OnboardingButton>(find.byWidgetPredicate((widget) => widget is OnboardingButton && widget.label == 'Next'));
+      expect(restored.onPressed, isNotNull);
+    }
+  });
+
   for (final size in [
     const Size(430, 1056),
     const Size(360, 740),

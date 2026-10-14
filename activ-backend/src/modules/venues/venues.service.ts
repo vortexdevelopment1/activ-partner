@@ -103,31 +103,28 @@ export class VenuesService {
     const now = new Date();
     const venueId = randomUUID();
     const contactPhone = venueData.venuePhone || venueData.phone || null;
-    const existingDraft = await this.prisma.venues.findFirst({
-      where: {
-        partner_id: partnerId,
-        status: "DRAFT",
-        name: { equals: venueData.name, mode: "insensitive" },
-        partner_venue_profiles: {
-          address_line_1: venueData.venueAddress || venueData.address || null,
-        },
-      },
-      orderBy: { submitted_at: "desc" },
-    });
-
-    if (existingDraft) {
-      return this.update(
-        existingDraft.id,
-        createVenueDto as UpdateVenueDto,
-        { id: partnerId, role: UserRole.PARTNER },
-      );
-    }
-
     const { commissionPercentage } = await this.commissionService.getCommissionByCity(
       venueData.city ?? '', venueData.state,
     );
 
-    await this.prisma.$transaction(async (tx) => {
+    const existingVenue = await this.prisma.$transaction(async (tx) => {
+      // Serialize creation per partner so simultaneous retries cannot both insert.
+      await tx.$queryRaw`SELECT id FROM partners WHERE id = ${partnerId}::uuid FOR UPDATE`;
+      const matches = await tx.venues.findMany({
+        where: {
+          partner_id: partnerId,
+          name: { equals: venueData.name.trim(), mode: "insensitive" },
+          city_code: { equals: venueData.city?.trim() || "UNKNOWN", mode: "insensitive" },
+          partner_venue_profiles: {
+            address_line_1: venueData.venueAddress || venueData.address || null,
+          },
+        },
+        select: { id: true, status: true },
+        orderBy: { submitted_at: { sort: "desc", nulls: "last" } },
+      });
+      const existing = matches.find((venue) => venue.status === "PUBLISHED")
+        ?? matches.find((venue) => venue.status === "DRAFT") ?? matches[0] ?? null;
+      if (existing) return existing;
       await tx.venues.create({
         data: {
           id: venueId,
@@ -241,7 +238,27 @@ export class VenuesService {
           })),
         });
       }
+      return null;
     });
+
+    if (existingVenue) {
+      const existing = existingVenue;
+      if (existing.status === "PUBLISHED") return this.findOne(existing.id);
+      const saved = await this.update(existing.id, createVenueDto as UpdateVenueDto,
+        { id: partnerId, role: UserRole.PARTNER });
+      if (existing.status === "ARCHIVED") {
+        await this.prisma.$transaction([
+          this.prisma.venues.update({ where: { id: existing.id },
+            data: { status: "DRAFT", review_status: null, rejection_reason: null } }),
+          this.prisma.partner_venue_services.updateMany({
+            where: { venue_id: existing.id, status: "REJECTED" },
+            data: { status: "DRAFT", rejection_reason: null, updated_at: new Date() },
+          }),
+        ]);
+        return this.findOne(existing.id);
+      }
+      return saved;
+    }
 
     return {
       id: venueId,
@@ -501,6 +518,7 @@ export class VenuesService {
     status?: VenueStatus,
     categoryId?: string,
     partnerId?: string,
+    filters: { city?: string; state?: string; sort?: 'newest' | 'oldest' | 'updated' } = {},
   ) {
     const statusMap: Record<string, "DRAFT" | "PUBLISHED" | "ARCHIVED"> = {
       draft: "DRAFT",
@@ -512,6 +530,19 @@ export class VenuesService {
     const where: any = {};
     if (status) where.status = statusMap[status] || undefined;
     if (partnerId) where.partner_id = partnerId;
+    const conditions: any[] = [];
+    if (status === VenueStatus.SUSPENDED) where.review_status = VenueStatus.SUSPENDED;
+    if (status === VenueStatus.REJECTED) conditions.push({
+      OR: [{ review_status: null }, { review_status: { not: VenueStatus.SUSPENDED } }],
+    });
+    if (filters.city?.trim()) conditions.push({ OR: [
+      { city_code: { contains: filters.city.trim(), mode: 'insensitive' } },
+      { partner_venue_profiles: { city: { contains: filters.city.trim(), mode: 'insensitive' } } },
+    ] });
+    if (filters.state?.trim()) conditions.push({
+      partner_venue_profiles: { state: { contains: filters.state.trim(), mode: 'insensitive' } },
+    });
+    if (conditions.length) where.AND = conditions;
     if (pagination.search) {
       where.OR = [
         { name: { contains: pagination.search, mode: "insensitive" } },
@@ -520,7 +551,7 @@ export class VenuesService {
     }
     if (categoryId) {
       where.partner_venue_services = {
-        some: { service_category_id: categoryId },
+        some: { service_category_id: categoryId, status: { not: "ARCHIVED" } },
       };
     }
 
@@ -537,12 +568,17 @@ export class VenuesService {
           partner_venue_profiles: true,
           partner_venue_images: { orderBy: { sort_order: "asc" } },
           partner_venue_services: {
+            where: { status: { not: "ARCHIVED" } },
             include: { partner_service_categories: true },
           },
         },
         skip: pagination.skip,
         take: pagination.limit,
-        orderBy: { name: "asc" },
+        orderBy: [
+          { partner_venue_profiles: filters.sort === 'updated'
+            ? { updated_at: 'desc' } : { created_at: filters.sort === 'oldest' ? 'asc' : 'desc' } },
+          { id: filters.sort === 'oldest' ? 'asc' : 'desc' },
+        ],
       }),
       this.prisma.venues.count({ where }),
     ]);
@@ -557,7 +593,7 @@ export class VenuesService {
         venue.status === "PUBLISHED"
           ? "approved"
           : venue.status === "ARCHIVED"
-            ? "rejected"
+            ? venue.review_status === VenueStatus.SUSPENDED ? "suspended" : "rejected"
             : "pending";
       return {
         id: venue.id,
