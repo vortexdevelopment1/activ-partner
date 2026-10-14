@@ -10,7 +10,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 export class BankAccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private map(record: any) {
+  private map(record: any, reviewedByName: string | null = null) {
     const owner = record.partners?.partner_users?.[0]?.users;
     const names = (owner?.name || '').trim().split(/\s+/);
     return {
@@ -21,6 +21,7 @@ export class BankAccountsService {
       cancelledChequeUrl: record.cancelled_cheque_url,
       status: record.status.toLowerCase(), rejectionReason: record.rejection_reason,
       reviewedBy: record.reviewed_by, reviewedAt: record.reviewed_at,
+      reviewedByName,
       hasSeenVerifiedScreen: record.has_seen_verified_screen,
       createdAt: record.created_at, updatedAt: record.updated_at,
       ...(record.partners ? { partner: {
@@ -78,7 +79,10 @@ export class BankAccountsService {
       include: { partners: { include: { partner_business_profiles: true, partner_users: { include: { users: true } } } } },
     });
     if (!record) throw new NotFoundException('Bank account record not found');
-    return this.map(record);
+    const reviewer = !partnerId && record.reviewed_by
+      ? await this.prisma.users.findUnique({ where: { id: record.reviewed_by }, select: { name: true } })
+      : null;
+    return this.map(record, reviewer?.name?.trim() || null);
   }
 
   async markVerifiedScreenSeen(id: string, partnerId: string) {

@@ -360,6 +360,7 @@ export interface BankAccount {
   status: BankAccountStatus;
   rejectionReason?: string;
   reviewedBy?: string;
+  reviewedByName?: string | null;
   reviewedAt?: string;
   createdAt: string;
   updatedAt: string;

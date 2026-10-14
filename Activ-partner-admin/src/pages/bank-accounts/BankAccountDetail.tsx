@@ -346,7 +346,7 @@ export const BankAccountDetail: React.FC = () => {
             <CalendarClock size={16} className="text-primary-600" />
             <h3 className="text-sm font-semibold text-gray-700">Review Info</h3>
           </div>
-          <InfoRow label="Reviewed By" value={account.reviewedBy} />
+          <InfoRow label="Reviewed By" value={account.reviewedBy ? account.reviewedByName?.trim() || 'Admin' : undefined} />
           <InfoRow
             label="Reviewed At"
             value={

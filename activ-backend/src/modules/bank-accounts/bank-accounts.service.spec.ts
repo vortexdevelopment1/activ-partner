@@ -9,7 +9,7 @@ describe('bank account persistence', () => {
     account_type: dto.accountType, branch_name: dto.branchName, cancelled_cheque_url: '/uploads/cheque.pdf', status: 'UNDER_REVIEW' };
   let prisma: any, service: BankAccountsService;
   beforeEach(() => {
-    prisma = { partner_bank_accounts: {
+    prisma = { users: { findUnique: jest.fn().mockResolvedValue({ name: ' Super Admin ' }) }, partner_bank_accounts: {
       findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue(record),
       findMany: jest.fn().mockResolvedValue([record]), updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     }, bookings: { aggregate: jest.fn().mockResolvedValue({ _sum: { total_paise: 12000n } }) },
@@ -43,6 +43,21 @@ describe('bank account persistence', () => {
   it('scopes individual account reads to the requesting partner', async () => {
     await expect(service.findOne('account', 'other-partner')).rejects.toThrow('not found');
     expect(prisma.partner_bank_accounts.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'account', partner_id: 'other-partner' } }));
+  });
+
+  it('shows the reviewing admin name while preserving the review ID', async () => {
+    prisma.partner_bank_accounts.findFirst.mockResolvedValue({ ...record, reviewed_by: 'admin' });
+    expect(await service.findOne('account')).toMatchObject({ reviewedBy: 'admin', reviewedByName: 'Super Admin' });
+    expect(prisma.users.findUnique).toHaveBeenCalledWith({ where: { id: 'admin' }, select: { name: true } });
+  });
+
+  it('handles missing reviewers and avoids resolving names in partner-scoped responses', async () => {
+    prisma.partner_bank_accounts.findFirst.mockResolvedValue({ ...record, reviewed_by: 'admin' });
+    prisma.users.findUnique.mockResolvedValue(null);
+    expect((await service.findOne('account')).reviewedByName).toBeNull();
+    prisma.users.findUnique.mockClear();
+    expect((await service.findOne('account', 'partner')).reviewedByName).toBeNull();
+    expect(prisma.users.findUnique).not.toHaveBeenCalled();
   });
 
   it('persists admin review in the same table and rejects concurrent reviews', async () => {
