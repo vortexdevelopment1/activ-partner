@@ -543,20 +543,43 @@ class FaqSupportScreen extends StatefulWidget {
 
 class _FaqSupportScreenState extends State<FaqSupportScreen> {
   int _open = 0;
-  static const _faqs = [
-    _FaqData(
-      'Is there a fee to use the app?',
-      'Listing your venue on ACTIV is free, We charge a small commission per confirmed booking. You can view the applicable commission rates for your city in the app.',
-    ),
-    _FaqData(
-      'What can I do with ACTIV user app?',
-      'With the ACTIV partner app, you can manage your venue listing, track bookings, update availability slots, handle team members, and view payout history - all from one place.',
-    ),
-    _FaqData(
-      'When will the ACTIV app be available ?',
-      "The ACTIV user app is currently in development. We're working hard to hiring it to you soon, Stay tuned for our official launched announcement.",
-    ),
-  ];
+  List<_FaqData> _faqs = [];
+  bool _loading = true;
+  String? _error;
+  int _loadVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFaqs();
+  }
+
+  Future<void> _loadFaqs() async {
+    final version = ++_loadVersion;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final response = await (widget.client?.get ?? http.get)(Uri.parse(FAQ_PUBLIC_URL))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) throw const FormatException('FAQ request failed');
+      final body = jsonDecode(response.body);
+      if (body is! Map || body['data'] is! List) throw const FormatException('Invalid FAQ response');
+      final items = <_FaqData>[];
+      for (final entry in body['data']) {
+        if (entry is! Map || entry['question'] is! String || entry['answer'] is! String) {
+          throw const FormatException('Invalid FAQ entry');
+        }
+        if (entry['isActive'] != false) items.add(_FaqData(entry['question'], entry['answer']));
+      }
+      if (!mounted || version != _loadVersion) return;
+      setState(() { _faqs = items; _open = items.isEmpty ? -1 : 0; });
+    } catch (_) {
+      if (mounted && version == _loadVersion) {
+        setState(() => _error = 'Unable to load FAQs.');
+      }
+    } finally {
+      if (mounted && version == _loadVersion) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -569,10 +592,22 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
           RequestCallbackScreen(client: widget.client),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 30, 28, 0),
-        child: Column(
-          children: [
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!),
+                  TextButton.icon(onPressed: _loadFaqs, icon: const Icon(Icons.refresh), label: const Text('Retry loading FAQs')),
+                ]))
+              : RefreshIndicator(
+                  onRefresh: _loadFaqs,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(28, 30, 28, 20),
+                    children: [
+            if (_faqs.isEmpty) const Padding(
+              padding: EdgeInsets.only(top: 30), child: Center(child: Text('No FAQs available yet.')),
+            ),
             for (var i = 0; i < _faqs.length; i++) ...[
               _FaqTile(
                 question: _faqs[i].question,
@@ -582,9 +617,9 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
               ),
               if (i != _faqs.length - 1) const SizedBox(height: 14),
             ],
-          ],
-        ),
-      ),
+                    ],
+                  ),
+                ),
     );
   }
 }

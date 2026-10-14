@@ -2075,6 +2075,51 @@ void main() {
     expect(find.byType(LoginScreen), findsOneWidget);
   });
 
+  testWidgets('support FAQs display backend content and refresh admin edits', (tester) async {
+    var answer = 'Listing your venue on ACTIV is free. We charge a small commission per confirmed booking. You can view the applicable commission rates for your city in the app.';
+    var requests = 0;
+    await showScreen(tester, FaqSupportScreen(client: MockClient((request) async {
+      requests++;
+      expect(request.url.path, endsWith('/faqs/public'));
+      return http.Response(jsonEncode({'data': [
+        {'question': 'Is there a fee to use the app?', 'answer': answer, 'isActive': true},
+        {'question': 'What can I do with ACTIV user app?', 'answer': 'With the ACTIV partner app, you can manage your venue listing, track bookings, update availability slots, handle team members, and view payout history - all from one place.', 'isActive': true},
+        {'question': 'When will the ACTIV app be available ?', 'answer': "The ACTIV user app is currently in development. We're working hard to bring it to you soon. Stay tuned for our official launch announcement.", 'isActive': true},
+        {'question': 'Inactive FAQ', 'answer': 'Hidden answer', 'isActive': false},
+      ]}), 200);
+    })));
+    expect(find.text('Is there a fee to use the app?'), findsOneWidget);
+    expect(find.text('What can I do with ACTIV user app?'), findsOneWidget);
+    expect(find.text('When will the ACTIV app be available ?'), findsOneWidget);
+    expect(find.text(answer), findsOneWidget);
+    expect(find.text('Inactive FAQ'), findsNothing);
+    await capture(tester, 'backend-support-faqs');
+    await tester.tap(find.text('When will the ACTIV app be available ?'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('official launch announcement'), findsOneWidget);
+    answer = 'Updated in the admin panel';
+    await tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh();
+    await tester.pumpAndSettle();
+    expect(find.text(answer), findsOneWidget);
+    expect(requests, 2);
+    expect(find.text('Request Call Back'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('support FAQs retry failures and show an empty backend result without static FAQs', (tester) async {
+    var requests = 0;
+    await showScreen(tester, FaqSupportScreen(client: MockClient((_) async {
+      requests++;
+      return requests == 1 ? http.Response('{}', 503) : http.Response('{"data":[]}', 200);
+    })));
+    expect(find.text('Retry loading FAQs'), findsOneWidget);
+    expect(find.text('Is there a fee to use the app?'), findsNothing);
+    await tester.tap(find.text('Retry loading FAQs'));
+    await tester.pumpAndSettle();
+    expect(find.text('No FAQs available yet.'), findsOneWidget);
+    expect(requests, 2);
+  });
+
   testWidgets('FAQ panel fetches public questions and supports retry', (tester) async {
     var calls = 0;
     await showScreen(tester, MobileNumberScreen(client: MockClient((request) async {
