@@ -346,10 +346,20 @@ export interface AdminNotification {
 
 export type BankAccountStatus = 'under_review' | 'approved' | 'rejected';
 
+export interface BankAccountPartner {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  businessName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  user?: User;
+}
+
 export interface BankAccount {
   id: string;
   partnerId: string;
-  partner?: Partner;
+  partner?: BankAccountPartner;
   accountHolderName: string;
   bankName: string;
   accountNumber: string;

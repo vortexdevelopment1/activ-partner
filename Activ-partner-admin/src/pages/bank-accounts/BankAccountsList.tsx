@@ -139,7 +139,7 @@ export const BankAccountsList: React.FC = () => {
                     <td className="px-5 py-3.5 text-gray-600">{account.accountType}</td>
                     <td className="px-5 py-3.5 text-gray-600">
                       {account.partner
-                        ? `${account.partner.user?.firstName ?? ''} ${account.partner.user?.lastName ?? ''}`.trim() ||
+                        ? `${account.partner.firstName ?? account.partner.user?.firstName ?? ''} ${account.partner.lastName ?? account.partner.user?.lastName ?? ''}`.trim() || account.partner.businessName ||
                           '—'
                         : '—'}
                     </td>
