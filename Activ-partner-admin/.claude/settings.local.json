@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"D:\\\\ActivProduct\\\\Backend\\\\src\\\\modules\\\\partners\\\\\" 2>&1 || ls -la \"D:/ActivProduct/Backend/src/modules/partners/\" 2>&1)",
+      "Read(//d/ActivProduct/Backend/src/modules/partners\" 2>&1 || ls -la D:/ActivProduct/Backend/src/modules/partners/**)",
+      "Bash(find \"d:\\\\ActivProduct\\\\activ-app-stage\" -type f -name \"*.dart\" | grep -iE \"\\(api|service|repository\\)\" | head -20)",
+      "Read(//d/ActivProduct/activ-app-stage/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://staging-be.activ.co.in/api/v1/venues/update-requests --max-time 5)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(node -e ' *)",
+      "WebFetch(domain:staging-be.activ.co.in)",
+      "Bash(curl -sv https://example.com --max-time 5)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

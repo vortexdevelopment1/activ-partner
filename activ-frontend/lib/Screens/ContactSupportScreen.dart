@@ -1,0 +1,280 @@
+import 'dart:convert';
+
+import 'package:activ_app/Screens/StringExtensions.dart';
+import 'package:activ_app/Style/app_colors.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../Style/app_size.dart';
+import '../Utills/common_utilities.dart';
+import '../api_calling/api_constant.dart';
+import '../api_calling/api_request.dart';
+import 'CommonCode.dart';
+import 'LoginScreen.dart';
+
+class ContactSupportScreen extends StatefulWidget {
+  const ContactSupportScreen({super.key});
+
+  @override
+  State<ContactSupportScreen> createState() => _State();
+}
+
+class _State extends State<ContactSupportScreen> {
+
+  String _venueId = '';
+  String _venueName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVenueInfo();
+  }
+
+  Future<void> _loadVenueInfo() async {
+    final id = checkString(await SharedPreference.readStr("venue_id"));
+    var name = checkString(await SharedPreference.readStr("venue_name"));
+    if (name.isEmpty) {
+      name = _venueNameFromDraft(
+        checkString(await SharedPreference.readStr("venue_details")),
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _venueId = id;
+        _venueName = name;
+      });
+    }
+    if (name.isEmpty) await _loadVenueNameFromApi(id);
+  }
+
+  String _venueNameFromDraft(String value) {
+    if (value.isEmpty) return '';
+    try {
+      final data = jsonDecode(value);
+      if (data is Map) {
+        return checkString(data['venue_name']?.toString());
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<void> _loadVenueNameFromApi(String selectedId) async {
+    try {
+      final token = checkString(await SharedPreference.readStr('jwt_token'));
+      if (token.isEmpty) return;
+      final response = await http.get(
+        Uri.parse(MY_VENUES_URL),
+        headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final data = jsonDecode(response.body)['data'];
+      final items = data is Map
+          ? (data['items'] ?? data['venues'] ?? data['data'] ?? [])
+          : [];
+      if (items is! List || items.isEmpty) return;
+      final venue = selectedId.isNotEmpty
+          ? items.cast<dynamic>().firstWhere(
+              (item) => item is Map && item['id']?.toString() == selectedId,
+              orElse: () => items.first,
+            )
+          : items.first;
+      if (venue is! Map) return;
+      final name = checkString(venue['name']?.toString());
+      if (name.isNotEmpty) {
+        await SharedPreference.addStringToSF('venue_name', name);
+        if (mounted) setState(() => _venueName = name);
+      }
+    } catch (e) {
+      CommonUtilities.showLog('_loadVenueNameFromApi error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Container(
+      child: Stack(
+        children: [
+          /*To Set Top Header Color*/
+          Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              height: 100,
+              color: AppColors.yellowTop,
+            ),
+          ),
+          /*To Set Bottom Header Color*/
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              height: 100,
+              color: AppColors.white,
+            ),
+          ),
+          SafeArea(
+            top: true,
+            bottom: true,
+            left: false,
+            right: false,
+            child: Scaffold(
+              body: Container(
+                decoration: context.getYellowGradient,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    double width = constraints.maxWidth;
+
+                    bool isMobile = width < 600;
+                    bool isTablet = width >= 600 && width < 1100;
+
+                    double containerWidth =
+                    isMobile ? width * 1 : (isTablet ? 500 : 600);
+
+                    return Container(
+                      //width: containerWidth,
+                      //margin: const EdgeInsets.only(right: 20),
+                      //padding: EdgeInsets.all(isMobile ? 20 : 30),
+                      child: Container(
+                        margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+
+                            Expanded(
+                              child: Container(
+                                margin: EdgeInsets.fromLTRB(15, 0, 15, 0),
+                                child: ListView(
+                                  shrinkWrap: true,
+                                  children: [
+
+                                    getActivIcon(),
+                                    
+                                    Container(
+                                      margin: EdgeInsets.fromLTRB(10, 15, 10, 0),
+                                      width: 224,
+                                      height: 300,
+                                      child: Image.asset('assets/reviewing.png'),
+                                    ),
+
+                                    getText(),
+
+                                    getSubText(_venueName, _venueId)
+
+
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            Container(
+                              margin: const EdgeInsets.only(top: 10),
+                              child: Column(
+                                children: [
+                                  bottomBarShadow(),
+
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: InkWell(
+                                      onTap: () {
+                                        CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                                            context, const LoginScreen());
+                                      },
+                                      child: getButtonBlack(context, "Back to Login", "contactSupport"),
+                                    ),
+                                  )
+                                ],
+                              ),
+                            )
+
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget getDividerLine()
+  {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 15, 0, 15),
+      color: AppColors.gray,
+      height: 1,
+    );
+  }
+
+
+
+  Widget getActivIcon()
+  {
+    return Container(
+        margin: const EdgeInsets.only(top: 10),
+        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
+    );
+  }
+
+  Widget getText()
+  {
+    return Container(
+      margin: const EdgeInsets.only(top: 15),
+      alignment: Alignment.center,
+      child: const Text(
+        "🎉 You’re all set, we’re reviewing your venue!",
+        style: TextStyle(
+            fontSize: AppSize.size_28,
+            fontFamily: 'FontSemiBold',
+            color: AppColors.darkBlack,
+            height: 1.2
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget getSubText(String venueName, String venueId)
+  {
+    final venueLabel =
+        venueName.isNotEmpty ? venueName : (venueId.isNotEmpty ? "#$venueId" : "your venue");
+    return Container(
+      alignment: Alignment.center,
+      margin: EdgeInsets.fromLTRB(0, 15, 0, 10),
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style: TextStyle(
+            color: AppColors.darkBlack,   // different color
+            fontFamily: 'FontRegular',
+            fontSize: AppSize.size_16,
+            height: 1.4
+          ),
+          children: [
+            TextSpan(text: "Your venue registration "),
+            TextSpan(
+              text: venueLabel,
+              style: TextStyle(
+                color: AppColors.black,   // different color
+                fontFamily: 'FontSemiBold',
+                  height: 1.4
+              ),
+            ),
+            TextSpan(
+              text:
+              " is complete and under review. Come back in sometime to see your venue live and start receiving bookings from members.",
+              style: TextStyle(
+                color: AppColors.darkBlack,   // different color
+                fontFamily: 'FontRegular',
+                fontSize: AppSize.size_16,
+                  height: 1.4
+              ),
+            ),
+          ],
+        ),
+      )
+    );
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "626237685353",
+    "project_id": "activ-b02f8",
+    "storage_bucket": "activ-b02f8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:626237685353:android:34ebb1a94cb97f274decf8",
+        "android_client_info": {
+          "package_name": "com.activ"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB11VLcJv6FF7iiBH6vJ2hr5_n246Dn6G8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
