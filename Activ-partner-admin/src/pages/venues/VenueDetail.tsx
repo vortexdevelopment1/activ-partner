@@ -190,6 +190,10 @@ export const VenueDetail: React.FC = () => {
 
   // venue.partner is a flat merged user+partner object from the API
   const partner = typeof venue.partner === 'object' ? (venue.partner as any) : null;
+  const partnerName = [partner?.firstName, partner?.lastName]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join(' ')
+    .trim();
   const category = typeof venue.category === 'object' ? (venue.category as any) : null;
   const amenities: string[] = Array.isArray(venue.amenities) ? venue.amenities : [];
 
@@ -562,8 +566,8 @@ export const VenueDetail: React.FC = () => {
                 <User size={16} className="text-gray-400" /> Partner Information
               </h3>
               <div className="space-y-2.5">
-                <InfoRow label="Name" value={`${partner.firstName} ${partner.lastName}`} />
-                <InfoRow label="Email" value={partner.email} />
+                <InfoRow label="Name" value={partnerName || 'Profile not completed'} />
+                <InfoRow label="Email" value={partner.email?.trim() || 'Not provided'} />
                 <InfoRow label="Phone" value={partner.phone} />
                 <InfoRow label="Contact Phone" value={partner.contactPhone} />
                 <InfoRow label="Business" value={partner.businessName} />
