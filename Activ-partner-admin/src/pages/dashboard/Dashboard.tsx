@@ -30,7 +30,7 @@ const tabStatus: Record<Tab, string | undefined> = {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>('Pending');
+  const [activeTab, setActiveTab] = useState<Tab>('All');
   const [filters, setFilters] = useState<VenueFilterValues>(defaultVenueFilters);
 
   const { data: statsData } = useQuery({
