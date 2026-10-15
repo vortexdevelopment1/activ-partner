@@ -457,9 +457,15 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     set('amenities', form.amenities.includes(a)
       ? form.amenities.filter(x => x !== a) : [...form.amenities, a]);
 
-  const toggleCategory = (id: string) =>
-    set('categoryIds', form.categoryIds.includes(id)
-      ? form.categoryIds.filter(x => x !== id) : [...form.categoryIds, id]);
+  const selectCategory = (id: string) => setForm(prev => {
+    if (prev.categoryIds.length === 1 && prev.categoryIds[0] === id) return prev;
+    const globalQuestionIds = new Set(questionGroups.globalQuestions.map(question => question.id));
+    return {
+      ...prev,
+      categoryIds: [id],
+      answers: Object.fromEntries(Object.entries(prev.answers).filter(([questionId]) => globalQuestionIds.has(questionId))),
+    };
+  });
 
   const updateLegalFile = (field: 'aadhaarFile' | 'panFile' | 'gstinFile', files: FileList | null) => {
     const file = files?.[0];
@@ -600,7 +606,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     if (step === 0) return !!form.partnerId && !!form.name.trim() && /^\d{10}$/.test(form.venuePhone);
     if (step === 1) return !!(form.address || addressSearch) && !!form.city.trim() && !!form.state.trim() && /^\d{6}$/.test(form.zipCode);
     if (step === 2) return true; // Amenities are optional
-    if (step === 3) return form.categoryIds.length > 0;
+    if (step === 3) return form.categoryIds.length === 1;
     if (step === 4) {
       return flatRequiredQuestions.every(q => {
         const val = form.answers[q.id];
@@ -1113,25 +1119,25 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
           {/* ── Step 4: Categories ── */}
           {step === 3 && (
             <div>
-              <Label required>Sport Categories</Label>
-              <p className="text-xs text-gray-400 mb-2.5">Select one or more activity categories for this venue</p>
+              <Label required>Sport Category</Label>
               {categories.length === 0 ? (
                 <p className="text-sm text-gray-400">Loading categories…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div role="radiogroup" aria-label="Sport category" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {categories.map(cat => {
                     const selected = form.categoryIds.includes(cat.id);
                     return (
-                      <button key={cat.id} type="button" onClick={() => toggleCategory(cat.id)}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                      <label key={cat.id}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left cursor-pointer focus-within:ring-2 focus-within:ring-primary-500 ${
                           selected
                             ? 'border-primary-500 bg-primary-50 text-primary-700'
                             : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                         }`}>
+                        <input type="radio" name="venue-category" value={cat.id} checked={selected} onChange={() => selectCategory(cat.id)} className="sr-only" />
                         <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain" />
                         <span className="flex-1 truncate">{cat.name}</span>
                         {selected && <Check size={13} className="text-primary-600 shrink-0" />}
-                      </button>
+                      </label>
                     );
                   })}
                 </div>
