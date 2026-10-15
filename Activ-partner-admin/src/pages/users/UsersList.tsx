@@ -115,19 +115,20 @@ export const UsersList: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              users.map((user) => (
-                <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+              users.map((user) => {
+                const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+                return <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-xs font-semibold text-primary-700 shrink-0">
-                        {user.firstName?.[0]?.toUpperCase()}
+                        {name[0]?.toUpperCase() ?? '?'}
                       </div>
-                      <p className="font-medium text-gray-900">
-                        {user.firstName} {user.lastName}
+                      <p className={name ? 'font-medium text-gray-900' : 'text-gray-500'}>
+                        {name || 'Profile not completed'}
                       </p>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-600">{user.email}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{user.email?.trim() || 'Not provided'}</td>
                   <td className="px-5 py-3.5 text-gray-500">{user.phone ?? '—'}</td>
                   <td className="px-5 py-3.5">
                     <span
@@ -173,8 +174,8 @@ export const UsersList: React.FC = () => {
                       )}
                     </button>
                   </td>
-                </tr>
-              ))
+                </tr>;
+              })
             )}
           </tbody>
         </table>

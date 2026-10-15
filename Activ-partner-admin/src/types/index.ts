@@ -16,9 +16,9 @@ export interface PaginatedData<T> {
 
 export interface User {
   id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
   phone?: string;
   role: 'admin' | 'partner' | 'user';
   isActive: boolean;
