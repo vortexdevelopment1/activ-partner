@@ -6,6 +6,7 @@ import { categoriesApi } from '../../api/categories.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
 import { CategoryForm } from './CategoryForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
 import type { Category, CategoryType } from '../../types';
 
@@ -22,17 +23,21 @@ export const CategoriesList: React.FC = () => {
   const search = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
+  const [page, setPage] = useState(1);
+  const limit = 12;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<Category | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const categoryQueryKey = ['categories', search, page] as const;
   const { data, isLoading } = useQuery({
-    queryKey: ['categories', search],
-    queryFn: () => categoriesApi.getAll({ limit: 100, search: search || undefined }),
+    queryKey: categoryQueryKey,
+    queryFn: () => categoriesApi.getAll({ page, limit, search: search || undefined }),
   });
 
   const categories: Category[] = data?.data?.data?.items ?? [];
+  const total: number = data?.data?.data?.total ?? 0;
 
   const createMutation = useMutation({
     mutationFn: ({ formData }: { formData: FormData }) =>
@@ -71,9 +76,9 @@ export const CategoriesList: React.FC = () => {
     mutationFn: ({ id }: { id: string; isActive: boolean }) => categoriesApi.toggleStatus(id),
     onMutate: async ({ id, isActive }) => {
       await queryClient.cancelQueries({ queryKey: ['categories'] });
-      const previous = queryClient.getQueryData(['categories', search]);
+      const previous = queryClient.getQueryData(categoryQueryKey);
 
-      queryClient.setQueryData(['categories', search], (current: any) => {
+      queryClient.setQueryData(categoryQueryKey, (current: any) => {
         const items = current?.data?.data?.items;
         if (!Array.isArray(items)) return current;
         return {
@@ -96,7 +101,7 @@ export const CategoriesList: React.FC = () => {
       success(`Category ${context?.nextActive ? 'enabled' : 'disabled'} successfully`);
     },
     onError: (err: any, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['categories', search], context.previous);
+      if (context?.previous) queryClient.setQueryData(categoryQueryKey, context.previous);
       error(err?.response?.data?.message ?? 'Failed to update category status');
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['categories'] }),
@@ -151,7 +156,10 @@ export const CategoriesList: React.FC = () => {
         <span className="sr-only">Search categories</span>
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input className="input pl-9" value={search} placeholder="Search categories..."
-          onChange={(event) => setSearchParams(event.target.value ? { search: event.target.value } : {}, { replace: true })} />
+          onChange={(event) => {
+            setPage(1);
+            setSearchParams(event.target.value ? { search: event.target.value } : {}, { replace: true });
+          }} />
       </label>
 
       {/* Grid */}
@@ -162,7 +170,8 @@ export const CategoriesList: React.FC = () => {
           No categories yet. Add your first one!
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <>
+        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {categories.map((cat) => (
             <div
               key={cat.id}
@@ -244,6 +253,48 @@ export const CategoriesList: React.FC = () => {
             </div>
           ))}
         </div>
+        <div className="space-y-2 sm:hidden">
+          {categories.map((cat) => (
+            <div key={cat.id} className="bg-white rounded-lg border border-gray-100 p-3">
+              <div className="flex gap-3">
+                <div className="relative h-16 w-16 shrink-0 rounded-lg bg-gray-50">
+                  <img src={activityLogoUrl(cat.name)} alt={cat.name} className="h-full w-full object-contain p-2" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="break-words text-sm font-semibold text-gray-900">{cat.name}</h3>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${cat.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {cat.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    {cat.type && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">{CATEGORY_TYPE_LABELS[cat.type] ?? cat.type}</span>}
+                    <span className="text-[10px] text-gray-400">#{cat.order}</span>
+                  </div>
+                  {cat.description && <p className="mt-1 line-clamp-1 text-xs text-gray-500">{cat.description}</p>}
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-1 border-t border-gray-100 pt-2">
+                <button type="button" onClick={() => { setEditItem(cat); setFormOpen(true); }}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-md text-xs text-gray-600 hover:bg-primary-50 hover:text-primary-700">
+                  <Pencil size={13} /> Edit
+                </button>
+                <button type="button" onClick={() => toggleMutation.mutate({ id: cat.id, isActive: cat.isActive })}
+                  disabled={toggleMutation.isPending}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-md text-xs text-gray-600 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50">
+                  {cat.isActive ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                  {cat.isActive ? 'Disable' : 'Enable'}
+                </button>
+                <button type="button" onClick={() => setDeleteId(cat.id)}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-md text-xs text-gray-600 hover:bg-red-50 hover:text-red-600">
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {total > limit && <div className="mt-4 overflow-hidden rounded-lg border border-gray-100 bg-white"><Pagination page={page} limit={limit} total={total} onPageChange={setPage} /></div>}
+        </>
       )}
 
       {/* Form modal */}

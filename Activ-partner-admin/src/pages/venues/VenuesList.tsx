@@ -76,12 +76,12 @@ export const VenuesList: React.FC = () => {
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-xl border border-gray-100">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <VenueFilters value={filters} onChange={(next) => { setFilters(next); setPage(1); }} onReset={() => {
           setFilters(defaultVenueFilters); setActiveTab('All'); setPage(1);
         }} />
         {/* Tabs */}
-        <div className="flex gap-1 px-5 border-b border-gray-100 overflow-x-auto">
+        <div className="flex gap-1 px-3 sm:px-5 border-b border-gray-100 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -97,8 +97,48 @@ export const VenuesList: React.FC = () => {
           ))}
         </div>
 
+        {/* Mobile venue list */}
+        <div className="divide-y divide-gray-100 md:hidden">
+          {isLoading ? (
+            <div className="py-14 text-center text-sm text-gray-400">Loading...</div>
+          ) : isError ? (
+            <div className="py-14 text-center text-sm text-red-500">Unable to load venues. Please try again.</div>
+          ) : venues.length === 0 ? (
+            <div className="py-14 text-center">
+              <Building2 size={30} className="mx-auto mb-2 text-gray-200" />
+              <p className="text-sm text-gray-400">No venues found</p>
+            </div>
+          ) : venues.map((venue) => {
+            const partnerName = typeof venue.partner === 'object'
+              ? `${(venue.partner as any)?.firstName ?? ''} ${(venue.partner as any)?.lastName ?? ''}`.trim()
+              : '';
+            const categoryName = typeof venue.category === 'object' ? (venue.category as any)?.name : '';
+            return (
+              <button key={venue.id} type="button" onClick={() => navigate(`/venues/${venue.id}`)}
+                className="flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-gray-50">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                  <Building2 size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 break-words text-sm font-semibold text-gray-900">{venue.name}</p>
+                    <Badge status={venue.status} />
+                  </div>
+                  <p className="mt-1 truncate text-xs text-gray-500">{partnerName || 'Partner unavailable'}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                    {categoryName && <span>{categoryName}</span>}
+                    {(venue.city || venue.state) && <span>{[venue.city, venue.state].filter(Boolean).join(', ')}</span>}
+                    <span>{venue.services?.length ?? 0} services</span>
+                  </div>
+                </div>
+                <ArrowRight size={15} className="mt-3 shrink-0 text-gray-300" />
+              </button>
+            );
+          })}
+        </div>
+
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
