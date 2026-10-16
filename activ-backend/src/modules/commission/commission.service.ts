@@ -11,7 +11,7 @@ import { CreateCityCommissionDto } from "./dto/create-city-commission.dto";
 import { UpdateCityCommissionDto } from "./dto/update-city-commission.dto";
 import { CityCommission } from "./entities/city-commission.entity";
 
-const DEFAULT_COMMISSION = 10;
+export const DEFAULT_COMMISSION = 5;
 
 @Injectable()
 export class CommissionService {
@@ -77,6 +77,7 @@ export class CommissionService {
   ): Promise<[CityCommission[], number]> {
     const where = {
       partner_id: null,
+      NOT: { city_code: "", state_code: null },
       ...(pagination.search ? { OR: [
         { city_code: { contains: pagination.search, mode: 'insensitive' as const } },
         { state_code: { contains: pagination.search, mode: 'insensitive' as const } },
@@ -166,6 +167,65 @@ export class CommissionService {
       throw new BadRequestException("A city or state is required");
   }
 
+  async getDefaultCommission(): Promise<{
+    commissionPercentage: number;
+    isPersisted: boolean;
+  }> {
+    const record = await this.findActiveDefault();
+    return {
+      commissionPercentage: record
+        ? record.commission_bps / 100
+        : DEFAULT_COMMISSION,
+      isPersisted: Boolean(record),
+    };
+  }
+
+  async updateDefaultCommission(commissionPercentage: number): Promise<{
+    commissionPercentage: number;
+    isPersisted: boolean;
+  }> {
+    const existing = await this.findActiveDefault();
+    const now = new Date();
+    const data = {
+      commission_bps: Math.round(commissionPercentage * 100),
+      updated_at: now,
+    };
+
+    if (existing) {
+      await this.prisma.partner_city_commissions.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await this.prisma.partner_city_commissions.create({
+        data: {
+          id: randomUUID(),
+          partner_id: null,
+          city_code: "",
+          state_code: null,
+          effective_from: now,
+          ...data,
+        },
+      });
+    }
+
+    return { commissionPercentage, isPersisted: true };
+  }
+
+  private findActiveDefault() {
+    const now = new Date();
+    return this.prisma.partner_city_commissions.findFirst({
+      where: {
+        partner_id: null,
+        city_code: "",
+        state_code: null,
+        effective_from: { lte: now },
+        OR: [{ effective_to: null }, { effective_to: { gte: now } }],
+      },
+      orderBy: { effective_from: "desc" },
+    });
+  }
+
   async getCommissionByCity(
     city: string,
     state?: string,
@@ -211,6 +271,16 @@ export class CommissionService {
           isDefault: false,
         };
       }
+    }
+
+    const defaultRule = await this.findActiveDefault();
+    if (defaultRule) {
+      return {
+        city: normalizedCity,
+        state: normalizedState,
+        commissionPercentage: defaultRule.commission_bps / 100,
+        isDefault: true,
+      };
     }
 
     return {

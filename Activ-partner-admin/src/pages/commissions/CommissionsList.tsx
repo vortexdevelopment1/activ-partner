@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Percent, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, Search, Save } from 'lucide-react';
 import { commissionsApi } from '../../api/commissions.api';
 import { CommissionForm } from './CommissionForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -20,6 +20,17 @@ export const CommissionsList: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<Commission | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [defaultRate, setDefaultRate] = useState('5');
+
+  const { data: defaultData, isLoading: isDefaultLoading } = useQuery({
+    queryKey: ['commissions', 'default'],
+    queryFn: commissionsApi.getDefault,
+  });
+
+  useEffect(() => {
+    const rate = defaultData?.data?.data?.commissionPercentage;
+    if (typeof rate === 'number') setDefaultRate(String(rate));
+  }, [defaultData]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['commissions', page, search],
@@ -62,6 +73,24 @@ export const CommissionsList: React.FC = () => {
     onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to delete'),
   });
 
+  const defaultMutation = useMutation({
+    mutationFn: (rate: number) => commissionsApi.updateDefault(rate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commissions'] });
+      success('India-wide commission updated');
+    },
+    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to update default commission'),
+  });
+
+  const saveDefaultRate = () => {
+    const rate = Number(defaultRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      error('Enter a commission percentage between 0 and 100');
+      return;
+    }
+    defaultMutation.mutate(rate);
+  };
+
   const handleSubmit = (payload: { city: string; state: string; commissionPercentage: number }) => {
     if (editItem) {
       updateMutation.mutate({ id: editItem.id, payload });
@@ -79,7 +108,7 @@ export const CommissionsList: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Commissions</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Manage commission percentages by city and state
+            Set the India-wide rate and add location overrides when needed
           </p>
         </div>
         <button
@@ -88,6 +117,49 @@ export const CommissionsList: React.FC = () => {
         >
           <Plus size={16} /> Add Commission
         </button>
+      </div>
+
+      <section className="bg-white border border-gray-200 rounded-lg p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Percent size={18} className="text-primary-600" />
+              <h3 className="font-semibold text-gray-900">India-wide default</h3>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Applies to every state and city unless a location override exists.
+            </p>
+          </div>
+          <div className="flex items-end gap-2 w-full sm:w-auto">
+            <label className="flex-1 sm:w-36">
+              <span className="block text-xs font-medium text-gray-600 mb-1">Commission (%)</span>
+              <input
+                aria-label="India-wide commission percentage"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={defaultRate}
+                disabled={isDefaultLoading || defaultMutation.isPending}
+                onChange={(event) => setDefaultRate(event.target.value)}
+                className="input w-full"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={saveDefaultRate}
+              disabled={isDefaultLoading || defaultMutation.isPending}
+              className="btn-primary flex items-center gap-2 whitespace-nowrap"
+            >
+              <Save size={16} /> {defaultMutation.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div>
+        <h3 className="font-semibold text-gray-900">City and state overrides</h3>
+        <p className="text-sm text-gray-500 mt-0.5">More specific rules take priority over the India-wide default.</p>
       </div>
 
       <label className="relative block max-w-sm">

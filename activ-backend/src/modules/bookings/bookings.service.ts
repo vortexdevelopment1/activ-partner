@@ -386,7 +386,7 @@ export class BookingsService {
 
     const payment = await this.paymentRepository.findOne({ where: { bookingId: booking.id } });
     const { commissionPercent, activCommission, gstOnCommission, netReceived } =
-      this.computeBreakdown(Number(booking.totalAmount), Number(booking.venue.commission ?? 10));
+      this.computeBreakdown(Number(booking.totalAmount), Number(booking.venue.commission ?? 5));
 
     const partner = booking.venue.partner;
     const isGstRegistered = !!(partner?.gstNumber && partner?.gstVerifiedAt);
@@ -458,7 +458,7 @@ export class BookingsService {
     const items = payments.map((payment) => {
       const { netReceived } = this.computeBreakdown(
         Number(payment.booking.totalAmount),
-        Number(payment.booking.venue.commission ?? 10),
+        Number(payment.booking.venue.commission ?? 5),
       );
       return {
         id: payment.booking.id,

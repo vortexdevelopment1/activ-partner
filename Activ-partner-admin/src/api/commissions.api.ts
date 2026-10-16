@@ -3,6 +3,9 @@ import api from './axios';
 export const commissionsApi = {
   getAll: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/commissions', { params }),
+  getDefault: () => api.get('/commissions/default'),
+  updateDefault: (commissionPercentage: number) =>
+    api.patch('/commissions/default', { commissionPercentage }),
   getById: (id: string) => api.get(`/commissions/${id}`),
   create: (data: { city: string; state?: string | null; commissionPercentage: number }) =>
     api.post('/commissions', data),

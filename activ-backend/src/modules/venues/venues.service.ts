@@ -964,7 +964,7 @@ export class VenuesService {
       isActive: venue.status === "PUBLISHED",
       bookingAccept: venue.booking_accept,
       hasSeenWelcome: venue.has_seen_welcome,
-      commission: Number(venue.commission_percent ?? 10),
+      commission: Number(venue.commission_percent ?? 5),
       images: venue.partner_venue_images.map((image) => ({
         id: image.id,
         venueId: image.venue_id,

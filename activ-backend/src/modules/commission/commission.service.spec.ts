@@ -84,7 +84,33 @@ describe("location commissions", () => {
   it("uses the backend default only when no active location rule matches", async () => {
     expect(
       await service.getCommissionByCity("Pune", "Maharashtra"),
-    ).toMatchObject({ commissionPercentage: 10, isDefault: true });
+    ).toMatchObject({ commissionPercentage: 5, isDefault: true });
+  });
+
+  it("uses the editable nationwide rule when one has been saved", async () => {
+    table.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...rule, city_code: "", state_code: null, commission_bps: 650 });
+
+    expect(
+      await service.getCommissionByCity("Pune", "Maharashtra"),
+    ).toMatchObject({ commissionPercentage: 6.5, isDefault: true });
+  });
+
+  it("persists the nationwide default so admins can change it later", async () => {
+    await expect(service.updateDefaultCommission(5.5)).resolves.toEqual({
+      commissionPercentage: 5.5,
+      isPersisted: true,
+    });
+    expect(table.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        city_code: "",
+        state_code: null,
+        commission_bps: 550,
+      }),
+    });
   });
 
   it("saves state-wide rules with basis-point precision", async () => {
