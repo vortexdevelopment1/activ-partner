@@ -41,9 +41,9 @@ const questionLabel = (answer: VenueAnswer) => {
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="flex gap-3">
-      <span className="text-xs text-gray-400 w-32 shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-gray-800">{value}</span>
+    <div className="grid min-w-0 grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+      <span className="text-xs text-gray-400 pt-0.5">{label}</span>
+      <span className="min-w-0 text-sm text-gray-800 [overflow-wrap:anywhere]">{value}</span>
     </div>
   ) : null;
 
@@ -254,10 +254,10 @@ export const VenueDetail: React.FC = () => {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <button
             onClick={() => setDeleteOpen(true)}
-            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5"
+            className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
           >
             <Trash2 size={14} /> Delete Venue
           </button>
@@ -265,19 +265,19 @@ export const VenueDetail: React.FC = () => {
             <>
               <button
                 onClick={() => setChangesOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                className="min-h-10 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 sm:px-4"
               >
                 Request Changes
               </button>
               <button
                 onClick={() => setRejectOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                className="min-h-10 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
               >
                 Reject
               </button>
               <button
                 onClick={() => setApproveOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                className="min-h-10 rounded-lg bg-emerald-600 px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 sm:px-4"
               >
                 Approve
               </button>

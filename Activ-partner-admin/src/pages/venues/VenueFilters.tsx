@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { categoriesApi } from '../../api/categories.api';
 import type { Category } from '../../types';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 
 export interface VenueFilterValues {
   search: string;
@@ -27,6 +28,15 @@ export const VenueFilters: React.FC<{
     queryFn: () => categoriesApi.getAllActive(),
   });
   const categories: Category[] = data?.data?.data ?? [];
+  const categoryOptions = [
+    { value: '', label: isError ? 'Categories unavailable' : 'All categories' },
+    ...categories.map((category) => ({ value: category.id, label: category.name })),
+  ];
+  const sortOptions = [
+    { value: 'newest', label: 'Newest first' },
+    { value: 'oldest', label: 'Oldest first' },
+    { value: 'updated', label: 'Recently updated' },
+  ];
   const set = (key: keyof VenueFilterValues, next: string) => onChange({ ...value, [key]: next });
   const activeFilterCount = [value.categoryId, value.city, value.state, value.sort !== 'newest' ? value.sort : '']
     .filter(Boolean).length;
@@ -49,17 +59,12 @@ export const VenueFilters: React.FC<{
         </div>
         {mobileOpen && (
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <select aria-label="Category" className="input col-span-2" value={value.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
-              <option value="">{isError ? 'Categories unavailable' : 'All categories'}</option>
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </select>
+            <SelectMenu className="col-span-2" ariaLabel="Category" value={value.categoryId}
+              placeholder="All categories" options={categoryOptions} onChange={(next) => set('categoryId', next)} />
             <input aria-label="City" className="input min-w-0" placeholder="City" value={value.city} onChange={(e) => set('city', e.target.value)} />
             <input aria-label="State" className="input min-w-0" placeholder="State" value={value.state} onChange={(e) => set('state', e.target.value)} />
-            <select aria-label="Sort venues" className="input col-span-2" value={value.sort} onChange={(e) => set('sort', e.target.value)}>
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="updated">Recently updated</option>
-            </select>
+            <SelectMenu className="col-span-2" ariaLabel="Sort venues" value={value.sort}
+              placeholder="Sort venues" options={sortOptions} onChange={(next) => set('sort', next)} />
             <button type="button" onClick={() => { onReset(); setMobileOpen(false); }} className="btn-secondary col-span-2 flex items-center justify-center gap-2 text-sm">
               <RotateCcw size={15} /> Reset filters
             </button>
@@ -72,17 +77,12 @@ export const VenueFilters: React.FC<{
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input className="input pl-9 w-full" placeholder="Search venues..." value={value.search} onChange={(e) => set('search', e.target.value)} />
       </label>
-      <select aria-label="Category" className="input w-full min-w-0" value={value.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
-        <option value="">{isError ? 'Categories unavailable' : 'All categories'}</option>
-        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-      </select>
+      <SelectMenu ariaLabel="Category" value={value.categoryId} placeholder="All categories"
+        options={categoryOptions} onChange={(next) => set('categoryId', next)} />
       <input aria-label="City" className="input w-full min-w-0" placeholder="City" value={value.city} onChange={(e) => set('city', e.target.value)} />
       <input aria-label="State" className="input w-full min-w-0" placeholder="State" value={value.state} onChange={(e) => set('state', e.target.value)} />
-      <select aria-label="Sort venues" className="input w-full min-w-0" value={value.sort} onChange={(e) => set('sort', e.target.value)}>
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
-        <option value="updated">Recently updated</option>
-      </select>
+      <SelectMenu ariaLabel="Sort venues" value={value.sort} placeholder="Sort venues"
+        options={sortOptions} onChange={(next) => set('sort', next)} />
       <button type="button" onClick={onReset} title="Reset filters" aria-label="Reset filters" className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
         <RotateCcw size={16} />
       </button>
