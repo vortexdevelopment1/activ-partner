@@ -771,7 +771,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-white rounded-lg sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-lg shadow-[0_24px_70px_rgb(8_20_17/0.24)] ring-1 ring-black/5 w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { XCircle } from 'lucide-react';
+import { Check, ChevronDown, XCircle } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 
 const REJECTION_REASONS = [
@@ -28,6 +28,7 @@ export const RejectActivityModal: React.FC<Props> = ({
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [reasonsOpen, setReasonsOpen] = useState(false);
 
   const handleConfirm = () => {
     if (!reason) {
@@ -42,6 +43,7 @@ export const RejectActivityModal: React.FC<Props> = ({
     setReason('');
     setNotes('');
     setError('');
+    setReasonsOpen(false);
     onCancel();
   };
 
@@ -61,16 +63,41 @@ export const RejectActivityModal: React.FC<Props> = ({
 
         <div>
           <label className="label">Rejection Reason *</label>
-          <select
-            value={reason}
-            onChange={(e) => { setReason(e.target.value); setError(''); }}
-            className="input"
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={reasonsOpen}
+            onClick={() => setReasonsOpen((current) => !current)}
+            className={`input flex items-center justify-between gap-3 text-left ${reason ? 'text-gray-900' : 'text-gray-500'}`}
           >
-            <option value="">Select a reason...</option>
-            {REJECTION_REASONS.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+            <span className="min-w-0 truncate">{reason || 'Select a reason...'}</span>
+            <ChevronDown size={17} className={`shrink-0 text-gray-400 transition-transform ${reasonsOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {reasonsOpen && (
+            <div role="listbox" aria-label="Rejection reason" className="mt-1 max-h-52 overflow-y-auto overscroll-contain rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+              {REJECTION_REASONS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="option"
+                  aria-selected={reason === item}
+                  onClick={() => {
+                    setReason(item);
+                    setError('');
+                    setReasonsOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                    reason === item
+                      ? 'bg-primary-50 font-medium text-primary-800'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{item}</span>
+                  {reason === item && <Check size={16} className="shrink-0 text-primary-700" />}
+                </button>
+              ))}
+            </div>
+          )}
           {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
         </div>
 

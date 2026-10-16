@@ -88,14 +88,14 @@ export const GlobalSearch: React.FC = () => {
   };
 
   return (
-    <div className="relative" ref={containerRef}>
-      <div className="relative hidden md:block">
+    <div className="relative md:w-full md:max-w-xl xl:max-w-2xl" ref={containerRef}>
+      <div className="relative hidden md:block md:w-full">
         <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
           onFocus={() => setOpen(true)} onKeyDown={onInputKeyDown}
           aria-label="Search admin panel" aria-expanded={open} aria-controls="admin-search-results"
           placeholder="Search..."
-          className="w-56 lg:w-64 rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-4 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+          className="w-full rounded-lg border border-gray-200 bg-[#f7f9f8] py-2.5 pl-10 pr-4 text-sm shadow-[inset_0_1px_1px_rgb(20_35_31/0.02)] focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
       </div>
       <button type="button" aria-label="Search admin panel" onClick={() => { setMobileOpen(true); setOpen(true); }}
         className="rounded-lg p-2 text-gray-500 hover:bg-gray-50 md:hidden"><Search size={19} /></button>

@@ -28,7 +28,7 @@ export const Layout: React.FC = () => {
       <Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         <Header onOpenMenu={() => setMenuOpen(true)} />
-        <main className="admin-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+        <main className="admin-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-7">
           <Outlet />
         </main>
       </div>

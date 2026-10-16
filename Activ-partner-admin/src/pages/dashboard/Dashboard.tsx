@@ -93,8 +93,8 @@ export const Dashboard: React.FC = () => {
       label: 'Total Partners',
       value: totalPartners,
       icon: Briefcase,
-      color: 'bg-violet-50 text-violet-600',
-      border: 'border-violet-100',
+      color: 'bg-amber-50 text-amber-700',
+      border: 'border-amber-100',
     },
     {
       label: 'Total Users',
@@ -122,7 +122,7 @@ export const Dashboard: React.FC = () => {
         {statCards.map((card) => (
           <div
             key={card.label}
-            className={`bg-white rounded-xl border ${card.border} p-4`}
+            className={`metric-card bg-white rounded-lg border ${card.border} p-4`}
           >
             <div
               className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center mb-3`}
@@ -136,7 +136,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Venues table */}
-      <div className="bg-white rounded-xl border border-gray-100">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-[0_1px_3px_rgb(20_35_31/0.05)] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <div className="flex items-center gap-2">
