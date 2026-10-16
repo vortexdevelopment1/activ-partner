@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, DataSource } from 'typeorm';
 import { Partner } from './entities/partner.entity';
@@ -26,7 +27,7 @@ import { AdminNotificationsService } from '../admin-notifications/admin-notifica
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 import { PrismaService } from '../../prisma/prisma.service';
 import { deletePartnerAccount } from './delete-partner-account';
-import { PartnerStatus } from '../../generated/prisma/client';
+import { PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
 
 @Injectable()
 export class PartnersService {
@@ -52,19 +53,127 @@ export class PartnersService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async create(createPartnerDto: CreatePartnerDto): Promise<Partner> {
-    if (createPartnerDto.email) {
-      const existing = await this.partnerRepository.findOne({
-        where: { email: createPartnerDto.email },
-      });
-
-      if (existing) {
-        throw new ConflictException('A partner with this email already exists');
-      }
+  async create(createPartnerDto: CreatePartnerDto): Promise<any> {
+    if (!createPartnerDto.phone?.trim()) {
+      throw new BadRequestException('Partner phone number is required');
     }
 
-    const partner = this.partnerRepository.create(createPartnerDto);
-    return this.partnerRepository.save(partner);
+    const phone = this.normalizePhone(createPartnerDto.phone);
+    const email = createPartnerDto.email?.trim().toLowerCase() || null;
+    const fullName = [createPartnerDto.firstName, createPartnerDto.lastName]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join(' ');
+    const legalName = createPartnerDto.businessName?.trim() || fullName || 'Partner User';
+    const now = new Date();
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const userWithPhone = await tx.users.findUnique({ where: { phone_e164: phone } });
+        const userWithEmail = email
+          ? await tx.users.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
+          : null;
+
+        if (userWithEmail && userWithEmail.id !== userWithPhone?.id) {
+          throw new ConflictException('A user with this email already exists');
+        }
+
+        if (userWithPhone) {
+          const existingPartner = await tx.partner_users.findFirst({
+            where: { user_id: userWithPhone.id },
+          });
+          if (existingPartner) {
+            throw new ConflictException('A partner with this phone number already exists');
+          }
+        }
+
+        const user = userWithPhone
+          ? await tx.users.update({
+              where: { id: userWithPhone.id },
+              data: {
+                name: fullName || userWithPhone.name,
+                email: email || userWithPhone.email,
+                status: UserStatus.ACTIVE,
+                updated_at: now,
+              },
+            })
+          : await tx.users.create({
+              data: {
+                id: randomUUID(),
+                phone_e164: phone,
+                name: fullName || null,
+                email,
+                status: UserStatus.ACTIVE,
+                updated_at: now,
+              },
+            });
+
+        const partnerId = randomUUID();
+        const partner = await tx.partners.create({
+          data: {
+            id: partnerId,
+            legal_name: legalName,
+            status: PartnerStatus.PENDING,
+            updated_at: now,
+          },
+        });
+        await tx.partner_users.create({
+          data: {
+            id: randomUUID(),
+            partner_id: partnerId,
+            user_id: user.id,
+            role: PartnerRole.PARTNER_ADMIN,
+          },
+        });
+        await tx.partner_business_profiles.create({
+          data: {
+            id: randomUUID(),
+            partner_id: partnerId,
+            business_name: createPartnerDto.businessName?.trim() || null,
+            owner_name: fullName || null,
+            phone_e164: phone,
+            email,
+            pan_number: createPartnerDto.panNumber?.trim() || null,
+            gst_number: createPartnerDto.gstNumber?.trim() || null,
+            address_line_1: createPartnerDto.businessAddress?.trim() || null,
+            city: createPartnerDto.city?.trim() || null,
+            state: createPartnerDto.state?.trim() || null,
+            postal_code: createPartnerDto.zipCode?.trim() || null,
+            updated_at: now,
+          },
+        });
+
+        return {
+          id: partner.id,
+          userId: user.id,
+          firstName: createPartnerDto.firstName?.trim() || null,
+          lastName: createPartnerDto.lastName?.trim() || null,
+          email: user.email,
+          phone: user.phone_e164,
+          businessName: createPartnerDto.businessName?.trim() || partner.legal_name,
+          status: partner.status.toLowerCase(),
+          isActive: partner.status === PartnerStatus.ACTIVE,
+          createdAt: partner.created_at,
+          updatedAt: partner.updated_at,
+        };
+      });
+    } catch (error: any) {
+      if (error instanceof ConflictException || error instanceof BadRequestException) throw error;
+      if (error?.code === 'P2002') {
+        throw new ConflictException('A partner with this phone number or email already exists');
+      }
+      throw error;
+    }
+  }
+
+  private normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+    if (digits.length < 10 || digits.length > 15) {
+      throw new BadRequestException('Enter a valid phone number');
+    }
+    return `+${digits}`;
   }
 
   async findAll(pagination: PaginationDto) {
