@@ -46,6 +46,8 @@ export const LogsList: React.FC = () => {
   });
   const logs: ActivityLog[] = data?.data?.data?.items ?? [];
   const total: number = data?.data?.data?.total ?? 0;
+  const isVenueTarget = (log: ActivityLog) => log.resource === 'venues' && Boolean(log.targetId);
+  const openVenue = (targetId: string) => navigate(`/venues/${encodeURIComponent(targetId)}`);
 
   return (
     <div className="space-y-5">
@@ -112,7 +114,7 @@ export const LogsList: React.FC = () => {
                   <ScrollText size={28} className="mx-auto mb-2 text-gray-300" />No activity found
                 </td></tr>
                 : logs.map((log) => {
-                  const canOpenVenue = log.resource === 'venues' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(log.targetId);
+                  const canOpenVenue = isVenueTarget(log);
                   return <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap" title={new Date(log.createdAt).toLocaleString('en-IN')}>
                       {new Date(log.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -127,7 +129,7 @@ export const LogsList: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-gray-500">
-                      {canOpenVenue ? <button type="button" onClick={() => navigate(`/venues/${log.targetId}`)}
+                      {canOpenVenue ? <button type="button" onClick={() => openVenue(log.targetId)}
                         className="inline-flex items-center gap-1 text-primary-600 hover:underline" title={log.targetId}>
                         View venue <ArrowUpRight size={13} />
                       </button> : <span title={log.targetId}>{!log.targetId ? '—' : log.targetId.length > 16 ? `${log.targetId.slice(0, 8)}...` : log.targetId}</span>}
@@ -164,7 +166,19 @@ export const LogsList: React.FC = () => {
             <dt className="text-gray-500">Actor</dt><dd className="text-gray-900 break-words">{selectedLog.actor || 'System / unknown'}</dd>
             <dt className="text-gray-500">Resource</dt><dd className="text-gray-900 capitalize">{resourceLabel(selectedLog.resource)}</dd>
             {selectedLog.details.decision && <><dt className="text-gray-500">Decision</dt><dd className="text-gray-900 capitalize">{selectedLog.details.decision}</dd></>}
-            <dt className="text-gray-500">Target ID</dt><dd className="text-gray-900 break-all">{selectedLog.targetId || 'Not available'}</dd>
+            <dt className="text-gray-500">Target</dt>
+            <dd className="text-gray-900 break-all">
+              {isVenueTarget(selectedLog) ? (
+                <button
+                  type="button"
+                  onClick={() => openVenue(selectedLog.targetId)}
+                  className="inline-flex items-center gap-1 text-primary-600 hover:underline"
+                  title={selectedLog.targetId}
+                >
+                  View venue <ArrowUpRight size={13} />
+                </button>
+              ) : selectedLog.targetId || 'Not available'}
+            </dd>
             <dt className="text-gray-500">Source</dt><dd className="text-gray-600 break-all font-mono text-xs">{selectedLog.action}</dd>
           </dl>
         </div>
