@@ -691,13 +691,22 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
       const venueId = venueRes?.data?.data?.id;
       const warnings: string[] = [];
+      const selectedCategory = categories.find(category => category.id === form.categoryIds[0]);
 
       // Upload venue images — partner-scoped endpoint; skip gracefully if admin lacks permission
       if (form.images.length > 0 && venueId) {
         try {
-          await venuesApi.uploadImages(venueId, form.images, form.name.trim());
-        } catch {
-          warnings.push('Images could not be uploaded (partner permission required).');
+          if (!selectedCategory) throw new Error('Selected activity category is unavailable.');
+          await venuesApi.uploadImages(
+            venueId,
+            form.images,
+            selectedCategory.name,
+            selectedCategory.id,
+          );
+        } catch (uploadError: any) {
+          warnings.push(
+            uploadError?.response?.data?.message || uploadError?.message || 'Venue images could not be uploaded.',
+          );
         }
       }
 
@@ -713,8 +722,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
             gstNumber: form.gstin.trim() || undefined,
             gstinDoc: form.gstinFile ?? undefined,
           });
-        } catch {
-          warnings.push('Legal documents could not be submitted (partner permission required).');
+        } catch (legalError: any) {
+          warnings.push(
+            legalError?.response?.data?.message || legalError?.message || 'Legal documents could not be submitted.',
+          );
         }
       }
 
