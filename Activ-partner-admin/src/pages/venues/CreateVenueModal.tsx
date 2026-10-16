@@ -34,6 +34,14 @@ const STEPS = [
   'Images',
 ];
 
+const AADHAAR_NAME_PATTERN = /^(?=.{2,100}$)(?=(?:.*[A-Za-z]){2})[A-Za-z][A-Za-z .'-]*$/;
+const AADHAAR_NUMBER_PATTERN = /^[2-9]\d{11}$/;
+const PAN_NUMBER_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const LEGAL_DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const LEGAL_DOCUMENT_EXTENSIONS = /\.(pdf|jpe?g|png)$/i;
+const MAX_LEGAL_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type QuestionType = 'TEXT' | 'TEXTAREA' | 'NUMBER' | 'SELECT' | 'RADIO' | 'MULTISELECT' | 'CHECKBOX' | 'DATE';
@@ -470,6 +478,14 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
   const updateLegalFile = (field: 'aadhaarFile' | 'panFile' | 'gstinFile', files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
+    if (!LEGAL_DOCUMENT_TYPES.has(file.type) || !LEGAL_DOCUMENT_EXTENSIONS.test(file.name)) {
+      error('Upload a PDF, JPG, JPEG, or PNG document.');
+      return;
+    }
+    if (file.size > MAX_LEGAL_DOCUMENT_SIZE) {
+      error('Document size must be 5 MB or less.');
+      return;
+    }
     setForm(prev => ({ ...prev, [field]: file }));
   };
 
@@ -616,12 +632,14 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
       });
     }
     if (step === 5) {
+      const gstin = form.gstin.trim();
       return (
-        !!form.fullName.trim() &&
-        /^\d{12}$/.test(form.aadhaarNumber) &&
+        AADHAAR_NAME_PATTERN.test(form.fullName.trim()) &&
+        AADHAAR_NUMBER_PATTERN.test(form.aadhaarNumber) &&
         !!form.aadhaarFile &&
-        /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.panNumber) &&
-        !!form.panFile
+        PAN_NUMBER_PATTERN.test(form.panNumber) &&
+        !!form.panFile &&
+        (!gstin || (GSTIN_PATTERN.test(gstin) && !!form.gstinFile))
       );
     }
     return true;
@@ -1185,8 +1203,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
           {/* ── Step 6: Legal Information ── */}
           {step === 5 && (() => {
-            const aadhaarValid = /^\d{12}$/.test(form.aadhaarNumber);
-            const panValid = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.panNumber);
+            const fullNameValid = AADHAAR_NAME_PATTERN.test(form.fullName.trim());
+            const aadhaarValid = AADHAAR_NUMBER_PATTERN.test(form.aadhaarNumber);
+            const panValid = PAN_NUMBER_PATTERN.test(form.panNumber);
+            const gstinValid = !form.gstin.trim() || GSTIN_PATTERN.test(form.gstin.trim());
             const s = step4Submitted;
             return (
               <>
@@ -1198,10 +1218,16 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                   <div>
                     <Label required>Full Name As Per Aadhaar</Label>
                     <input
-                      className={`input ${s && !form.fullName.trim() ? 'border-red-400 focus:ring-red-300' : ''}`}
+                      className={`input ${s && !fullNameValid ? 'border-red-400 focus:ring-red-300' : ''}`}
                       placeholder="Enter Full Name" value={form.fullName}
-                      onChange={e => set('fullName', e.target.value)} />
-                    {s && !form.fullName.trim() && <p className="text-xs text-red-500 mt-1">Full name is required</p>}
+                      maxLength={100}
+                      autoComplete="name"
+                      onChange={e => set('fullName', e.target.value.replace(/[^A-Za-z .'-]/g, ''))} />
+                    {s && !fullNameValid && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Enter the name shown on Aadhaar (2-100 letters; spaces, periods, apostrophes and hyphens are allowed)
+                      </p>
+                    )}
                   </div>
 
                   {/* Aadhaar */}
@@ -1212,9 +1238,11 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                         className={`input ${s && !aadhaarValid ? 'border-red-400 focus:ring-red-300' : ''}`}
                         placeholder="Enter 12-digit Aadhaar Number"
                         maxLength={12}
+                        inputMode="numeric"
+                        autoComplete="off"
                         value={form.aadhaarNumber}
                         onChange={e => set('aadhaarNumber', e.target.value.replace(/\D/g, '').slice(0, 12))} />
-                      {s && !aadhaarValid && <p className="text-xs text-red-500 mt-1">Enter a valid 12-digit Aadhaar number</p>}
+                      {s && !aadhaarValid && <p className="text-xs text-red-500 mt-1">Enter a valid 12-digit Aadhaar number beginning with 2-9</p>}
                     </div>
                     <FileUploadZone field="aadhaarFile" file={form.aadhaarFile} label="Upload your Aadhaar Card" required showError={s} onChange={updateLegalFile} />
                   </div>
@@ -1228,7 +1256,8 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                         placeholder="ABCDE1234F"
                         maxLength={10}
                         value={form.panNumber}
-                        onChange={e => set('panNumber', e.target.value.toUpperCase().slice(0, 10))} />
+                        autoComplete="off"
+                        onChange={e => set('panNumber', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))} />
                       {s && !panValid
                         ? <p className="text-xs text-red-500 mt-1">PAN must be in format ABCDE1234F (5 letters, 4 digits, 1 letter)</p>
                         : <p className="text-xs text-gray-400 mt-1">Format: ABCDE1234F</p>
@@ -1242,10 +1271,17 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                     <div>
                       <label className="label">GSTIN <span className="text-gray-400 font-normal">(Optional)</span></label>
                       <p className="text-xs text-gray-400 mb-1">Should be linked to the Aadhaar provided above</p>
-                      <input className="input" placeholder="Enter GSTIN Number" value={form.gstin}
-                        onChange={e => set('gstin', e.target.value.toUpperCase())} />
+                      <input
+                        className={`input uppercase ${s && !gstinValid ? 'border-red-400 focus:ring-red-300' : ''}`}
+                        placeholder="22ABCDE1234F1Z5"
+                        maxLength={15}
+                        value={form.gstin}
+                        onChange={e => set('gstin', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15))}
+                      />
+                      {s && !gstinValid && <p className="text-xs text-red-500 mt-1">Enter a valid 15-character GSTIN</p>}
+                      {s && form.gstin.trim() && !form.gstinFile && <p className="text-xs text-red-500 mt-1">Upload the GSTIN document</p>}
                     </div>
-                    {form.gstin.trim() && <FileUploadZone field="gstinFile" file={form.gstinFile} label="Upload your GSTIN Document" required={false} showError={s} onChange={updateLegalFile} />}
+                    {form.gstin.trim() && <FileUploadZone field="gstinFile" file={form.gstinFile} label="Upload your GSTIN Document" required showError={s} onChange={updateLegalFile} />}
                   </div>
                 </div>
               </>
