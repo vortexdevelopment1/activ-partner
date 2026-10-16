@@ -15,6 +15,7 @@ export class AdminNotificationsService {
     type: string;
     title: string;
     body: string;
+    data: unknown;
     read_at: Date | null;
     created_at: Date;
   }): AdminNotification {
@@ -23,7 +24,9 @@ export class AdminNotificationsService {
       type: notification.type as AdminNotificationType,
       title: notification.title,
       body: notification.body,
-      data: null,
+      data: notification.data && typeof notification.data === 'object' && !Array.isArray(notification.data)
+        ? notification.data as Record<string, any>
+        : null,
       isRead: notification.read_at !== null,
       createdAt: notification.created_at,
     };
@@ -52,6 +55,7 @@ export class AdminNotificationsService {
           type,
           title,
           body,
+          data: data ?? undefined,
           status: 'SENT' as const,
           sent_at: now,
         })),

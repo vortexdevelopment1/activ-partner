@@ -65,6 +65,7 @@ model notifications {
   type       String
   title      String
   body       String
+  data       Json?
   status     NotificationStatus @default(PENDING)
   created_at DateTime           @default(now())
   sent_at    DateTime?
