@@ -89,6 +89,7 @@ export const CommissionsList: React.FC = () => {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -166,6 +167,7 @@ export const CommissionsList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

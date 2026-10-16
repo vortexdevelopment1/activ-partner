@@ -15,9 +15,9 @@ export const Pagination: React.FC<PaginationProps> = ({ page, totalPages: totalP
   const to = Math.min(page * limit, total);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-gray-100">
       <p className="text-sm text-gray-500">
-        Showing <span className="font-medium">{from}</span> to <span className="font-medium">{to}</span> of{' '}
+        Showing <span className="font-medium">{total ? from : 0}</span> to <span className="font-medium">{to}</span> of{' '}
         <span className="font-medium">{total}</span> results
       </p>
       <div className="flex items-center gap-1">
@@ -34,7 +34,7 @@ export const Pagination: React.FC<PaginationProps> = ({ page, totalPages: totalP
             <button
               key={pageNum}
               onClick={() => onPageChange(pageNum)}
-              className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+              className={`hidden sm:block w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                 page === pageNum ? 'bg-primary-600 text-white' : 'hover:bg-gray-100 text-gray-600'
               }`}
             >

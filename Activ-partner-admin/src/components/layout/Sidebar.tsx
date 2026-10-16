@@ -39,7 +39,7 @@ const navItems = [
   { to: '/logs', icon: History, label: 'Logs' },
 ];
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = ({ mobileOpen, onClose }) => {
   const { logout } = useAuthStore();
   const navigate = useNavigate();
 
@@ -49,7 +49,7 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
+    <aside id="admin-navigation" className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] bg-white border-r border-gray-100 flex flex-col transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       {/* Logo */}
       <div className="px-6 py-5 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
@@ -67,6 +67,7 @@ export const Sidebar: React.FC = () => {
           <NavLink
             key={to}
             to={to}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive

@@ -121,11 +121,11 @@ export const QuestionsList: React.FC = () => {
             Questions shown to partners during venue creation
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <select
             value={filterCat}
             onChange={(e) => setFilterCat(e.target.value)}
-            className="input w-48"
+            className="input w-full sm:w-48"
           >
             <option value="">All categories</option>
             <option value="global">Global only</option>
@@ -151,7 +151,7 @@ export const QuestionsList: React.FC = () => {
         ) : questions.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No questions found.</div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="w-8 px-4 py-3" />
@@ -234,7 +234,7 @@ export const QuestionsList: React.FC = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 

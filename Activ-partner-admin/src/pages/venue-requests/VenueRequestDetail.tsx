@@ -202,7 +202,7 @@ export const VenueRequestDetail: React.FC = () => {
         {changedFields.length === 0 ? (
           <p className="px-5 py-6 text-sm text-gray-400">No change data available.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide w-44">
@@ -237,7 +237,7 @@ export const VenueRequestDetail: React.FC = () => {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 

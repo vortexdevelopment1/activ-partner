@@ -54,6 +54,7 @@ export const NotificationsDropdown: React.FC = () => {
   return (
     <div className="relative" ref={containerRef}>
       <button
+        aria-label="Notifications"
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
       >
@@ -66,7 +67,7 @@ export const NotificationsDropdown: React.FC = () => {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
+        <div className="fixed top-16 inset-x-3 sm:absolute sm:top-auto sm:inset-x-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h4 className="text-sm font-semibold text-gray-900">Notifications</h4>
             {unreadCount > 0 && (
@@ -80,7 +81,7 @@ export const NotificationsDropdown: React.FC = () => {
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[calc(100dvh-8rem)] sm:max-h-96 overflow-y-auto">
             {isLoading ? (
               <p className="text-center text-sm text-gray-400 py-10">Loading...</p>
             ) : notifications.length === 0 ? (

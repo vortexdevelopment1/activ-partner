@@ -127,7 +127,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
         </div>
 
         {/* Icon + Order row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Icon (emoji or name)</label>
             <input

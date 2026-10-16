@@ -58,11 +58,11 @@ export const UsersList: React.FC = () => {
             Manage all registered users
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <select
             value={roleFilter}
             onChange={(e) => { setRoleFilter(e.target.value as RoleFilter); setPage(1); }}
-            className="input w-36"
+            className="input w-full sm:w-36"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>
@@ -70,7 +70,7 @@ export const UsersList: React.FC = () => {
               </option>
             ))}
           </select>
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -80,13 +80,14 @@ export const UsersList: React.FC = () => {
               placeholder="Search users..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="input pl-9 w-52"
+              className="input pl-9 w-full sm:w-52"
             />
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -179,6 +180,7 @@ export const UsersList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

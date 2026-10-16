@@ -1,18 +1,20 @@
 import React from 'react';
-import { Search } from 'lucide-react';
+import { Search, Menu } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 import { NotificationsDropdown } from './NotificationsDropdown';
 
 interface HeaderProps {
   title?: string;
+  onOpenMenu: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title }) => {
+export const Header: React.FC<HeaderProps> = ({ title, onOpenMenu }) => {
   const { user } = useAuthStore();
 
   return (
-    <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-10">
+    <header className="h-16 shrink-0 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10">
       <div className="flex items-center gap-4">
+        <button type="button" onClick={onOpenMenu} aria-label="Open navigation" aria-controls="admin-navigation" className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100"><Menu size={22} /></button>
         {title && (
           <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
         )}

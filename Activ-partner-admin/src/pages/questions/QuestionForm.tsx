@@ -114,7 +114,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
         </div>
 
         {/* Type + Category */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Question Type *</label>
             <select className="input" {...register('questionType', { required: true })}>
@@ -139,7 +139,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
         </div>
 
         {/* Placeholder + Helper */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Placeholder</label>
             <input className="input" placeholder="Input placeholder" {...register('placeholder')} />
@@ -152,7 +152,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
 
         {/* Length limits (for text / textarea / number) */}
         {hasLengthLimit && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Min Length / Value</label>
               <input
