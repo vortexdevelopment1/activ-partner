@@ -32,6 +32,7 @@ import { AdminNotificationsModule } from './modules/admin-notifications/admin-no
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AdminSearchModule } from './modules/admin-search/admin-search.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -83,6 +84,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     ReviewsModule,
     AmenitiesModule,
     AuditLogsModule,
+    AdminSearchModule,
   ],
   providers: [
     {

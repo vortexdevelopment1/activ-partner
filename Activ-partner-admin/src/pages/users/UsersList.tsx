@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { usersApi } from '../../api/users.api';
@@ -10,9 +11,13 @@ const ROLES = ['All', 'user', 'partner', 'admin'] as const;
 type RoleFilter = (typeof ROLES)[number];
 
 export const UsersList: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
+
+  useEffect(() => { setSearch(searchFromUrl); setPage(1); }, [searchFromUrl]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All');
   const [page, setPage] = useState(1);
   const limit = 20;

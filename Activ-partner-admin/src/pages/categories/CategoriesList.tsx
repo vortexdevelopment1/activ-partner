@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Search } from 'lucide-react';
 import { categoriesApi } from '../../api/categories.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
 import { CategoryForm } from './CategoryForm';
@@ -17,6 +18,8 @@ const CATEGORY_TYPE_LABELS: Record<CategoryType, string> = {
 };
 
 export const CategoriesList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
 
@@ -25,8 +28,8 @@ export const CategoriesList: React.FC = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => categoriesApi.getAll({ limit: 100 }),
+    queryKey: ['categories', search],
+    queryFn: () => categoriesApi.getAll({ limit: 100, search: search || undefined }),
   });
 
   const categories: Category[] = data?.data?.data?.items ?? [];
@@ -68,9 +71,9 @@ export const CategoriesList: React.FC = () => {
     mutationFn: ({ id }: { id: string; isActive: boolean }) => categoriesApi.toggleStatus(id),
     onMutate: async ({ id, isActive }) => {
       await queryClient.cancelQueries({ queryKey: ['categories'] });
-      const previous = queryClient.getQueryData(['categories']);
+      const previous = queryClient.getQueryData(['categories', search]);
 
-      queryClient.setQueryData(['categories'], (current: any) => {
+      queryClient.setQueryData(['categories', search], (current: any) => {
         const items = current?.data?.data?.items;
         if (!Array.isArray(items)) return current;
         return {
@@ -93,7 +96,7 @@ export const CategoriesList: React.FC = () => {
       success(`Category ${context?.nextActive ? 'enabled' : 'disabled'} successfully`);
     },
     onError: (err: any, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['categories'], context.previous);
+      if (context?.previous) queryClient.setQueryData(['categories', search], context.previous);
       error(err?.response?.data?.message ?? 'Failed to update category status');
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['categories'] }),
@@ -143,6 +146,13 @@ export const CategoriesList: React.FC = () => {
           <Plus size={16} /> Add Category
         </button>
       </div>
+
+      <label className="relative block max-w-sm">
+        <span className="sr-only">Search categories</span>
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input className="input pl-9" value={search} placeholder="Search categories..."
+          onChange={(event) => setSearchParams(event.target.value ? { search: event.target.value } : {}, { replace: true })} />
+      </label>
 
       {/* Grid */}
       {isLoading ? (

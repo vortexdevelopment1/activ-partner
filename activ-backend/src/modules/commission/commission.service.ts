@@ -75,15 +75,22 @@ export class CommissionService {
   async findAll(
     pagination: PaginationDto,
   ): Promise<[CityCommission[], number]> {
+    const where = {
+      partner_id: null,
+      ...(pagination.search ? { OR: [
+        { city_code: { contains: pagination.search, mode: 'insensitive' as const } },
+        { state_code: { contains: pagination.search, mode: 'insensitive' as const } },
+      ] } : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.partner_city_commissions.findMany({
-        where: { partner_id: null },
+        where,
         skip: pagination.skip,
         take: pagination.limit,
         orderBy: { city_code: "asc" },
       }),
       this.prisma.partner_city_commissions.count({
-        where: { partner_id: null },
+        where,
       }),
     ]);
     return [items.map((item) => this.mapCommission(item)), total];

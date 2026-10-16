@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 
-const navItems = [
+export const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/categories', icon: Tag, label: 'Categories' },
   { to: '/questions', icon: HelpCircle, label: 'Questions' },

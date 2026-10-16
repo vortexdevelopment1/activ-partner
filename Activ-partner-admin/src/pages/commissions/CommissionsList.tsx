@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Percent } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, Search } from 'lucide-react';
 import { commissionsApi } from '../../api/commissions.api';
 import { CommissionForm } from './CommissionForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -9,6 +10,8 @@ import { useToast } from '../../hooks/useToast';
 import type { Commission } from '../../types';
 
 export const CommissionsList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [page, setPage] = useState(1);
@@ -19,8 +22,8 @@ export const CommissionsList: React.FC = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['commissions', page],
-    queryFn: () => commissionsApi.getAll({ page, limit }),
+    queryKey: ['commissions', page, search],
+    queryFn: () => commissionsApi.getAll({ page, limit, search: search || undefined }),
   });
 
   const commissions: Commission[] = data?.data?.data?.items ?? [];
@@ -86,6 +89,13 @@ export const CommissionsList: React.FC = () => {
           <Plus size={16} /> Add Commission
         </button>
       </div>
+
+      <label className="relative block max-w-sm">
+        <span className="sr-only">Search commissions</span>
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input className="input pl-9" value={search} placeholder="Search city or state..."
+          onChange={(event) => { setPage(1); setSearchParams(event.target.value ? { search: event.target.value } : {}, { replace: true }); }} />
+      </label>
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
