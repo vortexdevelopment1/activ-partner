@@ -12,36 +12,42 @@ export enum GstVerificationStatus {
   REJECTED = 'rejected',
 }
 
-@Entity('gst_verification_requests')
+@Entity('partner_gst_verification_requests')
 export class GstVerificationRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ name: 'partner_id', type: 'uuid' })
   partnerId: string;
 
-  @Column()
+  @Column({ name: 'gst_number', type: 'text' })
   gstNumber: string;
 
-  @Column()
+  @Column({ name: 'legal_name', type: 'text', nullable: true })
   gstName: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'document_url', type: 'text', nullable: true })
   gstDocUrl: string;
 
   @Column({
     type: 'enum',
-    enum: GstVerificationStatus,
-    default: GstVerificationStatus.PENDING,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    enumName: 'PartnerKycStatus',
+    default: 'PENDING',
+    // Keep the public API lowercase while using the shared database enum.
+    transformer: {
+      to: (value: GstVerificationStatus | null | undefined) => value?.toUpperCase() ?? value,
+      from: (value: string | null) => value?.toLowerCase() ?? value,
+    },
   })
   status: GstVerificationStatus;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   adminNotes: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

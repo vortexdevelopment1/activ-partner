@@ -472,7 +472,7 @@ export class PartnersService {
       .orderBy('gst.createdAt', 'DESC');
 
     if (status) {
-      qb.andWhere('gst.status = :status', { status });
+      qb.andWhere({ status });
     }
 
     if (pagination.search) {
