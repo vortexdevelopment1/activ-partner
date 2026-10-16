@@ -8,6 +8,30 @@ import { actionLabel, localDateBoundary, resourceLabel } from './logPresentation
 
 const limit = 25;
 
+const targetLink = (log: ActivityLog): { label: string; path: string } | null => {
+  if (!log.targetId) return null;
+  const id = encodeURIComponent(log.targetId);
+  const exactRoutes: Record<string, { label: string; path: string }> = {
+    venues: { label: 'View venue', path: `/venues/${id}` },
+    support: { label: 'View request', path: `/support/callback/${id}` },
+    'bank-accounts': { label: 'View bank account', path: `/bank-accounts/${id}` },
+    'gst-verification': { label: 'View GST request', path: `/gst-verification/${id}` },
+    'venue-requests': { label: 'View venue request', path: `/venue-requests/${id}` },
+  };
+  if (exactRoutes[log.resource]) return exactRoutes[log.resource];
+
+  const sectionRoutes: Record<string, { label: string; path: string }> = {
+    categories: { label: 'View categories', path: '/categories' },
+    questions: { label: 'View questions', path: '/questions' },
+    users: { label: 'View users', path: '/users' },
+    partners: { label: 'View partners', path: '/partners' },
+    commission: { label: 'View commissions', path: '/commissions' },
+    faqs: { label: 'View FAQs', path: '/faqs' },
+    legal: { label: 'View legal', path: '/legal' },
+  };
+  return sectionRoutes[log.resource] ?? null;
+};
+
 export const LogsList: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -46,8 +70,6 @@ export const LogsList: React.FC = () => {
   });
   const logs: ActivityLog[] = data?.data?.data?.items ?? [];
   const total: number = data?.data?.data?.total ?? 0;
-  const isVenueTarget = (log: ActivityLog) => log.resource === 'venues' && Boolean(log.targetId);
-  const openVenue = (targetId: string) => navigate(`/venues/${encodeURIComponent(targetId)}`);
 
   return (
     <div className="space-y-5">
@@ -114,7 +136,7 @@ export const LogsList: React.FC = () => {
                   <ScrollText size={28} className="mx-auto mb-2 text-gray-300" />No activity found
                 </td></tr>
                 : logs.map((log) => {
-                  const canOpenVenue = isVenueTarget(log);
+                  const target = targetLink(log);
                   return <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap" title={new Date(log.createdAt).toLocaleString('en-IN')}>
                       {new Date(log.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -129,9 +151,9 @@ export const LogsList: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-gray-500">
-                      {canOpenVenue ? <button type="button" onClick={() => openVenue(log.targetId)}
+                      {target ? <button type="button" onClick={() => navigate(target.path)}
                         className="inline-flex items-center gap-1 text-primary-600 hover:underline" title={log.targetId}>
-                        View venue <ArrowUpRight size={13} />
+                        {target.label} <ArrowUpRight size={13} />
                       </button> : <span title={log.targetId}>{!log.targetId ? '—' : log.targetId.length > 16 ? `${log.targetId.slice(0, 8)}...` : log.targetId}</span>}
                     </td>
                     <td className="px-5 py-3.5">
@@ -168,14 +190,14 @@ export const LogsList: React.FC = () => {
             {selectedLog.details.decision && <><dt className="text-gray-500">Decision</dt><dd className="text-gray-900 capitalize">{selectedLog.details.decision}</dd></>}
             <dt className="text-gray-500">Target</dt>
             <dd className="text-gray-900 break-all">
-              {isVenueTarget(selectedLog) ? (
+              {targetLink(selectedLog) ? (
                 <button
                   type="button"
-                  onClick={() => openVenue(selectedLog.targetId)}
+                  onClick={() => navigate(targetLink(selectedLog)!.path)}
                   className="inline-flex items-center gap-1 text-primary-600 hover:underline"
                   title={selectedLog.targetId}
                 >
-                  View venue <ArrowUpRight size={13} />
+                  {targetLink(selectedLog)!.label} <ArrowUpRight size={13} />
                 </button>
               ) : selectedLog.targetId || 'Not available'}
             </dd>
