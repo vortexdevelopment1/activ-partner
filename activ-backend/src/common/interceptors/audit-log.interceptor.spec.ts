@@ -48,6 +48,29 @@ describe('AuditLogInterceptor', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('records a server error on an authenticated read', async () => {
+    const request = { method: 'GET', route: { path: '/api/v1/venues/admin/:id' },
+      user: { id: 'admin-id', role: 'admin' }, params: { id: 'venue-id' } };
+    await new Promise<void>((resolve) => interceptor.intercept(context(request), {
+      handle: () => throwError(() => new Error('database failed')),
+    }).subscribe({ error: () => resolve() }));
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      action: 'GET /api/v1/venues/admin/:id', entity_id: 'venue-id',
+      after_json: { outcome: 'failed', statusCode: 500 },
+    }) });
+  });
+
+  it('records only an allowed review decision, never the review body', async () => {
+    const request = { method: 'PATCH', route: { path: '/api/v1/venues/admin/:id/approval' },
+      user: { id: 'admin-id', role: 'admin' }, params: { id: 'venue-id' },
+      body: { status: 'APPROVED', reason: 'private text' } };
+    await new Promise<void>((resolve) => interceptor.intercept(context(request), { handle: () => of(null) }).subscribe({ complete: resolve }));
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      after_json: { outcome: 'success', statusCode: 201, decision: 'approved' },
+    }) });
+    expect(JSON.stringify(create.mock.calls[0][0])).not.toContain('private text');
+  });
+
   it('does not break the action when logging fails', async () => {
     create.mockRejectedValueOnce(new Error('database unavailable'));
     const request = { method: 'POST', route: { path: '/api/v1/venues' }, user: { id: 'admin-id' }, params: {} };

@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { AuditLogsService } from './audit-logs.service';
@@ -21,6 +21,12 @@ class AuditLogsQueryDto {
 
   @IsOptional() @IsIn(['success', 'failed'])
   outcome?: 'success' | 'failed';
+
+  @IsOptional() @IsDateString()
+  from?: string;
+
+  @IsOptional() @IsDateString()
+  to?: string;
 }
 
 @ApiTags('Audit Logs')
@@ -29,6 +35,12 @@ class AuditLogsQueryDto {
 @Controller('admin/logs')
 export class AuditLogsController {
   constructor(private readonly service: AuditLogsService) {}
+
+  @Get('resources')
+  @ApiOperation({ summary: 'List recorded activity resources (Admin only)' })
+  async resources() {
+    return { message: 'Log resources fetched successfully', data: await this.service.resources() };
+  }
 
   @Get()
   @ApiOperation({ summary: 'List activity logs (Admin only)' })

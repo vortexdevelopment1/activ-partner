@@ -38,7 +38,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (settings.isActive === false || staff.partner_users.users.status !== 'ACTIVE' || staff.partner_users.partners.status === 'SUSPENDED') {
         throw new UnauthorizedException('Account has been deactivated');
       }
-      return { id: staff.id, partnerId: staff.partner_users.partner_id, role: 'team_member',
+      return { id: staff.id, userId: staff.partner_users.user_id,
+        partnerId: staff.partner_users.partner_id, role: 'team_member',
         permissions: { bookingManagement: settings.bookingManagement === true,
           pricingControl: settings.pricingControl === true, analyticsView: settings.analyticsView === true } };
     }

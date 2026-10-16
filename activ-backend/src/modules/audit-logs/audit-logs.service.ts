@@ -7,26 +7,42 @@ export interface AuditLogFilters {
   search?: string;
   resource?: string;
   outcome?: 'success' | 'failed';
+  from?: string;
+  to?: string;
 }
 
 @Injectable()
 export class AuditLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async resources(): Promise<string[]> {
+    const records = await this.prisma.audit_events.groupBy({ by: ['entity_type'] });
+    return records.map((record) => record.entity_type).sort();
+  }
+
   async findAll(filters: AuditLogFilters) {
     const where: any = {};
     if (filters.resource) where.entity_type = filters.resource;
     if (filters.outcome) {
-      where.after_json = { path: ['outcome'], equals: filters.outcome };
+      where.OR = filters.outcome === 'success'
+        ? [{ after_json: { path: ['outcome'], equals: 'success' } }, { action: 'legal_content.published' }]
+        : [{ after_json: { path: ['outcome'], equals: 'failed' } }];
+    }
+    if (filters.from || filters.to) {
+      where.created_at = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lt: new Date(filters.to) } : {}),
+      };
     }
     if (filters.search) {
-      where.OR = [
+      where.AND = [{ OR: [
         { action: { contains: filters.search, mode: 'insensitive' } },
         { entity_type: { contains: filters.search, mode: 'insensitive' } },
         { entity_id: { contains: filters.search, mode: 'insensitive' } },
         { users: { is: { name: { contains: filters.search, mode: 'insensitive' } } } },
         { users: { is: { email: { contains: filters.search, mode: 'insensitive' } } } },
-      ];
+        { users: { is: { phone_e164: { contains: filters.search } } } },
+      ] }];
     }
 
     const [records, total] = await Promise.all([
@@ -53,6 +69,7 @@ export class AuditLogsService {
           details: {
             outcome: metadata.outcome === 'failed' ? 'failed' : 'success',
             statusCode: typeof metadata.statusCode === 'number' ? metadata.statusCode : null,
+            decision: typeof metadata.decision === 'string' ? metadata.decision : null,
           },
           createdAt: record.created_at,
         };

@@ -12,15 +12,19 @@ export class AuditLogInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest();
-    if (!request || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) || !request.user) {
+    if (!request?.user) {
       return next.handle();
     }
 
     const method: string = request.method;
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     const path: string = `${request.baseUrl || ''}${request.route?.path || request.path}`;
     const segments = path.split('/').filter(Boolean).filter((part) => part !== 'api' && !/^v\d+$/.test(part));
     const resource = segments[0] === 'admin' ? segments[1] || 'admin' : segments[0] || 'system';
     const actorId = request.user.userId || (request.user.role === 'team_member' ? null : request.user.id);
+    const requestedStatus = typeof request.body?.status === 'string' ? request.body.status.toLowerCase() : '';
+    const decision = ['approved', 'rejected', 'pending', 'suspended', 'verified', 'active', 'inactive']
+      .includes(requestedStatus) ? requestedStatus : undefined;
     const write = (outcome: 'success' | 'failed', statusCode: number, result?: any) => {
       const targetId = request.params?.id || request.params?.venueId || request.params?.partnerId ||
         result?.data?.id || result?.data?.venueId || result?.id || '';
@@ -31,14 +35,17 @@ export class AuditLogInterceptor implements NestInterceptor {
           action: `${method} ${path}`,
           entity_type: resource,
           entity_id: typeof targetId === 'string' ? targetId : '',
-          after_json: { outcome, statusCode },
+          after_json: { outcome, statusCode, ...(decision ? { decision } : {}) },
         },
       }).catch((error) => this.logger.warn(`Could not record activity: ${error.message}`));
     };
 
     return next.handle().pipe(tap({
-      next: (result) => write('success', context.switchToHttp().getResponse().statusCode, result),
-      error: (error) => write('failed', typeof error.getStatus === 'function' ? error.getStatus() : 500),
+      next: (result) => { if (isMutation) write('success', context.switchToHttp().getResponse().statusCode, result); },
+      error: (error) => {
+        const status = typeof error.getStatus === 'function' ? error.getStatus() : 500;
+        if (isMutation || status >= 500) write('failed', status);
+      },
     }));
   }
 }
