@@ -9,8 +9,7 @@ import { actionLabel, localDateBoundary, resourceLabel } from './logPresentation
 const limit = 25;
 
 const targetLink = (log: ActivityLog): { label: string; path: string } | null => {
-  if (!log.targetId) return null;
-  const id = encodeURIComponent(log.targetId);
+  const id = log.targetId ? encodeURIComponent(log.targetId) : '';
   const exactRoutes: Record<string, { label: string; path: string }> = {
     venues: { label: 'View venue', path: `/venues/${id}` },
     support: { label: 'View request', path: `/support/callback/${id}` },
@@ -18,7 +17,7 @@ const targetLink = (log: ActivityLog): { label: string; path: string } | null =>
     'gst-verification': { label: 'View GST request', path: `/gst-verification/${id}` },
     'venue-requests': { label: 'View venue request', path: `/venue-requests/${id}` },
   };
-  if (exactRoutes[log.resource]) return exactRoutes[log.resource];
+  if (id && exactRoutes[log.resource]) return exactRoutes[log.resource];
 
   const sectionRoutes: Record<string, { label: string; path: string }> = {
     categories: { label: 'View categories', path: '/categories' },
@@ -184,7 +183,12 @@ export const LogsList: React.FC = () => {
               className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"><X size={18} /></button>
           </div>
           <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm border-t border-gray-100 pt-4">
-            <dt className="text-gray-500">Result</dt><dd className="text-gray-900">{selectedLog.details.outcome === 'failed' ? 'Failed' : 'Success'}{selectedLog.details.statusCode ? ` (HTTP ${selectedLog.details.statusCode})` : ''}</dd>
+            <dt className="text-gray-500">Result</dt>
+            <dd className="text-gray-900">
+              {selectedLog.details.outcome === 'failed'
+                ? `Failed${selectedLog.details.statusCode ? ` (error ${selectedLog.details.statusCode})` : ''}`
+                : 'Success'}
+            </dd>
             <dt className="text-gray-500">Actor</dt><dd className="text-gray-900 break-words">{selectedLog.actor || 'System / unknown'}</dd>
             <dt className="text-gray-500">Resource</dt><dd className="text-gray-900 capitalize">{resourceLabel(selectedLog.resource)}</dd>
             {selectedLog.details.decision && <><dt className="text-gray-500">Decision</dt><dd className="text-gray-900 capitalize">{selectedLog.details.decision}</dd></>}
@@ -199,9 +203,8 @@ export const LogsList: React.FC = () => {
                 >
                   {targetLink(selectedLog)!.label} <ArrowUpRight size={13} />
                 </button>
-              ) : selectedLog.targetId || 'Not available'}
+              ) : selectedLog.targetId || 'General operation'}
             </dd>
-            <dt className="text-gray-500">Source</dt><dd className="text-gray-600 break-all font-mono text-xs">{selectedLog.action}</dd>
           </dl>
         </div>
       </div>}
