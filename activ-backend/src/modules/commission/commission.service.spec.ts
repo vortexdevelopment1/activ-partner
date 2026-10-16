@@ -31,6 +31,7 @@ describe("location commissions", () => {
         .mockImplementation(({ data }) =>
           Promise.resolve({ ...rule, ...data }),
         ),
+      findMany: jest.fn().mockResolvedValue([]),
     };
     service = new CommissionService({ partner_city_commissions: table } as any);
   });
@@ -145,5 +146,23 @@ describe("location commissions", () => {
     expect(
       await service.update(rule.id, { state: "", commissionPercentage: 6 }),
     ).toMatchObject({ city: "mumbai", state: null, commissionPercentage: 6 });
+  });
+
+  it("lists Indian cities with the effective nationwide rate", async () => {
+    const [cities, total] = await service.findAllIndianCities({
+      page: 1,
+      limit: 5,
+      search: "Mumbai",
+      skip: 0,
+    } as any);
+
+    expect(total).toBeGreaterThan(0);
+    expect(cities[0]).toMatchObject({
+      city: expect.stringMatching(/Mumbai/i),
+      state: "Maharashtra",
+      commissionPercentage: 5,
+      source: "default",
+      overrideId: null,
+    });
   });
 });

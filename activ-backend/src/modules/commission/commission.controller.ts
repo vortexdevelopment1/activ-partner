@@ -62,6 +62,30 @@ export class CommissionController {
     return { message: 'Default commission fetched successfully', data };
   }
 
+  @Get('cities')
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'List all Indian cities with their effective commission (Admin only)' })
+  async findAllCities(
+    @Query() pagination: PaginationDto,
+    @Query('state') state?: string,
+  ) {
+    const [items, total] = await this.commissionService.findAllIndianCities(
+      pagination,
+      state,
+    );
+    return {
+      message: 'City commissions fetched successfully',
+      data: {
+        items,
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / (pagination.limit || 10)),
+      },
+    };
+  }
+
   @Patch('default')
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)

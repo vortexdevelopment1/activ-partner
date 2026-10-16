@@ -7,7 +7,7 @@ import { CommissionForm } from './CommissionForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
-import type { Commission } from '../../types';
+import type { Commission, EffectiveCityCommission } from '../../types';
 
 export const CommissionsList: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,11 +33,11 @@ export const CommissionsList: React.FC = () => {
   }, [defaultData]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['commissions', page, search],
-    queryFn: () => commissionsApi.getAll({ page, limit, search: search || undefined }),
+    queryKey: ['commissions', 'cities', page, search],
+    queryFn: () => commissionsApi.getCities({ page, limit, search: search || undefined }),
   });
 
-  const commissions: Commission[] = data?.data?.data?.items ?? [];
+  const commissions: EffectiveCityCommission[] = data?.data?.data?.items ?? [];
   const total: number = data?.data?.data?.total ?? 0;
 
   const createMutation = useMutation({
@@ -92,7 +92,7 @@ export const CommissionsList: React.FC = () => {
   };
 
   const handleSubmit = (payload: { city: string; state: string; commissionPercentage: number }) => {
-    if (editItem) {
+    if (editItem?.id) {
       updateMutation.mutate({ id: editItem.id, payload });
     } else {
       createMutation.mutate(payload);
@@ -158,8 +158,8 @@ export const CommissionsList: React.FC = () => {
       </section>
 
       <div>
-        <h3 className="font-semibold text-gray-900">City and state overrides</h3>
-        <p className="text-sm text-gray-500 mt-0.5">More specific rules take priority over the India-wide default.</p>
+        <h3 className="font-semibold text-gray-900">All Indian cities</h3>
+        <p className="text-sm text-gray-500 mt-0.5">Edit any city to give it a rate different from its state or India-wide default.</p>
       </div>
 
       <label className="relative block max-w-sm">
@@ -175,7 +175,7 @@ export const CommissionsList: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {['City', 'State', 'Commission %', 'Created', ''].map((h) => (
+              {['City', 'State', 'Commission %', 'Rate source', ''].map((h) => (
                 <th
                   key={h}
                   className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide"
@@ -196,17 +196,17 @@ export const CommissionsList: React.FC = () => {
               <tr>
                 <td colSpan={5} className="text-center py-16">
                   <Percent size={32} className="mx-auto text-gray-200 mb-2" />
-                  <p className="text-gray-400 text-sm">No commissions yet. Add your first one!</p>
+                  <p className="text-gray-400 text-sm">No Indian cities match this search.</p>
                 </td>
               </tr>
             ) : (
               commissions.map((item) => (
-                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                <tr key={`${item.state}-${item.city}`} className="border-b border-gray-50 hover:bg-gray-50/50">
                   {/* City */}
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-gray-900">{item.city || 'All cities'}</p>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-600">{item.state || 'All states'}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{item.state}</td>
 
                   {/* Commission % */}
                   <td className="px-5 py-3.5">
@@ -216,32 +216,42 @@ export const CommissionsList: React.FC = () => {
                     </span>
                   </td>
 
-                  {/* Created */}
-                  <td className="px-5 py-3.5 text-gray-500 text-xs">
-                    {new Date(item.createdAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                  {/* Source */}
+                  <td className="px-5 py-3.5 text-xs">
+                    <span className="capitalize text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                      {item.source === 'default' ? 'India default' : `${item.source} override`}
+                    </span>
                   </td>
 
                   {/* Actions */}
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1 justify-end">
                       <button
-                        onClick={() => { setEditItem(item); setFormOpen(true); }}
+                        onClick={() => {
+                          setEditItem({
+                            id: item.overrideId ?? '',
+                            city: item.city,
+                            state: item.state,
+                            commissionPercentage: item.commissionPercentage,
+                            createdAt: '',
+                            updatedAt: '',
+                          });
+                          setFormOpen(true);
+                        }}
                         className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                         title="Edit"
                       >
                         <Pencil size={15} />
                       </button>
-                      <button
-                        onClick={() => setDeleteId(item.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {item.overrideId && (
+                        <button
+                          onClick={() => setDeleteId(item.overrideId)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove city override"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

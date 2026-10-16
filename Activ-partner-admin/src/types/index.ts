@@ -227,6 +227,14 @@ export interface Commission {
   updatedAt: string;
 }
 
+export interface EffectiveCityCommission {
+  city: string;
+  state: string;
+  commissionPercentage: number;
+  source: 'city' | 'state' | 'default';
+  overrideId: string | null;
+}
+
 export type LegalType = 'terms_and_conditions' | 'privacy_policy' | 'partner_agreement' | 'refund_policy';
 
 export interface LegalDocument {
