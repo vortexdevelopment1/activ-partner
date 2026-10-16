@@ -29,22 +29,9 @@ import { RequestChangesModal } from './RequestChangesModal';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import type { Venue, VenueAnswer } from '../../types';
+import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
-const API_URL =
-  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
-  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ||
-  '';
-
-const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
-
-const assetUrl = (src?: string | null) => {
-  const value = src?.trim();
-  if (!value) return '';
-  const resolved = /^(https?:|data:|blob:)/i.test(value)
-    ? value
-    : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
-  return resolved;
-};
+const assetUrl = resolveAssetUrl;
 
 const questionLabel = (answer: VenueAnswer) => {
   const question = typeof answer.question === 'object' ? (answer.question as any) : null;
@@ -62,20 +49,27 @@ const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, va
 
 const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, src }) => {
   const resolvedSrc = assetUrl(src);
-  const isPdf = /\.pdf(?:[?#].*)?$/i.test(resolvedSrc);
+  const isPdf = isPdfUrl(resolvedSrc);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState('');
   return resolvedSrc ? (
     <div>
       <p className="text-xs text-gray-400 mb-1.5">{label}</p>
       {isPdf ? (
-        <a
-          href={resolvedSrc}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          disabled={opening}
+          onClick={async () => {
+            setOpening(true); setOpenError('');
+            try { await openPdfDocument(resolvedSrc); }
+            catch (err: any) { setOpenError(err?.message || 'PDF could not be opened.'); }
+            finally { setOpening(false); }
+          }}
           className="flex w-full max-w-xs items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600"
         >
           <FileText size={22} />
-          Open PDF
-        </a>
+          {opening ? 'Opening PDF...' : 'Open PDF'}
+        </button>
       ) : (
         <a href={resolvedSrc} target="_blank" rel="noreferrer">
         <img
@@ -85,6 +79,7 @@ const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, 
         />
         </a>
       )}
+      {openError && <p className="mt-2 max-w-xs text-xs text-red-500">{openError}</p>}
     </div>
   ) : null;
 };

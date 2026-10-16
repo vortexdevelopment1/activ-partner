@@ -17,82 +17,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import type { BankAccount } from '../../types';
-
-const API_URL =
-  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
-  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ||
-  '';
-
-const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
-
-const assetUrl = (src?: string | null) => {
-  const value = src?.trim();
-  if (!value) return '';
-  const resolved = /^(https?:|data:|blob:)/i.test(value)
-    ? value
-    : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
-  if (
-    /^https?:\/\/res\.cloudinary\.com\//i.test(resolved) &&
-    /\.pdf(?:[?#].*)?$/i.test(resolved) &&
-    resolved.includes('/image/upload/')
-  ) {
-    return resolved.replace('/image/upload/', '/raw/upload/');
-  }
-  return resolved;
-};
-
-const isPdfUrl = (url: string) => /\.pdf(?:[?#].*)?$/i.test(url);
-
-const documentUrlCandidates = (url: string) => {
-  const urls = [url];
-  if (/^https?:\/\/res\.cloudinary\.com\//i.test(url)) {
-    if (url.includes('/raw/upload/')) {
-      urls.push(url.replace('/raw/upload/', '/image/upload/'));
-    } else if (url.includes('/image/upload/')) {
-      urls.push(url.replace('/image/upload/', '/raw/upload/'));
-    }
-  }
-  if (ASSET_BASE_URL && /^https?:/i.test(url)) {
-    try {
-      const parsed = new URL(url);
-      if (parsed.pathname.startsWith('/uploads/')) {
-        urls.push(`${ASSET_BASE_URL}${parsed.pathname}${parsed.search}`);
-      }
-    } catch {
-      // Keep the original URL if it cannot be parsed.
-    }
-  }
-  return Array.from(new Set(urls));
-};
-
-const openDocumentFromUrl = async (url: string): Promise<boolean> => {
-  const popup = window.open('', '_blank');
-  if (popup) popup.opener = null;
-
-  for (const candidate of documentUrlCandidates(url)) {
-    try {
-      const response = await fetch(candidate);
-      if (!response.ok) continue;
-
-      const blob = await response.blob();
-      if (!blob.size || /^text\/html/i.test(blob.type)) continue;
-
-      const objectUrl = URL.createObjectURL(blob);
-      if (popup) {
-        popup.location.href = objectUrl;
-      } else {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      }
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      return true;
-    } catch {
-      // Try the next Cloudinary delivery type.
-    }
-  }
-
-  popup?.close();
-  return false;
-};
+import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
@@ -105,12 +30,9 @@ const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, va
 const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => {
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState('');
-  const [imageIndex, setImageIndex] = useState(0);
   const [imageError, setImageError] = useState('');
-  const resolvedSrc = assetUrl(src);
+  const resolvedSrc = resolveAssetUrl(src);
   if (!resolvedSrc) return null;
-  const candidates = documentUrlCandidates(resolvedSrc);
-  const imageSrc = candidates[Math.min(imageIndex, candidates.length - 1)];
 
   return isPdfUrl(resolvedSrc) ? (
     <div className="space-y-2">
@@ -120,13 +42,9 @@ const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => 
         onClick={async () => {
           setOpening(true);
           setOpenError('');
-          const opened = await openDocumentFromUrl(resolvedSrc);
-          setOpening(false);
-          if (!opened) {
-            setOpenError(
-              'Cloudinary blocked this PDF. Enable PDF delivery in Cloudinary or ask the partner to re-upload the cheque as JPG/PNG.',
-            );
-          }
+          try { await openPdfDocument(resolvedSrc); }
+          catch (err: any) { setOpenError(err?.message || 'PDF could not be opened.'); }
+          finally { setOpening(false); }
         }}
         className="flex w-full max-w-md items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -141,15 +59,11 @@ const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => 
       the backend or ask the partner to re-upload the cheque.
     </div>
   ) : (
-    <a href={imageSrc} target="_blank" rel="noreferrer">
+    <a href={resolvedSrc} target="_blank" rel="noreferrer">
       <img
-        src={imageSrc}
+        src={resolvedSrc}
         alt="Cancelled cheque"
         onError={() => {
-          if (imageIndex < candidates.length - 1) {
-            setImageIndex((index) => index + 1);
-            return;
-          }
           setImageError('unavailable');
         }}
         className="w-full max-w-md rounded-lg border border-gray-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
