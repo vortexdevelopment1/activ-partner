@@ -408,6 +408,16 @@ export class AuthService {
           },
           include: { partners: { include: { partner_business_profiles: true } } },
         });
+        await tx.audit_events.create({
+          data: {
+            id: randomUUID(),
+            actor_id: user.id,
+            action: 'partner.registered',
+            entity_type: 'partners',
+            entity_id: partnerId,
+            after_json: { outcome: 'success' },
+          },
+        });
       }
 
       return { user, link };

@@ -20,6 +20,7 @@ import { GstVerificationDetail } from './pages/gst-verification/GstVerificationD
 import { VenueRequestsList } from './pages/venue-requests/VenueRequestsList';
 import { VenueRequestDetail } from './pages/venue-requests/VenueRequestDetail';
 import { ActivityApprovalList } from './pages/activities/ActivityApprovalList';
+import { LogsList } from './pages/logs/LogsList';
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="venue-requests" element={<VenueRequestsList />} />
         <Route path="venue-requests/:id" element={<VenueRequestDetail />} />
         <Route path="activity-approvals" element={<ActivityApprovalList />} />
+        <Route path="logs" element={<LogsList />} />
         <Route path="support/callback" element={<CallbackList />} />
         <Route path="support/callback/:id" element={<CallbackDetail />} />
       </Route>

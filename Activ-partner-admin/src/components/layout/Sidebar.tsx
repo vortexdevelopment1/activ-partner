@@ -17,6 +17,7 @@ import {
   FileCheck,
   ClipboardList,
   ListChecks,
+  History,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 
@@ -35,6 +36,7 @@ const navItems = [
   { to: '/legal', icon: ScrollText, label: 'Legal' },
   { to: '/bank-accounts', icon: Landmark, label: 'Bank Accounts' },
   { to: '/support/callback', icon: PhoneCall, label: 'Support' },
+  { to: '/logs', icon: History, label: 'Logs' },
 ];
 
 export const Sidebar: React.FC = () => {

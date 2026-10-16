@@ -31,10 +31,12 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AdminNotificationsModule } from './modules/admin-notifications/admin-notifications.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -80,6 +82,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     AdminNotificationsModule,
     ReviewsModule,
     AmenitiesModule,
+    AuditLogsModule,
   ],
   providers: [
     {
@@ -93,6 +96,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
     },
     {
       provide: APP_FILTER,
