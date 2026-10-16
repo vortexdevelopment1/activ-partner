@@ -1,1 +1,1 @@
-ALTER TABLE "notifications" ADD COLUMN "data" JSONB;
+ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "data" JSONB;
