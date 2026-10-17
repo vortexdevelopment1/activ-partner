@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Briefcase, ToggleLeft, ToggleRight, ExternalLink, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { partnersApi } from '../../api/partners.api';
 import { Pagination } from '../../components/ui/Pagination';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -10,33 +10,25 @@ import type { Partner } from '../../types';
 
 export const PartnersList: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
+
+  useEffect(() => { setSearch(searchFromUrl); setPage(1); }, [searchFromUrl]);
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteLabel, setDeleteLabel] = useState('');
   const limit = 20;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['partners', page],
-    queryFn: () => partnersApi.getAll({ page, limit }),
+    queryKey: ['partners', page, search],
+    queryFn: () => partnersApi.getAll({ page, limit, search: search || undefined }),
   });
 
   const allPartners: Partner[] = data?.data?.data?.items ?? [];
-  const partners: Partner[] = search
-    ? allPartners.filter((p) => {
-        const term = search.toLowerCase();
-        const flat = p as any;
-        return (
-          flat.firstName?.toLowerCase().includes(term) ||
-          flat.lastName?.toLowerCase().includes(term) ||
-          flat.email?.toLowerCase().includes(term) ||
-          flat.phone?.toLowerCase().includes(term) ||
-          p.businessName?.toLowerCase().includes(term)
-        );
-      })
-    : allPartners;
+  const partners = allPartners;
   const total: number = data?.data?.data?.total ?? 0;
 
   const deleteMutation = useMutation({
@@ -85,6 +77,7 @@ export const PartnersList: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -217,6 +210,7 @@ export const PartnersList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

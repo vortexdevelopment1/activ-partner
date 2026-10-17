@@ -17,10 +17,11 @@ import {
   FileCheck,
   ClipboardList,
   ListChecks,
+  History,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 
-const navItems = [
+export const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/categories', icon: Tag, label: 'Categories' },
   { to: '/questions', icon: HelpCircle, label: 'Questions' },
@@ -35,9 +36,10 @@ const navItems = [
   { to: '/legal', icon: ScrollText, label: 'Legal' },
   { to: '/bank-accounts', icon: Landmark, label: 'Bank Accounts' },
   { to: '/support/callback', icon: PhoneCall, label: 'Support' },
+  { to: '/logs', icon: History, label: 'Logs' },
 ];
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = ({ mobileOpen, onClose }) => {
   const { logout } = useAuthStore();
   const navigate = useNavigate();
 
@@ -47,29 +49,30 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
+    <aside id="admin-navigation" className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] bg-[#17211f] border-r border-white/5 flex flex-col transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-gray-100">
+      <div className="px-5 py-5 border-b border-white/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+          <div className="w-9 h-9 bg-primary-500 rounded-lg flex items-center justify-center shadow-lg shadow-primary-900/30">
             <Zap size={16} className="text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-900">ActivProduct</span>
+          <span className="text-lg font-bold text-white">ActivProduct</span>
         </div>
-        <p className="text-xs text-gray-400 mt-0.5 ml-10">Admin Panel</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-400 mt-1 ml-11">Admin workspace</p>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#3b4744_transparent]">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'text-gray-300 hover:bg-white/[0.07] hover:text-white'
               }`
             }
           >
@@ -77,7 +80,7 @@ export const Sidebar: React.FC = () => {
               <>
                 <Icon
                   size={18}
-                  className={isActive ? 'text-primary-600' : 'text-gray-400'}
+                  className={isActive ? 'text-white' : 'text-gray-500'}
                 />
                 {label}
               </>
@@ -87,12 +90,12 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* Logout */}
-      <div className="px-3 py-4 border-t border-gray-100">
+      <div className="px-3 py-4 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:bg-red-500/10 hover:text-red-300 transition-all"
         >
-          <LogOut size={18} className="text-gray-400" />
+          <LogOut size={18} className="text-gray-500" />
           Logout
         </button>
       </div>

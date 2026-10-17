@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, MessageCircleQuestion, Search } from 'lucide-react';
 import { faqsApi } from '../../api/faqs.api';
@@ -9,12 +10,16 @@ import { useToast } from '../../hooks/useToast';
 import type { FAQ } from '../../types';
 
 export const FAQsList: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [page, setPage] = useState(1);
   const limit = 20;
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
+  const [searchInput, setSearchInput] = useState(searchFromUrl);
+
+  useEffect(() => { setSearch(searchFromUrl); setSearchInput(searchFromUrl); setPage(1); }, [searchFromUrl]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<FAQ | null>(null);
@@ -109,6 +114,7 @@ export const FAQsList: React.FC = () => {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -195,6 +201,7 @@ export const FAQsList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

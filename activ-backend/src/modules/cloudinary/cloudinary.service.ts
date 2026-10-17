@@ -70,6 +70,45 @@ export class CloudinaryService {
     return Promise.all(files.map((file) => this.uploadFile(file, folder, resourceType))) as Promise<string[]>;
   }
 
+  async downloadPdf(sourceUrl: string): Promise<Buffer> {
+    let parsed: URL;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new BadRequestException('Invalid document URL.');
+    }
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.hostname !== 'res.cloudinary.com' ||
+      !parsed.pathname.startsWith(`/${this.cloudName}/`) ||
+      !/\/(?:raw|image)\/upload\//.test(parsed.pathname)
+    ) {
+      throw new BadRequestException('Only documents from the configured Cloudinary account can be opened.');
+    }
+
+    const candidates = [sourceUrl];
+    if (sourceUrl.includes('/image/upload/')) {
+      candidates.push(sourceUrl.replace('/image/upload/', '/raw/upload/'));
+    } else if (sourceUrl.includes('/raw/upload/')) {
+      candidates.push(sourceUrl.replace('/raw/upload/', '/image/upload/'));
+    }
+
+    for (const candidate of [...new Set(candidates)]) {
+      const response = await fetch(candidate, { headers: { Accept: 'application/pdf' } }).catch(() => null);
+      if (!response?.ok) continue;
+      const length = Number(response.headers.get('content-length') || 0);
+      if (length > 10 * 1024 * 1024) throw new BadRequestException('PDF exceeds the 10 MB viewing limit.');
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length <= 10 * 1024 * 1024 && bytes.subarray(0, 5).toString() === '%PDF-') {
+        return bytes;
+      }
+    }
+
+    throw new ServiceUnavailableException(
+      'Cloudinary did not deliver a valid PDF. Enable PDF and ZIP file delivery in Cloudinary Security settings, then try again.',
+    );
+  }
+
   private resourceTypeForFile(
     file: Express.Multer.File,
     requested: CloudinaryResourceType,

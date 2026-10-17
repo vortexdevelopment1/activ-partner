@@ -16,9 +16,9 @@ export interface PaginatedData<T> {
 
 export interface User {
   id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
   phone?: string;
   role: 'admin' | 'partner' | 'user';
   isActive: boolean;
@@ -189,6 +189,7 @@ export interface Venue {
   submittedAt?: string | null;
   approvedAt?: string;
   approvedBy?: string;
+  approvedByName?: string | null;
   isActive: boolean;
   images: VenueImage[];
   services: VenueService[];
@@ -224,6 +225,14 @@ export interface Commission {
   commissionPercentage: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EffectiveCityCommission {
+  city: string;
+  state: string;
+  commissionPercentage: number;
+  source: 'city' | 'state' | 'default';
+  overrideId: string | null;
 }
 
 export type LegalType = 'terms_and_conditions' | 'privacy_policy' | 'partner_agreement' | 'refund_policy';
@@ -345,10 +354,20 @@ export interface AdminNotification {
 
 export type BankAccountStatus = 'under_review' | 'approved' | 'rejected';
 
+export interface BankAccountPartner {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  businessName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  user?: User;
+}
+
 export interface BankAccount {
   id: string;
   partnerId: string;
-  partner?: Partner;
+  partner?: BankAccountPartner;
   accountHolderName: string;
   bankName: string;
   accountNumber: string;
@@ -359,6 +378,7 @@ export interface BankAccount {
   status: BankAccountStatus;
   rejectionReason?: string;
   reviewedBy?: string;
+  reviewedByName?: string | null;
   reviewedAt?: string;
   createdAt: string;
   updatedAt: string;

@@ -34,6 +34,14 @@ const STEPS = [
   'Images',
 ];
 
+const AADHAAR_NAME_PATTERN = /^(?=.{2,100}$)(?=(?:.*[A-Za-z]){2})[A-Za-z][A-Za-z .'-]*$/;
+const AADHAAR_NUMBER_PATTERN = /^[2-9]\d{11}$/;
+const PAN_NUMBER_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const LEGAL_DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const LEGAL_DOCUMENT_EXTENSIONS = /\.(pdf|jpe?g|png)$/i;
+const MAX_LEGAL_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type QuestionType = 'TEXT' | 'TEXTAREA' | 'NUMBER' | 'SELECT' | 'RADIO' | 'MULTISELECT' | 'CHECKBOX' | 'DATE';
@@ -457,13 +465,27 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     set('amenities', form.amenities.includes(a)
       ? form.amenities.filter(x => x !== a) : [...form.amenities, a]);
 
-  const toggleCategory = (id: string) =>
-    set('categoryIds', form.categoryIds.includes(id)
-      ? form.categoryIds.filter(x => x !== id) : [...form.categoryIds, id]);
+  const selectCategory = (id: string) => setForm(prev => {
+    if (prev.categoryIds.length === 1 && prev.categoryIds[0] === id) return prev;
+    const globalQuestionIds = new Set(questionGroups.globalQuestions.map(question => question.id));
+    return {
+      ...prev,
+      categoryIds: [id],
+      answers: Object.fromEntries(Object.entries(prev.answers).filter(([questionId]) => globalQuestionIds.has(questionId))),
+    };
+  });
 
   const updateLegalFile = (field: 'aadhaarFile' | 'panFile' | 'gstinFile', files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
+    if (!LEGAL_DOCUMENT_TYPES.has(file.type) || !LEGAL_DOCUMENT_EXTENSIONS.test(file.name)) {
+      error('Upload a PDF, JPG, JPEG, or PNG document.');
+      return;
+    }
+    if (file.size > MAX_LEGAL_DOCUMENT_SIZE) {
+      error('Document size must be 5 MB or less.');
+      return;
+    }
     setForm(prev => ({ ...prev, [field]: file }));
   };
 
@@ -600,7 +622,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     if (step === 0) return !!form.partnerId && !!form.name.trim() && /^\d{10}$/.test(form.venuePhone);
     if (step === 1) return !!(form.address || addressSearch) && !!form.city.trim() && !!form.state.trim() && /^\d{6}$/.test(form.zipCode);
     if (step === 2) return true; // Amenities are optional
-    if (step === 3) return form.categoryIds.length > 0;
+    if (step === 3) return form.categoryIds.length === 1;
     if (step === 4) {
       return flatRequiredQuestions.every(q => {
         const val = form.answers[q.id];
@@ -610,12 +632,14 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
       });
     }
     if (step === 5) {
+      const gstin = form.gstin.trim();
       return (
-        !!form.fullName.trim() &&
-        /^\d{12}$/.test(form.aadhaarNumber) &&
+        AADHAAR_NAME_PATTERN.test(form.fullName.trim()) &&
+        AADHAAR_NUMBER_PATTERN.test(form.aadhaarNumber) &&
         !!form.aadhaarFile &&
-        /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.panNumber) &&
-        !!form.panFile
+        PAN_NUMBER_PATTERN.test(form.panNumber) &&
+        !!form.panFile &&
+        (!gstin || (GSTIN_PATTERN.test(gstin) && !!form.gstinFile))
       );
     }
     return true;
@@ -667,13 +691,22 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
       const venueId = venueRes?.data?.data?.id;
       const warnings: string[] = [];
+      const selectedCategory = categories.find(category => category.id === form.categoryIds[0]);
 
       // Upload venue images — partner-scoped endpoint; skip gracefully if admin lacks permission
       if (form.images.length > 0 && venueId) {
         try {
-          await venuesApi.uploadImages(venueId, form.images, form.name.trim());
-        } catch {
-          warnings.push('Images could not be uploaded (partner permission required).');
+          if (!selectedCategory) throw new Error('Selected activity category is unavailable.');
+          await venuesApi.uploadImages(
+            venueId,
+            form.images,
+            selectedCategory.name,
+            selectedCategory.id,
+          );
+        } catch (uploadError: any) {
+          warnings.push(
+            uploadError?.response?.data?.message || uploadError?.message || 'Venue images could not be uploaded.',
+          );
         }
       }
 
@@ -689,8 +722,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
             gstNumber: form.gstin.trim() || undefined,
             gstinDoc: form.gstinFile ?? undefined,
           });
-        } catch {
-          warnings.push('Legal documents could not be submitted (partner permission required).');
+        } catch (legalError: any) {
+          warnings.push(
+            legalError?.response?.data?.message || legalError?.message || 'Legal documents could not be submitted.',
+          );
         }
       }
 
@@ -734,12 +769,12 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-lg shadow-[0_24px_70px_rgb(8_20_17/0.24)] ring-1 ring-black/5 w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Create Venue</h3>
             <p className="text-xs text-gray-400 mt-0.5">
@@ -752,7 +787,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
         </div>
 
         {/* Progress bar */}
-        <div className="px-6 pt-3 pb-1 shrink-0">
+        <div className="px-4 sm:px-6 pt-3 pb-1 shrink-0">
           <div className="flex gap-1.5">
             {STEPS.map((_, i) => (
               <div key={i}
@@ -764,7 +799,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 space-y-4">
 
           {/* ── Step 1: Partner & Basics ── */}
           {step === 0 && (
@@ -884,7 +919,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                           {!newPartnerSubmitted && <p className="text-xs text-gray-400 mt-1">Partner logs in via OTP using this number on the mobile app</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
                             <label className="label">First Name <span className="text-red-500">*</span></label>
                             <input
@@ -1033,7 +1068,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                   onChange={e => set('flatBuilding', e.target.value)} />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label required>City / Town</Label>
                   <input
@@ -1087,7 +1122,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
             <div>
               <Label>Amenities</Label>
               <p className="text-xs text-gray-400 mb-2.5">Select all facilities available at this venue</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {AMENITIES.map(a => {
                   const selected = form.amenities.includes(a);
                   return (
@@ -1113,25 +1148,25 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
           {/* ── Step 4: Categories ── */}
           {step === 3 && (
             <div>
-              <Label required>Sport Categories</Label>
-              <p className="text-xs text-gray-400 mb-2.5">Select one or more activity categories for this venue</p>
+              <Label required>Sport Category</Label>
               {categories.length === 0 ? (
                 <p className="text-sm text-gray-400">Loading categories…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div role="radiogroup" aria-label="Sport category" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {categories.map(cat => {
                     const selected = form.categoryIds.includes(cat.id);
                     return (
-                      <button key={cat.id} type="button" onClick={() => toggleCategory(cat.id)}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                      <label key={cat.id}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left cursor-pointer focus-within:ring-2 focus-within:ring-primary-500 ${
                           selected
                             ? 'border-primary-500 bg-primary-50 text-primary-700'
                             : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                         }`}>
+                        <input type="radio" name="venue-category" value={cat.id} checked={selected} onChange={() => selectCategory(cat.id)} className="sr-only" />
                         <img src={activityLogoUrl(cat.name)} alt="" className="w-7 h-7 object-contain" />
                         <span className="flex-1 truncate">{cat.name}</span>
                         {selected && <Check size={13} className="text-primary-600 shrink-0" />}
-                      </button>
+                      </label>
                     );
                   })}
                 </div>
@@ -1179,8 +1214,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
           {/* ── Step 6: Legal Information ── */}
           {step === 5 && (() => {
-            const aadhaarValid = /^\d{12}$/.test(form.aadhaarNumber);
-            const panValid = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.panNumber);
+            const fullNameValid = AADHAAR_NAME_PATTERN.test(form.fullName.trim());
+            const aadhaarValid = AADHAAR_NUMBER_PATTERN.test(form.aadhaarNumber);
+            const panValid = PAN_NUMBER_PATTERN.test(form.panNumber);
+            const gstinValid = !form.gstin.trim() || GSTIN_PATTERN.test(form.gstin.trim());
             const s = step4Submitted;
             return (
               <>
@@ -1192,10 +1229,16 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                   <div>
                     <Label required>Full Name As Per Aadhaar</Label>
                     <input
-                      className={`input ${s && !form.fullName.trim() ? 'border-red-400 focus:ring-red-300' : ''}`}
+                      className={`input ${s && !fullNameValid ? 'border-red-400 focus:ring-red-300' : ''}`}
                       placeholder="Enter Full Name" value={form.fullName}
-                      onChange={e => set('fullName', e.target.value)} />
-                    {s && !form.fullName.trim() && <p className="text-xs text-red-500 mt-1">Full name is required</p>}
+                      maxLength={100}
+                      autoComplete="name"
+                      onChange={e => set('fullName', e.target.value.replace(/[^A-Za-z .'-]/g, ''))} />
+                    {s && !fullNameValid && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Enter the name shown on Aadhaar (2-100 letters; spaces, periods, apostrophes and hyphens are allowed)
+                      </p>
+                    )}
                   </div>
 
                   {/* Aadhaar */}
@@ -1206,9 +1249,11 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                         className={`input ${s && !aadhaarValid ? 'border-red-400 focus:ring-red-300' : ''}`}
                         placeholder="Enter 12-digit Aadhaar Number"
                         maxLength={12}
+                        inputMode="numeric"
+                        autoComplete="off"
                         value={form.aadhaarNumber}
                         onChange={e => set('aadhaarNumber', e.target.value.replace(/\D/g, '').slice(0, 12))} />
-                      {s && !aadhaarValid && <p className="text-xs text-red-500 mt-1">Enter a valid 12-digit Aadhaar number</p>}
+                      {s && !aadhaarValid && <p className="text-xs text-red-500 mt-1">Enter a valid 12-digit Aadhaar number beginning with 2-9</p>}
                     </div>
                     <FileUploadZone field="aadhaarFile" file={form.aadhaarFile} label="Upload your Aadhaar Card" required showError={s} onChange={updateLegalFile} />
                   </div>
@@ -1222,7 +1267,8 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                         placeholder="ABCDE1234F"
                         maxLength={10}
                         value={form.panNumber}
-                        onChange={e => set('panNumber', e.target.value.toUpperCase().slice(0, 10))} />
+                        autoComplete="off"
+                        onChange={e => set('panNumber', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))} />
                       {s && !panValid
                         ? <p className="text-xs text-red-500 mt-1">PAN must be in format ABCDE1234F (5 letters, 4 digits, 1 letter)</p>
                         : <p className="text-xs text-gray-400 mt-1">Format: ABCDE1234F</p>
@@ -1236,10 +1282,17 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                     <div>
                       <label className="label">GSTIN <span className="text-gray-400 font-normal">(Optional)</span></label>
                       <p className="text-xs text-gray-400 mb-1">Should be linked to the Aadhaar provided above</p>
-                      <input className="input" placeholder="Enter GSTIN Number" value={form.gstin}
-                        onChange={e => set('gstin', e.target.value.toUpperCase())} />
+                      <input
+                        className={`input uppercase ${s && !gstinValid ? 'border-red-400 focus:ring-red-300' : ''}`}
+                        placeholder="22ABCDE1234F1Z5"
+                        maxLength={15}
+                        value={form.gstin}
+                        onChange={e => set('gstin', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15))}
+                      />
+                      {s && !gstinValid && <p className="text-xs text-red-500 mt-1">Enter a valid 15-character GSTIN</p>}
+                      {s && form.gstin.trim() && !form.gstinFile && <p className="text-xs text-red-500 mt-1">Upload the GSTIN document</p>}
                     </div>
-                    {form.gstin.trim() && <FileUploadZone field="gstinFile" file={form.gstinFile} label="Upload your GSTIN Document" required={false} showError={s} onChange={updateLegalFile} />}
+                    {form.gstin.trim() && <FileUploadZone field="gstinFile" file={form.gstinFile} label="Upload your GSTIN Document" required showError={s} onChange={updateLegalFile} />}
                   </div>
                 </div>
               </>
@@ -1269,7 +1322,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
 
               {form.images.length > 0 && (
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {form.images.map((file, idx) => (
                     <div key={idx} className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 group">
                       <img src={URL.createObjectURL(file)} alt={`preview-${idx}`}
@@ -1312,7 +1365,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-gray-100 shrink-0">
           <button
             onClick={step === 0 ? handleClose : () => setStep(s => s - 1)}
             className="btn-secondary flex items-center gap-1.5 text-sm"

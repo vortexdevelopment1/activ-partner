@@ -19,6 +19,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CommissionService } from './commission.service';
 import { CreateCityCommissionDto } from './dto/create-city-commission.dto';
 import { UpdateCityCommissionDto } from './dto/update-city-commission.dto';
+import { UpdateDefaultCommissionDto } from './dto/update-default-commission.dto';
 
 @ApiTags('Commissions')
 @Controller('commissions')
@@ -52,10 +53,54 @@ export class CommissionController {
     };
   }
 
+  @Get('default')
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get the nationwide default commission (Admin only)' })
+  async getDefault() {
+    const data = await this.commissionService.getDefaultCommission();
+    return { message: 'Default commission fetched successfully', data };
+  }
+
+  @Get('cities')
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'List all Indian cities with their effective commission (Admin only)' })
+  async findAllCities(
+    @Query() pagination: PaginationDto,
+    @Query('state') state?: string,
+  ) {
+    const [items, total] = await this.commissionService.findAllIndianCities(
+      pagination,
+      state,
+    );
+    return {
+      message: 'City commissions fetched successfully',
+      data: {
+        items,
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / (pagination.limit || 10)),
+      },
+    };
+  }
+
+  @Patch('default')
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update the nationwide default commission (Admin only)' })
+  async updateDefault(@Body() dto: UpdateDefaultCommissionDto) {
+    const data = await this.commissionService.updateDefaultCommission(
+      dto.commissionPercentage,
+    );
+    return { message: 'Default commission updated successfully', data };
+  }
+
   // NOTE: this route must come before /:id to avoid route collision
   @Get('city/:city')
   @Public()
-  @ApiOperation({ summary: 'Get commission percentage by city name (Public). Returns default 10% if not configured.' })
+  @ApiOperation({ summary: 'Get commission percentage by city name (Public). Returns the nationwide rate if not configured.' })
   @ApiParam({ name: 'city', example: 'Mumbai', description: 'City name' })
   async getByCity(@Param('city') city: string, @Query('state') state?: string) {
     const data = await this.commissionService.getCommissionByCity(city, state);

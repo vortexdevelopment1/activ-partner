@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, GripVertical } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown, Search } from 'lucide-react';
 import { questionsApi } from '../../api/questions.api';
 import { categoriesApi } from '../../api/categories.api';
 import { QuestionForm } from './QuestionForm';
@@ -21,32 +22,94 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export const QuestionsList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('search') ?? '';
+  const categoryParam = searchParams.get('categoryId') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<Question | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [filterCat, setFilterCat] = useState('');
+  const [filterCat, setFilterCat] = useState(categoryParam);
 
-  const { data: questionsData, isLoading } = useQuery({
+  useEffect(() => { setFilterCat(categoryParam); }, [categoryParam]);
+  const [orderedQuestions, setOrderedQuestions] = useState<Question[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+  const { data: questionsData, isLoading, isError, refetch } = useQuery({
     queryKey: ['questions'],
-    queryFn: () => questionsApi.getAll({ limit: 200 }),
+    queryFn: async (): Promise<Question[]> => {
+      const items: Question[] = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const response = await questionsApi.getAll({ page, limit: 200 });
+        const batch: Question[] = response.data.data.items;
+        total = response.data.data.total;
+        items.push(...batch);
+        if (batch.length === 0) break;
+        page += 1;
+      } while (items.length < total);
+      return items;
+    },
   });
+
+  useEffect(() => {
+    if (questionsData) setOrderedQuestions(questionsData);
+  }, [questionsData]);
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.getAll({ limit: 100 }),
   });
 
-  const allQuestions: Question[] = questionsData?.data?.data?.items ?? [];
+  const allQuestions = orderedQuestions.length ? orderedQuestions : questionsData ?? [];
   const questions: Question[] =
     filterCat === ''
       ? allQuestions
       : filterCat === 'global'
       ? allQuestions.filter((q) => !q.categoryId)
       : allQuestions.filter((q) => q.categoryId === filterCat);
+  const visibleQuestions = questions.filter((q) => q.questionText.toLowerCase().includes(search.toLowerCase()));
   const categories = categoriesData?.data?.data?.items ?? [];
+
+  const reorderMutation = useMutation({
+    mutationFn: (items: Question[]) =>
+      questionsApi.reorder(items.map((q, order) => ({ id: q.id, order }))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['questions'] });
+      success('Question order saved');
+    },
+    onError: (err: any, _items, previous) => {
+      if (previous) setOrderedQuestions(previous);
+      queryClient.invalidateQueries({ queryKey: ['questions'] });
+      error(err?.response?.data?.message ?? 'Could not save question order');
+    },
+    onMutate: () => allQuestions,
+  });
+
+  const moveQuestion = (sourceId: string, targetId: string, after: boolean) => {
+    if (reorderMutation.isPending || sourceId === targetId) return;
+    const visible = [...visibleQuestions];
+    const sourceIndex = visible.findIndex((q) => q.id === sourceId);
+    if (sourceIndex < 0 || !visible.some((q) => q.id === targetId)) return;
+    const [source] = visible.splice(sourceIndex, 1);
+    const targetIndex = visible.findIndex((q) => q.id === targetId);
+    visible.splice(targetIndex + (after ? 1 : 0), 0, source);
+    if (visible.every((q, index) => q.id === visibleQuestions[index].id)) return;
+
+    const moved = visible[Symbol.iterator]();
+    const next = allQuestions.map((q, index) => {
+      const inCategory = filterCat === '' ||
+        (filterCat === 'global' ? !q.categoryId : q.categoryId === filterCat);
+      const inFilter = inCategory && q.questionText.toLowerCase().includes(search.toLowerCase());
+      return { ...(inFilter ? moved.next().value! : q), order: index };
+    });
+    setOrderedQuestions(next);
+    reorderMutation.mutate(next);
+  };
 
   const createMutation = useMutation({
     mutationFn: questionsApi.create,
@@ -121,11 +184,20 @@ export const QuestionsList: React.FC = () => {
             Questions shown to partners during venue creation
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+          <label className="relative w-full sm:w-44">
+            <span className="sr-only">Search questions</span>
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input className="input pl-9" value={search} placeholder="Search questions..."
+              onChange={(event) => setSearchParams({ ...(event.target.value ? { search: event.target.value } : {}), ...(filterCat ? { categoryId: filterCat } : {}) }, { replace: true })} />
+          </label>
           <select
             value={filterCat}
-            onChange={(e) => setFilterCat(e.target.value)}
-            className="input w-48"
+            onChange={(e) => {
+              setFilterCat(e.target.value);
+              setSearchParams({ ...(search ? { search } : {}), ...(e.target.value ? { categoryId: e.target.value } : {}) }, { replace: true });
+            }}
+            className="input w-full sm:w-48"
           >
             <option value="">All categories</option>
             <option value="global">Global only</option>
@@ -148,10 +220,15 @@ export const QuestionsList: React.FC = () => {
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         {isLoading ? (
           <div className="text-center py-20 text-gray-400">Loading...</div>
-        ) : questions.length === 0 ? (
+        ) : isError ? (
+          <div className="text-center py-16 text-sm text-gray-500">
+            <p>Could not load questions.</p>
+            <button type="button" onClick={() => refetch()} className="mt-3 text-primary-600 hover:underline">Try again</button>
+          </div>
+        ) : visibleQuestions.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No questions found.</div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="w-8 px-4 py-3" />
@@ -174,10 +251,57 @@ export const QuestionsList: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {questions.map((q) => (
-                <tr key={q.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+              {visibleQuestions.map((q, index) => (
+                <tr key={q.id}
+                  className={`border-b border-gray-50 hover:bg-gray-50/50 ${draggingId === q.id ? 'opacity-50' : ''} ${dropTargetId === q.id ? 'bg-primary-50' : ''}`}
+                  onDragOver={(event) => {
+                    if (!draggingId || draggingId === q.id) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    if (dropTargetId !== q.id) setDropTargetId(q.id);
+                  }}
+                  onDragLeave={() => { if (dropTargetId === q.id) setDropTargetId(null); }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceId = event.dataTransfer.getData('text/plain') || draggingId;
+                    const after = event.clientY > event.currentTarget.getBoundingClientRect().top + event.currentTarget.clientHeight / 2;
+                    setDraggingId(null);
+                    setDropTargetId(null);
+                    if (sourceId) moveQuestion(sourceId, q.id, after);
+                  }}>
                   <td className="px-4 py-3 text-gray-300">
-                    <GripVertical size={14} />
+                    <button type="button" draggable={!reorderMutation.isPending}
+                      aria-label={`Reorder ${q.questionText}`}
+                      title="Drag to reorder; use arrow keys to move"
+                      disabled={reorderMutation.isPending}
+                      className="hidden sm:inline-flex cursor-grab rounded p-1 hover:bg-gray-100 hover:text-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 active:cursor-grabbing disabled:cursor-not-allowed"
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData('text/plain', q.id);
+                        event.dataTransfer.effectAllowed = 'move';
+                        setDraggingId(q.id);
+                      }}
+                      onDragEnd={() => { setDraggingId(null); setDropTargetId(null); }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowUp' && index > 0) {
+                          event.preventDefault();
+                          moveQuestion(q.id, visibleQuestions[index - 1].id, false);
+                        } else if (event.key === 'ArrowDown' && index < visibleQuestions.length - 1) {
+                          event.preventDefault();
+                          moveQuestion(q.id, visibleQuestions[index + 1].id, true);
+                        }
+                      }}>
+                      <GripVertical size={14} />
+                    </button>
+                    <div className="flex sm:hidden flex-col">
+                      <button type="button" aria-label={`Move ${q.questionText} up`}
+                        disabled={index === 0 || reorderMutation.isPending}
+                        onClick={() => moveQuestion(q.id, visibleQuestions[index - 1].id, false)}
+                        className="p-1 text-gray-500 disabled:opacity-30"><ChevronUp size={16} /></button>
+                      <button type="button" aria-label={`Move ${q.questionText} down`}
+                        disabled={index === visibleQuestions.length - 1 || reorderMutation.isPending}
+                        onClick={() => moveQuestion(q.id, visibleQuestions[index + 1].id, true)}
+                        className="p-1 text-gray-500 disabled:opacity-30"><ChevronDown size={16} /></button>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-gray-900">{q.questionText}</p>
@@ -234,7 +358,7 @@ export const QuestionsList: React.FC = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 

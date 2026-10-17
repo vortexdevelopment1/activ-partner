@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { XCircle } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 
 const REJECTION_REASONS = [
   'Incomplete documentation',
@@ -65,18 +66,9 @@ export const RejectModal: React.FC<RejectModalProps> = ({
 
         <div>
           <label className="label">Rejection Reason *</label>
-          <select
-            value={reason}
-            onChange={(e) => { setReason(e.target.value); setError(''); }}
-            className="input"
-          >
-            <option value="">Select a reason...</option>
-            {REJECTION_REASONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+          <SelectMenu value={reason} placeholder="Select a reason..." ariaLabel="Rejection reason"
+            options={REJECTION_REASONS.map((item) => ({ value: item, label: item }))}
+            onChange={(next) => { setReason(next); setError(''); }} />
           {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
         </div>
 

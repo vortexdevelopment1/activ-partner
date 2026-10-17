@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Radio } from 'lucide-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { adminNotificationsApi } from '../../api/admin-notifications.api';
@@ -11,6 +12,7 @@ export const NotificationsDropdown: React.FC = () => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: countData } = useQuery({
     queryKey: ['admin-notifications-unread-count'],
@@ -44,16 +46,33 @@ export const NotificationsDropdown: React.FC = () => {
   };
 
   const handleItemClick = async (n: AdminNotification) => {
-    if (!n.isRead) {
-      await adminNotificationsApi.markRead(n.id);
-      queryClient.invalidateQueries({ queryKey: ['admin-notifications-unread-count'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-notifications-list'] });
+    try {
+      if (!n.isRead) {
+        await adminNotificationsApi.markRead(n.id);
+        queryClient.invalidateQueries({ queryKey: ['admin-notifications-unread-count'] });
+        queryClient.invalidateQueries({ queryKey: ['admin-notifications-list'] });
+      }
+    } finally {
+      const data = n.data ?? {};
+      let destination = '/dashboard';
+      if (data.venueRequestId) destination = `/venue-requests/${encodeURIComponent(data.venueRequestId)}`;
+      else if (data.bankAccountId) destination = `/bank-accounts/${encodeURIComponent(data.bankAccountId)}`;
+      else if (data.gstVerificationId) destination = `/gst-verification/${encodeURIComponent(data.gstVerificationId)}`;
+      else if (data.callbackId) destination = `/support/callback/${encodeURIComponent(data.callbackId)}`;
+      else if (data.venueId) destination = `/venues/${encodeURIComponent(data.venueId)}`;
+      else if (n.type === 'activity_added' || n.type === 'activity_removed') destination = '/activity-approvals';
+      else if (n.type === 'partner_profile_updated') destination = '/partners';
+      else if (n.type.startsWith('venue_')) destination = '/venues';
+
+      setOpen(false);
+      navigate(destination);
     }
   };
 
   return (
     <div className="relative" ref={containerRef}>
       <button
+        aria-label="Notifications"
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
       >
@@ -66,7 +85,7 @@ export const NotificationsDropdown: React.FC = () => {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
+        <div className="fixed top-16 inset-x-3 sm:absolute sm:top-auto sm:inset-x-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h4 className="text-sm font-semibold text-gray-900">Notifications</h4>
             {unreadCount > 0 && (
@@ -80,7 +99,7 @@ export const NotificationsDropdown: React.FC = () => {
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[calc(100dvh-8rem)] sm:max-h-96 overflow-y-auto">
             {isLoading ? (
               <p className="text-center text-sm text-gray-400 py-10">Loading...</p>
             ) : notifications.length === 0 ? (

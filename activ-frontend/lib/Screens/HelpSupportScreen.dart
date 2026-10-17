@@ -543,9 +543,10 @@ class FaqSupportScreen extends StatefulWidget {
 
 class _FaqSupportScreenState extends State<FaqSupportScreen> {
   int _open = 0;
-  List<_FaqData> _faqs = const [];
+  List<_FaqData> _faqs = [];
   bool _loading = true;
   String? _error;
+  int _loadVersion = 0;
 
   @override
   void initState() {
@@ -554,51 +555,29 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
   }
 
   Future<void> _loadFaqs() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-
+    final version = ++_loadVersion;
+    setState(() { _loading = true; _error = null; });
     try {
-      final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(FAQ_PUBLIC_URL),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Unable to load FAQs.');
+      final response = await (widget.client?.get ?? http.get)(Uri.parse(FAQ_PUBLIC_URL))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) throw const FormatException('FAQ request failed');
+      final body = jsonDecode(response.body);
+      if (body is! Map || body['data'] is! List) throw const FormatException('Invalid FAQ response');
+      final items = <_FaqData>[];
+      for (final entry in body['data']) {
+        if (entry is! Map || entry['question'] is! String || entry['answer'] is! String) {
+          throw const FormatException('Invalid FAQ entry');
+        }
+        if (entry['isActive'] != false) items.add(_FaqData(entry['question'], entry['answer']));
       }
-
-      final decoded = jsonDecode(response.body);
-      final records = decoded is Map<String, dynamic>
-          ? decoded['data']
-          : decoded;
-      final faqs = records is List
-          ? records
-              .whereType<Map>()
-              .map(
-                (record) => _FaqData(
-                  record['question']?.toString().trim() ?? '',
-                  record['answer']?.toString().trim() ?? '',
-                ),
-              )
-              .where((faq) => faq.question.isNotEmpty && faq.answer.isNotEmpty)
-              .toList()
-          : <_FaqData>[];
-
-      if (!mounted) return;
-      setState(() {
-        _faqs = faqs;
-        _open = faqs.isEmpty ? -1 : 0;
-        _loading = false;
-      });
+      if (!mounted || version != _loadVersion) return;
+      setState(() { _faqs = items; _open = items.isEmpty ? -1 : 0; });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Unable to load FAQs right now.';
-      });
+      if (mounted && version == _loadVersion) {
+        setState(() => _error = 'Unable to load FAQs.');
+      }
+    } finally {
+      if (mounted && version == _loadVersion) setState(() => _loading = false);
     }
   }
 
@@ -613,60 +592,34 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
           RequestCallbackScreen(client: widget.client),
         ),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontSize: 15,
-                            color: AppColors.black1,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: _loadFaqs,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  )
-                : _faqs.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No FAQs available yet.',
-                          style: TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontSize: 15,
-                            color: AppColors.black1,
-                          ),
-                        ),
-                      )
-                    : Column(
-                        children: [
-                          for (var i = 0; i < _faqs.length; i++) ...[
-                            _FaqTile(
-                              question: _faqs[i].question,
-                              answer: _faqs[i].answer,
-                              open: _open == i,
-                              onTap: () => setState(
-                                () => _open = _open == i ? -1 : i,
-                              ),
-                            ),
-                            if (i != _faqs.length - 1)
-                              const SizedBox(height: 14),
-                          ],
-                        ],
-                      ),
-        ),
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!),
+                  TextButton.icon(onPressed: _loadFaqs, icon: const Icon(Icons.refresh), label: const Text('Retry loading FAQs')),
+                ]))
+              : RefreshIndicator(
+                  onRefresh: _loadFaqs,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(28, 30, 28, 20),
+                    children: [
+            if (_faqs.isEmpty) const Padding(
+              padding: EdgeInsets.only(top: 30), child: Center(child: Text('No FAQs available yet.')),
+            ),
+            for (var i = 0; i < _faqs.length; i++) ...[
+              _FaqTile(
+                question: _faqs[i].question,
+                answer: _faqs[i].answer,
+                open: _open == i,
+                onTap: () => setState(() => _open = _open == i ? -1 : i),
+              ),
+              if (i != _faqs.length - 1) const SizedBox(height: 14),
+            ],
+                    ],
+                  ),
+                ),
     );
   }
 }

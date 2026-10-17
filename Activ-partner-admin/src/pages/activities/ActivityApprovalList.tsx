@@ -64,7 +64,7 @@ export const ActivityApprovalList: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Activity Approvals</h1>
           <p className="text-sm text-gray-500 mt-0.5">Review and approve partner-submitted activities</p>
@@ -78,7 +78,7 @@ export const ActivityApprovalList: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             Loading...
@@ -91,7 +91,7 @@ export const ActivityApprovalList: React.FC = () => {
           </div>
         ) : (
           <>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/60">
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -182,7 +182,7 @@ export const ActivityApprovalList: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {total > LIMIT && (
               <Pagination

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { usersApi } from '../../api/users.api';
@@ -10,9 +11,13 @@ const ROLES = ['All', 'user', 'partner', 'admin'] as const;
 type RoleFilter = (typeof ROLES)[number];
 
 export const UsersList: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
+
+  useEffect(() => { setSearch(searchFromUrl); setPage(1); }, [searchFromUrl]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All');
   const [page, setPage] = useState(1);
   const limit = 20;
@@ -58,11 +63,11 @@ export const UsersList: React.FC = () => {
             Manage all registered users
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <select
             value={roleFilter}
             onChange={(e) => { setRoleFilter(e.target.value as RoleFilter); setPage(1); }}
-            className="input w-36"
+            className="input w-full sm:w-36"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>
@@ -70,7 +75,7 @@ export const UsersList: React.FC = () => {
               </option>
             ))}
           </select>
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -80,13 +85,14 @@ export const UsersList: React.FC = () => {
               placeholder="Search users..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="input pl-9 w-52"
+              className="input pl-9 w-full sm:w-52"
             />
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -115,19 +121,20 @@ export const UsersList: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              users.map((user) => (
-                <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+              users.map((user) => {
+                const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+                return <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-xs font-semibold text-primary-700 shrink-0">
-                        {user.firstName?.[0]?.toUpperCase()}
+                        {name[0]?.toUpperCase() ?? '?'}
                       </div>
-                      <p className="font-medium text-gray-900">
-                        {user.firstName} {user.lastName}
+                      <p className={name ? 'font-medium text-gray-900' : 'text-gray-500'}>
+                        {name || 'Profile not completed'}
                       </p>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-600">{user.email}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{user.email?.trim() || 'Not provided'}</td>
                   <td className="px-5 py-3.5 text-gray-500">{user.phone ?? '—'}</td>
                   <td className="px-5 py-3.5">
                     <span
@@ -173,11 +180,12 @@ export const UsersList: React.FC = () => {
                       )}
                     </button>
                   </td>
-                </tr>
-              ))
+                </tr>;
+              })
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

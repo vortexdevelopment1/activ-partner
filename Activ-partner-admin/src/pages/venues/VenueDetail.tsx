@@ -29,22 +29,9 @@ import { RequestChangesModal } from './RequestChangesModal';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import type { Venue, VenueAnswer } from '../../types';
+import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
-const API_URL =
-  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
-  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ||
-  '';
-
-const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
-
-const assetUrl = (src?: string | null) => {
-  const value = src?.trim();
-  if (!value) return '';
-  const resolved = /^(https?:|data:|blob:)/i.test(value)
-    ? value
-    : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
-  return resolved;
-};
+const assetUrl = resolveAssetUrl;
 
 const questionLabel = (answer: VenueAnswer) => {
   const question = typeof answer.question === 'object' ? (answer.question as any) : null;
@@ -54,28 +41,35 @@ const questionLabel = (answer: VenueAnswer) => {
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="flex gap-3">
-      <span className="text-xs text-gray-400 w-32 shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-gray-800">{value}</span>
+    <div className="grid min-w-0 grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+      <span className="text-xs text-gray-400 pt-0.5">{label}</span>
+      <span className="min-w-0 text-sm text-gray-800 [overflow-wrap:anywhere]">{value}</span>
     </div>
   ) : null;
 
 const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, src }) => {
   const resolvedSrc = assetUrl(src);
-  const isPdf = /\.pdf(?:[?#].*)?$/i.test(resolvedSrc);
+  const isPdf = isPdfUrl(resolvedSrc);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState('');
   return resolvedSrc ? (
     <div>
       <p className="text-xs text-gray-400 mb-1.5">{label}</p>
       {isPdf ? (
-        <a
-          href={resolvedSrc}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          disabled={opening}
+          onClick={async () => {
+            setOpening(true); setOpenError('');
+            try { await openPdfDocument(resolvedSrc); }
+            catch (err: any) { setOpenError(err?.message || 'PDF could not be opened.'); }
+            finally { setOpening(false); }
+          }}
           className="flex w-full max-w-xs items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600"
         >
           <FileText size={22} />
-          Open PDF
-        </a>
+          {opening ? 'Opening PDF...' : 'Open PDF'}
+        </button>
       ) : (
         <a href={resolvedSrc} target="_blank" rel="noreferrer">
         <img
@@ -85,6 +79,7 @@ const KycDocImage: React.FC<{ label: string; src?: string | null }> = ({ label, 
         />
         </a>
       )}
+      {openError && <p className="mt-2 max-w-xs text-xs text-red-500">{openError}</p>}
     </div>
   ) : null;
 };
@@ -190,6 +185,10 @@ export const VenueDetail: React.FC = () => {
 
   // venue.partner is a flat merged user+partner object from the API
   const partner = typeof venue.partner === 'object' ? (venue.partner as any) : null;
+  const partnerName = [partner?.firstName, partner?.lastName]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join(' ')
+    .trim();
   const category = typeof venue.category === 'object' ? (venue.category as any) : null;
   const amenities: string[] = Array.isArray(venue.amenities) ? venue.amenities : [];
 
@@ -255,10 +254,10 @@ export const VenueDetail: React.FC = () => {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <button
             onClick={() => setDeleteOpen(true)}
-            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5"
+            className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
           >
             <Trash2 size={14} /> Delete Venue
           </button>
@@ -266,19 +265,19 @@ export const VenueDetail: React.FC = () => {
             <>
               <button
                 onClick={() => setChangesOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                className="min-h-10 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 sm:px-4"
               >
                 Request Changes
               </button>
               <button
                 onClick={() => setRejectOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                className="min-h-10 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
               >
                 Reject
               </button>
               <button
                 onClick={() => setApproveOpen(true)}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                className="min-h-10 rounded-lg bg-emerald-600 px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 sm:px-4"
               >
                 Approve
               </button>
@@ -562,8 +561,8 @@ export const VenueDetail: React.FC = () => {
                 <User size={16} className="text-gray-400" /> Partner Information
               </h3>
               <div className="space-y-2.5">
-                <InfoRow label="Name" value={`${partner.firstName} ${partner.lastName}`} />
-                <InfoRow label="Email" value={partner.email} />
+                <InfoRow label="Name" value={partnerName || 'Profile not completed'} />
+                <InfoRow label="Email" value={partner.email?.trim() || 'Not provided'} />
                 <InfoRow label="Phone" value={partner.phone} />
                 <InfoRow label="Contact Phone" value={partner.contactPhone} />
                 <InfoRow label="Business" value={partner.businessName} />
@@ -655,9 +654,9 @@ export const VenueDetail: React.FC = () => {
                 </div>
               )}
               {venue.approvedBy && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Approved By</span>
-                  <span className="text-gray-700">{venue.approvedBy}</span>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-gray-400 shrink-0">Approved By</span>
+                  <span className="text-gray-700 min-w-0 text-right break-words">{venue.approvedByName?.trim() || 'Admin'}</span>
                 </div>
               )}
               <div className="flex justify-between">

@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Percent } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, Search, Save } from 'lucide-react';
 import { commissionsApi } from '../../api/commissions.api';
 import { CommissionForm } from './CommissionForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
-import type { Commission } from '../../types';
+import type { Commission, EffectiveCityCommission } from '../../types';
 
 export const CommissionsList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('search') ?? '';
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [page, setPage] = useState(1);
@@ -17,13 +20,24 @@ export const CommissionsList: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<Commission | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [defaultRate, setDefaultRate] = useState('5');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['commissions', page],
-    queryFn: () => commissionsApi.getAll({ page, limit }),
+  const { data: defaultData, isLoading: isDefaultLoading } = useQuery({
+    queryKey: ['commissions', 'default'],
+    queryFn: commissionsApi.getDefault,
   });
 
-  const commissions: Commission[] = data?.data?.data?.items ?? [];
+  useEffect(() => {
+    const rate = defaultData?.data?.data?.commissionPercentage;
+    if (typeof rate === 'number') setDefaultRate(String(rate));
+  }, [defaultData]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['commissions', 'cities', page, search],
+    queryFn: () => commissionsApi.getCities({ page, limit, search: search || undefined }),
+  });
+
+  const commissions: EffectiveCityCommission[] = data?.data?.data?.items ?? [];
   const total: number = data?.data?.data?.total ?? 0;
 
   const createMutation = useMutation({
@@ -59,8 +73,26 @@ export const CommissionsList: React.FC = () => {
     onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to delete'),
   });
 
+  const defaultMutation = useMutation({
+    mutationFn: (rate: number) => commissionsApi.updateDefault(rate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commissions'] });
+      success('India-wide commission updated');
+    },
+    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to update default commission'),
+  });
+
+  const saveDefaultRate = () => {
+    const rate = Number(defaultRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      error('Enter a commission percentage between 0 and 100');
+      return;
+    }
+    defaultMutation.mutate(rate);
+  };
+
   const handleSubmit = (payload: { city: string; state: string; commissionPercentage: number }) => {
-    if (editItem) {
+    if (editItem?.id) {
       updateMutation.mutate({ id: editItem.id, payload });
     } else {
       createMutation.mutate(payload);
@@ -76,7 +108,7 @@ export const CommissionsList: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Commissions</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Manage commission percentages by city and state
+            Set the India-wide rate and add location overrides when needed
           </p>
         </div>
         <button
@@ -87,12 +119,63 @@ export const CommissionsList: React.FC = () => {
         </button>
       </div>
 
+      <section className="bg-white border border-gray-200 rounded-lg p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Percent size={18} className="text-primary-600" />
+              <h3 className="font-semibold text-gray-900">India-wide default</h3>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Applies to every state and city unless a location override exists.
+            </p>
+          </div>
+          <div className="flex items-end gap-2 w-full sm:w-auto">
+            <label className="flex-1 sm:w-36">
+              <span className="block text-xs font-medium text-gray-600 mb-1">Commission (%)</span>
+              <input
+                aria-label="India-wide commission percentage"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={defaultRate}
+                disabled={isDefaultLoading || defaultMutation.isPending}
+                onChange={(event) => setDefaultRate(event.target.value)}
+                className="input w-full"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={saveDefaultRate}
+              disabled={isDefaultLoading || defaultMutation.isPending}
+              className="btn-primary flex items-center gap-2 whitespace-nowrap"
+            >
+              <Save size={16} /> {defaultMutation.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div>
+        <h3 className="font-semibold text-gray-900">All Indian cities</h3>
+        <p className="text-sm text-gray-500 mt-0.5">Edit any city to give it a rate different from its state or India-wide default.</p>
+      </div>
+
+      <label className="relative block max-w-sm">
+        <span className="sr-only">Search commissions</span>
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input className="input pl-9" value={search} placeholder="Search city or state..."
+          onChange={(event) => { setPage(1); setSearchParams(event.target.value ? { search: event.target.value } : {}, { replace: true }); }} />
+      </label>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {['City', 'State', 'Commission %', 'Created', ''].map((h) => (
+              {['City', 'State', 'Commission %', 'Rate source', ''].map((h) => (
                 <th
                   key={h}
                   className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide"
@@ -113,17 +196,17 @@ export const CommissionsList: React.FC = () => {
               <tr>
                 <td colSpan={5} className="text-center py-16">
                   <Percent size={32} className="mx-auto text-gray-200 mb-2" />
-                  <p className="text-gray-400 text-sm">No commissions yet. Add your first one!</p>
+                  <p className="text-gray-400 text-sm">No Indian cities match this search.</p>
                 </td>
               </tr>
             ) : (
               commissions.map((item) => (
-                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                <tr key={`${item.state}-${item.city}`} className="border-b border-gray-50 hover:bg-gray-50/50">
                   {/* City */}
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-gray-900">{item.city || 'All cities'}</p>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-600">{item.state || 'All states'}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{item.state}</td>
 
                   {/* Commission % */}
                   <td className="px-5 py-3.5">
@@ -133,32 +216,42 @@ export const CommissionsList: React.FC = () => {
                     </span>
                   </td>
 
-                  {/* Created */}
-                  <td className="px-5 py-3.5 text-gray-500 text-xs">
-                    {new Date(item.createdAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                  {/* Source */}
+                  <td className="px-5 py-3.5 text-xs">
+                    <span className="capitalize text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                      {item.source === 'default' ? 'India default' : `${item.source} override`}
+                    </span>
                   </td>
 
                   {/* Actions */}
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1 justify-end">
                       <button
-                        onClick={() => { setEditItem(item); setFormOpen(true); }}
+                        onClick={() => {
+                          setEditItem({
+                            id: item.overrideId ?? '',
+                            city: item.city,
+                            state: item.state,
+                            commissionPercentage: item.commissionPercentage,
+                            createdAt: '',
+                            updatedAt: '',
+                          });
+                          setFormOpen(true);
+                        }}
                         className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                         title="Edit"
                       >
                         <Pencil size={15} />
                       </button>
-                      <button
-                        onClick={() => setDeleteId(item.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {item.overrideId && (
+                        <button
+                          onClick={() => setDeleteId(item.overrideId)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove city override"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -166,6 +259,7 @@ export const CommissionsList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

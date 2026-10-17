@@ -10,6 +10,7 @@ import {
   CalendarClock,
   FileImage,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { bankAccountsApi } from '../../api/bank-accounts.api';
 import { Badge } from '../../components/ui/Badge';
@@ -17,100 +18,22 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import type { BankAccount } from '../../types';
-
-const API_URL =
-  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
-  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ||
-  '';
-
-const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
-
-const assetUrl = (src?: string | null) => {
-  const value = src?.trim();
-  if (!value) return '';
-  const resolved = /^(https?:|data:|blob:)/i.test(value)
-    ? value
-    : `${ASSET_BASE_URL}/${value.replace(/^\/+/, '')}`;
-  if (
-    /^https?:\/\/res\.cloudinary\.com\//i.test(resolved) &&
-    /\.pdf(?:[?#].*)?$/i.test(resolved) &&
-    resolved.includes('/image/upload/')
-  ) {
-    return resolved.replace('/image/upload/', '/raw/upload/');
-  }
-  return resolved;
-};
-
-const isPdfUrl = (url: string) => /\.pdf(?:[?#].*)?$/i.test(url);
-
-const documentUrlCandidates = (url: string) => {
-  const urls = [url];
-  if (/^https?:\/\/res\.cloudinary\.com\//i.test(url)) {
-    if (url.includes('/raw/upload/')) {
-      urls.push(url.replace('/raw/upload/', '/image/upload/'));
-    } else if (url.includes('/image/upload/')) {
-      urls.push(url.replace('/image/upload/', '/raw/upload/'));
-    }
-  }
-  if (ASSET_BASE_URL && /^https?:/i.test(url)) {
-    try {
-      const parsed = new URL(url);
-      if (parsed.pathname.startsWith('/uploads/')) {
-        urls.push(`${ASSET_BASE_URL}${parsed.pathname}${parsed.search}`);
-      }
-    } catch {
-      // Keep the original URL if it cannot be parsed.
-    }
-  }
-  return Array.from(new Set(urls));
-};
-
-const openDocumentFromUrl = async (url: string): Promise<boolean> => {
-  const popup = window.open('', '_blank');
-  if (popup) popup.opener = null;
-
-  for (const candidate of documentUrlCandidates(url)) {
-    try {
-      const response = await fetch(candidate);
-      if (!response.ok) continue;
-
-      const blob = await response.blob();
-      if (!blob.size || /^text\/html/i.test(blob.type)) continue;
-
-      const objectUrl = URL.createObjectURL(blob);
-      if (popup) {
-        popup.location.href = objectUrl;
-      } else {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      }
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      return true;
-    } catch {
-      // Try the next Cloudinary delivery type.
-    }
-  }
-
-  popup?.close();
-  return false;
-};
+import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="flex gap-3">
-      <span className="text-xs text-gray-400 w-36 shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-gray-800">{value}</span>
+    <div className="grid grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] gap-3">
+      <span className="text-xs text-gray-400 pt-0.5">{label}</span>
+      <span className="text-sm text-gray-800 break-words">{value}</span>
     </div>
   ) : null;
 
 const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => {
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState('');
-  const [imageIndex, setImageIndex] = useState(0);
   const [imageError, setImageError] = useState('');
-  const resolvedSrc = assetUrl(src);
+  const resolvedSrc = resolveAssetUrl(src);
   if (!resolvedSrc) return null;
-  const candidates = documentUrlCandidates(resolvedSrc);
-  const imageSrc = candidates[Math.min(imageIndex, candidates.length - 1)];
 
   return isPdfUrl(resolvedSrc) ? (
     <div className="space-y-2">
@@ -120,20 +43,28 @@ const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => 
         onClick={async () => {
           setOpening(true);
           setOpenError('');
-          const opened = await openDocumentFromUrl(resolvedSrc);
-          setOpening(false);
-          if (!opened) {
-            setOpenError(
-              'Cloudinary blocked this PDF. Enable PDF delivery in Cloudinary or ask the partner to re-upload the cheque as JPG/PNG.',
-            );
-          }
+          try { await openPdfDocument(resolvedSrc); }
+          catch (err: any) { setOpenError(err?.message || 'PDF could not be opened.'); }
+          finally { setOpening(false); }
         }}
-        className="flex w-full max-w-md items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <FileText size={22} />
         {opening ? 'Opening cancelled cheque...' : 'Open cancelled cheque PDF'}
       </button>
-      {openError && <p className="max-w-md text-xs text-red-500">{openError}</p>}
+      {openError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">PDF preview is unavailable</p>
+            <p className="mt-0.5 text-xs leading-5 text-amber-700">
+              {openError.toLowerCase().includes('cloudinary')
+                ? 'Enable PDF delivery in Cloudinary, or ask the partner to upload the cheque as JPG or PNG.'
+                : openError}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   ) : imageError ? (
     <div className="max-w-md rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -141,15 +72,11 @@ const CancelledChequeDocument: React.FC<{ src?: string | null }> = ({ src }) => 
       the backend or ask the partner to re-upload the cheque.
     </div>
   ) : (
-    <a href={imageSrc} target="_blank" rel="noreferrer">
+    <a href={resolvedSrc} target="_blank" rel="noreferrer">
       <img
-        src={imageSrc}
+        src={resolvedSrc}
         alt="Cancelled cheque"
         onError={() => {
-          if (imageIndex < candidates.length - 1) {
-            setImageIndex((index) => index + 1);
-            return;
-          }
           setImageError('unavailable');
         }}
         className="w-full max-w-md rounded-lg border border-gray-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
@@ -235,7 +162,7 @@ export const BankAccountDetail: React.FC = () => {
   const isUnderReview = account.status === 'under_review';
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="w-full max-w-6xl space-y-5">
       {/* Back + header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -285,8 +212,9 @@ export const BankAccountDetail: React.FC = () => {
         </div>
       )}
 
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
       {/* Bank details */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+      <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <Landmark size={16} className="text-primary-600" />
           <h3 className="text-sm font-semibold text-gray-700">Bank Details</h3>
@@ -303,7 +231,7 @@ export const BankAccountDetail: React.FC = () => {
 
       {/* Partner info */}
       {account.partner && (
-        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <User size={16} className="text-primary-600" />
             <h3 className="text-sm font-semibold text-gray-700">Partner</h3>
@@ -330,7 +258,7 @@ export const BankAccountDetail: React.FC = () => {
 
       {/* Cancelled cheque */}
       {account.cancelledChequeUrl && (
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 min-w-0">
           <div className="flex items-center gap-2 mb-3">
             <FileImage size={16} className="text-primary-600" />
             <h3 className="text-sm font-semibold text-gray-700">Cancelled Cheque</h3>
@@ -341,12 +269,12 @@ export const BankAccountDetail: React.FC = () => {
 
       {/* Review info */}
       {(account.reviewedAt || account.reviewedBy) && (
-        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-2.5">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-2.5 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <CalendarClock size={16} className="text-primary-600" />
             <h3 className="text-sm font-semibold text-gray-700">Review Info</h3>
           </div>
-          <InfoRow label="Reviewed By" value={account.reviewedBy} />
+          <InfoRow label="Reviewed By" value={account.reviewedBy ? account.reviewedByName?.trim() || 'Admin' : undefined} />
           <InfoRow
             label="Reviewed At"
             value={
@@ -373,6 +301,7 @@ export const BankAccountDetail: React.FC = () => {
           />
         </div>
       )}
+      </div>
 
       {/* Approve confirm */}
       <ConfirmDialog

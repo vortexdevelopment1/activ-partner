@@ -48,6 +48,7 @@
     "@types/pdfkit": "^0.17.6",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
+    "country-state-city": "^3.2.1",
     "class-validator": "^0.14.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.1",

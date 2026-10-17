@@ -10,6 +10,7 @@ import {
   XCircle,
   CalendarClock,
   FileImage,
+  FileText,
 } from 'lucide-react';
 import { gstVerificationApi } from '../../api/gst-verification.api';
 import { Badge } from '../../components/ui/Badge';
@@ -17,6 +18,34 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import type { GstVerification } from '../../types';
+import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
+
+const GstDocument: React.FC<{ src: string }> = ({ src }) => {
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState('');
+  const resolved = resolveAssetUrl(src);
+
+  return isPdfUrl(resolved) ? (
+    <div className="space-y-2">
+      <button type="button" disabled={opening}
+        onClick={async () => {
+          setOpening(true); setOpenError('');
+          try { await openPdfDocument(resolved); }
+          catch (err: any) { setOpenError(err?.message || 'PDF could not be opened.'); }
+          finally { setOpening(false); }
+        }}
+        className="flex w-full max-w-md items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-600 disabled:opacity-60">
+        <FileText size={22} /> {opening ? 'Opening PDF...' : 'Open GST document PDF'}
+      </button>
+      {openError && <p className="max-w-md text-xs text-red-500">{openError}</p>}
+    </div>
+  ) : (
+    <a href={resolved} target="_blank" rel="noreferrer">
+      <img src={resolved} alt="GST document"
+        className="w-full max-w-md rounded-lg border border-gray-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in" />
+    </a>
+  );
+};
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
@@ -226,13 +255,7 @@ export const GstVerificationDetail: React.FC = () => {
             <FileImage size={16} className="text-primary-600" />
             <h3 className="text-sm font-semibold text-gray-700">GST Certificate / Document</h3>
           </div>
-          <a href={request.gstinDocUrl} target="_blank" rel="noreferrer">
-            <img
-              src={request.gstinDocUrl}
-              alt="GST document"
-              className="w-full max-w-md rounded-lg border border-gray-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
-            />
-          </a>
+          <GstDocument src={request.gstinDocUrl} />
         </div>
       )}
 

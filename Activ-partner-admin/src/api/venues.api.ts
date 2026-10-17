@@ -20,15 +20,16 @@ export const venuesApi = {
     amenities?: string[];
     answers?: Array<{ questionId: string; answer: any }>;
   }) => api.post('/venues/admin/create', data),
-  uploadImages: (venueId: string, files: File[], serviceName: string) => {
+  uploadImages: (venueId: string, files: File[], serviceName: string, categoryId: string) => {
     const formData = new FormData();
     formData.append('serviceName', serviceName);
+    formData.append('categoryId', categoryId);
     files.forEach(f => formData.append('images', f));
     return api.post(`/venues/${venueId}/services/images`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; categoryId?: string; partnerId?: string }) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; categoryId?: string; partnerId?: string; city?: string; state?: string; sort?: 'newest' | 'oldest' | 'updated' }) =>
     api.get('/venues/admin/all', { params }),
   getPending: (params?: { page?: number; limit?: number }) =>
     api.get('/venues/admin/pending', { params }),

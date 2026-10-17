@@ -31,6 +31,7 @@ describe("location commissions", () => {
         .mockImplementation(({ data }) =>
           Promise.resolve({ ...rule, ...data }),
         ),
+      findMany: jest.fn().mockResolvedValue([]),
     };
     service = new CommissionService({ partner_city_commissions: table } as any);
   });
@@ -84,7 +85,33 @@ describe("location commissions", () => {
   it("uses the backend default only when no active location rule matches", async () => {
     expect(
       await service.getCommissionByCity("Pune", "Maharashtra"),
-    ).toMatchObject({ commissionPercentage: 10, isDefault: true });
+    ).toMatchObject({ commissionPercentage: 5, isDefault: true });
+  });
+
+  it("uses the editable nationwide rule when one has been saved", async () => {
+    table.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...rule, city_code: "", state_code: null, commission_bps: 650 });
+
+    expect(
+      await service.getCommissionByCity("Pune", "Maharashtra"),
+    ).toMatchObject({ commissionPercentage: 6.5, isDefault: true });
+  });
+
+  it("persists the nationwide default so admins can change it later", async () => {
+    await expect(service.updateDefaultCommission(5.5)).resolves.toEqual({
+      commissionPercentage: 5.5,
+      isPersisted: true,
+    });
+    expect(table.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        city_code: "",
+        state_code: null,
+        commission_bps: 550,
+      }),
+    });
   });
 
   it("saves state-wide rules with basis-point precision", async () => {
@@ -119,5 +146,23 @@ describe("location commissions", () => {
     expect(
       await service.update(rule.id, { state: "", commissionPercentage: 6 }),
     ).toMatchObject({ city: "mumbai", state: null, commissionPercentage: 6 });
+  });
+
+  it("lists Indian cities with the effective nationwide rate", async () => {
+    const [cities, total] = await service.findAllIndianCities({
+      page: 1,
+      limit: 5,
+      search: "Mumbai",
+      skip: 0,
+    } as any);
+
+    expect(total).toBeGreaterThan(0);
+    expect(cities[0]).toMatchObject({
+      city: expect.stringMatching(/Mumbai/i),
+      state: "Maharashtra",
+      commissionPercentage: 5,
+      source: "default",
+      overrideId: null,
+    });
   });
 });

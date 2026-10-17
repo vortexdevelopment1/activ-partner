@@ -20,7 +20,7 @@ const colors = {
 export const Toast: React.FC = () => {
   const { toasts, remove } = useToastStore();
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-80">
+    <div className="fixed top-4 left-4 right-4 sm:left-auto sm:w-80 z-[100] flex flex-col gap-2">
       {toasts.map((toast) => (
         <div key={toast.id} className={`flex items-start gap-3 p-3 rounded-xl border shadow-lg ${colors[toast.type]}`}>
           {icons[toast.type]}
