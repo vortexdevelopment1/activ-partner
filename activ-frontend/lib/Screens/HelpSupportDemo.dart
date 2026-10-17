@@ -143,7 +143,7 @@ class _HelpSupportDemoState extends State<HelpSupportDemo> with SingleTickerProv
               "Help & Support",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               "We are here to help you succeed!\nAvailable from 9 AM - 9 PM",
               style: TextStyle(color: Colors.grey),

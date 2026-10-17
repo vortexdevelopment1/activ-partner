@@ -136,6 +136,7 @@ import 'package:no_context_navigation/no_context_navigation.dart';
 import 'package:overlay_support/overlay_support.dart';
 
 import 'Screens/splash_screen.dart';
+import 'Screens/session_navigation.dart';
 import 'Style/app_colors.dart';
 import 'api_calling/api_constant.dart';
 
@@ -178,10 +179,14 @@ class MyApp extends StatelessWidget {
         child: MaterialApp(
           //title: 'Flutter Demo',
           debugShowCheckedModeBanner: false,
+          scrollBehavior:
+              const MaterialScrollBehavior().copyWith(scrollbars: false),
           theme: ThemeData(
             primarySwatch: Colors.orange,
+            fontFamily: 'Satoshi',
           ),
           navigatorKey: NavigationService.navigationKey,
+          navigatorObservers: [SessionNavigation.instance],
           home: const SplashScreen(),
           // home: new GetStartedScreen(),
         ),

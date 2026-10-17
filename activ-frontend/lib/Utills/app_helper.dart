@@ -11,7 +11,7 @@ class AppHelper {
     if(Platform.isAndroid)
     {
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown,]);
-      var _croppedFile = await ImageCropper().cropImage
+      var croppedFile = await ImageCropper().cropImage
         (
           sourcePath: imageFile.path,
           uiSettings: [
@@ -44,7 +44,7 @@ class AppHelper {
           ),
         ],
       );
-      return File(_croppedFile!.path.toString());
+      return File(croppedFile!.path.toString());
     }
     else
     {

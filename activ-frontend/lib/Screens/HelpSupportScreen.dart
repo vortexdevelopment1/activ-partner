@@ -543,20 +543,64 @@ class FaqSupportScreen extends StatefulWidget {
 
 class _FaqSupportScreenState extends State<FaqSupportScreen> {
   int _open = 0;
-  static const _faqs = [
-    _FaqData(
-      'Is there a fee to use the app?',
-      'Listing your venue on ACTIV is free, We charge a small commission per confirmed booking. You can view the applicable commission rates for your city in the app.',
-    ),
-    _FaqData(
-      'What can I do with ACTIV user app?',
-      'With the ACTIV partner app, you can manage your venue listing, track bookings, update availability slots, handle team members, and view payout history - all from one place.',
-    ),
-    _FaqData(
-      'When will the ACTIV app be available ?',
-      "The ACTIV user app is currently in development. We're working hard to hiring it to you soon, Stay tuned for our official launched announcement.",
-    ),
-  ];
+  List<_FaqData> _faqs = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFaqs();
+  }
+
+  Future<void> _loadFaqs() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(FAQ_PUBLIC_URL),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Unable to load FAQs.');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final records = decoded is Map<String, dynamic>
+          ? decoded['data']
+          : decoded;
+      final faqs = records is List
+          ? records
+              .whereType<Map>()
+              .map(
+                (record) => _FaqData(
+                  record['question']?.toString().trim() ?? '',
+                  record['answer']?.toString().trim() ?? '',
+                ),
+              )
+              .where((faq) => faq.question.isNotEmpty && faq.answer.isNotEmpty)
+              .toList()
+          : <_FaqData>[];
+
+      if (!mounted) return;
+      setState(() {
+        _faqs = faqs;
+        _open = faqs.isEmpty ? -1 : 0;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Unable to load FAQs right now.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -569,22 +613,60 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
           RequestCallbackScreen(client: widget.client),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 30, 28, 0),
-        child: Column(
-          children: [
-            for (var i = 0; i < _faqs.length; i++) ...[
-              _FaqTile(
-                question: _faqs[i].question,
-                answer: _faqs[i].answer,
-                open: _open == i,
-                onTap: () => setState(() => _open = _open == i ? -1 : i),
-              ),
-              if (i != _faqs.length - 1) const SizedBox(height: 14),
-            ],
-          ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 15,
+                            color: AppColors.black1,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: _loadFaqs,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : _faqs.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No FAQs available yet.',
+                          style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 15,
+                            color: AppColors.black1,
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          for (var i = 0; i < _faqs.length; i++) ...[
+                            _FaqTile(
+                              question: _faqs[i].question,
+                              answer: _faqs[i].answer,
+                              open: _open == i,
+                              onTap: () => setState(
+                                () => _open = _open == i ? -1 : i,
+                              ),
+                            ),
+                            if (i != _faqs.length - 1)
+                              const SizedBox(height: 14),
+                          ],
+                        ],
+                      ),
         ),
-      ),
     );
   }
 }

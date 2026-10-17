@@ -12,7 +12,7 @@ import '../MobileNumberFormatter.dart';
 import '../StringExtensions.dart';
 
 class DocumentInfoDetailsScreen extends StatefulWidget {
-  const DocumentInfoDetailsScreen({Key? key}) : super(key: key);
+  const DocumentInfoDetailsScreen({super.key});
 
   @override
   State<DocumentInfoDetailsScreen> createState() => _State();
@@ -198,7 +198,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -234,7 +234,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
         "*",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium',
+            fontFamily: 'Satoshi',
             color: AppColors.red,
             height: 1
         ),
@@ -252,7 +252,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
             "Full Name",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -281,18 +281,18 @@ class _State extends State<DocumentInfoDetailsScreen> {
             inputFormatters: [
               // Input formatter to allow Only Characters + Space // Using a regular expression
               FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-              new LengthLimitingTextInputFormatter(50),
+              LengthLimitingTextInputFormatter(50),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Full Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -314,7 +314,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
             "Email Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -341,18 +341,18 @@ class _State extends State<DocumentInfoDetailsScreen> {
             keyboardType: TextInputType.emailAddress,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(100),
+              LengthLimitingTextInputFormatter(100),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Email Address', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -375,7 +375,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
             "Phone Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -395,10 +395,10 @@ class _State extends State<DocumentInfoDetailsScreen> {
       decoration: BoxDecoration(
           color: AppColors.gray2,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray2, width: 1)),
       child: Padding(
@@ -413,10 +413,10 @@ class _State extends State<DocumentInfoDetailsScreen> {
                 children: [
                   Container(
                     child: Text(
-                      (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                      (phoneCode!="") ? phoneCode : "",
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -460,14 +460,14 @@ class _State extends State<DocumentInfoDetailsScreen> {
                   },
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,
@@ -503,7 +503,7 @@ class _State extends State<DocumentInfoDetailsScreen> {
               "Alternate Phone Number",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -533,10 +533,10 @@ class _State extends State<DocumentInfoDetailsScreen> {
                 children: [
                   Container(
                     child: Text(
-                      (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                      (phoneCode!="") ? phoneCode : "",
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -579,14 +579,14 @@ class _State extends State<DocumentInfoDetailsScreen> {
                   },
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,

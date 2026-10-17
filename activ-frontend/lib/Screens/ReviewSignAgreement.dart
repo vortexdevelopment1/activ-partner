@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../Style/app_colors.dart';
 import '../Utills/common_utilities.dart';
+import '../Utills/browser_session.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
@@ -43,6 +44,10 @@ class _State extends State<ReviewSignAgreement> {
   @override
   void initState() {
     super.initState();
+    if (isBrowserSession) {
+      _signature.text = readBrowserSession('agreement_signature_draft') ?? '';
+      _signature.addListener(() => writeBrowserSession('agreement_signature_draft', _signature.text));
+    }
     _loadAgreement();
   }
 
@@ -182,22 +187,30 @@ class _State extends State<ReviewSignAgreement> {
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
         child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                getStepBarCount(1, 10, 10),
+                const SizedBox(height: 25),
+                Text('Review & Sign Partnership Agreement',
+                    style: OnboardingStyles.heading.copyWith(fontSize: 25)),
+                const SizedBox(height: 12),
+                Text(
+                    'Review your partnership agreement carefully before completing registration',
+                    style: OnboardingStyles.body
+                        .copyWith(fontSize: 16, height: 1.4)),
+              ],
+            ),
+          ),
           Expanded(
               child: SingleChildScrollView(
             key: const Key('agreement-page-scroll'),
-            padding: const EdgeInsets.fromLTRB(15, 12, 15, 24),
+            padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const OnboardingLogo(),
-              getStepBarCount(1, 10, 10),
-              const SizedBox(height: 25),
-              Text('Review & Sign Partnership Agreement',
-                  style: OnboardingStyles.heading.copyWith(fontSize: 25)),
-              const SizedBox(height: 12),
-              Text(
-                  'Review your partnership agreement carefully before completing registration',
-                  style: OnboardingStyles.body
-                      .copyWith(fontSize: 16, height: 1.4)),
+
               const SizedBox(height: 22),
               Container(
                 padding: const EdgeInsets.all(20),
@@ -253,17 +266,14 @@ class _State extends State<ReviewSignAgreement> {
                                                       child:
                                                           const Text('Retry')),
                                                 ])))
-                                    : Scrollbar(
+                                    : SingleChildScrollView(
                                         controller: _documentScroll,
-                                        thumbVisibility: true,
-                                        child: SingleChildScrollView(
-                                            controller: _documentScroll,
-                                            padding: const EdgeInsets.all(12),
-                                            child: SelectableText(_content,
-                                                style: OnboardingStyles.body
-                                                    .copyWith(
-                                                        fontSize: 16,
-                                                        height: 1.45)))),
+                                        padding: const EdgeInsets.all(12),
+                                        child: SelectableText(_content,
+                                            style: OnboardingStyles.body
+                                                .copyWith(
+                                                    fontSize: 16,
+                                                    height: 1.45))),
                           )),
                       const SizedBox(height: 12),
                       Row(

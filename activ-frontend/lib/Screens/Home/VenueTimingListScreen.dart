@@ -27,7 +27,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
 
   late final String todayName;
 
-  final Map<String, ExpansionTileController> _controllers = {};
+  final Map<String, ExpansibleController> _controllers = {};
   final Map<String, bool> _expandedState = {};
 
   final List<String> weekOrder = const [
@@ -78,10 +78,6 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
   }
 
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +155,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -218,7 +214,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                   day,
                   style: TextStyle(
                     fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                    fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                    fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                     color: AppColors.darkBlack,
                   ),
                 ),
@@ -235,7 +231,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       "Closed",
                       style: TextStyle(
                         fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                         color: AppColors.darkRed,
                       ),
                     );
@@ -247,12 +243,12 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       "$open - $close",
                       style: TextStyle(
                         fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                         color: AppColors.darkBlack,
                       ),
                     ),
                   );
-                }).toList(),
+                }),
               ],
             ),
           ),
@@ -303,7 +299,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       day,
                       style: TextStyle(
                         fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -320,7 +316,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         "OPEN TIME",
                         style: TextStyle(
                           fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                          fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                          fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                           color: AppColors.darkGray,
                         ),
                       ),
@@ -330,7 +326,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         "CLOSE TIME",
                         style: TextStyle(
                           fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                          fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                          fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                           color: AppColors.darkGray,
                         ),
                       ),
@@ -354,7 +350,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         "Closed",
                         style: TextStyle(
                           fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                          fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                          fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                           color: AppColors.darkRed,
                         ),
                       ),
@@ -372,7 +368,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                                 open,
                                 style: TextStyle(
                                   fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                                   color: AppColors.darkBlack,
                                 ),
                               ),
@@ -382,7 +378,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                                 close,
                                 style: TextStyle(
                                   fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                                   color: AppColors.darkBlack,
                                 ),
                               ),
@@ -394,7 +390,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       // 🔹 SLOT DIVIDER (except last)
                       if (slotIndex != slots.length - 1)
                         Divider(
-                          color: AppColors.lightGray.withOpacity(0.4),
+                          color: AppColors.lightGray.withValues(alpha: 0.4),
                           thickness: 1,
                         ),
                     ],
@@ -449,7 +445,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       day,
                       style: TextStyle(
                         fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -464,7 +460,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                     "Closed",
                     style: TextStyle(
                       fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                      fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                      fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                       color: AppColors.darkRed,
                     ),
                   )
@@ -514,7 +510,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         // 🔹 DIVIDER
                         if (slotIndex != slots.length - 1)
                           Divider(
-                            color: AppColors.lightGray.withOpacity(0.4),
+                            color: AppColors.lightGray.withValues(alpha: 0.4),
                             thickness: 1,
                           ),
                       ],
@@ -584,7 +580,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       day,
                       style: TextStyle(
                         fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -599,7 +595,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                     "Closed",
                     style: TextStyle(
                       fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_14),
-                      fontFamily: CommonUtilities.fontTypeAccordingToLang('FontMedium'),
+                      fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                       color: AppColors.darkRed,
                     ),
                   )
@@ -649,7 +645,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         // 🔹 DIVIDER BETWEEN SLOTS
                         if (slotIndex != slots.length - 1)
                           Divider(
-                            color: AppColors.lightGray.withOpacity(0.4),
+                            color: AppColors.lightGray.withValues(alpha: 0.4),
                             thickness: 1,
                           ),
                       ],
@@ -710,7 +706,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       day,
                       style: TextStyle(
                         fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                        fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                        fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                       ),
                     ),
                   ],
@@ -749,7 +745,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                     day,
                     style: TextStyle(
                       fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-                      fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+                      fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                     ),
                   ),
                 ],
@@ -791,7 +787,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                       ),
                       if (slotIndex != slots.length - 1)
                         Divider(
-                          color: AppColors.lightGray.withOpacity(0.4),
+                          color: AppColors.lightGray.withValues(alpha: 0.4),
                         ),
                     ],
                   );
@@ -830,7 +826,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
           style: TextStyle(
             fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
             fontFamily:
-            CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+            CommonUtilities.fontTypeAccordingToLang('Satoshi'),
             color: AppColors.darkBlack,
           ),
         ),
@@ -866,7 +862,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
               (slot) => slot["open"] == "-" || slot["close"] == "-",
         );
 
-        _controllers.putIfAbsent(day, () => ExpansionTileController());
+        _controllers.putIfAbsent(day, () => ExpansibleController());
         _expandedState.putIfAbsent(
           day,
               () => day == todayName && !isDayClosed,
@@ -963,7 +959,7 @@ class _State extends State<VenueTimingListScreen> with SingleTickerProviderState
                         Divider(
                           height: 16,
                           color:
-                          AppColors.lightGray.withOpacity(0.4),
+                          AppColors.lightGray.withValues(alpha: 0.4),
                         ),
                     ],
                   );

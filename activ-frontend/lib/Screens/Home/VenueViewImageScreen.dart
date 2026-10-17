@@ -347,7 +347,7 @@ class _VenueImageScreenState extends State<VenueViewImageScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -385,7 +385,7 @@ class _VenueImageScreenState extends State<VenueViewImageScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 6,
           )
         ],
@@ -410,7 +410,7 @@ class _VenueImageScreenState extends State<VenueViewImageScreen> {
                   padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
+                    color: Colors.black.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(

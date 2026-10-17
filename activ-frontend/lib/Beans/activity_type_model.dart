@@ -22,14 +22,14 @@ class ActivityTypeModel {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['image'] = this.image;
-    data['type'] = this.type;
-    data['title'] = this.title;
-    data['description'] = this.description;
-    data['active'] = this.active;
-    data['isSelected'] = this.isSelected;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['image'] = image;
+    data['type'] = type;
+    data['title'] = title;
+    data['description'] = description;
+    data['active'] = active;
+    data['isSelected'] = isSelected;
 
     return data;
   }

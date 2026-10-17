@@ -1,16 +1,11 @@
-import 'package:activ_app/Screens/Home/HomeScreen.dart';
 import 'package:activ_app/Screens/LoginScreen.dart';
+import 'onboarding_widgets.dart';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import 'CommonCode.dart';
-import 'GoogleMapScreen.dart';
-import 'LoginScreenWithPassword.dart';
-import 'MultiImagePickerExample.dart';
-import 'VenuePhotoUploadScreen.dart';
 
 
 class GetStartedScreen extends StatefulWidget {
@@ -70,6 +65,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
 
                             Expanded(
                               child: Container(
@@ -78,12 +74,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                                   shrinkWrap: true,
                                   children: [
 
-                                    SizedBox(
-                                      height: 108,
-                                      child: Center(
-                                        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
-                                      ),
-                                    ),
+
 
                                     Container(
                                       alignment: Alignment.centerLeft,
@@ -91,7 +82,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                                         "📌 Let’s get your venue ACTIVated!",
                                         style: TextStyle(
                                             fontSize: AppSize.size_18,
-                                            fontFamily: 'FontSemiBold',
+                                            fontFamily: 'Satoshi',
                                             color: AppColors.darkBlack,
                                             height: 1.2
                                         ),
@@ -106,7 +97,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                                             "Set up in minutes and get discovered.",
                                         style: TextStyle(
                                             fontSize: AppSize.size_16,
-                                            fontFamily: 'FontRegular',
+                                            fontFamily: 'Satoshi',
                                             color: AppColors.darkBlack,
                                             height: 1.2
                                         ),
@@ -204,7 +195,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
               text,
               style: TextStyle(
                   fontSize: AppSize.size_16,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.darkBlack,
                   height: 1.4
               ),

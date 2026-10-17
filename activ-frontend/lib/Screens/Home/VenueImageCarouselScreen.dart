@@ -170,7 +170,7 @@ class _VenueImageCarouselScreenState extends State<VenueImageCarouselScreen> {
                                       begin: Alignment.topCenter,
                                       end: Alignment.center,
                                       colors: [
-                                        Colors.black.withOpacity(0.5),
+                                        Colors.black.withValues(alpha: 0.5),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -186,7 +186,7 @@ class _VenueImageCarouselScreenState extends State<VenueImageCarouselScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.7),
+                                        color: Colors.black.withValues(alpha: 0.7),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: const Text(
@@ -242,7 +242,7 @@ class _VenueImageCarouselScreenState extends State<VenueImageCarouselScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,

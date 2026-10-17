@@ -82,7 +82,11 @@ export class QuestionsService {
       include: { partner_service_categories: true },
       orderBy: { sort_order: 'asc' },
     });
-    return questions.map((question) => this.mapQuestion(question));
+    return questions
+      .filter((question) =>
+        !['abcd', 'abcde', 'asdf2'].includes(question.question.trim().toLowerCase()),
+      )
+      .map((question) => this.mapQuestion(question));
   }
 
   async findOne(id: string) {

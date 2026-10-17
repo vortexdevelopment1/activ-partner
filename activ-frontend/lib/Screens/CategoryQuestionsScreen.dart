@@ -8,11 +8,15 @@ import 'package:http/http.dart' as http;
 
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
+import '../Utills/activity_question_visibility.dart';
+import '../Utills/browser_session.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import '../api_calling/progress_bar/progress_bar_new.dart';
 import 'CommonCode.dart';
-import 'VenueTimingScreen.dart';
+import 'ActivityReviewScreen.dart';
+import 'VenuePhotoUploadScreen.dart';
+import 'onboarding_widgets.dart';
 
 // ─── Question model ───────────────────────────────────────────────────────────
 
@@ -177,6 +181,22 @@ class _State extends State<CategoryQuestionsScreen> {
   // ─── Composite key helper ─────────────────────────────────────────────────
   String _key(String categoryId, String questionId) => '${categoryId}_$questionId';
 
+  String get _sessionKey => 'question_draft_${widget.venueId}_${widget.currentCategory['id'] ?? ''}';
+
+  void _saveSessionAnswers() {
+    if (!isBrowserSession || _isLoading || _errorMessage.isNotEmpty) return;
+    writeBrowserSession(_sessionKey, jsonEncode({
+      ..._answers,
+      for (final entry in _textControllers.entries) entry.key: entry.value.text,
+    }));
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _saveSessionAnswers();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -222,7 +242,14 @@ class _State extends State<CategoryQuestionsScreen> {
           data = [];
         }
 
-        final questions = data.map((e) => _Question.fromJson(e as Map<String, dynamic>)).where((q) => q.isActive && !{'court surface', 'equipment available'}.contains(q.questionText.trim().toLowerCase())).toList()..sort((a, b) => a.order.compareTo(b.order));
+        final questions = data
+            .map((e) => _Question.fromJson(e as Map<String, dynamic>))
+            .where((q) => q.isActive &&
+                !isPlaceholderActivityQuestion(q.questionText) &&
+                !{'court surface', 'equipment available'}
+                    .contains(q.questionText.trim().toLowerCase()))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
 
         sections = [
           _CategorySection(
@@ -315,6 +342,24 @@ class _State extends State<CategoryQuestionsScreen> {
         }
       }
       if (!mounted) return;
+      if (isBrowserSession) {
+        try {
+          final raw = readBrowserSession(_sessionKey);
+          final draft = raw == null ? <String, dynamic>{} : jsonDecode(raw) as Map<String, dynamic>;
+          for (final entry in draft.entries) {
+            final controller = _textControllers[entry.key];
+            if (controller != null) {
+              controller.text = entry.value?.toString() ?? '';
+            } else {
+              _answers[entry.key] = entry.value is List
+                  ? (entry.value as List).map((e) => e.toString()).toList() : entry.value;
+            }
+          }
+        } catch (_) {}
+        for (final controller in _textControllers.values) {
+          controller.addListener(_saveSessionAnswers);
+        }
+      }
       setState(() {
         _globalQuestions = globals;
         _sections = filteredSections;
@@ -425,7 +470,10 @@ class _State extends State<CategoryQuestionsScreen> {
       }
       final categoryId = widget.currentCategory['id']?.toString() ?? '';
       final titles = displayList.map((q) => q['categoryTitle']).toSet();
-      existingList.removeWhere((q) => q['categoryId'] == categoryId || (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
+      existingList.removeWhere((q) =>
+          isPlaceholderActivityQuestion(q['questionText']) ||
+          q['categoryId'] == categoryId ||
+          (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
       existingList.addAll(displayList);
 
       final response = await (widget.client?.post ?? http.post)(
@@ -451,17 +499,34 @@ class _State extends State<CategoryQuestionsScreen> {
           Navigator.pop(context, true);
           return;
         }
-        CommonUtilities.NavigateWithPush(
-            context,
-            VenueTimingScreen(
-              activityId: widget.venueId,
-              categoryId: widget.currentCategory['id']?.toString() ?? '',
-              categoryTitle: widget.currentCategory['title']?.toString() ?? '',
-              categoryIndex: widget.categoryIndex,
-              totalCategories: widget.totalCategories,
-              remainingCategories: widget.remainingCategories,
-              accumulatedTimings: widget.accumulatedTimings,
-            ));
+
+        final accumulated = List<Map<String, dynamic>>.from(widget.accumulatedTimings)
+          ..removeWhere((entry) => entry['id'] == categoryId)
+          ..add({
+            'id': categoryId,
+            'title': widget.currentCategory['title']?.toString() ?? '',
+            'timing': <String, dynamic>{},
+          });
+
+        if (widget.remainingCategories.isNotEmpty) {
+          final nextCategory = widget.remainingCategories.first;
+          CommonUtilities.NavigateWithPush(
+              context,
+              VenuePhotoUploadScreen(
+                currentCategory: nextCategory,
+                remainingCategories: widget.remainingCategories.sublist(1),
+                categoryIndex: widget.categoryIndex + 1,
+                totalCategories: widget.totalCategories,
+                accumulatedTimings: accumulated,
+              ));
+        } else {
+          CommonUtilities.NavigateWithPush(
+              context,
+              ActivityReviewScreen(
+                activityId: widget.venueId,
+                categoryTimings: accumulated,
+              ));
+        }
       } else {
         final body = jsonDecode(response.body);
         final msg = body['message'] ?? 'Failed to save answers. Please try again.';
@@ -502,16 +567,15 @@ class _State extends State<CategoryQuestionsScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 20, 0, 8),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Text(
-              q.questionText,
-              style: const TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
-                color: AppColors.black1,
-                height: 1.3,
-              ),
+          Text(
+            q.questionText,
+            style: const TextStyle(
+              fontSize: AppSize.size_14,
+              fontFamily: 'Satoshi',
+              color: AppColors.black1,
+              height: 1.3,
             ),
           ),
           if (q.isRequired)
@@ -519,7 +583,7 @@ class _State extends State<CategoryQuestionsScreen> {
               ' *',
               style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1,
               ),
@@ -555,7 +619,7 @@ class _State extends State<CategoryQuestionsScreen> {
             maxLines: maxLines,
             style: const TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
@@ -566,7 +630,7 @@ class _State extends State<CategoryQuestionsScreen> {
                       : 'Enter ${q.questionText.toLowerCase()}',
               hintStyle: const TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
               border: InputBorder.none,
@@ -582,7 +646,7 @@ class _State extends State<CategoryQuestionsScreen> {
               q.helperText,
               style: const TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -615,13 +679,13 @@ class _State extends State<CategoryQuestionsScreen> {
                 q.placeholder.isNotEmpty ? q.placeholder : 'Select an option',
                 style: const TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor,
                 ),
               ),
               style: const TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
               items: q.options
@@ -641,7 +705,7 @@ class _State extends State<CategoryQuestionsScreen> {
               q.helperText,
               style: const TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -694,7 +758,7 @@ class _State extends State<CategoryQuestionsScreen> {
                     opt,
                     style: const TextStyle(
                       fontSize: AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -710,7 +774,7 @@ class _State extends State<CategoryQuestionsScreen> {
               q.helperText,
               style: const TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -755,7 +819,7 @@ class _State extends State<CategoryQuestionsScreen> {
                   dateStr ?? (q.placeholder.isNotEmpty ? q.placeholder : 'Select a date'),
                   style: TextStyle(
                     fontSize: AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: dateStr != null ? AppColors.darkBlack : AppColors.hintColor,
                   ),
                 ),
@@ -771,7 +835,7 @@ class _State extends State<CategoryQuestionsScreen> {
               q.helperText,
               style: const TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -811,49 +875,46 @@ class _State extends State<CategoryQuestionsScreen> {
               decoration: context.getYellowGradient,
               child: Column(
                 children: [
+                  const OnboardingHeader(),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        getStepBarCount(progress, currentStep, totalSteps),
+                        Container(
+                          margin: const EdgeInsets.only(top: 25),
+                          alignment: Alignment.centerLeft,
+                          child: const Text(
+                            "Tell us about your venue!",
+                            style: TextStyle(
+                              fontSize: AppSize.size_25,
+                              fontFamily: 'Satoshi',
+                              color: AppColors.darkBlack,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+                          child: const Text(
+                            "Please answer the questions for each selected category",
+                            style: TextStyle(
+                              fontSize: AppSize.size_16,
+                              fontFamily: 'Satoshi',
+                              color: AppColors.black1,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   Expanded(
                     child: Container(
                       margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                       child: ListView(
                         children: [
-                          // Header
-                          Container(
-                            margin: const EdgeInsets.only(top: 10),
-                            child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
-                          ),
-
-                          // Step bar
-                          getStepBarCount(progress, currentStep, totalSteps),
-
-                          // Title
-                          Container(
-                            margin: const EdgeInsets.only(top: 25),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              "Tell us about your venue!",
-                              style: TextStyle(
-                                fontSize: AppSize.size_25,
-                                fontFamily: 'FontSemiBold',
-                                color: AppColors.darkBlack,
-                                height: 1.2,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
-                          ),
-                          Container(
-                            margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
-                            child: const Text(
-                              "Please answer the questions for each selected category",
-                              style: TextStyle(
-                                fontSize: AppSize.size_16,
-                                fontFamily: 'FontRegular',
-                                color: AppColors.black1,
-                                height: 1.4,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
-                          ),
-
                           // Content
                           if (_isLoading)
                             const Padding(
@@ -868,7 +929,7 @@ class _State extends State<CategoryQuestionsScreen> {
                                   _errorMessage,
                                   style: const TextStyle(
                                     fontSize: AppSize.size_14,
-                                    fontFamily: 'FontRegular',
+                                    fontFamily: 'Satoshi',
                                     color: AppColors.black1,
                                   ),
                                   textAlign: TextAlign.center,
@@ -883,7 +944,7 @@ class _State extends State<CategoryQuestionsScreen> {
                                   "No additional questions for the selected categories.",
                                   style: TextStyle(
                                     fontSize: AppSize.size_14,
-                                    fontFamily: 'FontRegular',
+                                    fontFamily: 'Satoshi',
                                     color: AppColors.black1,
                                   ),
                                   textAlign: TextAlign.center,
@@ -963,7 +1024,7 @@ class _State extends State<CategoryQuestionsScreen> {
         title,
         style: const TextStyle(
           fontSize: AppSize.size_14,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.yellow,
           height: 1,
         ),

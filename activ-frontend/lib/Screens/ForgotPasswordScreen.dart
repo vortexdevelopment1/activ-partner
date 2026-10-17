@@ -55,28 +55,42 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) => OnboardingScaffold(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Form(
             key: _formKey,
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const OnboardingLogo(),
-                  const SizedBox(height: 40),
-                  const Text('Forgot password?',
-                      style: OnboardingStyles.heading),
-                  const SizedBox(height: 6),
-                  Text(
-                      "Enter your email address and we'll send you a verification code to reset your password",
-                      style: OnboardingStyles.body
-                          .copyWith(fontSize: 16, height: 1.4)),
-                  const SizedBox(height: 26),
-                  const Text.rich(TextSpan(children: [
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+
+                const SizedBox(height: 10),
+                const Text(
+                  'Forgot Password',
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 25,
+                    height: 1.15,
+                    color: AppColors.darkBlack,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text.rich(
+                  TextSpan(children: [
                     TextSpan(text: 'Email Address'),
-                    TextSpan(text: '*', style: TextStyle(color: AppColors.red)),
-                  ])),
-                  const SizedBox(height: 6),
-                  TextFormField(
+                    TextSpan(
+                      text: '*',
+                      style: TextStyle(color: AppColors.red),
+                    ),
+                  ]),
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 14,
+                    color: AppColors.darkBlack,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 58,
+                  child: TextFormField(
                     key: const Key('forgot-email'),
                     controller: _email,
                     enabled: !_loading,
@@ -84,31 +98,54 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.email],
                     autocorrect: false,
-                    style: OnboardingStyles.body,
-                    decoration: OnboardingStyles.inputDecoration(),
+                    style: OnboardingStyles.body.copyWith(fontSize: 18),
+                    decoration: OnboardingStyles.inputDecoration(
+                      hintText: 'Enter your email address.',
+                    ).copyWith(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 19,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.gray),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.gray1),
+                      ),
+                    ),
                     validator: (value) =>
                         CommonUtilities.emailVaidatation(value?.trim() ?? '')
                             ? null
                             : 'Enter a valid email address.',
                     onFieldSubmitted: (_) => _sendCode(),
                   ),
-                  const SizedBox(height: 24),
-                  OnboardingButton(
-                      key: const Key('forgot-send'),
-                      label: 'Send Code',
-                      loading: _loading,
-                      onPressed: _sendCode),
-                  const SizedBox(height: 16),
-                  Center(
-                      child: TextButton.icon(
-                    onPressed: _loading ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, size: 14),
-                    label: const Text('Back to Login'),
-                    style: TextButton.styleFrom(
-                        foregroundColor: AppColors.purple,
-                        textStyle: OnboardingStyles.body),
-                  )),
-                ]),
+                ),
+                const SizedBox(height: 28),
+                OnboardingButton(
+                  key: const Key('forgot-send'),
+                  label: 'Send OTP',
+                  loading: _loading,
+                  onPressed: _sendCode,
+                  fontSize: 16,
+                  minHeight: 58,
+                  borderRadius: 14,
+                ),
+                const SizedBox(height: 32),
+                OnboardingButton(
+                  label: 'Back to Login',
+                  outlined: true,
+                  onPressed: _loading ? null : () => Navigator.pop(context),
+                  fontSize: 16,
+                  minHeight: 58,
+                  borderRadius: 14,
+                ),
+              ],
+            ),
           ),
         ),
       );

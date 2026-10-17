@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class MultiImagePickerExample extends StatefulWidget {
+  const MultiImagePickerExample({super.key});
+
   @override
   _MultiImagePickerExampleState createState() =>
       _MultiImagePickerExampleState();
@@ -13,7 +15,7 @@ class _MultiImagePickerExampleState extends State<MultiImagePickerExample> {
   List<XFile> _images = [];
 
   Future<void> pickImages() async {
-    final List<XFile>? selectedImages = await _picker.pickMultiImage();
+    final List<XFile> selectedImages = await _picker.pickMultiImage();
 
     if (selectedImages != null) {
       if (selectedImages.length < 4) {

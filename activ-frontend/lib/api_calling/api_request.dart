@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Style/app_size.dart';
+import '../Utills/browser_session.dart';
 
 
 //Response call back
@@ -31,7 +32,7 @@ class Response {
 class ParserBasic {
   String? status;
   String? message;
-  var data = null;
+  var data;
   ParserBasic({required this.status, required this.message, this.data});
   ParserBasic.fromJson(Map<String, dynamic> json) {
     status = json['status'];
@@ -40,9 +41,9 @@ class ParserBasic {
     //data = json;
   }
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['status'] = this.status;
-    data['message'] = this.message;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['status'] = status;
+    data['message'] = message;
     //data = this.data;
     return data;
   }
@@ -65,6 +66,10 @@ class SharedPreference
 
   static addStringToSF(String key, String value) async
   {
+    if (isBrowserSession) {
+      writeBrowserSession(key, value);
+      return;
+    }
     // prefs = await SharedPreferences.getInstance();
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(key, value);
@@ -72,6 +77,11 @@ class SharedPreference
 
   static getStringValuesSF(String key) async
   {
+    if (isBrowserSession) {
+      final value = readBrowserSession(key);
+      AppSize.user_id = value ?? '';
+      return value;
+    }
     SharedPreferences prefs = await SharedPreferences.getInstance();
     //Return String
     String? stringValue = prefs.getString(key);
@@ -83,21 +93,30 @@ class SharedPreference
 
   static clearSF() async
   {
+    if (isBrowserSession) {
+      clearBrowserSession();
+      return;
+    }
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
 
   static remove(String key) async
   {
+    if (isBrowserSession) {
+      removeBrowserSession(key);
+      return;
+    }
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove(key);
   }
 
   static Future<String?> readStr(keys) async {
+    if (isBrowserSession) return readBrowserSession(keys.toString());
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = keys;
-      final value = prefs.getString(key) ?? null;
+      final value = prefs.getString(key);
       return value;
     } catch (e) {
      // print(e);

@@ -83,7 +83,7 @@ class CommonUtilities
   static NavigateWithPushReplacment(BuildContext context, Widget obj)
   {
     Navigator.pushReplacement(context,PageRouteBuilder(
-      pageBuilder: (context, animation1, animation2) => obj as Widget,
+      pageBuilder: (context, animation1, animation2) => obj,
       transitionDuration: Duration.zero,reverseTransitionDuration: Duration.zero,
     ),
     );
@@ -100,24 +100,24 @@ class CommonUtilities
 
   static Future<void> updateSharedPreference() async
   {
-    String? is_remember = await SharedPreference.readStr("is_remember");
-    String? is_app_tour_show = await SharedPreference.readStr("is_app_tour_show");
+    String? isRemember = await SharedPreference.readStr("is_remember");
+    String? isAppTourShow = await SharedPreference.readStr("is_app_tour_show");
     String? email = await SharedPreference.readStr("email");
 
     String? lastNotificationPermissionPopupDate = await SharedPreference.readStr("lastNotificationPermissionPopupDate"); // Before shared preference clear Notification Popup Show Onece's a Day Value Get
 
-    SharedPreference.addStringToSF("user_id","");
-    SharedPreference.clearSF();
+    await SharedPreference.clearSF();
+    await SharedPreference.addStringToSF("user_id","");
 
-    if(is_remember=='true')
+    if(isRemember=='true')
     {
       //SharedPreference.addStringToSF("is_remember",is_remember);
-      SharedPreference.addStringToSF("is_remember", is_remember ?? "false");
+      SharedPreference.addStringToSF("is_remember", isRemember ?? "false");
       SharedPreference.addStringToSF("email",email ?? "");
     }
     else{}
 
-    SharedPreference.addStringToSF("is_app_tour_show",is_app_tour_show ?? "");
+    SharedPreference.addStringToSF("is_app_tour_show",isAppTourShow ?? "");
 
     SharedPreference.addStringToSF("lastNotificationPermissionPopupDate",lastNotificationPermissionPopupDate ?? ""); // After shared preference clear Notification Popup Show Onece's a Day Value Set Again
   }
@@ -138,7 +138,7 @@ class CommonUtilities
   static bool passwordVaidatation(String value)
   {
     String  pattern = r'^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[!@#\$&*~]).{8,}$';
-    RegExp regExp = new RegExp(pattern);
+    RegExp regExp = RegExp(pattern);
     return regExp.hasMatch(value);
   }
 
@@ -146,7 +146,7 @@ class CommonUtilities
 
   static String converDateFormate(String value, String sourceFormate, String targetFormet)
   {
-    if (value!=null && !value.isEmpty)
+    if (value.isNotEmpty)
     {
       var dateTime = DateTime.parse(value);
       final DateTime now = dateTime;
@@ -156,7 +156,7 @@ class CommonUtilities
       final String formatted = formatter. format(now);
       //print(formatted); // something like 2013-04-20
 
-      return formatted==null?"":formatted;
+      return formatted ?? "";
     } else {
       return "";
     }

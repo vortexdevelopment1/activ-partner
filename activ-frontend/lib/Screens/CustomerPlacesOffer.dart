@@ -20,6 +20,7 @@ import 'TellUsAboutScreen.dart';
 import 'VenueAvailabilityScreen.dart';
 import 'ListActivityTypeScreen.dart';
 import 'VenueTimingScreen.dart';
+import 'onboarding_widgets.dart';
 
 class CustomerPlacesOffer extends StatefulWidget {
   const CustomerPlacesOffer({super.key, this.reviewMode = false, this.client});
@@ -94,10 +95,12 @@ class _State extends State<CustomerPlacesOffer> {
       }
     } catch (e) {
       CommonUtilities.showLog("Error fetching Data: $e");
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         isShimmerLoading = false;
         _loadError = 'Could not load amenities.';
       });
+      }
     }
   }
 
@@ -138,8 +141,7 @@ class _State extends State<CustomerPlacesOffer> {
                   padding: const EdgeInsets.fromLTRB(0,0,0,0),
                   child: Column(
                     children: [
-
-                      getActivIcon(),
+                      const OnboardingHeader(),
 
                       getStepBar(progress),
 
@@ -220,13 +222,6 @@ class _State extends State<CustomerPlacesOffer> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getStepBar(double progress)
   {
@@ -245,7 +240,7 @@ class _State extends State<CustomerPlacesOffer> {
         "Tell customers what your venue has to offer",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -431,7 +426,7 @@ class _State extends State<CustomerPlacesOffer> {
     return Container(
       alignment: Alignment.centerLeft,
       margin: const EdgeInsets.fromLTRB(10, 5, 2, 0),
-      child: Container(
+      child: SizedBox(
         width: 28,
         height: 28,
         child: additionalIcons.containsKey(model.type)
@@ -449,13 +444,13 @@ class _State extends State<CustomerPlacesOffer> {
     return Container(
       margin: EdgeInsets.fromLTRB(12, 5, 5, 5),
       child: Text(
-        (model.title!=null && model.title!="") ? model.title : "",
+        (model.title!="") ? model.title : "",
         textAlign: TextAlign.start,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),

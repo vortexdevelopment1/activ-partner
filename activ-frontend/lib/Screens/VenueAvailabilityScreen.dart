@@ -1,4 +1,5 @@
 import 'package:activ_app/Screens/StringExtensions.dart';
+import 'onboarding_widgets.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,6 +15,8 @@ import 'LegalInformationScreen.dart';
 import 'TellUsAboutScreen.dart';
 
 class VenueAvailabilityScreen extends StatefulWidget {
+  const VenueAvailabilityScreen({super.key});
+
   @override
   _State createState() => _State();
 }
@@ -89,15 +92,14 @@ class _State extends State<VenueAvailabilityScreen> {
                   padding: const EdgeInsets.fromLTRB(0,0,0,0),
                   child: Column(
                     children: [
-
-                      getActivIcon(),
+                      const OnboardingHeader(),
 
                       getStepBarCount(progress),
 
                       getText(),
                       getSubText(),
 
-                      (resultList!=null && resultList.length>0)
+                      (resultList.isNotEmpty)
                           ?
                       Expanded(
                         flex: 9,
@@ -150,13 +152,6 @@ class _State extends State<VenueAvailabilityScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getStepBarCount(double progress)
   {
@@ -185,7 +180,7 @@ class _State extends State<VenueAvailabilityScreen> {
               "$currentStep/$totalSteps",
               style: TextStyle(
                   fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -204,7 +199,7 @@ class _State extends State<VenueAvailabilityScreen> {
         "Set the venue’s availability",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -221,7 +216,7 @@ class _State extends State<VenueAvailabilityScreen> {
         "Tell us when the members can reserve your venue",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -314,7 +309,7 @@ class _State extends State<VenueAvailabilityScreen> {
     return Container(
       alignment: Alignment.centerLeft,
       margin: const EdgeInsets.fromLTRB(10, 5, 2, 0),
-      child: Container(
+      child: SizedBox(
         width: 28,
         height: 28,
         child: Image.asset(
@@ -330,13 +325,13 @@ class _State extends State<VenueAvailabilityScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 5, 5, 5),
       child: Text(
-        (model.title!=null && model.title!="") ? model.title : "",
+        (model.title!="") ? model.title : "",
         textAlign: TextAlign.start,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),

@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
+  Logger,
 } from "@nestjs/common";
 import type { Category } from "../categories/entities/category.entity";
 import * as bcrypt from "bcryptjs";
@@ -50,6 +52,7 @@ import { CommissionService } from "../commission/commission.service";
 
 @Injectable()
 export class VenuesService {
+  private readonly logger = new Logger(VenuesService.name);
   constructor(
     private readonly mailService: MailService,
     private readonly questionsService: QuestionsService,
@@ -103,31 +106,28 @@ export class VenuesService {
     const now = new Date();
     const venueId = randomUUID();
     const contactPhone = venueData.venuePhone || venueData.phone || null;
-    const existingDraft = await this.prisma.venues.findFirst({
-      where: {
-        partner_id: partnerId,
-        status: "DRAFT",
-        name: { equals: venueData.name, mode: "insensitive" },
-        partner_venue_profiles: {
-          address_line_1: venueData.venueAddress || venueData.address || null,
-        },
-      },
-      orderBy: { submitted_at: "desc" },
-    });
-
-    if (existingDraft) {
-      return this.update(
-        existingDraft.id,
-        createVenueDto as UpdateVenueDto,
-        { id: partnerId, role: UserRole.PARTNER },
-      );
-    }
-
     const { commissionPercentage } = await this.commissionService.getCommissionByCity(
       venueData.city ?? '', venueData.state,
     );
 
-    await this.prisma.$transaction(async (tx) => {
+    const existingVenue = await this.prisma.$transaction(async (tx) => {
+      // Serialize creation per partner so simultaneous retries cannot both insert.
+      await tx.$queryRaw`SELECT id FROM partners WHERE id = ${partnerId}::uuid FOR UPDATE`;
+      const matches = await tx.venues.findMany({
+        where: {
+          partner_id: partnerId,
+          name: { equals: venueData.name.trim(), mode: "insensitive" },
+          city_code: { equals: venueData.city?.trim() || "UNKNOWN", mode: "insensitive" },
+          partner_venue_profiles: {
+            address_line_1: venueData.venueAddress || venueData.address || null,
+          },
+        },
+        select: { id: true, status: true },
+        orderBy: { submitted_at: { sort: "desc", nulls: "last" } },
+      });
+      const existing = matches.find((venue) => venue.status === "PUBLISHED")
+        ?? matches.find((venue) => venue.status === "DRAFT") ?? matches[0] ?? null;
+      if (existing) return existing;
       await tx.venues.create({
         data: {
           id: venueId,
@@ -241,7 +241,27 @@ export class VenuesService {
           })),
         });
       }
+      return null;
     });
+
+    if (existingVenue) {
+      const existing = existingVenue;
+      if (existing.status === "PUBLISHED") return this.findOne(existing.id);
+      const saved = await this.update(existing.id, createVenueDto as UpdateVenueDto,
+        { id: partnerId, role: UserRole.PARTNER });
+      if (existing.status === "ARCHIVED") {
+        await this.prisma.$transaction([
+          this.prisma.venues.update({ where: { id: existing.id },
+            data: { status: "DRAFT", review_status: null, rejection_reason: null } }),
+          this.prisma.partner_venue_services.updateMany({
+            where: { venue_id: existing.id, status: "REJECTED" },
+            data: { status: "DRAFT", rejection_reason: null, updated_at: new Date() },
+          }),
+        ]);
+        return this.findOne(existing.id);
+      }
+      return saved;
+    }
 
     return {
       id: venueId,
@@ -276,6 +296,61 @@ export class VenuesService {
       );
     }
 
+    const signedVenue = await this.findOne(venueId);
+    if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
+      throw new BadRequestException("Please sign the partnership agreement before finishing");
+    }
+    // Temporarily disabled by default while the MSG91 template is configured.
+    // Re-enable explicitly without changing the signing/submission flow.
+    if (process.env.SIGNED_AGREEMENT_EMAIL_ENABLED === 'true') {
+      const recipient = signedVenue.partner?.email?.trim();
+      if (!recipient) {
+        throw new BadRequestException("Please enter your email in partner details before finishing");
+      }
+      // Keep a delivery receipt so retrying Finish after a later submission failure
+      // does not send the same agreement again.
+      const receipt = await this.prisma.audit_events.findFirst({
+        where: {
+          action: "partner_agreement.emailed", entity_type: "venues", entity_id: venueId,
+          after_json: { path: ['signedAt'], equals: new Date(signedVenue.termsAcceptedAt).toISOString() },
+        },
+      });
+      if (!receipt) {
+        const agreement = await this.generatePartnerAgreementPdf(venueId, {
+          id: partnerId, role: UserRole.PARTNER,
+        });
+        try {
+          await this.mailService.sendSignedPartnerAgreementEmail({
+            toEmail: recipient,
+            partnerName: signedVenue.electronicSignature.trim(),
+            venueName: signedVenue.name,
+            signedAt: new Date(signedVenue.termsAcceptedAt),
+            agreement,
+          });
+        } catch (error) {
+          // Provider errors can contain credentials, recipient addresses or message
+          // content. Log only diagnostic codes, never the raw provider response.
+          this.logger.error(
+            `Signed agreement email failed: code=${error?.code || 'UNKNOWN'} status=${error?.responseCode || 'unknown'}`,
+          );
+          if (error?.code === 'EAUTH' || error?.code === 'MSG91_CONFIG') {
+            throw new ServiceUnavailableException(
+              "Agreement email is temporarily unavailable. Please contact support@activ.live. Your signature is saved.",
+            );
+          }
+          throw new ServiceUnavailableException(
+            "We couldn't email your signed agreement. Please try Finish again.",
+          );
+        }
+        await this.prisma.audit_events.create({ data: {
+          id: randomUUID(),
+          action: "partner_agreement.emailed", entity_type: "venues", entity_id: venueId,
+          after_json: { email: recipient, signedAt: new Date(signedVenue.termsAcceptedAt).toISOString() },
+        } });
+      }
+
+    }
+
     await this.prisma.$transaction([
       this.prisma.venues.update({
         where: { id: venueId },
@@ -293,6 +368,28 @@ export class VenuesService {
   }
 
   // Partner saves legal info with uploaded document URLs
+  async getLegalInfo(venueId: string, callerId: string): Promise<any> {
+    const venue = await this.prisma.venues.findUnique({
+      where: { id: venueId },
+      select: { partner_id: true, partner_venue_legal_documents: true },
+    });
+
+    if (!venue) throw new NotFoundException(`Venue with id ${venueId} not found`);
+    if (venue.partner_id !== callerId) throw new ForbiddenException('Access denied');
+
+    const legal = venue.partner_venue_legal_documents;
+    return {
+      aadhaarName: legal?.aadhaar_name ?? null,
+      aadhaarNumber: legal?.aadhaar_number ?? null,
+      aadhaarCardUrl: legal?.aadhaar_card_url ?? null,
+      panNumber: legal?.pan_number ?? null,
+      panCardUrl: legal?.pan_card_url ?? null,
+      gstNumber: legal?.gst_number ?? null,
+      gstName: legal?.gst_name ?? null,
+      gstinDocUrl: legal?.gstin_doc_url ?? null,
+    };
+  }
+
   async saveLegalInfo(
     venueId: string,
     callerId: string,
@@ -300,11 +397,11 @@ export class VenuesService {
       aadhaarName?: string;
       aadhaarNumber?: string;
       panNumber?: string;
-      panCardUrl?: string;
-      aadhaarCardUrl?: string;
+      panCardUrl?: string | null;
+      aadhaarCardUrl?: string | null;
       gstNumber?: string;
       gstName?: string;
-      gstinDocUrl?: string;
+      gstinDocUrl?: string | null;
     },
     isAdmin = false,
   ): Promise<any> {
@@ -393,13 +490,21 @@ export class VenuesService {
       );
     }
 
+    if (!electronicSignature?.trim()) {
+      throw new BadRequestException("Electronic signature is required");
+    }
+    if (venue.partner_venue_profiles?.terms_accepted_at &&
+        venue.partner_venue_profiles.electronic_signature === electronicSignature.trim()) {
+      return this.findOne(venueId);
+    }
+
     const acceptedAt = new Date();
     await this.prisma.$transaction([
       this.prisma.partner_venue_profiles.update({
         where: { venue_id: venueId },
         data: {
           terms_accepted_at: acceptedAt,
-          electronic_signature: electronicSignature,
+          electronic_signature: electronicSignature.trim(),
           updated_at: acceptedAt,
         },
       }),
@@ -450,6 +555,7 @@ export class VenuesService {
     const signature = venue.electronicSignature || partnerName;
     const acceptedAt = venue.termsAcceptedAt
       ? new Date(venue.termsAcceptedAt).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
           day: "2-digit",
           month: "long",
           year: "numeric",
@@ -501,6 +607,7 @@ export class VenuesService {
     status?: VenueStatus,
     categoryId?: string,
     partnerId?: string,
+    filters: { city?: string; state?: string; sort?: 'newest' | 'oldest' | 'updated' } = {},
   ) {
     const statusMap: Record<string, "DRAFT" | "PUBLISHED" | "ARCHIVED"> = {
       draft: "DRAFT",
@@ -512,6 +619,19 @@ export class VenuesService {
     const where: any = {};
     if (status) where.status = statusMap[status] || undefined;
     if (partnerId) where.partner_id = partnerId;
+    const conditions: any[] = [];
+    if (status === VenueStatus.SUSPENDED) where.review_status = VenueStatus.SUSPENDED;
+    if (status === VenueStatus.REJECTED) conditions.push({
+      OR: [{ review_status: null }, { review_status: { not: VenueStatus.SUSPENDED } }],
+    });
+    if (filters.city?.trim()) conditions.push({ OR: [
+      { city_code: { contains: filters.city.trim(), mode: 'insensitive' } },
+      { partner_venue_profiles: { city: { contains: filters.city.trim(), mode: 'insensitive' } } },
+    ] });
+    if (filters.state?.trim()) conditions.push({
+      partner_venue_profiles: { state: { contains: filters.state.trim(), mode: 'insensitive' } },
+    });
+    if (conditions.length) where.AND = conditions;
     if (pagination.search) {
       where.OR = [
         { name: { contains: pagination.search, mode: "insensitive" } },
@@ -520,7 +640,7 @@ export class VenuesService {
     }
     if (categoryId) {
       where.partner_venue_services = {
-        some: { service_category_id: categoryId },
+        some: { service_category_id: categoryId, status: { not: "ARCHIVED" } },
       };
     }
 
@@ -537,12 +657,17 @@ export class VenuesService {
           partner_venue_profiles: true,
           partner_venue_images: { orderBy: { sort_order: "asc" } },
           partner_venue_services: {
+            where: { status: { not: "ARCHIVED" } },
             include: { partner_service_categories: true },
           },
         },
         skip: pagination.skip,
         take: pagination.limit,
-        orderBy: { name: "asc" },
+        orderBy: [
+          { partner_venue_profiles: filters.sort === 'updated'
+            ? { updated_at: 'desc' } : { created_at: filters.sort === 'oldest' ? 'asc' : 'desc' } },
+          { id: filters.sort === 'oldest' ? 'asc' : 'desc' },
+        ],
       }),
       this.prisma.venues.count({ where }),
     ]);
@@ -557,7 +682,7 @@ export class VenuesService {
         venue.status === "PUBLISHED"
           ? "approved"
           : venue.status === "ARCHIVED"
-            ? "rejected"
+            ? venue.review_status === VenueStatus.SUSPENDED ? "suspended" : "rejected"
             : "pending";
       return {
         id: venue.id,
@@ -755,6 +880,12 @@ export class VenuesService {
       },
     });
     if (!review) throw new NotFoundException(`Venue with id ${id} not found`);
+    const approver = review.approved_by
+      ? await this.prisma.users.findUnique({
+          where: { id: review.approved_by },
+          select: { name: true },
+        })
+      : null;
     const legal = review.partner_venue_legal_documents;
     return {
       ...venue,
@@ -768,6 +899,7 @@ export class VenuesService {
       submittedAt: review.submitted_at,
       approvedAt: review.approved_at,
       approvedBy: review.approved_by,
+      approvedByName: approver?.name?.trim() || null,
       rejectionReason: review.rejection_reason,
       partner: {
         ...venue.partner,

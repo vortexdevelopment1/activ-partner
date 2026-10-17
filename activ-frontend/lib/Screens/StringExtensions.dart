@@ -10,7 +10,7 @@ import '../api_calling/api_constant.dart';
 
 extension CapitalizeExtension on String {
   String capitalize() {
-    if (this.isEmpty) return '';
+    if (isEmpty) return '';
     return this[0].toUpperCase() + substring(1).toLowerCase();
   }
 }
@@ -37,7 +37,7 @@ extension CleanStringExtension on Object? {
   String checkString() {
     final str = this?.toString().trim().toLowerCase();
     if (str == null || str == 'null' || str == 'nil') return '';
-    return this.toString();
+    return toString();
   }
 }
 
@@ -78,7 +78,7 @@ extension GradientExtension on BuildContext {
 
   Decoration get showDecoration => const BoxDecoration(
     color: AppColors.white,
-    borderRadius: const BorderRadius.only(
+    borderRadius: BorderRadius.only(
       topLeft: Radius.circular(12),
       topRight: Radius.circular(12),
       bottomLeft: Radius.circular(12),
@@ -96,7 +96,7 @@ extension GradientExtension on BuildContext {
 
   Decoration get showDecorationMenu => const BoxDecoration(
     color: AppColors.white,
-    borderRadius: const BorderRadius.only(
+    borderRadius: BorderRadius.only(
       topLeft: Radius.circular(10),
       topRight: Radius.circular(10),
       bottomLeft: Radius.circular(10),
@@ -134,7 +134,7 @@ extension DateTimeFormatExtension on DateTime {
 extension DateParsingExtension on String {
   String convertDateFormat(String sourceFormat, String targetFormat) {
 
-    if (this.isEmpty) return "";
+    if (isEmpty) return "";
 
     try {
      /* DateTime dateTime = DateFormat(sourceFormat).parse(this);
@@ -160,7 +160,7 @@ String converDateFormate(String value, String sourceFormat, String targetFormat)
 extension UTCToLocalStringExtension on String {
   String UTCtoLocal(String sourceFormat, String targetFormat)
   {
-    if (this.isEmpty) return "";
+    if (isEmpty) return "";
 
     try {
       // Parse UTC date string

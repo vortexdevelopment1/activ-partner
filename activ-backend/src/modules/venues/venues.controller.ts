@@ -95,7 +95,7 @@ export class VenuesController {
   async saveLegalInfo(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
-    @Body() body: { aadhaarName?: string; aadhaarNumber?: string; panNumber?: string; gstNumber?: string; gstName?: string },
+    @Body() body: { aadhaarName?: string; aadhaarNumber?: string; panNumber?: string; gstNumber?: string; gstName?: string; clearPanCard?: string; clearAadhaarCard?: string; clearGstinDoc?: string },
     @UploadedFiles() files: { panCard?: Express.Multer.File[]; aadhaarCard?: Express.Multer.File[]; gstinDoc?: Express.Multer.File[] },
   ) {
     const legalData: any = {};
@@ -104,6 +104,9 @@ export class VenuesController {
     if (body.panNumber !== undefined)     legalData.panNumber     = body.panNumber;
     if (body.gstNumber !== undefined)     legalData.gstNumber     = body.gstNumber;
     if (body.gstName !== undefined)       legalData.gstName       = body.gstName;
+    if (body.clearPanCard === 'true')    legalData.panCardUrl    = null;
+    if (body.clearAadhaarCard === 'true') legalData.aadhaarCardUrl = null;
+    if (body.clearGstinDoc === 'true')   legalData.gstinDocUrl   = null;
 
     if (files?.panCard?.[0])    legalData.panCardUrl    = await this.cloudinaryService.uploadFile(files.panCard[0], 'activ/legal', 'auto');
     if (files?.aadhaarCard?.[0]) legalData.aadhaarCardUrl = await this.cloudinaryService.uploadFile(files.aadhaarCard[0], 'activ/legal', 'auto');
@@ -875,6 +878,7 @@ export class VenuesController {
       query.status,
       query.categoryId,
       query.partnerId,
+      query,
     );
     return {
       message: 'Venues fetched successfully',
@@ -1080,6 +1084,15 @@ export class VenuesController {
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     const data = await this.venuesService.findPublicVenue(id);
     return { message: 'Venue fetched successfully', data };
+  }
+
+  @Get(':id/legal')
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  @ApiOperation({ summary: 'Get saved legal details and document URLs for own venue' })
+  async getLegalInfo(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const data = await this.venuesService.getLegalInfo(id, user.id);
+    return { message: 'Legal information fetched successfully', data };
   }
 
   @Patch(':id')

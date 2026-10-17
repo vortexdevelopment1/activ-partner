@@ -10,7 +10,7 @@ class PdfViewerPage extends StatefulWidget {
   final File pdfFile;
   String documentType = "";
 
-  PdfViewerPage(this.pdfFile, this.documentType);
+  PdfViewerPage(this.pdfFile, this.documentType, {super.key});
 
   @override
   _PdfViewerPageState createState() => _PdfViewerPageState();
@@ -75,7 +75,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                         "Page No ${currentPage + 1} / $pageCount",
                         style: TextStyle(
                           fontSize: AppSize.size_16,
-                          fontFamily: 'FontSemiBold',
+                          fontFamily: 'Satoshi',
                         ),
                       ),
                     ),
@@ -126,7 +126,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
         widget.documentType,
         style: TextStyle(
           fontSize: AppSize.size_20,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),

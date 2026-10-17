@@ -231,7 +231,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               children: [
                 const Text('Participant Details',
                     style: TextStyle(
-                        fontFamily: 'FontBold',
+                        fontFamily: 'Satoshi',
                         fontSize: 20,
                         color: Color(0xFF202124))),
                 const SizedBox(height: 18),
@@ -295,7 +295,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                     ),
                     child: const Text('Reserve Slot',
                         style:
-                            TextStyle(fontFamily: 'FontBold', fontSize: 16)),
+                            TextStyle(fontFamily: 'Satoshi', fontSize: 16)),
                   ),
                 ),
               ],
@@ -462,7 +462,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         const Expanded(
                           child: Text('Book Slots',
                               style: TextStyle(
-                                  fontFamily: 'FontBold',
+                                  fontFamily: 'Satoshi',
                                   fontSize: 28,
                                   color: Color(0xFF202124))),
                         ),
@@ -495,7 +495,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Text(_slotError!,
                                 style: const TextStyle(
-                                    fontFamily: 'FontRegular',
+                                    fontFamily: 'Satoshi',
                                     fontSize: 13,
                                     color: Color(0xFFFF6B6B))),
                           ),
@@ -507,7 +507,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                                 ? 'Loading slots...'
                                 : 'No slots available for this date.',
                             style: const TextStyle(
-                                fontFamily: 'FontRegular',
+                                fontFamily: 'Satoshi',
                                 fontSize: 15,
                                 color: Color(0xFF686868))),
                       ],
@@ -534,7 +534,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         ),
                         child: Text(_saving ? 'Booking...' : 'Next',
                             style: const TextStyle(
-                                fontFamily: 'FontBold', fontSize: 18)),
+                                fontFamily: 'Satoshi', fontSize: 18)),
                       ),
                     ),
                   ),
@@ -577,7 +577,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               Expanded(
                 child: Text(slot.label,
                     style: TextStyle(
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         fontSize: 15,
                         color: slot.isAvailable
                             ? const Color(0xFF202124)
@@ -586,7 +586,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               if (!slot.isAvailable) ...[
                 Text(slot.statusLabel,
                     style: const TextStyle(
-                        fontFamily: 'FontBold',
+                        fontFamily: 'Satoshi',
                         fontSize: 12,
                         color: Color(0xFF8A8A8A))),
                 const SizedBox(width: 8),
@@ -594,7 +594,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               if (slot.price != null && slot.price!.isNotEmpty)
                 Text('\u20b9 ${slot.price}',
                     style: const TextStyle(
-                        fontFamily: 'FontBold',
+                        fontFamily: 'Satoshi',
                         fontSize: 14,
                         color: Color(0xFF202124))),
               const SizedBox(width: 8),
@@ -627,7 +627,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                   text: ' *', style: TextStyle(color: Color(0xFFFF6B6B))),
           ]),
           style: const TextStyle(
-              fontFamily: 'FontBold',
+              fontFamily: 'Satoshi',
               fontSize: 18,
               color: Color(0xFF202124)),
         ),
@@ -646,7 +646,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 fontSize: 16,
                 color: Color(0xFF202124))),
       );
@@ -671,7 +671,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         fontSize: 16,
                         color: Color(0xFF202124))),
               ),
@@ -755,7 +755,7 @@ class _CourtPickerSheet extends StatelessWidget {
               const SizedBox(height: 28),
               const Text('Select Court',
                   style: TextStyle(
-                      fontFamily: 'FontBold',
+                      fontFamily: 'Satoshi',
                       fontSize: 20,
                       color: Color(0xFF202124))),
               const SizedBox(height: 18),
@@ -790,7 +790,7 @@ class _CourtPickerSheet extends StatelessWidget {
                               Expanded(
                                 child: Text(court,
                                     style: TextStyle(
-                                        fontFamily: 'FontRegular',
+                                        fontFamily: 'Satoshi',
                                         fontSize: 16,
                                         color: selected
                                             ? _purple

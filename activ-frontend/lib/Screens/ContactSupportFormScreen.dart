@@ -146,7 +146,7 @@ class _State extends State<ContactSupportFormScreen> {
                                         'Contact Support',
                                         style: TextStyle(
                                             fontSize: AppSize.size_25,
-                                            fontFamily: 'FontSemiBold',
+                                            fontFamily: 'Satoshi',
                                             color: AppColors.darkBlack,
                                             height: 1.2
                                         ),
@@ -187,7 +187,7 @@ class _State extends State<ContactSupportFormScreen> {
                                             child: Column(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Container(
+                                                SizedBox(
                                                   width: 74,
                                                   height: 58,
                                                   child: Image.asset('assets/ic_pan.png'),
@@ -198,7 +198,7 @@ class _State extends State<ContactSupportFormScreen> {
                                                     "Drag and drop",
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_16,
-                                                        fontFamily: 'FontSemiBold',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.darkBlack,
                                                         height: 1
                                                     ),
@@ -211,7 +211,7 @@ class _State extends State<ContactSupportFormScreen> {
                                                     "or browse for photos",
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_14,
-                                                        fontFamily: 'FontRegular',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.black1,
                                                         height: 1
                                                     ),
@@ -242,7 +242,7 @@ class _State extends State<ContactSupportFormScreen> {
                                                             "Browse",
                                                             style: TextStyle(
                                                                 fontSize: AppSize.size_16,
-                                                                fontFamily: 'FontSemiBold',
+                                                                fontFamily: 'Satoshi',
                                                                 color: AppColors.purple,
                                                                 height: 1
                                                             ),
@@ -259,7 +259,7 @@ class _State extends State<ContactSupportFormScreen> {
                                                     textAlign: TextAlign.center,
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_14,
-                                                        fontFamily: 'FontRegular',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.black1,
                                                         height: 1.4
                                                     ),
@@ -389,7 +389,7 @@ class _State extends State<ContactSupportFormScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -426,7 +426,7 @@ class _State extends State<ContactSupportFormScreen> {
             "Name",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -440,7 +440,7 @@ class _State extends State<ContactSupportFormScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -457,10 +457,10 @@ class _State extends State<ContactSupportFormScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -474,18 +474,18 @@ class _State extends State<ContactSupportFormScreen> {
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-              new LengthLimitingTextInputFormatter(50),
+              LengthLimitingTextInputFormatter(50),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Full Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -508,7 +508,7 @@ class _State extends State<ContactSupportFormScreen> {
             "Phone Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -522,7 +522,7 @@ class _State extends State<ContactSupportFormScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -539,10 +539,10 @@ class _State extends State<ContactSupportFormScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -561,10 +561,10 @@ class _State extends State<ContactSupportFormScreen> {
                   children: [
                     Container(
                       child: Text(
-                        (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                        (phoneCode!="") ? phoneCode : "",
                         style: TextStyle(
                           fontSize:  AppSize.size_14,
-                          fontFamily: 'FontRegular',
+                          fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
                         ),
                       ),
@@ -609,14 +609,14 @@ class _State extends State<ContactSupportFormScreen> {
 
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,
@@ -642,7 +642,7 @@ class _State extends State<ContactSupportFormScreen> {
               "Description",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -655,7 +655,7 @@ class _State extends State<ContactSupportFormScreen> {
               "*",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.red,
                   height: 1
               ),
@@ -674,10 +674,10 @@ class _State extends State<ContactSupportFormScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: TextFormField(
@@ -693,7 +693,7 @@ class _State extends State<ContactSupportFormScreen> {
         maxLength: 500,
         style: TextStyle(
           fontSize:  AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
         decoration: InputDecoration(
@@ -701,7 +701,7 @@ class _State extends State<ContactSupportFormScreen> {
             hintText: 'Enter Description',
           hintStyle: TextStyle(
             fontSize:  AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.hintColor, // Text color of the hint label
           ),
         ),
@@ -823,7 +823,7 @@ class _State extends State<ContactSupportFormScreen> {
                     '⚠ Alert!',
                     style: TextStyle(
                         fontSize:  AppSize.size_18,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                         textBaseline: null),
                   ),
@@ -836,7 +836,7 @@ class _State extends State<ContactSupportFormScreen> {
                       message,
                       style: const TextStyle(
                           fontSize:  AppSize.size_16,
-                          fontFamily: 'FontSemiBold',
+                          fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
                           height: 1.5),
                       textAlign: TextAlign.center,),
@@ -873,7 +873,7 @@ class _State extends State<ContactSupportFormScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                     fontSize:  AppSize.size_16,
-                                    fontFamily: 'FontSemiBold',
+                                    fontFamily: 'Satoshi',
                                     color: AppColors.darkBlack
                                 ),
                               ),
@@ -892,7 +892,7 @@ class _State extends State<ContactSupportFormScreen> {
       },
     );
     if (confirmed == true && mounted) {
-      Navigator.of(this.context).pop();
+      Navigator.of(context).pop();
     }
   }
 

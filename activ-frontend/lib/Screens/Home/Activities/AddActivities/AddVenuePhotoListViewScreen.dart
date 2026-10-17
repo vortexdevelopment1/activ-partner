@@ -16,10 +16,12 @@ import '../../../../api_calling/api_request.dart';
 import '../../../../api_calling/progress_bar/progress_bar.dart';
 import '../../../CommonCode.dart';
 import 'AddVenueTimingScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
   final List<XFile> images;
-  const AddVenuePhotoListViewScreen({super.key, required this.images});
+  final ValueChanged<List<XFile>>? onPhotosChanged;
+  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged});
 
   @override
   State<AddVenuePhotoListViewScreen> createState() => _State();
@@ -28,7 +30,7 @@ class AddVenuePhotoListViewScreen extends StatefulWidget {
 class _State extends State<AddVenuePhotoListViewScreen> {
   late List<XFile> _images;
   int? _coverIndex = 0; // by default first image is cover
-  GlobalKey _imgKey = GlobalKey();
+  final GlobalKey _imgKey = GlobalKey();
   String userMobileNumber = '', phoneCode="", activityName = "Activity";
 
 
@@ -66,6 +68,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       // Update cover index
       _coverIndex = 0;
     });
+    widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
   }
 
   void deletePhoto(int index) {
@@ -78,6 +81,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         _coverIndex = _coverIndex! - 1;
       }
     });
+    widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
 
     if (_images.isEmpty)
     {
@@ -115,7 +119,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                 "Set as cover photo",
                 style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.darkBlack,
                 ),
               ),
@@ -133,7 +137,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
               "Delete photo",
               style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
             ),
@@ -200,7 +204,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                               margin: EdgeInsets.fromLTRB(15, 0, 15, 0),
                               child: Column(
                                 children: [
-                                  getActivIcon(),
+                                  const OnboardingHeader(),
 
                                   getStepBarCount(3 / 6, 3, 6),
 
@@ -280,7 +284,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                                 "Cover Photo",
                                                 style: TextStyle(
                                                     fontSize: AppSize.size_14,
-                                                    fontFamily: 'FontSemiBold',
+                                                    fontFamily: 'Satoshi',
                                                     color: AppColors.white,
                                                     height: 1
                                                 ),
@@ -369,12 +373,12 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                               print("UID: ${user?.uid}");
                                               print("isAnonymous: ${user?.isAnonymous}");
 
-                                              final activityId = await saveActivityWithImages(_images, 'IND (+91)' + userMobileNumber);
+                                              final activityId = await saveActivityWithImages(_images, 'IND (+91)$userMobileNumber');
 
                                               // Upload complete, close loader
                                               Navigator.of(context).pop();
 
-                                              print("activityId : " + activityId);
+                                              print("activityId : $activityId");
 
                                               // Navigate to next screen
                                               CommonUtilities.NavigateWithPush(context, AddVenueTimingScreen(activityId: activityId));
@@ -632,8 +636,8 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       String phoneKey, // "+91XXXXXXXXXX"
       ) async {
 
-    print("phoneKey : " + phoneCode+userMobileNumber);
-    print("phoneKey1 : " + phoneKey);
+    print("phoneKey : $phoneCode$userMobileNumber");
+    print("phoneKey1 : $phoneKey");
 
     // 1️⃣ Resolve REAL UID
     final phoneDoc = await FirebaseFirestore.instance
@@ -671,13 +675,6 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
 //----------------------------------------------End DataBase Image Upload Code----------------------------------------------------
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -688,7 +685,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         activityName,
         style: const TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -705,7 +702,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),

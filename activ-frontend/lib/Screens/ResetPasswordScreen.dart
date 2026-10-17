@@ -27,6 +27,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _confirm = TextEditingController();
   _ResetStep _step = _ResetStep.verify;
   bool _loading = false;
+  bool _hidePassword = true;
+  bool _hideConfirmPassword = true;
   int _resendSeconds = 60;
   Timer? _timer;
 
@@ -117,13 +119,33 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         key: Key(key),
         controller: controller,
         enabled: !_loading,
-        obscureText: true,
+        obscureText: confirm ? _hideConfirmPassword : _hidePassword,
         autocorrect: false,
         enableSuggestions: false,
         autofillHints: const [AutofillHints.newPassword],
         textInputAction: confirm ? TextInputAction.done : TextInputAction.next,
         style: OnboardingStyles.body,
-        decoration: OnboardingStyles.inputDecoration(),
+        decoration: OnboardingStyles.inputDecoration().copyWith(
+          suffixIcon: IconButton(
+            tooltip: (confirm ? _hideConfirmPassword : _hidePassword)
+                ? 'Show password'
+                : 'Hide password',
+            onPressed: () {
+              setState(() {
+                if (confirm) {
+                  _hideConfirmPassword = !_hideConfirmPassword;
+                } else {
+                  _hidePassword = !_hidePassword;
+                }
+              });
+            },
+            icon: Icon(
+              (confirm ? _hideConfirmPassword : _hidePassword)
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
+          ),
+        ),
         validator: (value) {
           if (value == null || value.length < 6) {
             return 'Password must be at least 6 characters.';
@@ -147,11 +169,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         child: OnboardingScaffold(
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const OnboardingLogo(),
+
                   if (_step == _ResetStep.success) ...[
                     const SizedBox(height: 61),
                     Center(

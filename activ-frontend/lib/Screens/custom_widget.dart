@@ -8,24 +8,24 @@ class CustomWidget extends StatelessWidget {
   final double height;
   final ShapeBorder shapeBorder;
 
-  const CustomWidget.rectangular({
+  const CustomWidget.rectangular({super.key, 
     this.width = double.infinity,
     required this.height
-  }): this.shapeBorder = const RoundedRectangleBorder();
+  }): shapeBorder = const RoundedRectangleBorder();
 
-  const CustomWidget.circular({
+  const CustomWidget.circular({super.key, 
     this.width = double.infinity,
     required this.height,
     this.shapeBorder = const CircleBorder()
   });
 
-  const CustomWidget.rectangular1({
+  const CustomWidget.rectangular1({super.key, 
     this.width = double.infinity,
     this.height = double.infinity,
     this.shapeBorder = const RoundedRectangleBorder()
   });
 
-  const CustomWidget.rectangularBanner({
+  const CustomWidget.rectangularBanner({super.key, 
     this.width = double.infinity,
     required this.height,
     this.shapeBorder = const RoundedRectangleBorder()
@@ -42,7 +42,7 @@ class CustomWidget extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: new BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(5),
           topRight: const Radius.circular(5),
           bottomRight: const Radius.circular(5),

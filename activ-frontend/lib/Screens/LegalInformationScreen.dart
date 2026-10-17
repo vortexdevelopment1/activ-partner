@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:activ_app/Screens/PdfViewerPage.dart';
 import 'package:dio/dio.dart' as dio_pkg;
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -13,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
@@ -21,6 +23,7 @@ import 'AadhaarNumberFormatter.dart';
 import 'CommonCode.dart';
 import 'ReviewVenueDetailsScreen.dart';
 import 'package:file_picker/file_picker.dart';
+import 'onboarding_widgets.dart';
 
 
 class LegalInformationScreen extends StatefulWidget {
@@ -69,6 +72,12 @@ class _State extends State<LegalInformationScreen> {
   Uint8List? _panCardBytes;
   Uint8List? _aadhaarCardBytes;
   Uint8List? _gstinCardBytes;
+  String? _existingPanUrl;
+  String? _existingAadhaarUrl;
+  String? _existingGstinUrl;
+  bool _panChanged = false;
+  bool _aadhaarChanged = false;
+  bool _gstinChanged = false;
 
   final panRegex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
 
@@ -100,6 +109,68 @@ class _State extends State<LegalInformationScreen> {
   void initState() {
     super.initState();
     _recoverPendingCameraDocument();
+    _loadSavedLegalInfo();
+  }
+
+  Future<void> _loadSavedLegalInfo() async {
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    if (venueId.isEmpty || token.isEmpty) return;
+    try {
+      final response = await http.get(
+        Uri.parse('$BASE_URL/venues/$venueId/legal'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return;
+      final decoded = jsonDecode(response.body);
+      final data = decoded is Map ? decoded['data'] : null;
+      if (data is! Map || !mounted) return;
+
+      fullNameController.text = data['aadhaarName']?.toString() ?? '';
+      aadhaarNumberController.text = data['aadhaarNumber']?.toString() ?? '';
+      panCardNumberController.text = data['panNumber']?.toString() ?? '';
+      gstINController.text = data['gstNumber']?.toString() ?? '';
+      _existingPanUrl = data['panCardUrl']?.toString();
+      _existingAadhaarUrl = data['aadhaarCardUrl']?.toString();
+      _existingGstinUrl = data['gstinDocUrl']?.toString();
+
+      await Future.wait([
+        _restoreRemoteDocument(_existingPanUrl, 'panCard'),
+        _restoreRemoteDocument(_existingAadhaarUrl, 'aadhaarCard'),
+        _restoreRemoteDocument(_existingGstinUrl, 'gstINCard'),
+      ]);
+      if (mounted) setState(() {});
+    } catch (error) {
+      CommonUtilities.showLog('Saved legal info restore failed: $error');
+    }
+  }
+
+  Future<void> _restoreRemoteDocument(String? url, String documentType) async {
+    if (url == null || url.isEmpty) return;
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode != 200 || response.bodyBytes.isEmpty || !mounted) return;
+    final bytes = Uint8List.fromList(response.bodyBytes);
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    final extension = contentType.contains('pdf') ? 'pdf' : 'jpg';
+    final fileName = '${documentType}_saved.$extension';
+    setState(() {
+      if (documentType == 'panCard') {
+        _panCardBytes = bytes;
+        panCardFileExtension = extension;
+        _filePanCardName = fileName;
+        _filePanCardSize = _getFileSize(bytes.length, 2);
+      } else if (documentType == 'aadhaarCard') {
+        _aadhaarCardBytes = bytes;
+        aadhaarCardFileExtension = extension;
+        _fileAadhaarCardName = fileName;
+        _fileAadhaarCardSize = _getFileSize(bytes.length, 2);
+      } else {
+        _gstinCardBytes = bytes;
+        gstInCardFileExtension = extension;
+        _fileGSTINCardName = fileName;
+        _fileGSTINCardSize = _getFileSize(bytes.length, 2);
+      }
+    });
   }
 
   getData() async
@@ -168,6 +239,18 @@ class _State extends State<LegalInformationScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 15),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  getStepBar(progress),
+                                  getText(),
+                                  getSubText(),
+                                ],
+                              ),
+                            ),
 
                             Expanded(
                               child: Container(
@@ -175,20 +258,39 @@ class _State extends State<LegalInformationScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
-                                    getActivIcon(),
-
-                                    getStepBar(progress),
-
-                                    getText(),
-
-                                    getSubText(),
-
                                     getFullNameLabel(),
                                     getFullNameField(context),
 
                                     getAadhaarNumberLabel(),
                                     getAadhaarNumberField(context),
+
+                                    // Aadhaar Card View and View Layout
+                                    getAadhaarCardBrowseLayout(context),
+
+                                    //Aadhaar Card Label
+                                    getViewAadhaarCardLabel(context),
+
+                                    // View Aadhaar Card Click
+                                    getViewAadhaarCardPDF(context),
+
+                                    _aadhaarCardBytes != null ?   Visibility(
+                                      visible: (aadhaarCardFileExtension == "jpg" || aadhaarCardFileExtension == "png" || aadhaarCardFileExtension == "jpeg") ? true : false,
+                                      child: Container(
+                                        margin: const EdgeInsets.only(top: 5),
+                                        child: AspectRatio(
+                                          aspectRatio: 16/9,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(8), // 👈 corner radius
+                                            child: Image.memory(
+                                              _aadhaarCardBytes!,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              height: 100,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ):Container(),
 
                                     getPanCardNumberLabel(),
                                     getPanCardNumberField(context),
@@ -213,34 +315,6 @@ class _State extends State<LegalInformationScreen> {
                                             borderRadius: BorderRadius.circular(8), // 👈 corner radius
                                             child: Image.memory(
                                               _panCardBytes!,
-                                              fit: BoxFit.cover,
-                                              width: double.infinity,
-                                              height: 100,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ):Container(),
-
-                                    // Aadhaar Card View and View Layout
-                                    getAadhaarCardBrowseLayout(context),
-
-                                    //Aadhaar Card Label
-                                    getViewAadhaarCardLabel(context),
-
-                                    // View Aadhaar Card Click
-                                    getViewAadhaarCardPDF(context),
-
-                                    _aadhaarCardBytes != null ?   Visibility(
-                                      visible: (aadhaarCardFileExtension == "jpg" || aadhaarCardFileExtension == "png" || aadhaarCardFileExtension == "jpeg") ? true : false,
-                                      child: Container(
-                                        margin: const EdgeInsets.only(top: 5),
-                                        child: AspectRatio(
-                                          aspectRatio: 16/9,
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(8), // 👈 corner radius
-                                            child: Image.memory(
-                                              _aadhaarCardBytes!,
                                               fit: BoxFit.cover,
                                               width: double.infinity,
                                               height: 100,
@@ -281,7 +355,7 @@ class _State extends State<LegalInformationScreen> {
                                               children: [
                                                 // Upload Icon
 
-                                                Container(
+                                                SizedBox(
                                                   width: 74,
                                                   height: 58,
                                                   child: Image.asset('assets/ic_pan.png'),
@@ -293,7 +367,7 @@ class _State extends State<LegalInformationScreen> {
                                                     "Upload your GSTIN Details",
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_16,
-                                                        fontFamily: 'FontSemiBold',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.darkBlack,
                                                         height: 1
                                                     ),
@@ -307,7 +381,7 @@ class _State extends State<LegalInformationScreen> {
                                                     "pdf formats up to 5MB",
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_14,
-                                                        fontFamily: 'FontRegular',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.black1,
                                                         height: 1
                                                     ),
@@ -341,7 +415,7 @@ class _State extends State<LegalInformationScreen> {
                                                             "Browse",
                                                             style: TextStyle(
                                                                 fontSize: AppSize.size_16,
-                                                                fontFamily: 'FontSemiBold',
+                                                                fontFamily: 'Satoshi',
                                                                 color: AppColors.purple,
                                                                 height: 1
                                                             ),
@@ -358,7 +432,7 @@ class _State extends State<LegalInformationScreen> {
                                                     textAlign: TextAlign.center,
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_14,
-                                                        fontFamily: 'FontRegular',
+                                                        fontFamily: 'Satoshi',
                                                         color: AppColors.black1,
                                                         height: 1.4
                                                     ),
@@ -375,20 +449,20 @@ class _State extends State<LegalInformationScreen> {
                                     Visibility(
                                       visible: _gstinCardBytes!=null ? true : false,
                                       child: InkWell(
-                                        onTap: ()
+                                        onTap: _pickedGSTINCardFile == null ? null : ()
                                         {
-                                          File _pickedPanCardFile1 = File(_pickedGSTINCardFile!.path);
-                                          CommonUtilities.NavigateWithPush(context, PdfViewerPage(_pickedPanCardFile1, "GSTIN Card"));
+                                          File pickedPanCardFile1 = File(_pickedGSTINCardFile!.path);
+                                          CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, "GSTIN Card"));
                                         },
                                         child: Container(
                                           margin: const EdgeInsets.fromLTRB(0, 8, 0, 15),
                                           decoration: BoxDecoration(
                                               color: AppColors.gray3,
                                               borderRadius: const BorderRadius.only(
-                                                topLeft: const Radius.circular(8),
-                                                topRight: const Radius.circular(8),
-                                                bottomLeft: const Radius.circular(8),
-                                                bottomRight: const Radius.circular(8),
+                                                topLeft: Radius.circular(8),
+                                                topRight: Radius.circular(8),
+                                                bottomLeft: Radius.circular(8),
+                                                bottomRight: Radius.circular(8),
                                               ),
                                               border: Border.all(color: AppColors.gray, width: 1)
                                           ),
@@ -404,13 +478,13 @@ class _State extends State<LegalInformationScreen> {
                                                       Text(_fileGSTINCardName ?? "",
                                                           style: TextStyle(
                                                               fontSize: 14,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.darkBlack)
                                                       ),
                                                       Text(_fileGSTINCardSize ?? "",
                                                           style: TextStyle(
                                                               fontSize: 12,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.hintColor)
                                                       ),
                                                     ],
@@ -426,6 +500,8 @@ class _State extends State<LegalInformationScreen> {
                                                       _fileGSTINCardName = null;
                                                       _fileGSTINCardSize = null;
                                                       gstInCardFileExtension = "";
+                                                      _existingGstinUrl = null;
+                                                      _gstinChanged = true;
                                                     });
                                                   },
                                                   child: Container(
@@ -721,13 +797,6 @@ class _State extends State<LegalInformationScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -738,7 +807,7 @@ class _State extends State<LegalInformationScreen> {
         "Provide legal information",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -755,7 +824,7 @@ class _State extends State<LegalInformationScreen> {
         "We will use these details to verify venue's legitimacy",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -773,7 +842,7 @@ class _State extends State<LegalInformationScreen> {
             "Full Name As Per Aadhaar",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -787,7 +856,7 @@ class _State extends State<LegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -804,10 +873,10 @@ class _State extends State<LegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)
       ),
@@ -826,14 +895,14 @@ class _State extends State<LegalInformationScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Full Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -855,7 +924,7 @@ class _State extends State<LegalInformationScreen> {
             "Aadhaar Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -869,7 +938,7 @@ class _State extends State<LegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -886,10 +955,10 @@ class _State extends State<LegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -908,14 +977,14 @@ class _State extends State<LegalInformationScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Aadhaar Number', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -937,7 +1006,7 @@ class _State extends State<LegalInformationScreen> {
             "PAN Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -951,7 +1020,7 @@ class _State extends State<LegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -968,10 +1037,10 @@ class _State extends State<LegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -989,14 +1058,14 @@ class _State extends State<LegalInformationScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Pan Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1041,7 +1110,7 @@ class _State extends State<LegalInformationScreen> {
               children: [
                 // Upload Icon
 
-                Container(
+                SizedBox(
                   width: 74,
                   height: 58,
                   child: Image.asset('assets/ic_pan.png'),
@@ -1054,11 +1123,11 @@ class _State extends State<LegalInformationScreen> {
                       children: [
                         TextSpan(
                           text: "Upload your PAN Card",
-                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'FontSemiBold', color: AppColors.darkBlack, height: 1),
+                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'Satoshi', color: AppColors.darkBlack, height: 1),
                         ),
                         TextSpan(
                           text: "*",
-                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'FontSemiBold', color: AppColors.red, height: 1),
+                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'Satoshi', color: AppColors.red, height: 1),
                         ),
                       ],
                     ),
@@ -1072,7 +1141,7 @@ class _State extends State<LegalInformationScreen> {
                     "pdf formats up to 5MB",
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1
                     ),
@@ -1106,7 +1175,7 @@ class _State extends State<LegalInformationScreen> {
                             "Browse",
                             style: TextStyle(
                                 fontSize: AppSize.size_16,
-                                fontFamily: 'FontSemiBold',
+                                fontFamily: 'Satoshi',
                                 color: AppColors.purple,
                                 height: 1
                             ),
@@ -1123,7 +1192,7 @@ class _State extends State<LegalInformationScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1.4
                     ),
@@ -1148,7 +1217,7 @@ class _State extends State<LegalInformationScreen> {
           "View PAN Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1163,12 +1232,12 @@ class _State extends State<LegalInformationScreen> {
     return Visibility(
       visible: _panCardBytes!=null ? true : false,
       child: InkWell(
-        onTap: ()
+        onTap: _pickedPanCardFile == null ? null : ()
         {
           if(panCardFileExtension == "pdf" || panCardFileExtension == "PDF")
           {
-            File _pickedPanCardFile1 = File(_pickedPanCardFile!.path);
-            CommonUtilities.NavigateWithPush(context, PdfViewerPage(_pickedPanCardFile1, "Pan Card"));
+            File pickedPanCardFile1 = File(_pickedPanCardFile!.path);
+            CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, "Pan Card"));
           }else{}
         },
         child: Container(
@@ -1176,10 +1245,10 @@ class _State extends State<LegalInformationScreen> {
           decoration: BoxDecoration(
               color: AppColors.gray3,
               borderRadius: const BorderRadius.only(
-                topLeft: const Radius.circular(8),
-                topRight: const Radius.circular(8),
-                bottomLeft: const Radius.circular(8),
-                bottomRight: const Radius.circular(8),
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
               ),
               border: Border.all(color: AppColors.gray, width: 1)
           ),
@@ -1195,13 +1264,13 @@ class _State extends State<LegalInformationScreen> {
                       Text(_filePanCardName ?? "",
                           style: TextStyle(
                               fontSize: 14,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack)
                       ),
                       Text(_filePanCardSize ?? "",
                           style: TextStyle(
                               fontSize: 12,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.hintColor)
                       ),
                     ],
@@ -1217,6 +1286,8 @@ class _State extends State<LegalInformationScreen> {
                       _filePanCardName = null;
                       _filePanCardSize = null;
                       panCardFileExtension = "";
+                      _existingPanUrl = null;
+                      _panChanged = true;
                     });
                   },
                   child: Container(
@@ -1258,7 +1329,7 @@ class _State extends State<LegalInformationScreen> {
               children: [
                 // Upload Icon
 
-                Container(
+                SizedBox(
                   width: 74,
                   height: 58,
                   child: Image.asset('assets/ic_pan.png'),
@@ -1271,11 +1342,11 @@ class _State extends State<LegalInformationScreen> {
                       children: [
                         TextSpan(
                           text: "Upload your Aadhaar Card",
-                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'FontSemiBold', color: AppColors.darkBlack, height: 1),
+                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'Satoshi', color: AppColors.darkBlack, height: 1),
                         ),
                         TextSpan(
                           text: "*",
-                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'FontSemiBold', color: AppColors.red, height: 1),
+                          style: TextStyle(fontSize: AppSize.size_16, fontFamily: 'Satoshi', color: AppColors.red, height: 1),
                         ),
                       ],
                     ),
@@ -1289,7 +1360,7 @@ class _State extends State<LegalInformationScreen> {
                     "pdf formats up to 5MB",
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1
                     ),
@@ -1323,7 +1394,7 @@ class _State extends State<LegalInformationScreen> {
                             "Browse",
                             style: TextStyle(
                                 fontSize: AppSize.size_16,
-                                fontFamily: 'FontSemiBold',
+                                fontFamily: 'Satoshi',
                                 color: AppColors.purple,
                                 height: 1
                             ),
@@ -1340,7 +1411,7 @@ class _State extends State<LegalInformationScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1.4
                     ),
@@ -1365,7 +1436,7 @@ class _State extends State<LegalInformationScreen> {
           "View Aadhaar Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1380,12 +1451,12 @@ class _State extends State<LegalInformationScreen> {
     return Visibility(
       visible: _aadhaarCardBytes!=null ? true : false,
       child: InkWell(
-        onTap: ()
+        onTap: _pickedAadhaarCardFile == null ? null : ()
         {
           if(aadhaarCardFileExtension == "pdf" || aadhaarCardFileExtension == "PDF")
           {
-            File _pickedPanCardFile1 = File(_pickedAadhaarCardFile!.path);
-            CommonUtilities.NavigateWithPush(context, PdfViewerPage(_pickedPanCardFile1, 'Aadhaar Card'));
+            File pickedPanCardFile1 = File(_pickedAadhaarCardFile!.path);
+            CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, 'Aadhaar Card'));
           }else{}
         },
         child: Container(
@@ -1393,10 +1464,10 @@ class _State extends State<LegalInformationScreen> {
           decoration: BoxDecoration(
               color: AppColors.gray3,
               borderRadius: const BorderRadius.only(
-                topLeft: const Radius.circular(8),
-                topRight: const Radius.circular(8),
-                bottomLeft: const Radius.circular(8),
-                bottomRight: const Radius.circular(8),
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
               ),
               border: Border.all(color: AppColors.gray, width: 1)
           ),
@@ -1412,13 +1483,13 @@ class _State extends State<LegalInformationScreen> {
                       Text(_fileAadhaarCardName ?? "",
                           style: TextStyle(
                               fontSize: 14,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack)
                       ),
                       Text(_fileAadhaarCardSize ?? "",
                           style: TextStyle(
                               fontSize: 12,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.hintColor)
                       ),
                     ],
@@ -1434,6 +1505,8 @@ class _State extends State<LegalInformationScreen> {
                       _fileAadhaarCardName = null;
                       _fileAadhaarCardSize = null;
                       aadhaarCardFileExtension = "";
+                      _existingAadhaarUrl = null;
+                      _aadhaarChanged = true;
                     });
                   },
                   child: Container(
@@ -1459,7 +1532,7 @@ class _State extends State<LegalInformationScreen> {
         "Are you GST registered? (Optional)",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1
         ),
@@ -1477,7 +1550,7 @@ class _State extends State<LegalInformationScreen> {
         "This should be linked to the Aadhaar provided earlier",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -1494,7 +1567,7 @@ class _State extends State<LegalInformationScreen> {
         "GSTIN",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1
         ),
@@ -1509,10 +1582,10 @@ class _State extends State<LegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -1525,18 +1598,18 @@ class _State extends State<LegalInformationScreen> {
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(15),
+              LengthLimitingTextInputFormatter(15),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter GSTIN Number', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1559,7 +1632,7 @@ class _State extends State<LegalInformationScreen> {
           "View GSTIN Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1585,6 +1658,10 @@ class _State extends State<LegalInformationScreen> {
       CommonUtilities.createSnackBar(context, ConstantsMessages.validationAadhaarNumberEnter);
       return false;
     }
+    else if (_aadhaarCardBytes == null) {
+      CommonUtilities.createSnackBar(context, ConstantsMessages.validationAadhaarCardPDF);
+      return false;
+    }
     else if (panCardNumberController.text.trim().isEmpty) {
       CommonUtilities.createSnackBar(context, ConstantsMessages.validationPanCardNumberEnter);
       return false;
@@ -1595,10 +1672,6 @@ class _State extends State<LegalInformationScreen> {
     }
     else if (_panCardBytes == null) {
       CommonUtilities.createSnackBar(context, ConstantsMessages.validationPanCardPDF);
-      return false;
-    }
-    else if (_aadhaarCardBytes == null) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.validationAadhaarCardPDF);
       return false;
     }
     else if (gstINController.text.toString().trim().isEmpty && _gstinCardBytes != null) {
@@ -1637,20 +1710,29 @@ class _State extends State<LegalInformationScreen> {
       if (gstINController.text.trim().isNotEmpty) {
         formData.fields.add(MapEntry('gstNumber', gstINController.text.trim()));
       }
+      if (_panChanged && _panCardBytes == null && _existingPanUrl == null) {
+        formData.fields.add(const MapEntry('clearPanCard', 'true'));
+      }
+      if (_aadhaarChanged && _aadhaarCardBytes == null && _existingAadhaarUrl == null) {
+        formData.fields.add(const MapEntry('clearAadhaarCard', 'true'));
+      }
+      if (_gstinChanged && _gstinCardBytes == null && _existingGstinUrl == null) {
+        formData.fields.add(const MapEntry('clearGstinDoc', 'true'));
+      }
       // File fields (per API spec: panCard, aadhaarCard, gstinDoc)
-      if (_panCardBytes != null) {
+      if (_panChanged && _panCardBytes != null) {
         formData.files.add(MapEntry('panCard', dio_pkg.MultipartFile.fromBytes(
           _panCardBytes!,
           filename: _filePanCardName ?? 'panCard.${panCardFileExtension ?? 'pdf'}',
         )));
       }
-      if (_aadhaarCardBytes != null) {
+      if (_aadhaarChanged && _aadhaarCardBytes != null) {
         formData.files.add(MapEntry('aadhaarCard', dio_pkg.MultipartFile.fromBytes(
           _aadhaarCardBytes!,
           filename: _fileAadhaarCardName ?? 'aadhaarCard.${aadhaarCardFileExtension ?? 'pdf'}',
         )));
       }
-      if (_gstinCardBytes != null) {
+      if (_gstinChanged && _gstinCardBytes != null) {
         formData.files.add(MapEntry('gstinDoc', dio_pkg.MultipartFile.fromBytes(
           _gstinCardBytes!,
           filename: _fileGSTINCardName ?? 'gstinDoc.${gstInCardFileExtension ?? 'pdf'}',
@@ -1814,6 +1896,7 @@ class _State extends State<LegalInformationScreen> {
       setState(() {
         if(documentType == "panCard")
         {
+          _panChanged = true;
           panCardFileExtension = ext;
           _pickedPanCardFile = file;
           _panCardBytes = fileBytes;
@@ -1822,6 +1905,7 @@ class _State extends State<LegalInformationScreen> {
         }
         else if(documentType == "aadhaarCard")
         {
+          _aadhaarChanged = true;
           aadhaarCardFileExtension = ext;
           _pickedAadhaarCardFile = file;
           _aadhaarCardBytes = fileBytes;
@@ -1830,6 +1914,7 @@ class _State extends State<LegalInformationScreen> {
         }
         else if(documentType == "gstINCard")
         {
+          _gstinChanged = true;
           gstInCardFileExtension = ext;
           _pickedGSTINCardFile = file;
           _gstinCardBytes = fileBytes;
@@ -1845,7 +1930,7 @@ class _State extends State<LegalInformationScreen> {
     const suffixes = ["B", "KB", "MB", "GB"];
     var i = (bytes.bitLength / 10).floor();
     var size = (bytes / (1 << (10 * i)));
-    return size.toStringAsFixed(decimals) + ' ' + suffixes[i];
+    return '${size.toStringAsFixed(decimals)} ${suffixes[i]}';
   }
 
 }

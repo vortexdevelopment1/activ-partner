@@ -16,9 +16,14 @@ import 'VenueScreen.dart';
 import 'MobileNumberScreen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
-  const OTPVerificationScreen({super.key, this.client});
+  const OTPVerificationScreen({
+    super.key,
+    this.client,
+    this.isCreatingAccount = false,
+  });
 
   final http.Client? client;
+  final bool isCreatingAccount;
 
   @override
   State<OTPVerificationScreen> createState() => _State();
@@ -71,7 +76,9 @@ class _State extends State<OTPVerificationScreen> {
     if (_resendSeconds > 0 ||
         _isResending ||
         _isSubmitting ||
-        userMobileNumber.isEmpty) return;
+        userMobileNumber.isEmpty) {
+      return;
+    }
     setState(() => _isResending = true);
     try {
       final response = await (widget.client?.post ?? http.post)(
@@ -112,7 +119,10 @@ class _State extends State<OTPVerificationScreen> {
       Navigator.of(context).pop();
     } else {
       Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => MobileNumberScreen(client: widget.client),
+        builder: (_) => MobileNumberScreen(
+          client: widget.client,
+          isCreatingAccount: widget.isCreatingAccount,
+        ),
       ));
     }
   }
@@ -166,6 +176,10 @@ class _State extends State<OTPVerificationScreen> {
       _focusNodes[index - 1].requestFocus();
     }
     setState(() {});
+    if (_controllers.every((controller) =>
+        RegExp(r'^\d$').hasMatch(controller.text))) {
+      _submit();
+    }
   }
 
   void _submit() {
@@ -189,7 +203,7 @@ class _State extends State<OTPVerificationScreen> {
 
     try {
       final response = await (widget.client?.post ?? http.post)(
-        Uri.parse(VERIFY_OTP_URL),
+        Uri.parse('$VERIFY_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
         headers: {
           'accept': '*/*',
           'Content-Type': 'application/json',
@@ -224,7 +238,7 @@ class _State extends State<OTPVerificationScreen> {
             "is_active", isUserActive ? "true" : "false");
 
         if (!mounted) return;
-        if (!isProfileComplete) {
+        if (!isProfileComplete || (widget.isCreatingAccount && !isUserActive)) {
           CommonUtilities.NavigateWithPush(context, TellUsAboutScreen());
         } else if (!isUserActive) {
           await _checkVenueAndNavigate(token);
@@ -356,24 +370,31 @@ class _State extends State<OTPVerificationScreen> {
     return OnboardingScaffold(
       child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Verify your number',
+                    style: OnboardingStyles.heading),
+                const SizedBox(height: 6),
+                Text(
+                  'We sent a code to $_formattedPhone',
+                  key: const Key('otp-phone'),
+                  style: OnboardingStyles.body
+                      .copyWith(fontSize: 16, color: AppColors.black1),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const OnboardingLogo(),
-                  const SizedBox(height: 16),
-                  const Text('Verify your number',
-                      style: OnboardingStyles.heading),
-                  const SizedBox(height: 6),
-                  Text(
-                    'We sent a code to $_formattedPhone',
-                    key: const Key('otp-phone'),
-                    style: OnboardingStyles.body
-                        .copyWith(fontSize: 16, color: AppColors.black1),
-                  ),
+
                   const SizedBox(height: 32),
                   const Text('Enter the 4 digit one-time code'),
                   const SizedBox(height: 8),
@@ -486,7 +507,7 @@ class _State extends State<OTPVerificationScreen> {
             ),
             child: Row(children: [
               Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: TextButton(
                     key: const Key('otp-edit-number'),
                     onPressed:
@@ -495,17 +516,23 @@ class _State extends State<OTPVerificationScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       foregroundColor: AppColors.darkBlack,
                       textStyle: const TextStyle(
-                        fontFamily: 'OnboardingSemibold',
+                        fontFamily: 'Satoshi',
                         fontSize: 18,
                         decoration: TextDecoration.underline,
                       ),
                     ),
-                    child:
-                        const Text('Edit Number', textAlign: TextAlign.center),
+                    child: const Text(
+                      'Edit Number',
+                      maxLines: 1,
+                      overflow: TextOverflow.visible,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                      textScaler: TextScaler.noScaling,
+                    ),
                   )),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
-                  flex: 6,
+                  flex: 7,
                   child: OnboardingButton(
                     key: const Key('otp-submit'),
                     label: 'Verify',

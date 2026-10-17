@@ -194,30 +194,6 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   fonts:
-    - family: OnboardingRegular
-      fonts:
-        - asset: fonts/Metropolis-Regular.ttf
-    - family: OnboardingMedium
-      fonts:
-        - asset: fonts/Metropolis-Medium.otf
-    - family: OnboardingSemibold
-      fonts:
-        - asset: fonts/Metropolis-SemiBold.otf
-    - family: FontBold
-      fonts:
-        - asset: fonts/Acumin-BdPro.otf
-    - family: FontMedium
-      fonts:
-        - asset: fonts/AcuminPro-Medium.otf
-    - family: FontRegular
-      fonts:
-        - asset: fonts/Acumin-RPro.otf
-    - family: FontRegularItalic
-      fonts:
-        - asset: fonts/Metropolis-RegularItalic.otf
-    - family: FontSemiBold
-      fonts:
-        - asset: fonts/AcuminPro-Semibold.otf
     - family: Satoshi
       fonts:
         - asset: fonts/Satoshi-Medium.otf

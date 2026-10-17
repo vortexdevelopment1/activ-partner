@@ -15,6 +15,7 @@ import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddSelectedVenueFormScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 class AddListActivityTypeScreen extends StatefulWidget {
   const AddListActivityTypeScreen({super.key});
@@ -103,8 +104,7 @@ class _State extends State<AddListActivityTypeScreen> {
                   padding: const EdgeInsets.fromLTRB(0,0,0,0),
                   child: Column(
                     children: [
-
-                      getActivIcon(),
+                      const OnboardingHeader(),
 
                       Container(
                         margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
@@ -172,13 +172,6 @@ class _State extends State<AddListActivityTypeScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getOperateText()
   {
@@ -189,7 +182,7 @@ class _State extends State<AddListActivityTypeScreen> {
         "Select activity",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -207,7 +200,7 @@ class _State extends State<AddListActivityTypeScreen> {
         "Choose the activity available at your venue",
         style: TextStyle(
           fontSize: AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.black1,
         ),
       ),
@@ -331,7 +324,7 @@ class _State extends State<AddListActivityTypeScreen> {
   {
     return Container(
         margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
-        child: Container(
+        child: SizedBox(
           width: 46,
           height: 59,
           child: Image.asset(
@@ -347,13 +340,13 @@ class _State extends State<AddListActivityTypeScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.title!=null && model.title!="") ? model.title : "",
+        (model.title!="") ? model.title : "",
         textAlign: TextAlign.center,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),
@@ -365,13 +358,13 @@ class _State extends State<AddListActivityTypeScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.description!=null && model.description!="") ? model.description : "",
+        (model.description!="") ? model.description : "",
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.black1,
         ),
       ),

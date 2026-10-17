@@ -4,6 +4,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
 class GoogleMapScreen extends StatefulWidget {
+  const GoogleMapScreen({super.key});
+
   @override
   _GoogleMapScreenState createState() => _GoogleMapScreenState();
 }
@@ -47,7 +49,7 @@ class _GoogleMapScreenState extends State<GoogleMapScreen> {
       top: true,
       bottom: true,
       child: Scaffold(
-        body: Container(
+        body: SizedBox(
           height: 300,
           child: Column(
             children: [

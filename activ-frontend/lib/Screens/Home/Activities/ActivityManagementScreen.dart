@@ -160,14 +160,14 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   const SizedBox(height: 36),
                   Container(width: 78, height: 78, decoration: const BoxDecoration(color: Color(0xFFFFEFEF), shape: BoxShape.circle), child: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 42)),
                   const SizedBox(height: 28),
-                  const Text('Delete Activity?', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'FontBold', fontSize: 22, color: Colors.redAccent)),
+                  const Text('Delete Activity?', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Satoshi', fontSize: 22, color: Colors.redAccent)),
                   const SizedBox(height: 22),
-                  const Text('This will permanently delete this activity and all associated data including bookings history, slot configurations and images. This action cannot be undone.', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'FontRegular', fontSize: 14, height: 1.45, color: Color(0xFF777777))),
+                  const Text('This will permanently delete this activity and all associated data including bookings history, slot configurations and images. This action cannot be undone.', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, height: 1.45, color: Color(0xFF777777))),
                   const SizedBox(height: 34),
                   Row(children: [
-                    Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(context, false), style: ElevatedButton.styleFrom(elevation: 0, minimumSize: const Size(0, 56), backgroundColor: const Color(0xFFFFF8C8), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel', style: TextStyle(fontFamily: 'FontBold', fontSize: 16)))),
+                    Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(context, false), style: ElevatedButton.styleFrom(elevation: 0, minimumSize: const Size(0, 56), backgroundColor: const Color(0xFFFFF8C8), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel', style: TextStyle(fontFamily: 'Satoshi', fontSize: 16)))),
                     const SizedBox(width: 18),
-                    Expanded(flex: 2, child: ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(elevation: 0, minimumSize: const Size(0, 56), backgroundColor: const Color(0xFF1F1F1F), foregroundColor: const Color(0xFFD8F34A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Delete Activity', style: TextStyle(fontFamily: 'FontBold', fontSize: 16)))),
+                    Expanded(flex: 2, child: ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(elevation: 0, minimumSize: const Size(0, 56), backgroundColor: const Color(0xFF1F1F1F), foregroundColor: const Color(0xFFD8F34A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Delete Activity', style: TextStyle(fontFamily: 'Satoshi', fontSize: 16)))),
                   ]),
                 ]),
               ),
@@ -311,7 +311,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                           _action('Review & Ratings', 'View customer reviews & Ratings', Icons.reviews_outlined, _reviews),
                         ])),
                         const SizedBox(height: 12),
-                        Row(children: [Expanded(child: _text('Recent Bookings', bold: true, size: 17)), TextButton(onPressed: _loading || _error != null ? null : _allBookings, child: const Text('View all \u2192', style: TextStyle(color: _purple, fontFamily: 'FontRegular')))]),
+                        Row(children: [Expanded(child: _text('Recent Bookings', bold: true, size: 17)), TextButton(onPressed: _loading || _error != null ? null : _allBookings, child: const Text('View all \u2192', style: TextStyle(color: _purple, fontFamily: 'Satoshi')))]),
                         if (!_loading && _error == null && _items('bookings').isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: _text('No bookings yet', color: Colors.grey)),
                         ..._items('bookings').take(5).map(_booking),
                         const SizedBox(height: 6),
@@ -350,7 +350,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         const SizedBox(height: 5),
         _text(_description, color: Colors.grey, size: 13),
         const SizedBox(height: 14),
-        Text.rich(TextSpan(text: 'ACTIV ID: ', children: [TextSpan(text: widget.activity.activityId, style: const TextStyle(color: Colors.grey))]), style: const TextStyle(fontFamily: 'FontRegular', fontSize: 12)),
+        Text.rich(TextSpan(text: 'ACTIV ID: ', children: [TextSpan(text: widget.activity.activityId, style: const TextStyle(color: Colors.grey))]), style: const TextStyle(fontFamily: 'Satoshi', fontSize: 12)),
       ])),
     ]));
   }
@@ -418,7 +418,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               titlePadding: const EdgeInsets.fromLTRB(24, 22, 12, 8),
               contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              title: Row(children: [const Expanded(child: Text('Booking details', style: TextStyle(fontFamily: 'FontBold', fontSize: 20))), IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))]),
+              title: Row(children: [const Expanded(child: Text('Booking details', style: TextStyle(fontFamily: 'Satoshi', fontSize: 20))), IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))]),
               content: SizedBox(
                   width: double.maxFinite,
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -475,7 +475,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         if (_active) ...[
           _text('Go InACTIV and temporarily stop accepting bookings.', size: 12),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: _canControl && !_saving ? _showPauseReasonSheet : null, style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))), child: SizedBox(height: 40, child: Row(children: [const Expanded(child: Text('Activity Control', style: TextStyle(fontFamily: 'FontRegular'))), const Icon(Icons.keyboard_arrow_down)]))),
+          OutlinedButton(onPressed: _canControl && !_saving ? _showPauseReasonSheet : null, style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))), child: SizedBox(height: 40, child: Row(children: [const Expanded(child: Text('Activity Control', style: TextStyle(fontFamily: 'Satoshi'))), const Icon(Icons.keyboard_arrow_down)]))),
         ] else if (_canControl)
           _button(_saving ? 'Resuming...' : 'Resume Booking', _saving ? null : () => _save({'isActive': true})),
         const SizedBox(height: 26),
@@ -538,7 +538,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                           ])),
                       const SizedBox(height: 22),
                       Row(children: [
-                        Expanded(child: OutlinedButton(onPressed: _saving ? null : () => Navigator.pop(sheetContext), style: OutlinedButton.styleFrom(backgroundColor: const Color(0xFFFFF8DC), foregroundColor: Colors.black, minimumSize: const Size(0, 56), side: const BorderSide(color: Colors.black), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel', style: TextStyle(fontFamily: 'FontBold')))),
+                        Expanded(child: OutlinedButton(onPressed: _saving ? null : () => Navigator.pop(sheetContext), style: OutlinedButton.styleFrom(backgroundColor: const Color(0xFFFFF8DC), foregroundColor: Colors.black, minimumSize: const Size(0, 56), side: const BorderSide(color: Colors.black), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel', style: TextStyle(fontFamily: 'Satoshi')))),
                         const SizedBox(width: 20),
                         Expanded(
                             flex: 2,
@@ -581,10 +581,10 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               ]))));
 }
 
-Widget _text(String text, {double size = 14, bool bold = false, Color color = const Color(0xFF303030)}) => Text(text, style: TextStyle(fontFamily: bold ? 'FontBold' : 'FontRegular', fontSize: size, color: color));
+Widget _text(String text, {double size = 14, bool bold = false, Color color = const Color(0xFF303030)}) => Text(text, style: TextStyle(fontFamily: bold ? 'Satoshi' : 'Satoshi', fontSize: size, color: color));
 Widget _panel({required Widget child}) => Container(width: double.infinity, padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border)), child: child);
 Widget _badge(String text, Color color) => Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color.withValues(alpha: .09), borderRadius: BorderRadius.circular(20)), child: _text(text, size: 11, color: color, bold: true));
-Widget _button(String label, VoidCallback? onPressed) => SizedBox(height: 48, width: double.infinity, child: ElevatedButton(onPressed: onPressed, style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: const Color(0xFFD8F34A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: Text(label, style: const TextStyle(fontFamily: 'FontBold', fontSize: 15))));
+Widget _button(String label, VoidCallback? onPressed) => SizedBox(height: 48, width: double.infinity, child: ElevatedButton(onPressed: onPressed, style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: const Color(0xFFD8F34A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: Text(label, style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15))));
 
 class _ActivityInfoPage extends StatefulWidget {
   const _ActivityInfoPage({required this.activity, required this.data, required this.name});
@@ -749,11 +749,11 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
   Widget _fieldLabel(String label, {bool required = false}) => Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: RichText(
-          text: TextSpan(text: label, style: const TextStyle(fontFamily: 'FontRegular', fontSize: 15, color: Color(0xFF202020)), children: [
+          text: TextSpan(text: label, style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15, color: Color(0xFF202020)), children: [
         if (required) const TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent)),
       ])));
 
-  Widget _input({required TextEditingController controller, int maxLines = 1, int? maxLength, TextInputType? keyboardType}) => TextField(controller: controller, maxLines: maxLines, maxLength: maxLength, keyboardType: keyboardType, style: const TextStyle(fontFamily: 'FontRegular', fontSize: 15), decoration: InputDecoration(counterText: '', filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _purple))));
+  Widget _input({required TextEditingController controller, int maxLines = 1, int? maxLength, TextInputType? keyboardType}) => TextField(controller: controller, maxLines: maxLines, maxLength: maxLength, keyboardType: keyboardType, style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15), decoration: InputDecoration(counterText: '', filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _purple))));
 
   Widget _checkPanel({required List<String> options, required Set<String> values, required ValueChanged<Set<String>> onChanged}) => Container(
       width: double.infinity,
@@ -923,7 +923,7 @@ class _BookingsPageState extends State<_BookingsPage> {
                   )))
               .toList()));
 
-  Widget _searchField() => TextField(controller: _search, onChanged: (_) => setState(() {}), style: const TextStyle(fontFamily: 'FontRegular', fontSize: 14), decoration: InputDecoration(hintText: 'Search by name, booking id...', hintStyle: const TextStyle(fontFamily: 'FontRegular', color: Colors.grey), prefixIcon: const Icon(Icons.search, color: Colors.grey), filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(vertical: 16), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _purple))));
+  Widget _searchField() => TextField(controller: _search, onChanged: (_) => setState(() {}), style: const TextStyle(fontFamily: 'Satoshi', fontSize: 14), decoration: InputDecoration(hintText: 'Search by name, booking id...', hintStyle: const TextStyle(fontFamily: 'Satoshi', color: Colors.grey), prefixIcon: const Icon(Icons.search, color: Colors.grey), filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(vertical: 16), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _purple))));
 
   Widget _bookingCard(BuildContext context, Map<String, dynamic> booking) {
     final status = booking['status']?.toString() ?? 'Upcoming';
@@ -967,7 +967,7 @@ class _BookingsPageState extends State<_BookingsPage> {
         builder: (_) => AlertDialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 22),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(children: [const Expanded(child: Text('Booking details', style: TextStyle(fontFamily: 'FontBold', fontSize: 20))), IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))]),
+              title: Row(children: [const Expanded(child: Text('Booking details', style: TextStyle(fontFamily: 'Satoshi', fontSize: 20))), IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))]),
               content: SizedBox(
                   width: double.maxFinite,
                   child: Column(mainAxisSize: MainAxisSize.min, children: [

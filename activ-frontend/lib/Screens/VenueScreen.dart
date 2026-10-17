@@ -13,12 +13,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../Beans/state_model.dart';
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
+import '../Utills/venue_postal_code.dart';
+import '../Utills/browser_session.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'CurvePopupDesign.dart';
 import 'CustomerPlacesOffer.dart';
 import 'TellUsAboutScreen.dart';
+import 'onboarding_widgets.dart';
 
 class VenueScreen extends StatefulWidget {
   const VenueScreen({super.key, this.reviewMode = false, this.client});
@@ -89,7 +92,14 @@ class _State extends State<VenueScreen> {
     super.initState();
     cityController.addListener(_locationChanged);
     stateController.addListener(_locationChanged);
-    getData();
+    getData().whenComplete(() {
+      if (!mounted || !isBrowserSession || widget.reviewMode) return;
+      for (final controller in [venueNameController, descriptionController,
+        venueAddressSearchController, addressController, areaController,
+        cityController, stateController, pinCodeController]) {
+        controller.addListener(_saveDraft);
+      }
+    });
     fetchStates();
   }
 
@@ -281,6 +291,18 @@ class _State extends State<VenueScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
+
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 15),
+                              child: Column(
+                                children: [
+                                  getStepBarCount(progress, currentStep, totalSteps),
+                                  getText('Tell us about your venue'),
+                                  getSubText("Let's get your venue details ready for members"),
+                                ],
+                              ),
+                            ),
 
                             Expanded(
                               child: Container(
@@ -288,15 +310,6 @@ class _State extends State<VenueScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
-                                    getActivIcon('assets/logo.png'),
-
-                                    getStepBarCount(progress, currentStep, totalSteps),
-
-                                    getText('Tell us about your venue'),
-
-                                    getSubText("Let's get your venue details ready for members"),
-
                                     getVenueNameLabel(),
                                     getVenueNameField(context),
 
@@ -326,10 +339,10 @@ class _State extends State<VenueScreen> {
                                       decoration: BoxDecoration(
                                           color: AppColors.white,
                                           borderRadius: const BorderRadius.only(
-                                            topLeft: const Radius.circular(8),
-                                            topRight: const Radius.circular(8),
-                                            bottomLeft: const Radius.circular(8),
-                                            bottomRight: const Radius.circular(8),
+                                            topLeft: Radius.circular(8),
+                                            topRight: Radius.circular(8),
+                                            bottomLeft: Radius.circular(8),
+                                            bottomRight: Radius.circular(8),
                                           ),
                                           border: Border.all(color: AppColors.gray, width: 1)
                                       ),
@@ -350,7 +363,8 @@ class _State extends State<VenueScreen> {
                                                     overflow: TextOverflow.ellipsis,
                                                     style: TextStyle(
                                                         fontSize: AppSize.size_16,
-                                                        fontFamily: 'FontSemiBold',
+                                                        fontFamily: 'Satoshi',
+                                                        fontWeight: FontWeight.w700,
                                                         color: AppColors.darkBlack,
                                                     ),
                                                     textAlign: TextAlign.left,
@@ -363,10 +377,10 @@ class _State extends State<VenueScreen> {
                                                 decoration: BoxDecoration(
                                                     color: AppColors.redBG,
                                                     borderRadius: const BorderRadius.only(
-                                                      topLeft: const Radius.circular(25),
-                                                      topRight: const Radius.circular(25),
-                                                      bottomLeft: const Radius.circular(25),
-                                                      bottomRight: const Radius.circular(25),
+                                                      topLeft: Radius.circular(25),
+                                                      topRight: Radius.circular(25),
+                                                      bottomLeft: Radius.circular(25),
+                                                      bottomRight: Radius.circular(25),
                                                     ),
                                                     border: Border.all(color: AppColors.redBG, width: 1)
                                                 ),
@@ -374,7 +388,7 @@ class _State extends State<VenueScreen> {
                                                   "IMPORTANT",
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_10,
-                                                      fontFamily: 'FontBold',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.red,
                                                   ),
                                                   textAlign: TextAlign.left,
@@ -396,30 +410,23 @@ class _State extends State<VenueScreen> {
                                                           "For your venue",
                                                           style: TextStyle(
                                                               fontSize: AppSize.size_14,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.darkBlack,
                                                               height: 1
                                                           ),
                                                           textAlign: TextAlign.left,
                                                         ),
                                                       ),
-
-                                                      _commissionLoading
-                                                          ? const SizedBox(
-                                                              width: 14,
-                                                              height: 14,
-                                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                                            )
-                                                          : Text(
-                                                              _commissionPct == null ? '--' : "${_commissionPct!.toStringAsFixed(_commissionPct == _commissionPct!.truncateToDouble() ? 0 : 2)}%",
-                                                              style: const TextStyle(
-                                                                  fontSize: AppSize.size_14,
-                                                                  fontFamily: 'FontMedium',
-                                                                  color: AppColors.purple,
-                                                                  height: 1
-                                                              ),
-                                                              textAlign: TextAlign.left,
-                                                            )
+                                                      const Text(
+                                                        '10%',
+                                                        style: TextStyle(
+                                                          fontSize: AppSize.size_14,
+                                                          fontFamily: 'Satoshi',
+                                                          color: AppColors.purple,
+                                                          height: 1,
+                                                        ),
+                                                        textAlign: TextAlign.right,
+                                                      ),
                                                     ],
                                                   ),
                                                   if (_commissionError != null)
@@ -440,7 +447,7 @@ class _State extends State<VenueScreen> {
                                                             "Standard rate",
                                                             style: TextStyle(
                                                                 fontSize: AppSize.size_12,
-                                                                fontFamily: 'FontMedium',
+                                                                fontFamily: 'Satoshi',
                                                                 color: AppColors.hintColor,
                                                                 height: 1
                                                             ),
@@ -455,7 +462,7 @@ class _State extends State<VenueScreen> {
                                                             "Per booking",
                                                             style: TextStyle(
                                                                 fontSize: AppSize.size_12,
-                                                                fontFamily: 'FontMedium',
+                                                                fontFamily: 'Satoshi',
                                                                 color: AppColors.hintColor,
                                                                 height: 1
                                                             ),
@@ -481,10 +488,10 @@ class _State extends State<VenueScreen> {
                                               decoration: BoxDecoration(
                                                   color: AppColors.white,
                                                   borderRadius: const BorderRadius.only(
-                                                    topLeft: const Radius.circular(8),
-                                                    topRight: const Radius.circular(8),
-                                                    bottomLeft: const Radius.circular(8),
-                                                    bottomRight: const Radius.circular(8),
+                                                    topLeft: Radius.circular(8),
+                                                    topRight: Radius.circular(8),
+                                                    bottomLeft: Radius.circular(8),
+                                                    bottomRight: Radius.circular(8),
                                                   ),
                                                   border: Border.all(color: AppColors.purple1, width: 1)
                                               ),
@@ -499,7 +506,7 @@ class _State extends State<VenueScreen> {
                                                         "Note: Commission rates vary by city to ensure pricing and operational coverage across India.",
                                                         style: TextStyle(
                                                             fontSize: AppSize.size_14,
-                                                            fontFamily: 'FontMedium',
+                                                            fontFamily: 'Satoshi',
                                                             color: AppColors.purple1,
                                                             height: 1.4
                                                         ),
@@ -516,7 +523,8 @@ class _State extends State<VenueScreen> {
                                                           "Learn more about how commissions work →",
                                                           style: TextStyle(
                                                               fontSize: AppSize.size_13,
-                                                              fontFamily: 'FontBold',
+                                                              fontFamily: 'Satoshi',
+                                                              fontWeight: FontWeight.w700,
                                                               color: AppColors.purple,
                                                               height: 1
                                                           ),
@@ -617,7 +625,7 @@ class _State extends State<VenueScreen> {
             "Venue Name",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -631,7 +639,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -656,18 +664,18 @@ class _State extends State<VenueScreen> {
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(100),
+              LengthLimitingTextInputFormatter(100),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Venue Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -691,7 +699,7 @@ class _State extends State<VenueScreen> {
               "Description (optional)",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -721,7 +729,7 @@ class _State extends State<VenueScreen> {
         maxLength: 200,
         style: TextStyle(
           fontSize:  AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
         decoration: InputDecoration(
@@ -729,7 +737,7 @@ class _State extends State<VenueScreen> {
             hintText: 'Briefly describe your venue',
           hintStyle: TextStyle(
             fontSize:  AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.hintColor, // Text color of the hint label
           ),
         ),
@@ -746,7 +754,7 @@ class _State extends State<VenueScreen> {
             "Venue Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1),
           ),
@@ -754,7 +762,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1),
           ),
@@ -818,19 +826,20 @@ class _State extends State<VenueScreen> {
   }
 
   Future<void> _fetchPlaceDetails(String placeId) async {
+    final selectedPlaceUrl = _selectedPlaceUrl;
     // fallback: geographic center of India
     double lat = 20.5937;
     double lon = 78.9629;
 
     try {
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse('https://places.googleapis.com/v1/places/$placeId'),
         headers: {
           'X-Goog-Api-Key': _mapsApiKey,
           'X-Goog-FieldMask': 'addressComponents,location',
         },
-      );
-      if (!mounted) return;
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted || _selectedPlaceUrl != selectedPlaceUrl) return;
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final components = data['addressComponents'] as List? ?? [];
@@ -854,8 +863,21 @@ class _State extends State<VenueScreen> {
         lat = (location?['latitude'] as num?)?.toDouble() ?? lat;
         lon = (location?['longitude'] as num?)?.toDouble() ?? lon;
 
+        if (!isValidVenuePostalCode(pincode) &&
+            location?['latitude'] is num &&
+            location?['longitude'] is num) {
+          pincode = await resolveVenuePostalCode(
+            latitude: lat,
+            longitude: lon,
+            apiKey: _mapsApiKey,
+            client: widget.client,
+          );
+        }
+        if (!mounted || _selectedPlaceUrl != selectedPlaceUrl) return;
+
         setState(() {
-          if (pincode.isNotEmpty) pinCodeController.text = pincode;
+          pinCodeController.text =
+              isValidVenuePostalCode(pincode) ? pincode.trim() : '';
           if (city.isNotEmpty) cityController.text = city;
           if (state.isNotEmpty) stateController.text = state;
           if (sublocality.isNotEmpty) areaController.text = sublocality;
@@ -874,7 +896,7 @@ class _State extends State<VenueScreen> {
     }
 
     // always open map picker — even if API failed, user can manually adjust pin
-    if (mounted) {
+    if (mounted && _selectedPlaceUrl == selectedPlaceUrl) {
       await _showMapPicker(lat, lon);
     }
   }
@@ -898,6 +920,7 @@ class _State extends State<VenueScreen> {
       });
       // only reverse geocode if user moved the pin more than ~100 metres
       if (_hasMovedSignificantly(initialLat, initialLon, result.latitude, result.longitude)) {
+        setState(() => pinCodeController.clear());
         await _reverseGeocode(result.latitude, result.longitude);
       }
     }
@@ -909,30 +932,50 @@ class _State extends State<VenueScreen> {
   }
 
   Future<void> _reverseGeocode(double lat, double lon) async {
+    String pincode = '';
     try {
       final placemarks = await placemarkFromCoordinates(lat, lon);
-      if (placemarks.isEmpty || !mounted) return;
-      final place = placemarks.first;
-      setState(() {
-        if (place.subLocality?.isNotEmpty == true)
-          areaController.text = place.subLocality!;
-        if (place.locality?.isNotEmpty == true) {
-          cityController.text = place.locality!;
-          _pincodeResolved = true;
-          _pincodeError = false;
+      if (!mounted || _selectedLat != lat || _selectedLon != lon) return;
+      for (final placemark in placemarks) {
+        if (isValidVenuePostalCode(placemark.postalCode ?? '')) {
+          pincode = placemark.postalCode!.trim();
+          break;
         }
-        if (place.administrativeArea?.isNotEmpty == true)
-          stateController.text = place.administrativeArea!;
-        if (place.postalCode?.isNotEmpty == true)
-          pinCodeController.text = place.postalCode!;
-      });
-      if (place.locality?.isNotEmpty == true)
-        _fetchCommission(place.locality!);
-      CommonUtilities.showLog(
-          "Reverse geocode: ${place.locality}, ${place.administrativeArea}, ${place.postalCode}");
+      }
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        setState(() {
+          if (place.subLocality?.isNotEmpty == true) {
+            areaController.text = place.subLocality!;
+          }
+          if (place.locality?.isNotEmpty == true) {
+            cityController.text = place.locality!;
+            _pincodeResolved = true;
+            _pincodeError = false;
+          }
+          if (place.administrativeArea?.isNotEmpty == true) {
+            stateController.text = place.administrativeArea!;
+          }
+        });
+        if (place.locality?.isNotEmpty == true) {
+          _fetchCommission(place.locality!);
+        }
+        CommonUtilities.showLog(
+            "Reverse geocode: ${place.locality}, ${place.administrativeArea}, ${place.postalCode}");
+      }
     } catch (e) {
       CommonUtilities.showLog("Reverse geocode error: $e");
     }
+    if (pincode.isEmpty) {
+      pincode = await resolveVenuePostalCode(
+        latitude: lat,
+        longitude: lon,
+        apiKey: _mapsApiKey,
+        client: widget.client,
+      );
+    }
+    if (!mounted || _selectedLat != lat || _selectedLon != lon) return;
+    setState(() => pinCodeController.text = pincode);
   }
 
   Widget getAddressSearchField(BuildContext context) {
@@ -975,14 +1018,14 @@ class _State extends State<VenueScreen> {
                     },
                     style: const TextStyle(
                       fontSize: AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Search your venue address',
                       hintStyle: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.hintColor,
                       ),
                       border: InputBorder.none,
@@ -1049,7 +1092,7 @@ class _State extends State<VenueScreen> {
                             s['description'] as String,
                             style: const TextStyle(
                               fontSize: AppSize.size_13,
-                              fontFamily: 'FontRegular',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack,
                             ),
                           ),
@@ -1076,7 +1119,7 @@ class _State extends State<VenueScreen> {
               "Flat/Building, Floor Number (optional)",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -1103,14 +1146,14 @@ class _State extends State<VenueScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Flat/Building Number', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1132,7 +1175,7 @@ class _State extends State<VenueScreen> {
             "Area, Sector, Locality (optional)",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1146,7 +1189,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -1172,14 +1215,14 @@ class _State extends State<VenueScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Area, Sector, Locality', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1201,7 +1244,7 @@ class _State extends State<VenueScreen> {
             "City/Town",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1215,7 +1258,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -1242,14 +1285,14 @@ class _State extends State<VenueScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter City/Town', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1271,7 +1314,7 @@ class _State extends State<VenueScreen> {
             "State",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1285,7 +1328,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -1317,14 +1360,14 @@ class _State extends State<VenueScreen> {
               cursorColor: AppColors.cursorBlack,
               style: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
               decoration: InputDecoration(
                 hintText: 'Select State', // Set the hint label text
                 hintStyle: TextStyle(
                   fontSize:  AppSize.size_14,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor, // Text color of the hint label
                 ),
                 border: InputBorder.none,
@@ -1427,7 +1470,7 @@ class _State extends State<VenueScreen> {
                                       filteredList[index].name,
                                       style: TextStyle(
                                         fontSize: AppSize.size_14,
-                                        fontFamily: 'FontSemiBold',
+                                        fontFamily: 'Satoshi',
                                         color: AppColors.darkBlack,
                                       ),
                                     ),
@@ -1463,7 +1506,7 @@ class _State extends State<VenueScreen> {
             "Pin Code",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1477,7 +1520,7 @@ class _State extends State<VenueScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -1516,14 +1559,14 @@ class _State extends State<VenueScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Pin Code', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -1623,7 +1666,7 @@ For any queries regarding commission or payouts, please reach out to ACTIV suppo
                       'How Commission Works',
                       style: TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -1646,7 +1689,7 @@ For any queries regarding commission or payouts, please reach out to ACTIV suppo
                   _commissionInfoText.trim(),
                   style: const TextStyle(
                     fontSize: AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                     height: 1.6,
                   ),
@@ -1735,7 +1778,7 @@ class _MapPickerPageState extends State<_MapPickerPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Lat: ${widget.initialLat.toStringAsFixed(6)},  Lon: ${widget.initialLon.toStringAsFixed(6)}',
-          style: const TextStyle(fontFamily: 'FontRegular'),
+          style: const TextStyle(fontFamily: 'Satoshi'),
         ),
         duration: const Duration(seconds: 5),
         backgroundColor: AppColors.darkBlack,
@@ -1880,7 +1923,7 @@ class _MapPickerPageState extends State<_MapPickerPage> {
                     "Move map to set location",
                     style: TextStyle(
                       fontSize: AppSize.size_12,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor,
                     ),
                   ),
@@ -1909,7 +1952,7 @@ class _MapPickerPageState extends State<_MapPickerPage> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: AppSize.size_14,
-                            fontFamily: 'FontSemiBold',
+                            fontFamily: 'Satoshi',
                             color: _geocoding ? AppColors.hintColor : AppColors.darkBlack,
                           ),
                         ),
@@ -1931,7 +1974,7 @@ class _MapPickerPageState extends State<_MapPickerPage> {
                         "Confirm Location",
                         style: TextStyle(
                           fontSize: AppSize.size_15,
-                          fontFamily: 'FontSemiBold',
+                          fontFamily: 'Satoshi',
                           color: Colors.white,
                         ),
                       ),

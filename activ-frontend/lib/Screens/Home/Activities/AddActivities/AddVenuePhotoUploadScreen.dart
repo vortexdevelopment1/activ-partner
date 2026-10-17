@@ -10,9 +10,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
+import '../../../../Utills/venue_photo_duplicates.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddVenuePhotoListViewScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
   const AddVenuePhotoUploadScreen({super.key});
@@ -99,14 +101,10 @@ class _State extends State<AddVenuePhotoUploadScreen> {
       return;
     }
 
-    final List<XFile>? images = await _picker.pickMultiImage();
+    final List<XFile> images = await _picker.pickMultiImage();
 
     if (images != null && images.isNotEmpty) {
-      if (_selectedImages.length + images.length > 12) {
-        CommonUtilities.createSnackBar(context, "Maximum 12 images allowed.");
-        return;
-      }
-
+      var duplicateFound = false;
       for (var img in images) {
         final isValid = await _isValidFileSize(img.path);
 
@@ -118,10 +116,22 @@ class _State extends State<AddVenuePhotoUploadScreen> {
           continue;
         }
 
+        if (await containsVenuePhoto(await img.readAsBytes(), selectedPhotos: _selectedImages)) {
+          duplicateFound = true;
+          continue;
+        }
+        if (!mounted) return;
+        if (_selectedImages.length >= 12) {
+          CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+          continue;
+        }
+
         setState(() {
           _selectedImages.add(img);
         });
       }
+      _updateButtonStatus();
+      if (duplicateFound && mounted) await showDuplicateVenuePhotoDialog(context);
     }
 
     _updateButtonStatus(); // ✅ update button state
@@ -145,6 +155,11 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         return;
       }
 
+      if (await containsVenuePhoto(await image.readAsBytes(), selectedPhotos: _selectedImages)) {
+        if (mounted) await showDuplicateVenuePhotoDialog(context);
+        return;
+      }
+      if (!mounted) return;
       setState(() {
         _selectedImages.add(image);
       });
@@ -232,13 +247,13 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
                             Expanded(
                               child: Container(
                                 margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-                                    getActivIcon(),
 
                                     getStepBarCount(2 / 6, 2, 6),
 
@@ -265,7 +280,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                           child: Column(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
-                                              Container(
+                                              SizedBox(
                                                 width: 74,
                                                 height: 58,
                                                 child: Image.asset('assets/ic_pan.png'),
@@ -276,7 +291,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   "Drag and drop",
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_16,
-                                                      fontFamily: 'FontSemiBold',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.darkBlack,
                                                       height: 1
                                                   ),
@@ -289,7 +304,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   "or browse for photos",
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_14,
-                                                      fontFamily: 'FontRegular',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.black1,
                                                       height: 1
                                                   ),
@@ -321,7 +336,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                           "Browse",
                                                           style: TextStyle(
                                                               fontSize: AppSize.size_16,
-                                                              fontFamily: 'FontSemiBold',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.purple,
                                                               height: 1
                                                           ),
@@ -338,7 +353,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   textAlign: TextAlign.center,
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_14,
-                                                      fontFamily: 'FontRegular',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.black1,
                                                       height: 1.4
                                                   ),
@@ -436,7 +451,17 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                 context,
                                                 MaterialPageRoute(
                                                   builder: (context) =>
-                                                      AddVenuePhotoListViewScreen(images: _selectedImages),
+                                                      AddVenuePhotoListViewScreen(
+                                                        images: _selectedImages,
+                                                        onPhotosChanged: (images) {
+                                                          if (!mounted) return;
+                                                          setState(() {
+                                                            _selectedImages
+                                                              ..clear()
+                                                              ..addAll(images);
+                                                          });
+                                                        },
+                                                      ),
                                                 ),
                                               ).then((value) {
                                                 refresh();
@@ -477,13 +502,6 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
 
   Widget getText()
@@ -495,7 +513,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         activityName,
         style: const TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -512,7 +530,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),

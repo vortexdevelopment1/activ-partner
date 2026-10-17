@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
+import '../Utills/activity_question_visibility.dart';
 import '../Style/activity_logos.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
@@ -108,7 +109,8 @@ class _State extends State<ReviewVenueDetailsScreen> {
             .map((e) => e['title']?.toString() ?? '')
             .where((e) => e.isNotEmpty)
             .toList();
-        questions = _maps(_decode(values[11], []));
+        questions = _maps(_decode(values[11], []))
+            .where((q) => !isPlaceholderActivityQuestion(q['questionText'])).toList();
         categoryTimings = _maps(_decode(values[12], []));
         commissionPct = cachedCommission != null &&
                 cachedCommission >= 0 &&
@@ -120,11 +122,12 @@ class _State extends State<ReviewVenueDetailsScreen> {
       });
       await _fetchCommission(version);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           loading = false;
           loadError = 'Could not load your saved details.';
         });
+      }
     }
   }
 
@@ -163,8 +166,9 @@ class _State extends State<ReviewVenueDetailsScreen> {
         setState(() => commissionError = 'Unable to refresh the rate.');
       }
     } finally {
-      if (mounted && version == _loadVersion)
+      if (mounted && version == _loadVersion) {
         setState(() => commissionLoading = false);
+      }
     }
   }
 
@@ -193,8 +197,9 @@ class _State extends State<ReviewVenueDetailsScreen> {
     try {
       final id = await SharedPreference.readStr('venue_id') ?? '';
       final token = await SharedPreference.readStr('jwt_token') ?? '';
-      if (id.isEmpty || token.isEmpty)
+      if (id.isEmpty || token.isEmpty) {
         throw const FormatException('Missing session');
+      }
       final response = await (widget.client?.patch ?? http.patch)(
         Uri.parse('$CREATE_VENUE_URL/$id'),
         headers: {
@@ -278,7 +283,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
           foregroundColor: _editColor,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           textStyle:
-              const TextStyle(fontFamily: 'OnboardingMedium', fontSize: 14)),
+              const TextStyle(fontFamily: 'Satoshi', fontSize: 14)),
       icon: const Icon(Icons.edit_outlined, size: 17),
       label: const Text('Edit'));
 
@@ -286,25 +291,30 @@ class _State extends State<ReviewVenueDetailsScreen> {
           {VoidCallback? onEdit, Widget? trailing}) =>
       Container(
         margin: const EdgeInsets.only(top: 24),
-        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
             color: Colors.white,
             border: Border.all(color: AppColors.gray),
             borderRadius: BorderRadius.circular(8)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-                child: Text(title,
-                    style: const TextStyle(
-                        fontFamily: 'OnboardingSemibold',
-                        fontSize: 16,
-                        height: 1.4))),
-            if (onEdit != null) _editButton(onEdit),
-            if (trailing != null) const SizedBox(width: 12),
-            if (trailing != null) trailing,
-          ]),
-          const SizedBox(height: 16),
-          content,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+            child: Row(children: [
+              Expanded(
+                  child: Text(title,
+                      style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          height: 1.4))),
+              if (onEdit != null) _editButton(onEdit),
+              if (trailing != null) const SizedBox(width: 12),
+              if (trailing != null) trailing,
+            ]),
+          ),
+          const Divider(height: 1, color: AppColors.gray),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: content,
+          ),
         ]),
       );
 
@@ -317,7 +327,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
           const SizedBox(height: 4),
           Text(value.isEmpty ? '-' : value,
               style: const TextStyle(
-                  fontSize: 14, fontFamily: 'OnboardingMedium', height: 1.45)),
+                  fontSize: 14, fontFamily: 'Satoshi', height: 1.45)),
         ]),
       );
 
@@ -331,7 +341,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
           const SizedBox(height: 14),
           const Text("Venue's primary contact number",
               style: TextStyle(
-                  fontFamily: 'OnboardingSemibold', fontSize: 16, height: 1.4)),
+                  fontFamily: 'Satoshi', fontSize: 16, height: 1.4)),
           const SizedBox(height: 14),
           _detail('Phone Number', _phone(contactNumber)),
         ]),
@@ -406,7 +416,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title,
               style:
-                  const TextStyle(fontFamily: 'OnboardingMedium', height: 1.4)),
+                  const TextStyle(fontFamily: 'Satoshi', height: 1.4)),
           const SizedBox(height: 4),
           Text(subtitle.replaceAll('\u20b9', 'INR '),
               style: const TextStyle(
@@ -424,7 +434,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
               : Text(value,
                   textAlign: TextAlign.right,
                   style: const TextStyle(
-                      fontFamily: 'OnboardingSemibold',
+                      fontFamily: 'Satoshi',
                       fontSize: 14,
                       color: _editColor,
                       height: 1.4)),
@@ -482,7 +492,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                       padding: EdgeInsets.zero,
                       alignment: Alignment.centerLeft,
                       textStyle: const TextStyle(
-                          fontFamily: 'OnboardingMedium', fontSize: 13)),
+                          fontFamily: 'Satoshi', fontSize: 13)),
                   child: const Row(mainAxisSize: MainAxisSize.min, children: [
                     Flexible(
                         child: Text('Learn more about how commissions work')),
@@ -500,7 +510,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
             style: TextStyle(
                 fontSize: 11,
                 color: AppColors.red,
-                fontFamily: 'OnboardingSemibold')),
+                fontFamily: 'Satoshi')),
       ));
 
   IconData _amenityIcon(String name) {
@@ -535,7 +545,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                       Flexible(
                           child: Text(name,
                               style: const TextStyle(
-                                  fontFamily: 'OnboardingSemibold',
+                                  fontFamily: 'Satoshi',
                                   fontSize: 12,
                                   height: 1.3))),
                     ])),
@@ -568,7 +578,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(activity['title']?.toString() ?? '',
                 style: const TextStyle(
-                    fontFamily: 'OnboardingSemibold',
+                    fontFamily: 'Satoshi',
                     fontSize: 16,
                     height: 1.3)),
             const SizedBox(height: 4),
@@ -576,7 +586,6 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 style: const TextStyle(
                     fontSize: 14, color: AppColors.hintColor, height: 1.4)),
           ]);
-          final edit = _editButton(_editActivity);
           return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -588,10 +597,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                       fit: BoxFit.contain),
                   const SizedBox(width: 12),
                   Expanded(child: details),
-                  if (!compact) edit,
                 ]),
-                if (compact)
-                  Align(alignment: Alignment.centerRight, child: edit),
               ]);
         },
       );
@@ -610,16 +616,17 @@ class _State extends State<ReviewVenueDetailsScreen> {
               padding:
                   EdgeInsets.only(bottom: i == activities.length - 1 ? 0 : 16),
               child: _activityRow(activities[i], i)),
-      ]));
+      ]),
+      onEdit: _editActivity);
 
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
           child: Column(children: [
-        Expanded(
-            child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+        Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              const OnboardingLogo(),
               getStepBarCount(onboardingReviewStep / totalSetup,
                   onboardingReviewStep, totalSetup),
               const SizedBox(height: 28),
@@ -629,6 +636,12 @@ class _State extends State<ReviewVenueDetailsScreen> {
               const Text("Review your venue's details for a final confirmation",
                   style: TextStyle(
                       fontSize: 16, height: 1.4, color: AppColors.black1)),
+            ])),
+        Expanded(
+            child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                children: [
+
               if (loading)
                 const Padding(
                     padding: EdgeInsets.all(32),

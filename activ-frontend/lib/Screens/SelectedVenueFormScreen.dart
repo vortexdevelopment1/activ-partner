@@ -8,11 +8,13 @@ import 'package:http/http.dart' as http;
 
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
+import '../Utills/activity_question_visibility.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import '../api_calling/progress_bar/progress_bar_new.dart';
 import 'CommonCode.dart';
 import 'VenueTimingScreen.dart';
+import 'onboarding_widgets.dart';
 
 // ─── Model ───────────────────────────────────────────────────────────────────
 
@@ -188,7 +190,11 @@ class _State extends State<SelectedVenueFormScreen> {
         } else {
           data = [];
         }
-        final questions = data.map((e) => Question.fromJson(e as Map<String, dynamic>)).where((q) => q.isActive).toList()..sort((a, b) => a.order.compareTo(b.order));
+        final questions = data
+            .map((e) => Question.fromJson(e as Map<String, dynamic>))
+            .where((q) => q.isActive && !isPlaceholderActivityQuestion(q.questionText))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
 
         // Create text controllers for text-based question types
         for (final q in questions) {
@@ -343,7 +349,7 @@ class _State extends State<SelectedVenueFormScreen> {
             q.questionText,
             style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1,
             ),
@@ -353,7 +359,7 @@ class _State extends State<SelectedVenueFormScreen> {
               ' *',
               style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1,
               ),
@@ -385,14 +391,14 @@ class _State extends State<SelectedVenueFormScreen> {
             maxLines: maxLines,
             style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: q.placeholder.isNotEmpty ? q.placeholder : 'Enter ${q.questionText.toLowerCase()}',
               hintStyle: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
               border: InputBorder.none,
@@ -408,7 +414,7 @@ class _State extends State<SelectedVenueFormScreen> {
               q.helperText,
               style: TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -439,13 +445,13 @@ class _State extends State<SelectedVenueFormScreen> {
                 q.placeholder.isNotEmpty ? q.placeholder : 'Select an option',
                 style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor,
                 ),
               ),
               style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
               items: q.options
@@ -465,7 +471,7 @@ class _State extends State<SelectedVenueFormScreen> {
               q.helperText,
               style: TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -517,7 +523,7 @@ class _State extends State<SelectedVenueFormScreen> {
                     opt,
                     style: TextStyle(
                       fontSize: AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -533,7 +539,7 @@ class _State extends State<SelectedVenueFormScreen> {
               q.helperText,
               style: TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -577,7 +583,7 @@ class _State extends State<SelectedVenueFormScreen> {
                   dateStr ?? (q.placeholder.isNotEmpty ? q.placeholder : 'Select a date'),
                   style: TextStyle(
                     fontSize: AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: dateStr != null ? AppColors.darkBlack : AppColors.hintColor,
                   ),
                 ),
@@ -593,7 +599,7 @@ class _State extends State<SelectedVenueFormScreen> {
               q.helperText,
               style: TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor,
               ),
             ),
@@ -632,12 +638,12 @@ class _State extends State<SelectedVenueFormScreen> {
                     mainAxisSize: MainAxisSize.max,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const OnboardingHeader(),
                       Expanded(
                         child: Container(
                           margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                           child: ListView(
                             children: [
-                              getActivIcon(),
                               getStepBar(progress),
                               getText(),
                               getSubText(),
@@ -654,7 +660,7 @@ class _State extends State<SelectedVenueFormScreen> {
                                       _errorMessage,
                                       style: TextStyle(
                                         fontSize: AppSize.size_14,
-                                        fontFamily: 'FontRegular',
+                                        fontFamily: 'Satoshi',
                                         color: AppColors.black1,
                                       ),
                                       textAlign: TextAlign.center,
@@ -719,12 +725,6 @@ class _State extends State<SelectedVenueFormScreen> {
     );
   }
 
-  Widget getActivIcon() {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
-    );
-  }
 
   Widget getText() {
     return Container(
@@ -734,7 +734,7 @@ class _State extends State<SelectedVenueFormScreen> {
         "Tell us about your venue!",
         style: TextStyle(
           fontSize: AppSize.size_25,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
           height: 1.2,
         ),
@@ -750,7 +750,7 @@ class _State extends State<SelectedVenueFormScreen> {
         "We will use these details for venue place",
         style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.black1,
           height: 1.4,
         ),

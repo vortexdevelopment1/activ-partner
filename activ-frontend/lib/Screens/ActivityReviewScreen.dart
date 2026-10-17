@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
+import '../Utills/activity_question_visibility.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LegalInformationScreen.dart';
-import 'ListActivityTypeScreen.dart';
+import 'CategoryQuestionsScreen.dart';
 import 'VenuePhotoListViewScreen.dart';
 import 'VenuePhotoUploadScreen.dart';
 import 'onboarding_widgets.dart';
@@ -40,19 +41,7 @@ class _State extends State<ActivityReviewScreen> {
   List<Map<String, dynamic>> _questions = [];
   int _activityIndex = 0;
   final _scrollController = ScrollController();
-  List<Map<String, dynamic>>? _editedActivities;
-  static const _days = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
   List<Map<String, dynamic>> get _activities {
-    if (_editedActivities != null) return _editedActivities!;
     if (widget.categoryTimings.isNotEmpty) return widget.categoryTimings;
     final titles = _questions
         .map((q) => q['categoryTitle']?.toString() ?? '')
@@ -82,7 +71,7 @@ class _State extends State<ActivityReviewScreen> {
     _activityIndex = widget.initialActivityIndex.clamp(
       0,
       _activities.length - 1,
-    ) as int;
+    );
     _loadQuestions();
   }
 
@@ -93,7 +82,8 @@ class _State extends State<ActivityReviewScreen> {
       final decoded = jsonDecode(raw);
       if (decoded is! List || decoded.any((q) => q is! Map)) return;
       setState(() => _questions =
-          decoded.map((q) => Map<String, dynamic>.from(q as Map)).toList());
+          decoded.map((q) => Map<String, dynamic>.from(q as Map))
+              .where((q) => !isPlaceholderActivityQuestion(q['questionText'])).toList());
     } on FormatException {
       // An incomplete local draft must not prevent reviewing saved timings.
     }
@@ -104,14 +94,6 @@ class _State extends State<ActivityReviewScreen> {
     _scrollController.dispose();
     super.dispose();
   }
-
-  List<Map<String, dynamic>> _slots(String day) => (_timing[day] as List? ?? [])
-      .map((slot) => Map<String, dynamic>.from(slot as Map))
-      .where((slot) => _hasTime(slot['open']) && _hasTime(slot['close']))
-      .toList();
-
-  bool _hasTime(dynamic value) =>
-      value != null && value.toString().isNotEmpty && value != '-';
 
   String _answer(dynamic value) {
     if (value is List) return value.join(', ');
@@ -124,7 +106,7 @@ class _State extends State<ActivityReviewScreen> {
       case 'total courts':
         return 'Number of Courts';
       case 'activity description':
-        return 'Description';
+        return 'Activity Description';
       default:
         return label;
     }
@@ -133,33 +115,21 @@ class _State extends State<ActivityReviewScreen> {
   Future<void> _edit(int screensBack) async {
     if (screensBack == 2) {
       final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => ListActivityTypeScreen(
+        builder: (_) => CategoryQuestionsScreen(
+          venueId: widget.activityId,
+          currentCategory: {
+            ..._activity,
+            'title': _title,
+          },
+          categoryIndex: _activityIndex + 1,
+          totalCategories: _activities.length,
+          accumulatedTimings: _activities,
           reviewMode: true,
-          initialCategoryId: _activity['id']?.toString(),
           client: widget.client,
         ),
       ));
       if (!mounted || saved != true) return;
       await _loadQuestions();
-      final raw = await SharedPreference.readStr('operate_value');
-      if (!mounted || raw == null || raw.isEmpty) return;
-      final decoded = jsonDecode(raw);
-      final selected = decoded is List ? decoded.whereType<Map>().toList() : <Map>[];
-      if (selected.isEmpty) return;
-      final currentId = _activity['id'];
-      final previous = _activities;
-      setState(() {
-        _editedActivities = selected.map((category) {
-          final existing = previous.where((entry) => entry['id'] == category['id']);
-          return <String, dynamic>{
-            ...Map<String, dynamic>.from(category),
-            'timing': existing.isEmpty ? <String, dynamic>{} : existing.first['timing'],
-          };
-        }).toList();
-        final selectedIndex = _editedActivities!.indexWhere((entry) => entry['id'] == currentId);
-        _activityIndex = selectedIndex < 0 ? 0 : selectedIndex;
-      });
-      await SharedPreference.addStringToSF('activity_review_timings', jsonEncode(_editedActivities));
       return;
     }
     if (screensBack == 3) {
@@ -208,8 +178,8 @@ class _State extends State<ActivityReviewScreen> {
       return;
     }
 
-    // Each configured activity contributes upload, preview, questions and timings.
-    final count = screensBack + 4 * (_activities.length - 1 - _activityIndex);
+    // Each configured activity contributes upload, preview and questions.
+    final count = screensBack + 3 * (_activities.length - 1 - _activityIndex);
     final navigator = Navigator.of(context);
     for (var i = 0; i < count && navigator.canPop(); i++) {
       navigator.pop();
@@ -221,39 +191,54 @@ class _State extends State<ActivityReviewScreen> {
     _scrollController.jumpTo(0);
   }
 
-  Widget _section(String title, int screensBack, Widget child) => Container(
+  Widget _section(String title, int screensBack, Widget child) {
+    final partitioned = title == 'Activity Specific Details';
+    final header = Row(children: [
+      Expanded(
+          child: Text(title,
+              style: const TextStyle(
+                  fontFamily: 'Satoshi', fontSize: 16, height: 1.3))),
+      TextButton.icon(
+        onPressed: () => _edit(screensBack),
+        style: TextButton.styleFrom(
+          foregroundColor: _editColor,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: const TextStyle(fontFamily: 'Satoshi', fontSize: 14),
+        ),
+        icon: const Icon(Icons.edit_outlined, size: 17),
+        label: const Text('Edit'),
+      ),
+    ]);
+    return Container(
         margin: const EdgeInsets.only(top: 24),
-        padding: const EdgeInsets.all(18),
+        padding: partitioned ? EdgeInsets.zero : const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: AppColors.gray),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-                child: Text(title,
-                    style: const TextStyle(
-                        fontFamily: 'OnboardingSemibold',
-                        fontSize: 16,
-                        height: 1.3))),
-            TextButton.icon(
-              onPressed: () => _edit(screensBack),
-              style: TextButton.styleFrom(
-                foregroundColor: _editColor,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                textStyle: const TextStyle(
-                    fontFamily: 'OnboardingMedium', fontSize: 14),
-              ),
-              icon: const Icon(Icons.edit_outlined, size: 17),
-              label: const Text('Edit'),
-            ),
-          ]),
-          if (title == 'Photos') const Divider(height: 1, color: AppColors.gray),
-          const SizedBox(height: 12),
-          child,
+          if (partitioned)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+              child: header,
+            )
+          else
+            header,
+          if (partitioned || title == 'Photos')
+            const Divider(height: 1, color: AppColors.gray),
+          if (partitioned)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+              child: child,
+            )
+          else ...[
+            const SizedBox(height: 12),
+            child,
+          ],
         ]),
       );
+  }
 
   Widget _photos() {
     final coverIndex = VenuePhotoListViewScreen.cachedCoverIndexByCategory[
@@ -288,7 +273,7 @@ class _State extends State<ActivityReviewScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                             decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
-                            child: const Text('Cover Photo', style: TextStyle(color: Colors.white, fontFamily: 'OnboardingSemibold', fontSize: 14)),
+                            child: const Text('Cover Photo', style: TextStyle(color: Colors.white, fontFamily: 'Satoshi', fontSize: 14)),
                           ),
                         ),
                       ]),
@@ -303,7 +288,7 @@ class _State extends State<ActivityReviewScreen> {
       _activityQuestions.isEmpty
           ? const Text('No details available.')
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_title, style: const TextStyle(fontFamily: 'OnboardingSemibold', fontSize: 16)),
+              Text(_title, style: const TextStyle(fontFamily: 'Satoshi', fontSize: 16)),
               const SizedBox(height: 14),
               for (var i = 0; i < _activityQuestions.length; i++)
                 Padding(
@@ -324,83 +309,9 @@ class _State extends State<ActivityReviewScreen> {
           const SizedBox(height: 3),
           Text(value,
               style: const TextStyle(
-                  fontFamily: 'OnboardingMedium', fontSize: 14, height: 1.4)),
+                  fontFamily: 'Satoshi', fontSize: 14, height: 1.4)),
         ],
       );
-
-  String _capacity(Map<String, dynamic> slot) {
-    if (slot['capacity'] != null) return _answer(slot['capacity']);
-    for (final q in _activityQuestions) {
-      final label = q['questionText']?.toString().toLowerCase() ?? '';
-      if (label.contains('capacity')) return _answer(q['answer']);
-    }
-    return '-';
-  }
-
-  Widget _operations() {
-    final openDays = _days.where((day) => _slots(day).isNotEmpty).toList();
-    return _section(
-        'Operational Details',
-        1,
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Operating Days',
-              style: TextStyle(fontFamily: 'OnboardingSemibold')),
-          const SizedBox(height: 18),
-          SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  spacing: 16,
-                  runSpacing: 10,
-                  children: [
-                    for (final day in _days)
-                      Text(day.substring(0, 3),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 13,
-                              height: 1.4,
-                              color: openDays.contains(day)
-                                  ? AppColors.darkBlack
-                                  : AppColors.hintColor,
-                              decoration: openDays.contains(day)
-                                  ? null
-                                  : TextDecoration.lineThrough)),
-                  ])),
-          const Divider(height: 32, color: AppColors.gray),
-          const Text('Day Wise Timings',
-              style: TextStyle(fontFamily: 'OnboardingSemibold')),
-          if (openDays.isEmpty) ...[
-            const SizedBox(height: 16),
-            const Text('Operational timings have not been added yet.'),
-          ],
-          for (var i = 0; i < openDays.length; i++) ...[
-            const SizedBox(height: 18),
-            Text(openDays[i],
-                style: const TextStyle(fontFamily: 'OnboardingSemibold')),
-            for (final slot in _slots(openDays[i])) ...[
-              const SizedBox(height: 10),
-              LayoutBuilder(builder: (context, constraints) {
-                final columns =
-                    MediaQuery.textScalerOf(context).scale(14) > 18 ? 2 : 3;
-                final width =
-                    (constraints.maxWidth - 8 * (columns - 1)) / columns;
-                return Wrap(spacing: 8, runSpacing: 12, children: [
-                  SizedBox(
-                      width: width,
-                      child: _cell('Open Time', _answer(slot['open']))),
-                  SizedBox(
-                      width: width,
-                      child: _cell('Close Time', _answer(slot['close']))),
-                  SizedBox(
-                      width: width, child: _cell('Capacity', _capacity(slot))),
-                ]);
-              }),
-            ],
-            if (i < openDays.length - 1)
-              const Divider(height: 24, color: AppColors.gray),
-          ],
-        ]));
-  }
 
   Widget _footerButton(
           {required String label,
@@ -414,7 +325,7 @@ class _State extends State<ActivityReviewScreen> {
           backgroundColor: outlined ? AppColors.cream : Colors.black,
           foregroundColor: outlined ? Colors.black : AppColors.yellow,
           textStyle:
-              const TextStyle(fontFamily: 'OnboardingSemibold', fontSize: 16),
+              const TextStyle(fontFamily: 'Satoshi', fontSize: 16),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
               side: outlined
@@ -427,12 +338,11 @@ class _State extends State<ActivityReviewScreen> {
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
         child: Column(children: [
-          Expanded(
-              child: ListView(
-            controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(15, 10, 15, 32),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const OnboardingLogo(),
               getStepBarCount(onboardingActivityReviewStep / totalSetup,
                   onboardingActivityReviewStep, totalSetup),
               const SizedBox(height: 25),
@@ -442,9 +352,17 @@ class _State extends State<ActivityReviewScreen> {
                   "Review this activity's details for changes or proceed",
                   style: TextStyle(
                       fontSize: 16, height: 1.4, color: AppColors.black1)),
+            ],
+          ),
+        ),
+          Expanded(
+              child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(15, 0, 15, 32),
+            children: [
+
               _photos(),
               _details(),
-              _operations(),
             ],
           )),
           DecoratedBox(

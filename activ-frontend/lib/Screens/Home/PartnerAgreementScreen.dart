@@ -280,7 +280,7 @@ class _AgreementCard extends StatelessWidget {
                     children: [
                       TextSpan(
                         text:
-                            _PartnerAgreementScreenState._agreementTitle + '\n',
+                            '${_PartnerAgreementScreenState._agreementTitle}\n',
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           color: AppColors.darkBlack,
@@ -313,20 +313,16 @@ class _AgreementCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.gray),
             ),
-            child: Scrollbar(
+            child: SingleChildScrollView(
               controller: documentScroll,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                controller: documentScroll,
-                padding: const EdgeInsets.all(14),
-                child: const SelectableText(
-                  _PartnerAgreementScreenState._agreementText,
-                  style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 14,
-                    height: 1.32,
-                    color: AppColors.darkBlack,
-                  ),
+              padding: const EdgeInsets.all(14),
+              child: const SelectableText(
+                _PartnerAgreementScreenState._agreementText,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 14,
+                  height: 1.32,
+                  color: AppColors.darkBlack,
                 ),
               ),
             ),

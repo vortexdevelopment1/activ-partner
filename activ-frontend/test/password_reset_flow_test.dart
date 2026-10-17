@@ -14,8 +14,7 @@ import 'package:http/testing.dart';
 void main() {
   setUpAll(() async {
     for (final entry in {
-      'OnboardingRegular': 'fonts/Metropolis-Regular.ttf',
-      'OnboardingSemibold': 'fonts/Metropolis-SemiBold.otf',
+      'Satoshi': 'fonts/Satoshi-Medium.otf',
       'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(rootBundle.load(entry.value)))
@@ -42,7 +41,7 @@ void main() {
       });
       final boundary = GlobalKey();
       await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(useMaterial3: true, fontFamily: 'OnboardingRegular'),
+        theme: ThemeData(useMaterial3: true, fontFamily: 'Satoshi'),
         builder: (_, child) => RepaintBoundary(key: boundary, child: child),
         home: ForgotPasswordScreen(
             emailId: 'partner@example.com', client: client),

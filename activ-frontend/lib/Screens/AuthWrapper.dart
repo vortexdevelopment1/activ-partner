@@ -15,6 +15,9 @@ import 'Home/HomeScreen.dart' show HomeScreen;
 import 'LegalInformationScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
+import 'LoginScreen.dart';
+import 'session_navigation.dart';
+import '../Utills/browser_session.dart';
 
 /*
 class AuthWrapper extends StatelessWidget {
@@ -114,7 +117,8 @@ class _AuthWrapperState — reads userMobileNumber from SharedPrefs,
 */
 
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  const AuthWrapper({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
@@ -125,7 +129,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       'pending_legal_camera_document_type';
 
   bool isLoading = true;
-  Widget _destination = GetStartedScreen();
+  Widget _destination = const GetStartedScreen();
 
   @override
   void initState() {
@@ -138,8 +142,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final token = await SharedPreference.readStr("jwt_token");
       final hasToken = token != null && token.isNotEmpty;
 
+      final stack = isBrowserSession ? SessionNavigation.savedStack() : <Map<String, dynamic>>[];
+
       if (!hasToken) {
-        _finish(GetStartedScreen());
+        if (stack.isNotEmpty && stack.every(SessionNavigation.isPublic) && _restoreStack(stack)) return;
+        _finish(const GetStartedScreen());
         return;
       }
 
@@ -157,22 +164,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       // Team members: just validate token is still alive, then go to HomeScreen
       if (userType == "team_member") {
-        final response = await http.get(
+        final response = await (widget.client?.get ?? http.get)(
           Uri.parse(AUTH_PROFILE_URL),
           headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
         );
         CommonUtilities.showLog("AuthWrapper team-member status: ${response.statusCode}");
         if (response.statusCode == 200 || response.statusCode == 201) {
+          if (stack.isNotEmpty && _restoreStack(stack)) return;
           _finish(HomeScreen());
         } else {
           await SharedPreference.clearSF();
-          _finish(GetStartedScreen());
+          _finish(const LoginScreen());
         }
         return;
       }
 
       // Partner flow — always fetch fresh state from server
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse(AUTH_PROFILE_URL),
         headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
       );
@@ -182,7 +190,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         await SharedPreference.clearSF();
-        _finish(GetStartedScreen());
+        _finish(const LoginScreen());
         return;
       }
 
@@ -193,6 +201,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // Update local values with fresh API data
       await SharedPreference.addStringToSF("is_profile_complete", apiIsProfileComplete ? "true" : "false");
       await SharedPreference.addStringToSF("is_active", apiIsActive ? "true" : "false");
+
+      if (stack.isNotEmpty && _restoreStack(stack)) return;
 
       if (!apiIsProfileComplete) {
         _finish(TellUsAboutScreen());
@@ -208,13 +218,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await _checkVenueStatus(token);
     } catch (e) {
       CommonUtilities.showLog("AuthWrapper init error: $e");
-      _finish(GetStartedScreen());
+      _finish(const LoginScreen());
     }
   }
 
   Future<void> _checkVenueStatus(String token) async {
     try {
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse(MY_VENUES_URL),
         headers: {
           'accept': '*/*',
@@ -253,24 +263,46 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // Profile complete but no venue yet — continue onboarding
           _finish(VenueScreen());
         } else {
-          _finish(GetStartedScreen());
+          _finish(const LoginScreen());
         }
       } else {
         // Token likely expired or server error — go to login
-        _finish(GetStartedScreen());
+        _finish(const LoginScreen());
       }
     } catch (e) {
       CommonUtilities.showLog("AuthWrapper venue check error: $e");
-      _finish(GetStartedScreen());
+      _finish(const LoginScreen());
     }
   }
 
   void _finish(Widget destination) {
     if (mounted) {
+      SessionNavigation.instance.setRoot(destination);
       setState(() {
         _destination = destination;
         isLoading = false;
       });
+    }
+  }
+
+  bool _restoreStack(List<Map<String, dynamic>> stack) {
+    try {
+      final pages = stack.map(SessionNavigation.restore).toList();
+      if (pages.isEmpty || pages.any((page) => page == null)) return false;
+      _finish(pages.first!);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        for (final page in pages.skip(1)) {
+          Navigator.of(context).push(PageRouteBuilder(
+            pageBuilder: (_, __, ___) => page!,
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ));
+        }
+      });
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

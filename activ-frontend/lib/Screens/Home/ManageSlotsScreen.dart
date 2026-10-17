@@ -412,6 +412,7 @@ class _State extends State<ManageSlotsScreen> {
 
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
+        showLogo: false,
           child: Column(children: [
         Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),

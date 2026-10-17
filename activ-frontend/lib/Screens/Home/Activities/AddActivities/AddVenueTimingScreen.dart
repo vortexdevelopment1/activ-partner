@@ -6,6 +6,7 @@ import 'package:activ_app/Screens/Home/Activities/VenueActivityListScreen.dart';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
+import 'package:activ_app/Utills/timing_copy_confirmation.dart';
 import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,6 +17,7 @@ import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import '../../../../api_calling/api_request.dart';
 import 'AddActivitySubmissionResultScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 
 class DayTiming {
@@ -195,6 +197,7 @@ class _State extends State<AddVenueTimingScreen> {
               decoration: context.getYellowGradient,
               child: Column(
                 children: [
+                  const OnboardingHeader(),
 
                   Expanded(
                     child: Container(
@@ -202,8 +205,6 @@ class _State extends State<AddVenueTimingScreen> {
                       child: ListView(
                         shrinkWrap: true,
                         children: [
-
-                          getActivIcon(),
 
                           getText(),
 
@@ -216,7 +217,7 @@ class _State extends State<AddVenueTimingScreen> {
                               "Mark Operating Days",
                               style: TextStyle(
                                   fontSize: AppSize.size_16,
-                                  fontFamily: 'FontSemiBold',
+                                  fontFamily: 'Satoshi',
                                   color: AppColors.black1,
                                   height: 1.2
                               ),
@@ -264,7 +265,7 @@ class _State extends State<AddVenueTimingScreen> {
                                       day,
                                       style: const TextStyle(
                                         fontSize: AppSize.size_14,
-                                        fontFamily: 'FontMedium',
+                                        fontFamily: 'Satoshi',
                                         color: AppColors.darkBlack,
                                       ),
                                     ),
@@ -285,7 +286,7 @@ class _State extends State<AddVenueTimingScreen> {
                         label: Text("Copy to all",
                           style: TextStyle(
                             fontSize: AppSize.size_14,
-                            fontFamily: 'FontMedium',
+                            fontFamily: 'Satoshi',
                             color: AppColors.purple,
                           ),),
                         onPressed: () {
@@ -318,14 +319,14 @@ class _State extends State<AddVenueTimingScreen> {
                               "Day Wise Timings",
                               style: TextStyle(
                                 fontSize: AppSize.size_16,
-                                fontFamily: 'FontBold',
+                                fontFamily: 'Satoshi',
                                 color: AppColors.black1,
                               ),
                             ),
                           ),
 
                            Visibility(
-                             visible: selectedDays.length > 0 ? false : true,
+                             visible: selectedDays.isNotEmpty ? false : true,
                              child: Container(
                               margin: const EdgeInsets.fromLTRB(15, 5, 15, 0),
                               alignment: Alignment.centerLeft,
@@ -333,7 +334,7 @@ class _State extends State<AddVenueTimingScreen> {
                                 "Select the operating days above to start adding time slots",
                                 style: TextStyle(
                                   fontSize: AppSize.size_14,
-                                  fontFamily: 'FontRegular',
+                                  fontFamily: 'Satoshi',
                                   color: AppColors.black1,
                                 ),
                               ),
@@ -345,7 +346,7 @@ class _State extends State<AddVenueTimingScreen> {
                               int index = entry.key;
                               String day = entry.value;
 
-                              CommonUtilities.showLog("Select_Day : " + day.toString());
+                              CommonUtilities.showLog("Select_Day : $day");
 
                               return Card(
                                 color: AppColors.transparent,
@@ -370,7 +371,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                 child: Text("${dayMap[day]}",
                                                   style: TextStyle(
                                                     fontSize: AppSize.size_14,
-                                                    fontFamily: 'FontBold',
+                                                    fontFamily: 'Satoshi',
                                                     color: AppColors.darkBlack,
                                                   ),
                                                 ),
@@ -379,26 +380,7 @@ class _State extends State<AddVenueTimingScreen> {
                                               // Copy To All Text
                                               InkWell(
                                                 onTap: hasAnyTimingSelected()
-                                                    ? () {
-                                                  if (selectedDays.isNotEmpty) {
-                                                    String firstDay = selectedDays.first;
-                                                    DayTiming firstDayTiming = timings[firstDay]!;
-
-                                                    // ✅ Deep copy of slots
-                                                    for (var day in selectedDays) {
-                                                      timings[day] = DayTiming(
-                                                        timeSlots: firstDayTiming.timeSlots
-                                                            .map((slot) => {
-                                                          "open": slot["open"]!,
-                                                          "close": slot["close"]!,
-                                                        })
-                                                            .toList(),
-                                                      );
-                                                    }
-
-                                                    setState(() {});
-                                                  }
-                                                }
+                                                    ? _copyTimingsToAllDays
                                                     : null,
                                                 child: Visibility(
                                                   visible: (day == selectedDays.first), // 👈 pehle wale day par hi dikhana
@@ -406,7 +388,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                     padding: const EdgeInsets.fromLTRB(2, 2, 2, 4),
                                                     child: Row(
                                                       children: [
-                                                        Container(
+                                                        SizedBox(
                                                           width: 20,
                                                           height: 20,
                                                           child: Image.asset(
@@ -422,7 +404,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                             "Copy to all",
                                                             style: TextStyle(
                                                               fontSize: AppSize.size_14,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: hasAnyTimingSelected()
                                                                   ? AppColors.purple
                                                                   : AppColors.lightGray,
@@ -460,7 +442,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                                   text: "Open Time",
                                                                   style: const TextStyle(
                                                                     fontSize: AppSize.size_14,
-                                                                    fontFamily: 'FontMedium',
+                                                                    fontFamily: 'Satoshi',
                                                                     color: AppColors.darkBlack,
                                                                   ),
                                                                 ),
@@ -468,7 +450,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                                   text: "*",
                                                                   style: const TextStyle(
                                                                     fontSize: AppSize.size_14,
-                                                                    fontFamily: 'FontMedium',
+                                                                    fontFamily: 'Satoshi',
                                                                     color: AppColors.red,
                                                                   ),
                                                                 ),
@@ -506,11 +488,11 @@ class _State extends State<AddVenueTimingScreen> {
                                                                     slot["open"]!,
                                                                     style: const TextStyle(
                                                                       fontSize: AppSize.size_14,
-                                                                      fontFamily: 'FontRegular',
+                                                                      fontFamily: 'Satoshi',
                                                                       color: AppColors.darkBlack,
                                                                     ),
                                                                   ),
-                                                                  Container(
+                                                                  SizedBox(
                                                                     width: 16,
                                                                     height: 16,
                                                                     child: Image.asset(
@@ -539,7 +521,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                                   text: "Close Time",
                                                                   style: const TextStyle(
                                                                     fontSize: AppSize.size_14,
-                                                                    fontFamily: 'FontMedium',
+                                                                    fontFamily: 'Satoshi',
                                                                     color: AppColors.darkBlack,
                                                                   ),
                                                                 ),
@@ -547,7 +529,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                                   text: "*",
                                                                   style: const TextStyle(
                                                                     fontSize: AppSize.size_14,
-                                                                    fontFamily: 'FontMedium',
+                                                                    fontFamily: 'Satoshi',
                                                                     color: AppColors.red,
                                                                   ),
                                                                 ),
@@ -586,11 +568,11 @@ class _State extends State<AddVenueTimingScreen> {
                                                                     slot["close"]!,
                                                                     style: const TextStyle(
                                                                       fontSize: AppSize.size_14,
-                                                                      fontFamily: 'FontRegular',
+                                                                      fontFamily: 'Satoshi',
                                                                       color: AppColors.darkBlack,
                                                                     ),
                                                                   ),
-                                                                  Container(
+                                                                  SizedBox(
                                                                     width: 16,
                                                                     height: 16,
                                                                     child: Image.asset(
@@ -646,7 +628,7 @@ class _State extends State<AddVenueTimingScreen> {
                                               mainAxisAlignment: MainAxisAlignment.start,
                                               crossAxisAlignment: CrossAxisAlignment.center,
                                               children: [
-                                                Container(
+                                                SizedBox(
                                                   width: 20,
                                                   height: 20,
                                                   child: Image.asset('assets/ic_plus.png'),
@@ -657,7 +639,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                     "Add time slot",
                                                     style: TextStyle(
                                                       fontSize: AppSize.size_14,
-                                                      fontFamily: 'FontMedium',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.purple,
                                                     ),
                                                   ),
@@ -731,7 +713,7 @@ class _State extends State<AddVenueTimingScreen> {
                                           await saveVenueTimingToFirestore(
                                             widget.activityId,
                                             venueTimingMap,
-                                            'IND (+91)' + userMobileNumber!,
+                                            'IND (+91)${userMobileNumber!}',
                                           );
                                           CommonUtilities.createSnackBar(context, "Activity submitted successfully.");
                                           CommonUtilities.addActivitySuccessfully = "yes";
@@ -886,13 +868,6 @@ class _State extends State<AddVenueTimingScreen> {
   }
 
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -903,7 +878,7 @@ class _State extends State<AddVenueTimingScreen> {
         "Set the venue’s availability",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -920,13 +895,29 @@ class _State extends State<AddVenueTimingScreen> {
         "Tell us when the members can reserve your venue",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
         textAlign: TextAlign.left,
       ),
     );
+  }
+
+  Future<void> _copyTimingsToAllDays() async {
+    if (selectedDays.isEmpty) return;
+    final confirmed = await confirmCopyTimingsToAllDays(context);
+    if (!mounted || !confirmed || selectedDays.isEmpty) return;
+    final source = timings[selectedDays.first]!;
+    setState(() {
+      for (final day in selectedDays) {
+        timings[day] = DayTiming(
+          timeSlots: source.timeSlots
+              .map((slot) => Map<String, String>.from(slot))
+              .toList(),
+        );
+      }
+    });
   }
 
   bool hasAnyTimingSelected() {
@@ -976,7 +967,7 @@ class _State extends State<AddVenueTimingScreen> {
                       '⚠ Alert!',
                     style: TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                         textBaseline: null),),
 
@@ -987,7 +978,7 @@ class _State extends State<AddVenueTimingScreen> {
                     child: Text(description,
                       style: TextStyle(
                           fontSize: AppSize.size_14,
-                          fontFamily: 'FontSemiBold',
+                          fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
                           height: 1.5), textAlign: TextAlign.center,),
                   ),
@@ -1023,7 +1014,7 @@ class _State extends State<AddVenueTimingScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: AppSize.size_14,
-                                  fontFamily: 'FontSemiBold',
+                                  fontFamily: 'Satoshi',
                                   color: AppColors.darkBlack,),
                               ),
                             ),
@@ -1056,7 +1047,7 @@ class _State extends State<AddVenueTimingScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: AppSize.size_14,
-                                  fontFamily: 'FontSemiBold',
+                                  fontFamily: 'Satoshi',
                                   color: AppColors.darkBlack,),
                               ),
                             ),

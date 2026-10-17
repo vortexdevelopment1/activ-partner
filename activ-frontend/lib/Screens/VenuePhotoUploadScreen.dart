@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -5,11 +8,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
 import '../Style/app_size.dart';
+import '../Utills/venue_photo_duplicates.dart';
+import '../Utills/session_photo_draft.dart';
 import 'VenuePhotoListViewScreen.dart';
 import '../api_calling/api_constant.dart';
+import '../api_calling/api_request.dart';
+import 'StringExtensions.dart';
 import 'CommonCode.dart';
 import 'onboarding_widgets.dart';
 
@@ -70,9 +78,112 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
           mimeType: 'image/jpeg',
         ),
       ));
-      _coverIndex = _coverIndex.clamp(0, _imageBytes.length - 1) as int;
+      _coverIndex = _coverIndex.clamp(0, _imageBytes.length - 1);
       _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
     }
+    _restoreSessionPhotos();
+    if (widget.initialImageBytes.isEmpty &&
+        SessionPhotoDraft.read(widget.currentCategory) == null) {
+      _restoreExistingPhotos();
+    }
+    SessionPhotoDraft.changes.addListener(_restoreSessionPhotos);
+  }
+
+  Future<void> _restoreExistingPhotos() async {
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    if (venueId.isEmpty || token.isEmpty) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$BASE_URL/venues/$venueId/activities/full'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return;
+
+      final decoded = jsonDecode(response.body);
+      final rawServices = decoded is Map ? decoded['data'] : null;
+      final services = rawServices is List
+          ? rawServices
+          : rawServices is Map
+              ? rawServices['items']
+              : null;
+      if (services is! List) return;
+
+      final categoryId = widget.currentCategory['id']?.toString() ?? '';
+      final categoryName = (widget.currentCategory['title'] ??
+              widget.currentCategory['name'])
+          ?.toString()
+          .toLowerCase();
+      final service = services
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .firstWhere(
+            (value) => value['categoryId']?.toString() == categoryId ||
+                value['name']?.toString().toLowerCase() == categoryName,
+            orElse: () => <String, dynamic>{},
+          );
+      final urls = (service['imageUrls'] as List? ?? [])
+          .map((value) => value.toString())
+          .where((value) => value.isNotEmpty)
+          .toList();
+      if (urls.isEmpty || !mounted) return;
+
+      final downloaded = <({String url, Uint8List bytes})>[];
+      for (final url in urls) {
+        final imageResponse = await http.get(Uri.parse(url));
+        if (imageResponse.statusCode == 200 && imageResponse.bodyBytes.isNotEmpty) {
+          downloaded.add((url: url, bytes: Uint8List.fromList(imageResponse.bodyBytes)));
+        }
+      }
+      if (downloaded.isEmpty || !mounted) return;
+
+      final coverUrl = service['coverImageUrl']?.toString();
+      var coverIndex = downloaded.indexWhere((item) => item.url == coverUrl);
+      if (coverIndex < 0) coverIndex = 0;
+      final bytes = downloaded.map((item) => item.bytes).toList();
+      setState(() {
+        _imageBytes
+          ..clear()
+          ..addAll(bytes);
+        _selectedImages
+          ..clear()
+          ..addAll([
+            for (var index = 0; index < bytes.length; index++)
+              XFile.fromData(bytes[index],
+                  name: 'existing_photo_${index + 1}.jpg', mimeType: 'image/jpeg'),
+          ]);
+        _coverIndex = coverIndex;
+        _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
+      });
+      SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+      if (categoryId.isNotEmpty) {
+        VenuePhotoListViewScreen.cachedImagesByCategory[categoryId] = List.from(_imageBytes);
+        VenuePhotoListViewScreen.cachedCoverIndexByCategory[categoryId] = _coverIndex;
+      }
+    } catch (error) {
+      CommonUtilities.showLog('Existing activity photos restore failed: $error');
+    }
+  }
+
+  void _restoreSessionPhotos() {
+    final draft = SessionPhotoDraft.read(widget.currentCategory);
+    if (!mounted || draft == null) return;
+    setState(() {
+      _imageBytes..clear()..addAll(draft.bytes);
+      _selectedImages..clear()..addAll([
+        for (var i = 0; i < draft.bytes.length; i++)
+          XFile.fromData(draft.bytes[i], name: 'venue_photo_$i.jpg', mimeType: 'image/jpeg'),
+      ]);
+      _coverIndex = draft.bytes.isEmpty ? 0 : draft.cover.clamp(0, draft.bytes.length - 1);
+      _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
+    });
+  }
+
+  @override
+  void dispose() {
+    SessionPhotoDraft.changes.removeListener(_restoreSessionPhotos);
+    super.dispose();
   }
 
   void nextStep() {
@@ -162,6 +273,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
   void _continue() {
     if (!_isButtonEnabled) return;
+    SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
     Navigator.push(context, MaterialPageRoute(builder: (_) => VenuePhotoListViewScreen(
       images: _selectedImages,
       imageBytes: _imageBytes,
@@ -172,8 +284,23 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       accumulatedTimings: widget.accumulatedTimings,
       initialCoverIndex: _coverIndex,
       replaceOnlyCurrentCategory: widget.replaceOnlyCurrentCategory,
+      onPhotosChanged: _syncReviewedPhotos,
     ))).then((_) {
       if (mounted) refresh();
+    });
+  }
+
+  void _syncReviewedPhotos(List<XFile> images, List<Uint8List> bytes, int coverIndex) {
+    if (!mounted) return;
+    setState(() {
+      _selectedImages
+        ..clear()
+        ..addAll(images);
+      _imageBytes
+        ..clear()
+        ..addAll(bytes);
+      _coverIndex = coverIndex;
+      _isButtonEnabled = images.length >= 4 && images.length <= 12;
     });
   }
 
@@ -183,6 +310,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     setState(() {
       _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
     });
+    SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
   }
 
   Future<void> _pickImages1() async {
@@ -191,7 +319,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       return;
     }
 
-    final List<XFile>? images = await _picker.pickMultiImage();
+    final List<XFile> images = await _picker.pickMultiImage();
 
     if (images != null && images.isNotEmpty) {
       if (_selectedImages.length + images.length > 12) {
@@ -238,38 +366,15 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       return;
     }
 
-    final List<XFile>? images = await _picker.pickMultiImage();
+    final List<XFile> images = await _picker.pickMultiImage();
 
     if (images != null && images.isNotEmpty) {
-      if (_selectedImages.length + images.length > 12) {
-        _showPhotoError("Maximum 12 images allowed.");
-        return;
-      }
-
+      var duplicateFound = false;
       for (var img in images) {
-        if (await img.length() > 5 * 1024 * 1024) {
-          _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
-          continue;
-        }
-        final raw = await img.readAsBytes();
-        if (raw.length > 5 * 1024 * 1024) {
-          _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
-          continue;
-        }
-
-        final compressed = await FlutterImageCompress.compressWithList(
-          raw,
-          quality: 60,
-          minWidth: 1280,
-          minHeight: 720,
-        );
-
-        if (!mounted) return;
-        setState(() {
-          _selectedImages.add(img);
-          _imageBytes.add(compressed);
-        });
+        duplicateFound = await _addSelectedPhoto(img) || duplicateFound;
       }
+      _updateButtonStatus();
+      if (duplicateFound && mounted) await showDuplicateVenuePhotoDialog(context);
     }
 
     _updateButtonStatus(); // ✅ update button state
@@ -284,31 +389,49 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
+      final duplicateFound = await _addSelectedPhoto(image);
+      _updateButtonStatus();
+      if (duplicateFound && mounted) await showDuplicateVenuePhotoDialog(context);
+    }
+
+    _updateButtonStatus(); // ✅ update button state
+  }
+
+  // Returns true only when the photo was rejected as a duplicate.
+  Future<bool> _addSelectedPhoto(XFile image) async {
+    try {
       if (await image.length() > 5 * 1024 * 1024) {
-        _showPhotoError('Each photo must be 5 MB or smaller. This photo was not added.');
-        return;
+        _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
+        return false;
       }
       final raw = await image.readAsBytes();
       if (raw.length > 5 * 1024 * 1024) {
-        _showPhotoError('Each photo must be 5 MB or smaller. This photo was not added.');
-        return;
+        _showPhotoError('Each photo must be 5 MB or smaller. Oversized photos were not added.');
+        return false;
       }
-
+      if (await containsVenuePhoto(raw,
+          selectedPhotos: _selectedImages, processedPhotos: _imageBytes)) {
+        return true;
+      }
+      if (!mounted) return false;
+      if (_selectedImages.length >= 12) {
+        _showPhotoError('Maximum 12 images allowed.');
+        return false;
+      }
       final compressed = await FlutterImageCompress.compressWithList(
-        raw,
-        quality: 60,
-        minWidth: 1280,
-        minHeight: 720,
+        raw, quality: 60, minWidth: 1280, minHeight: 720,
       );
-
-      if (!mounted) return;
+      if (!mounted) return false;
+      if (matchesVenuePhoto(compressed, _imageBytes)) return true;
       setState(() {
         _selectedImages.add(image);
         _imageBytes.add(compressed);
       });
+      SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+    } catch (_) {
+      _showPhotoError('Unable to add this photo. Please try another image.');
     }
-
-    _updateButtonStatus(); // ✅ update button state
+    return false;
   }
 
 
@@ -358,20 +481,22 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 15),
+                              child: Column(
+                                children: [
+                                  getStepBar(currentStep / totalSteps),
+                                  getText(),
+                                  getSubText(),
+                                ],
+                              ),
+                            ),
                             Expanded(
                               child: Container(
                                 margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-                                    getActivIcon(),
-
-                                    getStepBar(currentStep / totalSteps),
-
-                                    getText(),
-
-                                    getSubText(),
-
                                     if (_photoError != null)
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -402,7 +527,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                           child: Column(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
-                                              Container(
+                                              SizedBox(
                                                 width: 64,
                                                 height: 52,
                                                 child: Image.asset('assets/ic_pan.png'),
@@ -413,7 +538,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                   "Drag and drop",
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_16,
-                                                      fontFamily: 'FontSemiBold',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.darkBlack,
                                                       height: 1
                                                   ),
@@ -426,7 +551,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                   "or browse for photos",
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_14,
-                                                      fontFamily: 'FontRegular',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.black1,
                                                       height: 1
                                                   ),
@@ -459,7 +584,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                           "Browse",
                                                           style: TextStyle(
                                                               fontSize: AppSize.size_16,
-                                                              fontFamily: 'FontSemiBold',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.purple,
                                                               height: 1
                                                           ),
@@ -476,7 +601,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                                   textAlign: TextAlign.center,
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_14,
-                                                      fontFamily: 'FontRegular',
+                                                      fontFamily: 'Satoshi',
                                                       color: AppColors.black1,
                                                       height: 1.4
                                                   ),
@@ -498,7 +623,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                               fontSize: AppSize.size_12,
-                                              fontFamily: 'FontRegular',
+                                              fontFamily: 'Satoshi',
                                               color: AppColors.darkBlack,
                                               height: 1
                                           ),
@@ -627,13 +752,6 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 48, bottom: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getStepBar(double progress)
   {
@@ -652,7 +770,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         'Add some photos of your venue',
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -669,7 +787,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         'These images will be shown on the Activ venue listing page',
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),

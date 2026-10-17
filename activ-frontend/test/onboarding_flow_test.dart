@@ -107,15 +107,8 @@ void main() {
 
   setUpAll(() async {
     for (final entry in {
-      'OnboardingRegular': 'fonts/Metropolis-Regular.ttf',
-      'OnboardingMedium': 'fonts/Metropolis-Medium.otf',
-      'OnboardingSemibold': 'fonts/Metropolis-SemiBold.otf',
-      'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
-      'FontRegular': 'fonts/Acumin-RPro.otf',
-      'FontBold': 'fonts/Acumin-BdPro.otf',
       'Satoshi': 'fonts/Satoshi-Medium.otf',
-      'FontMedium': 'fonts/AcuminPro-Medium.otf',
-      'FontSemiBold': 'fonts/AcuminPro-Semibold.otf',
+      'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
       'packages/font_awesome_flutter/FontAwesomeBrands': 'packages/font_awesome_flutter/lib/fonts/fa-brands-400.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(rootBundle.load(entry.value))).load();
@@ -159,6 +152,16 @@ void main() {
       await precacheImage(const AssetImage('assets/logo.png'), tester.element(find.byType(RepaintBoundary).first));
     });
     await tester.pumpAndSettle();
+    final header = find.byType(OnboardingHeader);
+    if (header.evaluate().isNotEmpty) {
+      expect(header, findsOneWidget);
+      final logo = find.descendant(of: header, matching: find.byType(Image));
+      final compact = size.width < 360;
+      expect(tester.getSize(logo), compact ? const Size(100, 60) : const Size(118, 68));
+      expect(tester.getTopLeft(logo).dy,
+          14 + tester.view.padding.top / tester.view.devicePixelRatio);
+      expect(tester.getCenter(logo).dx, size.width / 2);
+    }
   }
 
   Future<void> capture(WidgetTester tester, String name) async {
@@ -743,7 +746,7 @@ void main() {
     final picker = _AgreementFilePicker();
     FilePicker.platform = picker;
     addTearDown(() {
-      if (original != null) FilePicker.platform = original!;
+      if (original != null) FilePicker.platform = original;
     });
     final bytes = Uint8List.fromList(utf8.encode('%PDF-1.4 test document'));
     final client = MockClient((request) async => request.url.path.endsWith('/download')
@@ -1031,6 +1034,59 @@ void main() {
     });
   }
 
+  testWidgets('activity grid spacing and touch feedback stay inside the scrolling area', (tester) async {
+    final client = MockClient((_) async => http.Response(jsonEncode({'data':
+      ['Badminton', 'Basketball', 'Hockey', 'Tennis', 'Swimming', 'Yoga', 'Squash', 'Archery']
+          .map((name) => {'id': name.toLowerCase(), 'name': name, 'description': '$name bookings', 'isActive': true})
+          .toList(),
+    }), 200));
+    await showScreen(tester, ListActivityTypeScreen(client: client), size: const Size(360, 800));
+    final divider = find.byKey(const Key('activity-filter-divider'));
+    final grid = find.byType(GridView);
+    expect(tester.getTopLeft(grid).dy, tester.getBottomLeft(divider).dy);
+    expect(tester.getTopLeft(find.byKey(const ValueKey('activity-archery'))).dy,
+        tester.getBottomLeft(divider).dy + 12);
+    expect(tester.getBottomLeft(grid).dy,
+        tester.getTopLeft(find.byKey(const Key('activity-footer'))).dy - 10);
+    final headerBottom = tester.getTopLeft(divider).dy.floor();
+    Future<Uint8List> headerPixels() async {
+      final boundary = boundaryKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 1);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final pixels = Uint8List.fromList(bytes!.buffer.asUint8List(0, image.width * headerBottom * 4));
+      image.dispose();
+      return pixels;
+    }
+    final before = await tester.runAsync(headerPixels);
+    final gesture = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('activity-badminton'))));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(0, -170));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.moveBy(const Offset(0, -60));
+    await tester.pump(const Duration(milliseconds: 16));
+    final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: grid, matching: find.byType(Scrollable)).first);
+    expect(scrollable.position.pixels, greaterThan(0));
+    final during = await tester.runAsync(headerPixels);
+    expect(during, orderedEquals(before!));
+    await capture(tester, 'select-activities-touch-scroll-360');
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(grid).dy, tester.getBottomLeft(divider).dy);
+    scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(tester.getBottomLeft(find.byKey(const ValueKey('activity-yoga'))).dy,
+        tester.getBottomLeft(grid).dy - 12);
+    final filters = find.byWidgetPredicate((widget) =>
+        widget is ListView && widget.scrollDirection == Axis.horizontal);
+    await tester.drag(filters, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    final lastFilter = find.ancestor(
+        of: find.text('Water Sports'), matching: find.byType(GestureDetector)).first;
+    expect(tester.getTopRight(lastFilter).dx, 330);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [
     const Size(430, 1056),
     const Size(360, 740),
@@ -1067,6 +1123,45 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('profile Back opens login from root and previous routes', (tester) async {
+    for (final hasPrevious in [false, true]) {
+      await showScreen(tester, hasPrevious
+          ? const Scaffold(body: Text('Previous screen'))
+          : const TellUsAboutScreen());
+      if (hasPrevious) {
+        tester.state<NavigatorState>(find.byType(Navigator).first).push(
+          MaterialPageRoute(builder: (_) => const TellUsAboutScreen()),
+        );
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(TellUsAboutScreen), findsNothing);
+      expect(tester.state<NavigatorState>(find.byType(Navigator).first).canPop(), isFalse);
+    }
+  });
+
+  testWidgets('profile system Back opens login', (tester) async {
+    await showScreen(tester, const TellUsAboutScreen());
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(TellUsAboutScreen), findsNothing);
+  });
+
+  testWidgets('profile review Back returns to the review route', (tester) async {
+    await showScreen(tester, const Scaffold(body: Text('Review screen')));
+    tester.state<NavigatorState>(find.byType(Navigator).first).push(
+      MaterialPageRoute(builder: (_) => const TellUsAboutScreen(reviewMode: true)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review screen'), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
+  });
 
   testWidgets('venue update matches editable reference and starts from saved values', (tester) async {
     seedVenueInfo();
@@ -1643,11 +1738,11 @@ void main() {
     expect(answers.any((answer) => answer['answer'] == 'Updated badminton description'), isTrue);
   });
 
-  testWidgets('Get Started logo stays small across viewport widths', (tester) async {
+  testWidgets('Get Started logo matches login across viewport widths', (tester) async {
     for (final width in [320.0, 430.0, 800.0]) {
       await showScreen(tester, const GetStartedScreen(), size: Size(width, 932));
       final logo = find.byWidgetPredicate((widget) => widget is Image && widget.image is AssetImage && (widget.image as AssetImage).assetName == 'assets/logo.png');
-      expect(tester.getSize(logo), const Size(105, 60));
+      expect(tester.getSize(logo), width < 360 ? const Size(100, 60) : const Size(118, 68));
       expect(tester.takeException(), isNull);
     }
   });
@@ -1698,7 +1793,7 @@ void main() {
     expect(find.text('Number of Courts'), findsOneWidget);
     expect(find.text('Synthetic'), findsOneWidget);
     expect(find.text('24'), findsOneWidget);
-    expect(find.text('Operational Details'), findsOneWidget);
+    expect(find.text('Operational Details'), findsNothing);
     expect(find.text('Tuesday'), findsOneWidget);
     expect(find.text('06:00 AM'), findsOneWidget);
     expect(find.text('04:00 PM'), findsOneWidget);
@@ -1712,7 +1807,7 @@ void main() {
     expect(find.text('2'), findsOneWidget);
     expect(find.text('No photos uploaded.'), findsOneWidget);
     expect(find.text('Synthetic'), findsNothing);
-    expect(find.text('Operational timings have not been added yet.'), findsOneWidget);
+    expect(find.text('Operational timings have not been added yet.'), findsNothing);
     expect(find.text('Next'), findsOneWidget);
     await tester.tap(find.text('Back'));
     await tester.pumpAndSettle();
@@ -1744,7 +1839,8 @@ void main() {
     ]);
     for (final size in [const Size(320, 640), const Size(430, 932), const Size(800, 932)]) {
       await showScreen(tester, screen, size: size, textScale: 1.5);
-      await tester.scrollUntilVisible(find.text('Capacity'), 250, scrollable: find.byType(Scrollable).first);
+      expect(find.text('Activity Specific Details'), findsOneWidget);
+      expect(find.text('Operational Details'), findsNothing);
       expect(tester.takeException(), isNull);
       await capture(tester, 'activity-review-${size.width.toInt()}-large-text');
     }
@@ -1762,7 +1858,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('activity details Edit opens activity selection then configuration and restores answers', (tester) async {
+  testWidgets('activity details Edit opens its form directly and restores answers', (tester) async {
     SharedPreferences.setMockInitialValues({
       'venue_id': 'venue-1',
       'jwt_token': 'test-token',
@@ -1771,9 +1867,15 @@ void main() {
         'categoryId': 'volleyball', 'categoryTitle': 'Volleyball',
         'questionId': 'description', 'questionText': 'Activity Description',
         'answer': 'Existing volleyball description',
+      }, {
+        'categoryId': 'badminton', 'categoryTitle': 'Badminton',
+        'questionId': 'badminton-description', 'questionText': 'Activity Description',
+        'answer': 'Keep badminton description',
       }]),
     });
+    final requests = <http.Request>[];
     final client = MockClient((request) async {
+      requests.add(request);
       if (request.url.path.endsWith('/categories/active')) {
         return http.Response(jsonEncode({'data': [
           {'id': 'volleyball', 'name': 'Volleyball', 'isActive': true},
@@ -1794,16 +1896,18 @@ void main() {
     });
     await showScreen(tester, ActivityReviewScreen(
       activityId: 'venue-1', client: client,
-      categoryTimings: const [{'id': 'volleyball', 'title': 'Volleyball', 'timing': <String, dynamic>{}}],
+      initialActivityIndex: 1,
+      categoryTimings: const [
+        {'id': 'badminton', 'title': 'Badminton', 'timing': <String, dynamic>{}},
+        {'id': 'volleyball', 'title': 'Volleyball', 'timing': <String, dynamic>{}},
+      ],
     ));
     final header = find.ancestor(of: find.text('Activity Specific Details'), matching: find.byType(Row)).first;
     final edit = find.descendant(of: header, matching: find.byType(TextButton));
     await tester.ensureVisible(edit);
     await tester.tap(edit);
     await tester.pumpAndSettle();
-    expect(find.byType(ListActivityTypeScreen), findsOneWidget);
-    await tester.tap(find.text('Next'));
-    await tester.pumpAndSettle();
+    expect(find.byType(ListActivityTypeScreen), findsNothing);
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
     await capture(tester, 'activity-edit-configuration');
     expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, 'Existing volleyball description');
@@ -1812,6 +1916,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ActivityReviewScreen), findsOneWidget);
     expect(find.text('Updated volleyball description'), findsOneWidget);
+    expect(requests.any((request) => request.url.path.endsWith('/categories/active')), isFalse);
+    expect(requests.any((request) => request.method == 'PATCH'), isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    final savedAnswers = jsonDecode(prefs.getString('activity_questions_display')!) as List;
+    expect(savedAnswers.any((answer) => answer['answer'] == 'Keep badminton description'), isTrue);
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Unsaved change');
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActivityReviewScreen), findsOneWidget);
+    expect(find.text('Updated volleyball description'), findsOneWidget);
+    expect(find.text('Unsaved change'), findsNothing);
     await capture(tester, 'activity-edit-review');
     expect(tester.takeException(), isNull);
   });
@@ -1824,7 +1942,7 @@ void main() {
       {'id': 'a', 'title': 'Badminton', 'timing': <String, dynamic>{}},
       {'id': 'b', 'title': 'Squash', 'timing': <String, dynamic>{}},
     ]);
-    for (final section in ['Photos', 'Operational Details']) {
+    for (final section in ['Photos']) {
       await showScreen(tester, const Scaffold(body: Text('upload1')));
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
       for (final step in steps.skip(1)) {
@@ -1878,6 +1996,37 @@ void main() {
     }
     expect(tester.getTopLeft(find.byKey(const Key('otp-submit'))).dy, closeTo(856, 1));
     await capture(tester, 'otp-430x932');
+  });
+
+  testWidgets('onboarding logo matches login and stays fixed while forms scroll', (tester) async {
+    tester.view.padding = const FakeViewPadding(top: 24, bottom: 16);
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 16);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewPadding);
+    for (final size in [const Size(320, 740), const Size(360, 740), const Size(430, 932)]) {
+      await showScreen(tester, const LoginScreen(), size: size);
+      final logo = find.descendant(
+          of: find.byType(OnboardingHeader), matching: find.byType(Image));
+      final loginRect = tester.getRect(logo);
+      for (final screen in <Widget>[
+        const MobileNumberScreen(),
+        const OTPVerificationScreen(),
+        const GetStartedScreen(),
+        const TellUsAboutScreen(),
+        const VenueScreen(),
+        VenuePhotoUploadScreen(currentCategory: const {'id': 'badminton', 'title': 'Badminton'}),
+        const VenueTimingScreen(activityId: 'venue'),
+        const LegalInformationScreen(),
+        ReviewSignAgreement(client: MockClient((_) async => agreementResponse())),
+      ]) {
+        await showScreen(tester, screen, size: size);
+        expect(tester.getRect(logo), loginRect);
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -250));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(logo), loginRect);
+        expect(tester.takeException(), isNull);
+      }
+    }
   });
 
   testWidgets('mobile screen matches reference and only enables valid numbers', (tester) async {
@@ -2080,6 +2229,7 @@ void main() {
       return http.Response(
           jsonEncode({
             'data': [
+              {'id': 'placeholder', 'questionText': 'ABCDE', 'questionType': 'select', 'options': ['a', 'b'], 'isRequired': true, 'order': 0},
               {'id': 'description', 'questionText': 'Activity Description', 'questionType': 'textarea', 'isRequired': true, 'order': 1},
               {'id': 'arenas', 'questionText': 'Total Arenas', 'questionType': 'number', 'order': 2},
               {'id': 'courts', 'questionText': 'Total Courts', 'questionType': 'number', 'order': 3},
@@ -2147,6 +2297,8 @@ void main() {
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     final answers = {for (final answer in submitted!['answers']) answer['questionId']: answer['answer']};
+    expect(find.text('ABCDE'), findsNothing);
+    expect(answers.containsKey('placeholder'), isFalse);
     expect(answers['description'], 'A full-size basketball facility.');
     expect(answers['arenas'], '2');
     expect(answers['courts'], '4');
@@ -2307,7 +2459,8 @@ void main() {
   });
 
   testWidgets('OTP accepts digits, advances, pastes and deletes backwards', (tester) async {
-    await showScreen(tester, const OTPVerificationScreen());
+    await showScreen(tester, OTPVerificationScreen(client: MockClient((_) async =>
+      http.Response('{"message":"Invalid code"}', 400))));
     await tester.enterText(digit(0), 'a1');
     await tester.pump();
     expect(tester.widget<TextField>(digit(0)).controller!.text, '1');
@@ -2317,7 +2470,7 @@ void main() {
     expect(tester.widget<TextField>(digit(0)).controller!.text, isEmpty);
     expect(tester.widget<TextField>(digit(0)).focusNode!.hasFocus, isTrue);
     await tester.enterText(digit(2), '0512');
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(List.generate(4, (i) => tester.widget<TextField>(digit(i)).controller!.text), ['0', '5', '1', '2']);
     await tester.enterText(digit(3), '');
     await tester.pump();
@@ -2327,6 +2480,9 @@ void main() {
   testWidgets('OTP resend countdown sends current phone and resets code', (tester) async {
     var calls = 0;
     await showScreen(tester, OTPVerificationScreen(client: MockClient((request) async {
+      if (request.url.path.endsWith('/verify-otp')) {
+        return http.Response('{"message":"Invalid code"}', 400);
+      }
       calls++;
       expect(request.url.path, endsWith('/request-otp'));
       expect(jsonDecode(request.body), {'phone': '9876544567'});
@@ -2334,6 +2490,7 @@ void main() {
     })));
     expect(find.byKey(const Key('otp-resend')), findsNothing);
     await tester.enterText(digit(0), '1234');
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 40));
     await tester.tap(find.byKey(const Key('otp-resend')));
     await tester.pumpAndSettle();
@@ -2453,6 +2610,9 @@ void main() {
       calls++;
       return http.Response('{}', 400);
     })));
+    await tester.enterText(digit(0), '123');
+    await tester.pumpAndSettle();
+    expect(calls, 0);
     await tester.tap(find.byKey(const Key('otp-submit')));
     await tester.pump();
     expect(calls, 0);
@@ -2461,10 +2621,11 @@ void main() {
 
   testWidgets('OTP errors preserve screen and requests cannot repeat', (tester) async {
     var calls = 0;
+    http.Request? submittedRequest;
     final response = Completer<http.Response>();
     await showScreen(tester, OTPVerificationScreen(client: MockClient((request) {
       calls++;
-      expect(jsonDecode(request.body), {'phone': '9876544567', 'otp': '1234'});
+      submittedRequest = request;
       return response.future;
     })));
     await tester.enterText(digit(0), '1234');
@@ -2472,6 +2633,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('otp-submit')));
     expect(calls, 1);
+    expect(jsonDecode(submittedRequest!.body), {'phone': '9876544567', 'otp': '1234'});
     response.complete(http.Response('{"message":"Invalid code"}', 400));
     await tester.pumpAndSettle();
     expect(find.text('Invalid code'), findsOneWidget);
@@ -2495,26 +2657,105 @@ void main() {
     expect(find.text('Network error. Please check your connection.'), findsOneWidget);
   });
 
-  testWidgets('successful OTP stores token and opens profile onboarding', (tester) async {
-    await showScreen(
-        tester,
-        OTPVerificationScreen(
-            client: MockClient((_) async => http.Response(
-                jsonEncode({
-                  'data': {
-                    'accessToken': 'test-token',
-                    'isProfileComplete': false,
-                    'partner': {'isActive': false},
-                  }
-                }),
-                200))));
-    await tester.enterText(digit(0), '1234');
-    await tester.tap(find.byKey(const Key('otp-submit')));
+  for (final pasted in [false, true]) {
+    testWidgets('complete ${pasted ? "pasted" : "typed"} OTP automatically verifies and opens profile', (tester) async {
+      var calls = 0;
+      http.Request? submittedRequest;
+      await showScreen(
+          tester,
+          OTPVerificationScreen(
+              client: MockClient((request) async {
+                calls++;
+                submittedRequest = request;
+                return http.Response(
+                  jsonEncode({
+                    'data': {
+                      'accessToken': 'test-token',
+                      'isProfileComplete': false,
+                      'partner': {'isActive': false},
+                    }
+                  }),
+                  200);
+              })));
+      if (pasted) {
+        await tester.enterText(digit(0), '1234');
+      } else {
+        for (var index = 0; index < 4; index++) {
+          expect(calls, 0);
+          await tester.enterText(digit(index), '${index + 1}');
+        }
+      }
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+      expect(jsonDecode(submittedRequest!.body), {'phone': '9876544567', 'otp': '1234'});
+      expect(find.byType(TellUsAboutScreen), findsOneWidget);
+      expect(find.text('3/10'), findsOneWidget);
+      expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, closeTo(3 / 10, 0.0001));
+      expect((await SharedPreferences.getInstance()).getString('jwt_token'), 'test-token');
+  });
+  }
+
+  for (final creatingAccount in [true, false]) {
+    testWidgets(creatingAccount
+        ? 'Create Account restarts at personal details after OTP for a saved profile'
+        : 'Login using OTP still resumes venue setup for a saved profile', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'owner_full_name': 'Virat Kohli',
+        'owner_email': 'virat@example.com',
+        'is_profile_complete': 'true',
+        'venue_details': jsonEncode({'venue_name': 'Spartna Club'}),
+      });
+      final requests = <http.Request>[];
+      final client = MockClient((request) async {
+        requests.add(request);
+        if (request.url.path.endsWith('/request-otp')) {
+          return http.Response('{}', 200);
+        }
+        if (request.url.path.endsWith('/verify-otp')) {
+          return http.Response(jsonEncode({'data': {
+            'accessToken': 'test-token',
+            'isProfileComplete': true,
+            'partner': {'isActive': false},
+          }}), 200);
+        }
+        return http.Response(jsonEncode({'data': {
+          'total': 1, 'items': [{'id': 'venue-1', 'status': 'draft'}],
+        }}), 200);
+      });
+      await showScreen(tester, LoginScreen(client: client));
+      final link = find.text(creatingAccount ? 'Create Account' : 'Login using OTP');
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(tester.widget<MobileNumberScreen>(find.byType(MobileNumberScreen)).isCreatingAccount, creatingAccount);
+      await tester.enterText(find.byKey(const Key('mobile-number')), '9876544567');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('mobile-submit')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen)).isCreatingAccount, creatingAccount);
+      await tester.enterText(digit(0), '1234');
+      await tester.pumpAndSettle();
+      if (creatingAccount) {
+        expect(find.byType(TellUsAboutScreen), findsOneWidget);
+        expect(find.byType(VenueScreen), findsNothing);
+        expect(find.text('3/10'), findsOneWidget);
+        expect(find.text('Virat'), findsOneWidget);
+        expect(requests.where((request) => request.method == 'GET'), isEmpty);
+      } else {
+        expect(find.byType(VenueScreen), findsOneWidget);
+        expect(find.byType(TellUsAboutScreen), findsNothing);
+        expect(requests.where((request) => request.method == 'GET'), hasLength(1));
+      }
+      expect((await SharedPreferences.getInstance()).getString('venue_details'), contains('Spartna Club'));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('Create Account intent survives Edit Number from a root OTP screen', (tester) async {
+    await showScreen(tester, const OTPVerificationScreen(isCreatingAccount: true));
+    await tester.tap(find.byKey(const Key('otp-edit-number')));
     await tester.pumpAndSettle();
-    expect(find.byType(TellUsAboutScreen), findsOneWidget);
-    expect(find.text('3/10'), findsOneWidget);
-    expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, closeTo(3 / 10, 0.0001));
-    expect((await SharedPreferences.getInstance()).getString('jwt_token'), 'test-token');
+    expect(tester.widget<MobileNumberScreen>(find.byType(MobileNumberScreen)).isCreatingAccount, isTrue);
   });
 
   testWidgets('login validates and sends existing payload once', (tester) async {

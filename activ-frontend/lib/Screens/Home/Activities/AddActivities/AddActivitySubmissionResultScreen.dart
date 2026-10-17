@@ -73,7 +73,7 @@ class _AddActivitySubmissionResultScreenState
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 24,
-                  fontFamily: 'FontSemiBold',
+                  fontFamily: 'Satoshi',
                   color: AppColors.darkBlack,
                 ),
               ),
@@ -85,7 +85,7 @@ class _AddActivitySubmissionResultScreenState
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: AppSize.size_16,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1.4,
                 ),
@@ -148,7 +148,7 @@ class _AddActivitySubmissionResultScreenState
                       _title.isEmpty ? 'Activity' : _title,
                       style: const TextStyle(
                         fontSize: 22,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -157,7 +157,7 @@ class _AddActivitySubmissionResultScreenState
                       _description,
                       style: const TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.hintColor,
                       ),
                     ),
@@ -204,7 +204,7 @@ class _AddActivitySubmissionResultScreenState
                   : "What Happens next?\nWe'll notify you once your activity is approved and live.",
               style: TextStyle(
                 fontSize: AppSize.size_16,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: draft ? AppColors.red : AppColors.purple,
                 height: 1.45,
               ),
@@ -224,7 +224,7 @@ class _AddActivitySubmissionResultScreenState
             label,
             style: const TextStyle(
               fontSize: AppSize.size_15,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
             ),
           ),
@@ -244,7 +244,7 @@ class _AddActivitySubmissionResultScreenState
                       value,
                       style: const TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.white,
                       ),
                     ),
@@ -255,7 +255,7 @@ class _AddActivitySubmissionResultScreenState
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: AppSize.size_15,
-                    fontFamily: 'FontSemiBold',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                     height: 1.35,
                   ),
@@ -278,7 +278,7 @@ class _AddActivitySubmissionResultScreenState
           label,
           style: TextStyle(
             fontSize: AppSize.size_18,
-            fontFamily: 'FontBold',
+            fontFamily: 'Satoshi',
             color: filled ? AppColors.yellow : AppColors.black,
           ),
         ),

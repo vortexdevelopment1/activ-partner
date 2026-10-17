@@ -224,7 +224,7 @@ class _State extends State<VenueActivityListScreen> {
               const Expanded(
                   child: Text('Activity Management',
                       style: TextStyle(
-                          fontFamily: 'FontBold',
+                          fontFamily: 'Satoshi',
                           fontSize: 22,
                           color: Color(0xFF303030)))),
             ]),
@@ -293,7 +293,7 @@ class _State extends State<VenueActivityListScreen> {
                                               horizontal: 10),
                                           child: Text(filter,
                                               style: TextStyle(
-                                                  fontFamily: 'FontBold',
+                                                  fontFamily: 'Satoshi',
                                                   fontSize: 13,
                                                   color:
                                                       selectedFilter == filter
@@ -364,7 +364,7 @@ class _State extends State<VenueActivityListScreen> {
                               borderRadius: BorderRadius.circular(8))),
                       child: const Text('Add New Activity',
                           style: TextStyle(
-                              fontFamily: 'FontBold', fontSize: 16))))),
+                              fontFamily: 'Satoshi', fontSize: 16))))),
         ]),
       ))),
     );
@@ -381,7 +381,7 @@ class _State extends State<VenueActivityListScreen> {
                 child: Text(title,
                     maxLines: 1,
                     style: const TextStyle(
-                        fontFamily: 'FontRegular', fontSize: 9))),
+                        fontFamily: 'Satoshi', fontSize: 9))),
             const Icon(Icons.receipt_long_outlined,
                 size: 12, color: Color(0xFF80DD92)),
           ]),
@@ -392,13 +392,13 @@ class _State extends State<VenueActivityListScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text(value,
                       style: const TextStyle(
-                          fontFamily: 'FontBold', fontSize: 16)))),
+                          fontFamily: 'Satoshi', fontSize: 16)))),
           const SizedBox(height: 7),
           Text(caption,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   fontSize: 8,
                   color: Color(0xFF858585))),
         ]),
@@ -466,7 +466,7 @@ class _State extends State<VenueActivityListScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontFamily: 'FontBold', fontSize: 15))),
+                                  fontFamily: 'Satoshi', fontSize: 15))),
                       const Icon(Icons.chevron_right,
                           size: 18, color: Color(0xFF777777)),
                     ]),
@@ -475,7 +475,7 @@ class _State extends State<VenueActivityListScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontFamily: 'FontRegular',
+                            fontFamily: 'Satoshi',
                             fontSize: 12,
                             color: Color(0xFF888888))),
                     const SizedBox(height: 15),
@@ -487,7 +487,7 @@ class _State extends State<VenueActivityListScreen> {
                                   'Booking',
                                   Text(bookings.toInt().toString(),
                                       style: const TextStyle(
-                                          fontFamily: 'FontBold',
+                                          fontFamily: 'Satoshi',
                                           fontSize: 15,
                                           color: purple)))),
                           Expanded(
@@ -499,7 +499,7 @@ class _State extends State<VenueActivityListScreen> {
                                       child: Text(
                                           currency.format(earnings),
                                           style: const TextStyle(
-                                              fontFamily: 'FontBold',
+                                              fontFamily: 'Satoshi',
                                               fontSize: 11))))),
                           const SizedBox(width: 4),
                           Expanded(
@@ -521,7 +521,7 @@ class _State extends State<VenueActivityListScreen> {
                                                       ? 'In review'
                                                       : status,
                                                   style: const TextStyle(
-                                                      fontFamily: 'FontBold',
+                                                      fontFamily: 'Satoshi',
                                                       fontSize: 9,
                                                       color:
                                                           Colors.white))))))),
@@ -536,7 +536,7 @@ class _State extends State<VenueActivityListScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: const TextStyle(fontFamily: 'FontRegular', fontSize: 10)),
+              style: const TextStyle(fontFamily: 'Satoshi', fontSize: 10)),
           const SizedBox(height: 4),
           value,
         ],

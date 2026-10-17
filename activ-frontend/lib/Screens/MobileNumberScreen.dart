@@ -14,9 +14,14 @@ import 'OTPVerificationScreen.dart';
 import 'onboarding_widgets.dart';
 
 class MobileNumberScreen extends StatefulWidget {
-  const MobileNumberScreen({super.key, this.client});
+  const MobileNumberScreen({
+    super.key,
+    this.client,
+    this.isCreatingAccount = false,
+  });
 
   final http.Client? client;
+  final bool isCreatingAccount;
 
   @override
   State<MobileNumberScreen> createState() => _MobileNumberScreenState();
@@ -59,7 +64,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
       if (!mounted) return;
 
       final response = await (widget.client?.post ?? http.post)(
-        Uri.parse(REQUEST_OTP_URL),
+        Uri.parse('$REQUEST_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
         headers: {
           'accept': '*/*',
           'Content-Type': 'application/json',
@@ -75,11 +80,15 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
             'userMobileNumber', mobileController.text);
         if (!mounted) return;
         CommonUtilities.NavigateWithPush(
-            context, const OTPVerificationScreen());
+            context, OTPVerificationScreen(
+              client: widget.client,
+              isCreatingAccount: widget.isCreatingAccount,
+            ));
       } else {
         final body = jsonDecode(response.body);
-        _showMessage(body['message']?.toString() ??
-            'Failed to send OTP. Please try again.');
+        _showMessage(body is Map && body['message'] != null
+            ? body['message'].toString()
+            : 'Failed to send OTP. Please try again.');
       }
     } catch (error) {
       if (!mounted) return;
@@ -116,21 +125,35 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
     return OnboardingScaffold(
       child: Column(
         children: [
-          SizedBox(
-            height: 48,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: IconButton(
-                  key: const Key('mobile-back-login'),
-                  tooltip: 'Back to login',
-                  onPressed: _isSubmitting ? null : _openLogin,
-                  color: Colors.black,
-                  iconSize: 28,
-                  icon: const Icon(Icons.arrow_back),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Enter your mobile number',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 25,
+                    height: 1.15,
+                    color: AppColors.darkBlack,
+                  ),
                 ),
-              ),
+                SizedBox(height: 8),
+                Text(
+                  "We'll send a 4-digit OTP to verify your number.",
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 12,
+                    height: 1.25,
+                    color: AppColors.black1,
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -142,88 +165,85 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: IntrinsicHeight(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 50),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const OnboardingLogo(),
-                          const SizedBox(height: 16),
-                          const Text('Enter your mobile number',
-                              style: OnboardingStyles.heading),
-                          const SizedBox(height: 6),
-                          Text("We'll send you a verification code",
-                              style: OnboardingStyles.body.copyWith(
-                                  fontSize: 16, color: AppColors.black1)),
-                          const SizedBox(height: 26),
-                          const Text.rich(TextSpan(children: [
-                            TextSpan(text: 'Phone Number'),
-                            TextSpan(
+
+                          const SizedBox(height: 22),
+                          const Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: 'Mobile Number'),
+                              TextSpan(
                                 text: '*',
-                                style: TextStyle(color: AppColors.red)),
-                          ])),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            key: const Key('mobile-number'),
-                            controller: mobileController,
-                            enabled: !_isSubmitting,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.done,
-                            autofillHints: const [
-                              AutofillHints.telephoneNumberNational
-                            ],
-                            cursorColor: Colors.black,
-                            style: OnboardingStyles.body,
-                            inputFormatters: [MobileNumberFormatter()],
-                            decoration: OnboardingStyles.inputDecoration(
-                                    hintText: 'XX-XXXX-XXXX')
-                                .copyWith(
-                              prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 76, minHeight: 44),
-                              prefixIcon: Container(
-                                width: 76 *
-                                    MediaQuery.textScalerOf(context).scale(14) /
-                                    14,
-                                height: 44,
-                                alignment: Alignment.center,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                decoration: const BoxDecoration(
-                                  border: Border(
-                                      right: BorderSide(color: AppColors.gray)),
-                                ),
-                                child: const Text('IND (+91)',
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: OnboardingStyles.body),
+                                style: TextStyle(color: AppColors.red),
                               ),
+                            ]),
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontSize: 14,
+                              color: AppColors.darkBlack,
                             ),
-                            onChanged: _validateNumber,
-                            onFieldSubmitted: (_) {
-                              if (isButtonEnabled) sendOTP();
-                            },
                           ),
-                          const SizedBox(height: 28),
-                          Wrap(
-                            alignment: WrapAlignment.center,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              const Text('Already have an account? '),
-                              Semantics(
-                                button: true,
-                                child: InkWell(
-                                  onTap: _isSubmitting ? null : _openLogin,
-                                  child: Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 2),
-                                    child: Text('Login',
-                                        style: OnboardingStyles.body
-                                            .copyWith(color: AppColors.purple)),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            height: 58,
+                            child: TextFormField(
+                              key: const Key('mobile-number'),
+                              controller: mobileController,
+                              enabled: !_isSubmitting,
+                              keyboardType: TextInputType.phone,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: const [
+                                AutofillHints.telephoneNumberNational
+                              ],
+                              cursorColor: Colors.black,
+                              style: OnboardingStyles.body.copyWith(fontSize: 14),
+                              inputFormatters: [MobileNumberFormatter()],
+                              decoration: OnboardingStyles.inputDecoration(
+                                hintText: '00-0000-0000',
+                              ).copyWith(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide:
+                                      const BorderSide(color: AppColors.gray),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide:
+                                      const BorderSide(color: AppColors.gray1),
+                                ),
+                                prefixIconConstraints: const BoxConstraints(
+                                    minWidth: 48, minHeight: 58),
+                                prefixIcon: Container(
+                                  width: 48,
+                                  height: 58,
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                    border: Border(
+                                      right: BorderSide(color: AppColors.gray),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    '+91',
+                                    style: OnboardingStyles.body,
                                   ),
                                 ),
                               ),
-                            ],
+                              onChanged: _validateNumber,
+                              onFieldSubmitted: (_) {
+                                if (isButtonEnabled) sendOTP();
+                              },
+                            ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
                           const Spacer(),
                           Align(
                             alignment: Alignment.centerRight,
@@ -252,13 +272,38 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
                     offset: Offset(0, -2)),
               ],
             ),
-            child: OnboardingButton(
-              key: const Key('mobile-submit'),
-              label: 'Send Code',
-              loading: _isSubmitting,
-              onPressed: isButtonEnabled ? sendOTP : null,
-              disabledBackgroundColor: AppColors.darkGray,
-              disabledForegroundColor: AppColors.lightGray,
+            child: Row(
+              children: [
+                SizedBox(
+                width: 108,
+                height: 58,
+                  child: OnboardingButton(
+                    label: 'Back',
+                    outlined: true,
+                    onPressed: _isSubmitting ? null : _openLogin,
+                    fontSize: 16,
+                    minHeight: 58,
+                    borderRadius: 10,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: SizedBox(
+                    height: 58,
+                    child: OnboardingButton(
+                      key: const Key('mobile-submit'),
+                      label: 'Send OTP',
+                      loading: _isSubmitting,
+                      onPressed: isButtonEnabled ? sendOTP : null,
+                      disabledBackgroundColor: AppColors.darkGray,
+                      disabledForegroundColor: AppColors.lightGray,
+                      fontSize: 16,
+                      minHeight: 58,
+                      borderRadius: 10,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

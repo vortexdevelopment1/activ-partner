@@ -12,7 +12,7 @@ import '../MobileNumberFormatter.dart';
 import '../StringExtensions.dart';
 
 class VenueOwnerDetailsScreen extends StatefulWidget {
-  const VenueOwnerDetailsScreen({Key? key}) : super(key: key);
+  const VenueOwnerDetailsScreen({super.key});
 
   @override
   State<VenueOwnerDetailsScreen> createState() => _State();
@@ -73,7 +73,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
     try {
 
       userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-      final String phoneKey = 'IND (+91)'+ userMobileNumber;
+      final String phoneKey = 'IND (+91)$userMobileNumber';
 
       // 2️⃣ Get UID from users_by_phone
       final phoneDoc = await FirebaseFirestore.instance
@@ -240,7 +240,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -276,7 +276,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
         "*",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium',
+            fontFamily: 'Satoshi',
             color: AppColors.red,
             height: 1
         ),
@@ -294,7 +294,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
             "Full Name",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -323,18 +323,18 @@ class _State extends State<VenueOwnerDetailsScreen> {
             inputFormatters: [
               // Input formatter to allow Only Characters + Space // Using a regular expression
               FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-              new LengthLimitingTextInputFormatter(50),
+              LengthLimitingTextInputFormatter(50),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Full Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -356,7 +356,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
             "Email Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -383,18 +383,18 @@ class _State extends State<VenueOwnerDetailsScreen> {
             keyboardType: TextInputType.emailAddress,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(100),
+              LengthLimitingTextInputFormatter(100),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Email Address', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -417,7 +417,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
             "Phone Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -437,10 +437,10 @@ class _State extends State<VenueOwnerDetailsScreen> {
       decoration: BoxDecoration(
           color: AppColors.gray2,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray2, width: 1)),
       child: Padding(
@@ -455,10 +455,10 @@ class _State extends State<VenueOwnerDetailsScreen> {
                 children: [
                   Container(
                     child: Text(
-                      (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                      (phoneCode!="") ? phoneCode : "",
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -502,14 +502,14 @@ class _State extends State<VenueOwnerDetailsScreen> {
                   },
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,
@@ -545,7 +545,7 @@ class _State extends State<VenueOwnerDetailsScreen> {
               "Alternate Phone Number",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -575,10 +575,10 @@ class _State extends State<VenueOwnerDetailsScreen> {
                 children: [
                   Container(
                     child: Text(
-                      (phoneCode!=null && phoneCode!="") ? phoneCode : "",
+                      (phoneCode!="") ? phoneCode : "",
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -621,14 +621,14 @@ class _State extends State<VenueOwnerDetailsScreen> {
                   },
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,

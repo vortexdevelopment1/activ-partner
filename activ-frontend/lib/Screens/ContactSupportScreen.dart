@@ -10,6 +10,7 @@ import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'LoginScreen.dart';
+import 'onboarding_widgets.dart';
 
 class ContactSupportScreen extends StatefulWidget {
   const ContactSupportScreen({super.key});
@@ -138,6 +139,7 @@ class _State extends State<ContactSupportScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
 
                             Expanded(
                               child: Container(
@@ -145,8 +147,6 @@ class _State extends State<ContactSupportScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
-                                    getActivIcon(),
                                     
                                     Container(
                                       margin: EdgeInsets.fromLTRB(10, 15, 10, 0),
@@ -174,7 +174,10 @@ class _State extends State<ContactSupportScreen> {
                                   SizedBox(
                                     width: double.infinity,
                                     child: InkWell(
-                                      onTap: () {
+                                      onTap: () async {
+                                        await CommonUtilities.updateSharedPreference();
+                                        CommonUtilities.firstTimeLoginSignup = '';
+                                        if (!context.mounted) return;
                                         CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
                                             context, const LoginScreen());
                                       },
@@ -210,13 +213,6 @@ class _State extends State<ContactSupportScreen> {
 
 
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -227,7 +223,7 @@ class _State extends State<ContactSupportScreen> {
         "🎉 You’re all set, we’re reviewing your venue!",
         style: TextStyle(
             fontSize: AppSize.size_28,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -248,7 +244,7 @@ class _State extends State<ContactSupportScreen> {
         text: TextSpan(
           style: TextStyle(
             color: AppColors.darkBlack,   // different color
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             fontSize: AppSize.size_16,
             height: 1.4
           ),
@@ -258,7 +254,7 @@ class _State extends State<ContactSupportScreen> {
               text: venueLabel,
               style: TextStyle(
                 color: AppColors.black,   // different color
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                   height: 1.4
               ),
             ),
@@ -267,7 +263,7 @@ class _State extends State<ContactSupportScreen> {
               " is complete and under review. Come back in sometime to see your venue live and start receiving bookings from members.",
               style: TextStyle(
                 color: AppColors.darkBlack,   // different color
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 fontSize: AppSize.size_16,
                   height: 1.4
               ),

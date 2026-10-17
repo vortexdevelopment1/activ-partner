@@ -35,7 +35,7 @@ Widget bottomBarShadow()
       color: AppColors.black,
       boxShadow: [
         BoxShadow(
-          color: AppColors.black.withOpacity(0.3),
+          color: AppColors.black.withValues(alpha: 0.3),
           spreadRadius: 1,
           blurRadius: 2,
           offset: Offset(0, -2), // changes position of shadow
@@ -59,7 +59,7 @@ Widget getTitleText(BuildContext context, String titleName, String screenName)
     titleName,
     style: TextStyle(
       fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_16),
-      fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+      fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
       color: screenName == "Activities_Details" ? AppColors.white : AppColors.darkBlack,
     ),
   );
@@ -73,7 +73,7 @@ Widget getActivityStepLabel(int categoryIndex, int totalCategories, int subStep)
       'Configuring Activity $categoryIndex of $totalCategories \u2014 Step $subStep/4',
       style: const TextStyle(
         fontSize: AppSize.size_14,
-        fontFamily: 'FontSemiBold',
+        fontFamily: 'Satoshi',
         color: AppColors.hintColor,
         height: 1.3,
       ),
@@ -143,7 +143,7 @@ Widget getStepBarCount(double progress, int currentStep, int totalSteps)
             "$currentStep/$totalSteps",
             style: TextStyle(
                 fontSize: AppSize.size_12,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -162,7 +162,7 @@ Widget getText(String text)
       text,
       style: TextStyle(
           fontSize: AppSize.size_25,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
           height: 1.2
       ),
@@ -179,7 +179,7 @@ Widget getSubText(String subText)
       subText,
       style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.black1,
           height: 1.4
       ),
@@ -214,7 +214,7 @@ Widget getButtonBlack(BuildContext context, String buttonName, String screenName
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: screenName == "Home_Screen" ? CommonUtilities.increaseSizeBy2(AppSize.size_16) : CommonUtilities.increaseSizeBy2(AppSize.size_18),
-                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontBold'),
+                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                   color: AppColors.yellow,
                 ),
               ),
@@ -251,7 +251,7 @@ Widget getButtonGray(BuildContext context, String buttonName, String screenName)
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_18),
-                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontBold'),
+                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                   color: AppColors.lightGray,
                 ),
               ),
@@ -288,7 +288,7 @@ Widget getLoginWithOTP(BuildContext context, String buttonName, String screenNam
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_18),
-                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontBold'),
+                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                   color: AppColors.black,
                 ),
               ),
@@ -326,7 +326,7 @@ Widget getBackButton(BuildContext context, String buttonName, String screenName)
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_18),
-                  fontFamily: CommonUtilities.fontTypeAccordingToLang('FontBold'),
+                  fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
                   color: AppColors.black,
                 ),
               ),
@@ -480,7 +480,7 @@ Widget getMenuSettingsText(BuildContext context, String titleName, String screen
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: CommonUtilities.increaseSizeBy2(AppSize.size_16),
-          fontFamily: screenName == "Profile_Screen" ? CommonUtilities.fontTypeAccordingToLang('FontBold') : CommonUtilities.fontTypeAccordingToLang('FontRegular'),
+          fontFamily: screenName == "Profile_Screen" ? CommonUtilities.fontTypeAccordingToLang('Satoshi') : CommonUtilities.fontTypeAccordingToLang('Satoshi'),
           color: AppColors.darkBlack,
         ),
       ),
@@ -496,7 +496,7 @@ Widget getMessage(BuildContext context, String message)
       message,
       style: TextStyle(
           fontSize:  CommonUtilities.increaseSizeBy2(AppSize.size_14),
-          fontFamily: CommonUtilities.fontTypeAccordingToLang('FontSemiBold'),
+          fontFamily: CommonUtilities.fontTypeAccordingToLang('Satoshi'),
           color: AppColors.darkBlack,height: 1.5), textAlign: TextAlign.center,),
   );
 }

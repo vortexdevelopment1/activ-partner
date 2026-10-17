@@ -21,6 +21,7 @@ import 'ForgotPasswordScreen.dart';
 import 'ListActivityTypeScreen.dart';
 import 'MobileNumberFormatter.dart';
 import 'OTPVerificationScreen.dart';
+import 'onboarding_widgets.dart';
 
 class LoginScreenWithPassword extends StatefulWidget {
   const LoginScreenWithPassword({super.key});
@@ -136,6 +137,7 @@ class _State extends State<LoginScreenWithPassword> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
 
                             Expanded(
                               child: Container(
@@ -143,8 +145,6 @@ class _State extends State<LoginScreenWithPassword> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
-                                    getActivIcon('assets/logo.png'),
 
                                    // getStepBarCount(progress, currentStep, totalSteps),
 
@@ -256,7 +256,7 @@ class _State extends State<LoginScreenWithPassword> {
             "Email Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -270,7 +270,7 @@ class _State extends State<LoginScreenWithPassword> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -288,10 +288,10 @@ class _State extends State<LoginScreenWithPassword> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -311,14 +311,14 @@ class _State extends State<LoginScreenWithPassword> {
                   inputFormatters: [],
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Enter Email Id',
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor,
                     ),
                     border: InputBorder.none,
@@ -344,7 +344,7 @@ class _State extends State<LoginScreenWithPassword> {
             "Password",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -358,7 +358,7 @@ class _State extends State<LoginScreenWithPassword> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -377,10 +377,10 @@ class _State extends State<LoginScreenWithPassword> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -400,14 +400,14 @@ class _State extends State<LoginScreenWithPassword> {
                   inputFormatters: [],
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Enter Password',
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor,
                     ),
                     border: InputBorder.none,
@@ -452,7 +452,7 @@ class _State extends State<LoginScreenWithPassword> {
               "Forgot Password?",
               style: TextStyle(
                   fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.purple,
                   height: 1
               ),
@@ -482,7 +482,7 @@ class _State extends State<LoginScreenWithPassword> {
         style: TextStyle(
             color: AppColors.darkBlack,
             fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium'
+            fontFamily: 'Satoshi'
         ),
       ),
     );
@@ -495,16 +495,16 @@ class _State extends State<LoginScreenWithPassword> {
       text: TextSpan(
         style: const TextStyle(
             color: AppColors.black,
-            fontFamily: 'FontMedium',
+            fontFamily: 'Satoshi',
             fontSize: AppSize.size_14,
           height: 1.5
         ),
         children: [
           const TextSpan(
             text: 'By clicking on Login, I accept the ',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.black,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
                 fontSize: AppSize.size_14
             ),
           ),
@@ -513,7 +513,7 @@ class _State extends State<LoginScreenWithPassword> {
             text: 'Terms & Conditions',
             style: const TextStyle(
               color: AppColors.purple,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               fontSize: AppSize.size_14
             ),
             recognizer: TapGestureRecognizer()
@@ -532,7 +532,7 @@ class _State extends State<LoginScreenWithPassword> {
             text: 'Privacy Policy',
             style: const TextStyle(
               color: AppColors.purple,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
                 fontSize: AppSize.size_14
             ),
             recognizer: TapGestureRecognizer()
@@ -575,7 +575,7 @@ class _State extends State<LoginScreenWithPassword> {
     String formatedDate1 = CommonUtilities.converDateFormate(todayDate, "DD-MM-YYYY", "yyyy-MM-dd HH:mm:ss"); //2022-09-29T08:07:48.000Z
     dateTime = CommonUtilities.converDateFormate(formatedDate1, "yyyy-MM-dd HH:mm:ss", "dd-MM-yyyy HH:mm:ss a");
 
-    CommonUtilities.showLog("dateTime : " + dateTime);
+    CommonUtilities.showLog("dateTime : $dateTime");
 
     if (Platform.isAndroid) {
       deviceType = "Android";

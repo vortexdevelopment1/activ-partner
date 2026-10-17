@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -273,8 +274,53 @@ export class AuthService {
 
   // ─── Phone OTP Flow ────────────────────────────────────────────────────────
 
-  async requestOtp(dto: RequestOtpDto) {
+  async requestOtp(dto: RequestOtpDto, intent: 'login' | 'register' = 'register') {
     const phone = this.normalizePhone(dto.phone);
+
+    const existingUser = await this.prisma.users.findUnique({
+      where: { phone_e164: phone },
+      include: {
+        partner_users: { include: { partners: true } },
+      },
+    });
+    const existingPartner = existingUser?.partner_users?.[0]?.partners;
+
+    if (intent === 'register' && existingPartner) {
+      if (existingPartner.status === 'ACTIVE') {
+        throw new ConflictException(
+          'This number is already registered. Please use Login instead.',
+        );
+      }
+      throw new ForbiddenException(
+        'Your account is awaiting admin approval. Please try again after it is approved.',
+      );
+    }
+
+    if (intent === 'login') {
+      const user = existingUser ?? await this.prisma.users.findUnique({
+        where: { phone_e164: phone },
+        include: {
+          partner_users: { include: { partners: true } },
+        },
+      });
+      const partner = user?.partner_users?.[0]?.partners;
+      if (partner) {
+        if (partner.status !== 'ACTIVE') {
+          throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
+        }
+      } else {
+        // Team members do not have a partner_users row, so only use the
+        // legacy lookup after the normal partner lookup has found nothing.
+        const teamMember = await this.findTeamMemberByIdentifier(phone, [phone]);
+        if (!teamMember) {
+          throw new NotFoundException('No account was found for this number. Please create an account first.');
+        }
+        if (!teamMember.isActive) {
+          throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
+        }
+      }
+    }
+
     const now = new Date();
     const latestChallenge = await this.prisma.otp_challenges.findFirst({
       where: { phone_e164: phone, consumed_at: null },
@@ -328,7 +374,7 @@ export class AuthService {
     return { phone };
   }
 
-  async verifyOtp(dto: VerifyOtpDto) {
+  async verifyOtp(dto: VerifyOtpDto, intent: 'login' | 'register' = 'register') {
     const phone = this.normalizePhone(dto.phone);
     const challenge = await this.prisma.otp_challenges.findFirst({
       where: {
@@ -343,6 +389,20 @@ export class AuthService {
     const isValid = await this.otpService.verifyOtp(phone, dto.otp);
     if (!isValid) {
       throw new BadRequestException('Invalid or expired OTP.');
+    }
+
+    if (intent === 'login') {
+      const user = await this.prisma.users.findUnique({
+        where: { phone_e164: phone },
+        include: { partner_users: { include: { partners: true } } },
+      });
+      const partner = user?.partner_users?.[0]?.partners;
+      if (!partner) {
+        throw new NotFoundException('No account was found for this number. Please create an account first.');
+      }
+      if (partner.status !== 'ACTIVE') {
+        throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
+      }
     }
 
     const staffMember = await this.teamService.findByPhone(phone);

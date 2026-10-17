@@ -14,7 +14,7 @@ class PdfViewerPageByUrl extends StatefulWidget {
   final String pdfUrl; //  Firebase URL
   final String documentType;
 
-  PdfViewerPageByUrl(this.pdfUrl, this.documentType);
+  const PdfViewerPageByUrl(this.pdfUrl, this.documentType, {super.key});
 
   @override
   _State createState() => _State();
@@ -89,7 +89,7 @@ class _State extends State<PdfViewerPageByUrl> {
                   "Page No ${currentPage + 1} / $pageCount",
                   style: TextStyle(
                     fontSize: AppSize.size_16,
-                    fontFamily: 'FontSemiBold',
+                    fontFamily: 'Satoshi',
                   ),
                 ),
               ),
@@ -119,7 +119,7 @@ class _State extends State<PdfViewerPageByUrl> {
         widget.documentType,
         style: TextStyle(
           fontSize: AppSize.size_20,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),

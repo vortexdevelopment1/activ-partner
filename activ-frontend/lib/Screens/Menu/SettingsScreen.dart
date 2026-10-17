@@ -558,7 +558,7 @@ class _SwitchCard extends StatelessWidget {
             child: Switch(
               value: value,
               onChanged: onChanged,
-              activeColor: const Color(0xFFD8F34A),
+              activeThumbColor: const Color(0xFFD8F34A),
               activeTrackColor: AppColors.darkBlack,
               inactiveThumbColor: Colors.white,
               inactiveTrackColor: const Color(0xFF6A6A6A),
@@ -900,7 +900,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.red,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.red.withOpacity(.6),
+                  disabledBackgroundColor: AppColors.red.withValues(alpha: .6),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),

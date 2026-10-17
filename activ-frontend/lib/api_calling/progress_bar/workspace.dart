@@ -4,6 +4,8 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../Style/app_colors.dart';
 
 class WorkSpace extends StatelessWidget {
+  const WorkSpace({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Container(

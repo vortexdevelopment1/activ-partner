@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -115,8 +116,11 @@ export class AuthController {
       'Send your phone number to receive an OTP via SMS (delivered through MSG91). ' +
       'If MSG91_OTP_ENABLED=false on the server, no SMS is sent and the OTP is the last 4 digits of the phone number (dev/mock mode).',
   })
-  async requestOtp(@Body() dto: RequestOtpDto) {
-    const data = await this.authService.requestOtp(dto);
+  async requestOtp(
+    @Body() dto: RequestOtpDto,
+    @Query('intent') intent?: string,
+  ) {
+    const data = await this.authService.requestOtp(dto, intent === 'login' ? 'login' : 'register');
     return { message: 'OTP sent successfully', data };
   }
 
@@ -128,8 +132,11 @@ export class AuthController {
     description:
       'Submit phone number + OTP. Returns JWT `accessToken`. Use this token in Step 3 to complete your profile.',
   })
-  async verifyOtp(@Body() dto: VerifyOtpDto) {
-    const data = await this.authService.verifyOtp(dto);
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Query('intent') intent?: string,
+  ) {
+    const data = await this.authService.verifyOtp(dto, intent === 'login' ? 'login' : 'register');
     return { message: 'OTP verified successfully', data };
   }
 

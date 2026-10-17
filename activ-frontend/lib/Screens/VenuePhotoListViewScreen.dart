@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -14,6 +13,8 @@ import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import '../api_calling/progress_bar/progress_bar.dart';
+import 'onboarding_widgets.dart';
+import '../Utills/session_photo_draft.dart';
 
 class VenuePhotoListViewScreen extends StatefulWidget {
   static List<Uint8List> cachedImageBytes = [];
@@ -30,6 +31,7 @@ class VenuePhotoListViewScreen extends StatefulWidget {
   final List<Map<String, dynamic>> accumulatedTimings;
   final int initialCoverIndex;
   final bool replaceOnlyCurrentCategory;
+  final void Function(List<XFile>, List<Uint8List>, int)? onPhotosChanged;
 
   const VenuePhotoListViewScreen({
     super.key,
@@ -42,6 +44,7 @@ class VenuePhotoListViewScreen extends StatefulWidget {
     this.accumulatedTimings = const [],
     this.initialCoverIndex = 0,
     this.replaceOnlyCurrentCategory = false,
+    this.onPhotosChanged,
   });
 
   @override
@@ -78,7 +81,7 @@ class _State extends State<VenuePhotoListViewScreen> {
     _imageBytes = List.from(widget.imageBytes);
     _coverIndex = _imageBytes.isEmpty
         ? null
-        : widget.initialCoverIndex.clamp(0, _imageBytes.length - 1) as int;
+        : widget.initialCoverIndex.clamp(0, _imageBytes.length - 1);
   }
 
 
@@ -108,6 +111,16 @@ class _State extends State<VenuePhotoListViewScreen> {
 
       _coverIndex = 0;
     });
+    _notifyPhotosChanged();
+  }
+
+  void _notifyPhotosChanged() {
+    SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex ?? 0);
+    widget.onPhotosChanged?.call(
+      List<XFile>.unmodifiable(_images),
+      List<Uint8List>.unmodifiable(_imageBytes),
+      _coverIndex ?? 0,
+    );
   }
 
   void deletePhoto(int index) {
@@ -121,6 +134,7 @@ class _State extends State<VenuePhotoListViewScreen> {
         _coverIndex = _coverIndex! - 1;
       }
     });
+    _notifyPhotosChanged();
 
     if (_images.isEmpty)
     {
@@ -158,7 +172,7 @@ class _State extends State<VenuePhotoListViewScreen> {
                 "Set as cover photo",
                 style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.darkBlack,
                 ),
               ),
@@ -175,7 +189,7 @@ class _State extends State<VenuePhotoListViewScreen> {
               "Delete photo",
               style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
             ),
@@ -243,7 +257,7 @@ class _State extends State<VenuePhotoListViewScreen> {
                               margin: EdgeInsets.fromLTRB(15, 0, 15, 0),
                               child: Column(
                                 children: [
-                                  getActivIcon(),
+                                  const OnboardingHeader(),
 
                                   getStepBar(progress),
 
@@ -322,7 +336,7 @@ class _State extends State<VenuePhotoListViewScreen> {
                                                 "Cover Photo",
                                                 style: TextStyle(
                                                     fontSize: AppSize.size_14,
-                                                    fontFamily: 'FontSemiBold',
+                                                    fontFamily: 'Satoshi',
                                                     color: AppColors.white,
                                                     height: 1
                                                 ),
@@ -429,9 +443,9 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               if (categoryId.isNotEmpty) {
                                                 formData.fields.add(MapEntry('categoryId', categoryId));
                                               }
-                                              if (widget.replaceOnlyCurrentCategory) {
-                                                formData.fields.add(const MapEntry('replaceImages', 'true'));
-                                              }
+                                              // The list is the complete current photo set. Replacing it
+                                              // keeps a re-save from appending the same server images again.
+                                              formData.fields.add(const MapEntry('replaceImages', 'true'));
                                               for (int i = 0; i < _images.length; i++) {
                                                 final fileName = _images[i].name.isNotEmpty ? _images[i].name : "image_$i.jpg";
                                                 formData.files.add(MapEntry(
@@ -564,13 +578,6 @@ class _State extends State<VenuePhotoListViewScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getStepBar(double progress)
   {
@@ -589,7 +596,7 @@ class _State extends State<VenuePhotoListViewScreen> {
         "Review Your Venue Photos",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -606,7 +613,7 @@ class _State extends State<VenuePhotoListViewScreen> {
         "Review the photos that will appear on your venue listing. You can go back to add or remove photos before submitting your venue for review.",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),

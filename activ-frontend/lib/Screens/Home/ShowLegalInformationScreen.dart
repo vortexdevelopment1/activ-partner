@@ -92,7 +92,7 @@ class _State extends State<ShowLegalInformationScreen> {
     try {
 
       userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-      final String phoneKey = 'IND (+91)'+ userMobileNumber;
+      final String phoneKey = 'IND (+91)$userMobileNumber';
 
       // 2️⃣ Get UID from users_by_phone
       final phoneDoc = await FirebaseFirestore.instance
@@ -273,7 +273,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                 children: [
                                                   // Upload Icon
 
-                                                  Container(
+                                                  SizedBox(
                                                     width: 74,
                                                     height: 58,
                                                     child: Image.asset('assets/ic_pan.png'),
@@ -285,7 +285,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                       "Upload your GSTIN Details",
                                                       style: TextStyle(
                                                           fontSize: AppSize.size_16,
-                                                          fontFamily: 'FontSemiBold',
+                                                          fontFamily: 'Satoshi',
                                                           color: AppColors.darkBlack,
                                                           height: 1
                                                       ),
@@ -299,7 +299,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                       "pdf formats up to 5MB",
                                                       style: TextStyle(
                                                           fontSize: AppSize.size_14,
-                                                          fontFamily: 'FontRegular',
+                                                          fontFamily: 'Satoshi',
                                                           color: AppColors.black1,
                                                           height: 1
                                                       ),
@@ -333,7 +333,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                               "Browse",
                                                               style: TextStyle(
                                                                   fontSize: AppSize.size_16,
-                                                                  fontFamily: 'FontSemiBold',
+                                                                  fontFamily: 'Satoshi',
                                                                   color: AppColors.purple,
                                                                   height: 1
                                                               ),
@@ -350,7 +350,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                       textAlign: TextAlign.center,
                                                       style: TextStyle(
                                                           fontSize: AppSize.size_14,
-                                                          fontFamily: 'FontRegular',
+                                                          fontFamily: 'Satoshi',
                                                           color: AppColors.black1,
                                                           height: 1.4
                                                       ),
@@ -377,10 +377,10 @@ class _State extends State<ShowLegalInformationScreen> {
                                           decoration: BoxDecoration(
                                               color: AppColors.gray3,
                                               borderRadius: const BorderRadius.only(
-                                                topLeft: const Radius.circular(8),
-                                                topRight: const Radius.circular(8),
-                                                bottomLeft: const Radius.circular(8),
-                                                bottomRight: const Radius.circular(8),
+                                                topLeft: Radius.circular(8),
+                                                topRight: Radius.circular(8),
+                                                bottomLeft: Radius.circular(8),
+                                                bottomRight: Radius.circular(8),
                                               ),
                                               border: Border.all(color: AppColors.gray, width: 1)
                                           ),
@@ -396,13 +396,13 @@ class _State extends State<ShowLegalInformationScreen> {
                                                       Text('GSTIN Number' ?? "",
                                                           style: TextStyle(
                                                               fontSize: 14,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.darkBlack)
                                                       ),
                                                       /*Text(_fileGSTINCardSize ?? "",
                                                           style: TextStyle(
                                                               fontSize: 12,
-                                                              fontFamily: 'FontMedium',
+                                                              fontFamily: 'Satoshi',
                                                               color: AppColors.hintColor)
                                                       ),*/
                                                     ],
@@ -419,7 +419,7 @@ class _State extends State<ShowLegalInformationScreen> {
                                                     });
                                                   },
                                                   child: Visibility(
-                                                    visible: (gstPdfFileURL!=null && gstPdfFileURL!="") ? false : true,
+                                                    visible: (gstPdfFileURL!="") ? false : true,
                                                     child: Container(
                                                       padding: const EdgeInsets.fromLTRB(5, 8, 0, 8),
                                                       width: 35,
@@ -455,7 +455,7 @@ class _State extends State<ShowLegalInformationScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -638,7 +638,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "Full Name As Per Aadhaar",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -652,7 +652,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -669,10 +669,10 @@ class _State extends State<ShowLegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)
       ),
@@ -687,18 +687,18 @@ class _State extends State<ShowLegalInformationScreen> {
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
-              new LengthLimitingTextInputFormatter(50),
+              LengthLimitingTextInputFormatter(50),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Full Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -720,7 +720,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "Aadhaar Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -734,7 +734,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -751,10 +751,10 @@ class _State extends State<ShowLegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -773,14 +773,14 @@ class _State extends State<ShowLegalInformationScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Aadhaar Number', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -802,7 +802,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "PAN Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -816,7 +816,7 @@ class _State extends State<ShowLegalInformationScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -833,10 +833,10 @@ class _State extends State<ShowLegalInformationScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -849,18 +849,18 @@ class _State extends State<ShowLegalInformationScreen> {
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(12),
+              LengthLimitingTextInputFormatter(12),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Pan Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -905,7 +905,7 @@ class _State extends State<ShowLegalInformationScreen> {
               children: [
                 // Upload Icon
 
-                Container(
+                SizedBox(
                   width: 74,
                   height: 58,
                   child: Image.asset('assets/ic_pan.png'),
@@ -917,7 +917,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     "Upload your PAN Card*",
                     style: TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                         height: 1
                     ),
@@ -931,7 +931,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     "pdf formats up to 5MB",
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1
                     ),
@@ -965,7 +965,7 @@ class _State extends State<ShowLegalInformationScreen> {
                             "Browse",
                             style: TextStyle(
                                 fontSize: AppSize.size_16,
-                                fontFamily: 'FontSemiBold',
+                                fontFamily: 'Satoshi',
                                 color: AppColors.purple,
                                 height: 1
                             ),
@@ -982,7 +982,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1.4
                     ),
@@ -1007,7 +1007,7 @@ class _State extends State<ShowLegalInformationScreen> {
           "View PAN Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1032,15 +1032,15 @@ class _State extends State<ShowLegalInformationScreen> {
           decoration: BoxDecoration(
               color: AppColors.gray3,
               borderRadius: const BorderRadius.only(
-                topLeft: const Radius.circular(8),
-                topRight: const Radius.circular(8),
-                bottomLeft: const Radius.circular(8),
-                bottomRight: const Radius.circular(8),
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
               ),
               border: Border.all(color: AppColors.gray, width: 1)
           ),
           child: Container(
-            padding: (panPdfFileURL!=null && panPdfFileURL!="") ? const EdgeInsets.fromLTRB(10, 15, 8, 15) : const EdgeInsets.fromLTRB(10, 10, 8, 8),
+            padding: (panPdfFileURL!="") ? const EdgeInsets.fromLTRB(10, 15, 8, 15) : const EdgeInsets.fromLTRB(10, 10, 8, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1051,13 +1051,13 @@ class _State extends State<ShowLegalInformationScreen> {
                       Text('Pan Card' ?? "",
                           style: TextStyle(
                               fontSize: 14,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack)
                       ),
                       /*Text(_filePanCardSize ?? "",
                           style: TextStyle(
                               fontSize: 12,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.hintColor)
                       ),*/
                     ],
@@ -1074,7 +1074,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     });
                   },
                   child: Visibility(
-                    visible: (panPdfFileURL!=null && panPdfFileURL!="") ? false : true,
+                    visible: (panPdfFileURL!="") ? false : true,
                     child: Container(
                       padding: const EdgeInsets.fromLTRB(5, 8, 0, 8),
                       width: 35,
@@ -1115,7 +1115,7 @@ class _State extends State<ShowLegalInformationScreen> {
               children: [
                 // Upload Icon
 
-                Container(
+                SizedBox(
                   width: 74,
                   height: 58,
                   child: Image.asset('assets/ic_pan.png'),
@@ -1127,7 +1127,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     "Upload your Aadhaar Card*",
                     style: TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                         height: 1
                     ),
@@ -1141,7 +1141,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     "pdf formats up to 5MB",
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1
                     ),
@@ -1175,7 +1175,7 @@ class _State extends State<ShowLegalInformationScreen> {
                             "Browse",
                             style: TextStyle(
                                 fontSize: AppSize.size_16,
-                                fontFamily: 'FontSemiBold',
+                                fontFamily: 'Satoshi',
                                 color: AppColors.purple,
                                 height: 1
                             ),
@@ -1192,7 +1192,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.black1,
                         height: 1.4
                     ),
@@ -1217,7 +1217,7 @@ class _State extends State<ShowLegalInformationScreen> {
           "View Aadhaar Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1241,15 +1241,15 @@ class _State extends State<ShowLegalInformationScreen> {
           decoration: BoxDecoration(
               color: AppColors.gray3,
               borderRadius: const BorderRadius.only(
-                topLeft: const Radius.circular(8),
-                topRight: const Radius.circular(8),
-                bottomLeft: const Radius.circular(8),
-                bottomRight: const Radius.circular(8),
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
               ),
               border: Border.all(color: AppColors.gray, width: 1)
           ),
           child: Container(
-            padding: (aadhaarPdfFileURL!=null && aadhaarPdfFileURL!="") ? const EdgeInsets.fromLTRB(10, 15, 8, 15) : const EdgeInsets.fromLTRB(10, 10, 8, 8),
+            padding: (aadhaarPdfFileURL!="") ? const EdgeInsets.fromLTRB(10, 15, 8, 15) : const EdgeInsets.fromLTRB(10, 10, 8, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1260,13 +1260,13 @@ class _State extends State<ShowLegalInformationScreen> {
                       Text('Aadhaar Card' ?? "",
                           style: TextStyle(
                               fontSize: 14,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack)
                       ),
                       /*Text(_fileAadhaarCardSize ?? "",
                           style: TextStyle(
                               fontSize: 12,
-                              fontFamily: 'FontMedium',
+                              fontFamily: 'Satoshi',
                               color: AppColors.hintColor)
                       ),*/
                     ],
@@ -1283,7 +1283,7 @@ class _State extends State<ShowLegalInformationScreen> {
                     });
                   },
                   child: Visibility(
-                    visible: (aadhaarPdfFileURL!=null && aadhaarPdfFileURL!="") ? false : true,
+                    visible: (aadhaarPdfFileURL!="") ? false : true,
                     child: Container(
                       padding: const EdgeInsets.fromLTRB(5, 8, 0, 8),
                       width: 35,
@@ -1308,7 +1308,7 @@ class _State extends State<ShowLegalInformationScreen> {
         "Are you GST registered? (Optional)",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1
         ),
@@ -1325,7 +1325,7 @@ class _State extends State<ShowLegalInformationScreen> {
         "This should be linked to the Aadhaar provided earlier",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -1343,7 +1343,7 @@ class _State extends State<ShowLegalInformationScreen> {
           "GSTIN",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1361,10 +1361,10 @@ class _State extends State<ShowLegalInformationScreen> {
         decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: const BorderRadius.only(
-              topLeft: const Radius.circular(8),
-              topRight: const Radius.circular(8),
-              bottomLeft: const Radius.circular(8),
-              bottomRight: const Radius.circular(8),
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+              bottomLeft: Radius.circular(8),
+              bottomRight: Radius.circular(8),
             ),
             border: Border.all(color: AppColors.gray, width: 1)),
         child: Padding(
@@ -1377,18 +1377,18 @@ class _State extends State<ShowLegalInformationScreen> {
               keyboardType: TextInputType.text,
               cursorColor: AppColors.cursorBlack,
               inputFormatters: [
-                new LengthLimitingTextInputFormatter(15),
+                LengthLimitingTextInputFormatter(15),
               ],
               style: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
               decoration: InputDecoration(
                 hintText: 'Enter GSTIN Number', // Set the hint label text
                 hintStyle: TextStyle(
                   fontSize:  AppSize.size_14,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor, // Text color of the hint label
                 ),
                 border: InputBorder.none,
@@ -1412,7 +1412,7 @@ class _State extends State<ShowLegalInformationScreen> {
           "View GSTIN Card",
           style: TextStyle(
               fontSize: AppSize.size_14,
-              fontFamily: 'FontMedium',
+              fontFamily: 'Satoshi',
               color: AppColors.black1,
               height: 1
           ),
@@ -1502,7 +1502,7 @@ class _State extends State<ShowLegalInformationScreen> {
     const suffixes = ["B", "KB", "MB", "GB"];
     var i = (bytes.bitLength / 10).floor();
     var size = (bytes / (1 << (10 * i)));
-    return size.toStringAsFixed(decimals) + ' ' + suffixes[i];
+    return '${size.toStringAsFixed(decimals)} ${suffixes[i]}';
   }
 
   Widget buildShimmer(BuildContext context) =>

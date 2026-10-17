@@ -110,8 +110,7 @@ class _State extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (CommonUtilities.firstTimeLoginSignup != null &&
-          CommonUtilities.firstTimeLoginSignup == 'yes') {
+      if (CommonUtilities.firstTimeLoginSignup == 'yes') {
         CommonUtilities.firstTimeLoginSignup = '';
         _showThankYouDialog();
       }
@@ -154,7 +153,8 @@ class _State extends State<HomeScreen> {
           final name = venue['name']?.toString() ?? '';
           final id = venue['id']?.toString() ?? '';
           final paused = venue['bookingAccept'] == false;
-          if (mounted) setState(() {
+          if (mounted) {
+            setState(() {
             if (name.isNotEmpty) { venueName = name; }
             _venueId = id;
             _isBookingsPaused = paused;
@@ -162,6 +162,7 @@ class _State extends State<HomeScreen> {
             _needsPricing = dashboardNeedsPricing(Map<String, dynamic>.from(venue));
             _setupError = null;
           });
+          }
           if (venue is Map) {
             await _loadDashboardData(Map<String, dynamic>.from(venue), token);
           }
@@ -431,7 +432,7 @@ class _State extends State<HomeScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -669,7 +670,7 @@ class _State extends State<HomeScreen> {
                 child: Text(title,
                     style: const TextStyle(
                         fontSize: 13,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack)),
               ),
               const Icon(Icons.close, size: 16, color: AppColors.darkBlack),
@@ -679,7 +680,7 @@ class _State extends State<HomeScreen> {
           Text(subtitle,
               style: const TextStyle(
                   fontSize: 11,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1)),
           const Spacer(),
           Container(
@@ -693,7 +694,7 @@ class _State extends State<HomeScreen> {
               child: Text(buttonLabel,
                   style: const TextStyle(
                       fontSize: 13,
-                      fontFamily: 'FontSemiBold',
+                      fontFamily: 'Satoshi',
                       color: Colors.white)),
             ),
           ),
@@ -863,7 +864,7 @@ class _State extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 6,
                 offset: const Offset(0, 2))
           ],
@@ -979,7 +980,7 @@ class _State extends State<HomeScreen> {
             label: Text(_isBookingsPaused ? 'Resume Bookings' : 'Pause Bookings',
                 style: const TextStyle(
                     fontSize: 13,
-                    fontFamily: 'FontSemiBold',
+                    fontFamily: 'Satoshi',
                     color: Color(0xFFFE6B6B))),
             style: OutlinedButton.styleFrom(
               backgroundColor: Colors.white,
@@ -1083,7 +1084,7 @@ class _State extends State<HomeScreen> {
                       child: Text(b.name,
                           style: const TextStyle(
                               fontSize: 14,
-                              fontFamily: 'FontSemiBold',
+                              fontFamily: 'Satoshi',
                               color: AppColors.darkBlack)),
                     ),
                     _statusBadge(b.status),
@@ -1093,7 +1094,7 @@ class _State extends State<HomeScreen> {
                   '${b.service}  |  ${b.date}  |  ${b.time}',
                   style: const TextStyle(
                       fontSize: 12,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.black1),
                 ),
             ],
@@ -1108,7 +1109,7 @@ class _State extends State<HomeScreen> {
                   b.amount,
                   style: const TextStyle(
                       fontSize: 13,
-                      fontFamily: 'FontSemiBold',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack),
                 ),
                 const Text('|',
@@ -1118,7 +1119,7 @@ class _State extends State<HomeScreen> {
                   b.persons,
                   style: const TextStyle(
                       fontSize: 13,
-                      fontFamily: 'FontSemiBold',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack),
                 ),
               ],
@@ -1163,7 +1164,7 @@ class _State extends State<HomeScreen> {
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(status,
           style: TextStyle(
-              fontSize: 11, fontFamily: 'FontSemiBold', color: fg)),
+              fontSize: 11, fontFamily: 'Satoshi', color: fg)),
     );
   }
 

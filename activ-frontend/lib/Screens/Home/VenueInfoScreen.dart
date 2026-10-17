@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../Style/app_colors.dart';
+import '../../Utills/venue_postal_code.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../onboarding_widgets.dart';
@@ -404,6 +405,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
       _controllers['address']!.text = suggestion['description'] ?? '';
       _controllers['locationUrl']!.text =
           'https://maps.google.com/?q=place_id:$placeId';
+      _controllers['zipCode']!.clear();
       _showPlaceSuggestions = false;
       _placeSuggestions.clear();
       _submissionError = null;
@@ -413,6 +415,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
 
   Future<void> _fetchPlaceDetails(String placeId) async {
     if (GOOGLE_MAPS_API_KEY.trim().isEmpty) return;
+    final selectedPlaceUrl = _controllers['locationUrl']!.text;
     try {
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse('https://places.googleapis.com/v1/places/$placeId'),
@@ -437,10 +440,24 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         if (types.contains('postal_code')) pincode = longName;
       }
       final location = data['location'] as Map?;
+      final latitude = (location?['latitude'] as num?)?.toDouble();
+      final longitude = (location?['longitude'] as num?)?.toDouble();
+      if (!isValidVenuePostalCode(pincode) &&
+          latitude != null &&
+          longitude != null) {
+        pincode = await resolveVenuePostalCode(
+          latitude: latitude,
+          longitude: longitude,
+          apiKey: GOOGLE_MAPS_API_KEY,
+          client: widget.client,
+        );
+      }
+      if (!mounted || _controllers['locationUrl']!.text != selectedPlaceUrl) return;
       setState(() {
         if (city.isNotEmpty) _controllers['city']!.text = city;
         if (state.isNotEmpty) _controllers['state']!.text = state;
-        if (pincode.isNotEmpty) _controllers['zipCode']!.text = pincode;
+        _controllers['zipCode']!.text =
+            isValidVenuePostalCode(pincode) ? pincode.trim() : '';
         _selectedLatitude = (location?['latitude'] as num?)?.toDouble();
         _selectedLongitude = (location?['longitude'] as num?)?.toDouble();
       });
@@ -470,7 +487,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             enabled: !_locked && !_submitting,
             validator: (value) => _validate('address', value),
             style: TextStyle(
-                fontFamily: 'OnboardingRegular',
+                fontFamily: 'Satoshi',
                 fontSize: 14,
                 height: 1.4,
                 color: _locked ? AppColors.hintColor : AppColors.darkBlack),
@@ -541,7 +558,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                         Expanded(
                             child: Text(suggestion['description'] ?? '',
                                 style: const TextStyle(
-                                    fontFamily: 'OnboardingRegular',
+                                    fontFamily: 'Satoshi',
                                     fontSize: 15,
                                     height: 1.35,
                                     color: AppColors.darkBlack))),
@@ -592,7 +609,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             enabled: !_locked && !_submitting,
             validator: (value) => _validate(key, value),
             style: TextStyle(
-                fontFamily: 'OnboardingRegular',
+                fontFamily: 'Satoshi',
                 fontSize: 14,
                 height: 1.4,
                 color: _locked ? AppColors.hintColor : AppColors.darkBlack),
@@ -629,7 +646,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               counterStyle: const TextStyle(
-                  fontFamily: 'OnboardingRegular',
+                  fontFamily: 'Satoshi',
                   fontSize: 12,
                   color: AppColors.hintColor),
               fillColor: _locked ? const Color(0x80FFFFFF) : Colors.white,
@@ -697,11 +714,11 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
-                              fontFamily: 'OnboardingMedium')))),
+                              fontFamily: 'Satoshi')))),
               const SizedBox(height: 2),
               const Text('Status: Under Review',
                   style: TextStyle(
-                      fontFamily: 'OnboardingSemibold',
+                      fontFamily: 'Satoshi',
                       fontSize: 18,
                       height: 1.3)),
               const SizedBox(height: 10),
@@ -734,7 +751,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             Text('Changes will be reviewed',
                 style: TextStyle(
                     color: _accent,
-                    fontFamily: 'OnboardingSemibold',
+                    fontFamily: 'Satoshi',
                     fontSize: 18,
                     height: 1.3)),
             SizedBox(height: 12),
@@ -748,7 +765,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         const Text('Submitted on',
             style: TextStyle(
                 color: _accent,
-                fontFamily: 'OnboardingSemibold',
+                fontFamily: 'Satoshi',
                 fontSize: 18,
                 height: 1.4)),
         const SizedBox(height: 12),
@@ -758,7 +775,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
         Text('Review ETA',
             style: TextStyle(
                 color: _accent,
-                fontFamily: 'OnboardingSemibold',
+                fontFamily: 'Satoshi',
                 fontSize: 18,
                 height: 1.4)),
         SizedBox(height: 12),
@@ -787,6 +804,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
 
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
+        showLogo: false,
           child: Column(children: [
         Expanded(
             child: Form(
@@ -817,7 +835,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                            fontFamily: 'OnboardingSemibold',
+                                            fontFamily: 'Satoshi',
                                             fontSize: 20,
                                             height: 1.25))),
                               ])),

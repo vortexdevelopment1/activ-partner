@@ -441,10 +441,10 @@ class _State extends State<ListActivityTypeScreen> {
         controller: _searchController,
         onChanged: (_) => setState(() {}),
         cursorColor: AppColors.cursorBlack,
-        style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.darkBlack),
+        style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.darkBlack),
         decoration: InputDecoration(
           hintText: 'Search activities...',
-          hintStyle: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.hintColor),
+          hintStyle: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.hintColor),
           prefixIcon: const Icon(Icons.search, color: AppColors.hintColor, size: 20),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -457,10 +457,11 @@ class _State extends State<ListActivityTypeScreen> {
 
   Widget getFilterChips() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(15, 10, 0, 0),
-      height: 30,
+      margin: const EdgeInsets.fromLTRB(15, 10, 15, 0),
+      height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(right: 15),
         itemCount: _filterLabels.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
@@ -469,20 +470,22 @@ class _State extends State<ListActivityTypeScreen> {
           return GestureDetector(
             onTap: () => setState(() => _selectedFilter = label),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.purple : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
+                color: isSelected ? AppColors.purple : AppColors.white,
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: isSelected ? AppColors.purple : AppColors.gray1,
+                  color: isSelected ? AppColors.purple : AppColors.gray,
                   width: 1,
                 ),
               ),
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontFamily: 'FontMedium',
+                  fontSize: 13,
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w500,
                   color: isSelected ? AppColors.white : AppColors.darkBlack,
                 ),
               ),
@@ -514,7 +517,6 @@ class _State extends State<ListActivityTypeScreen> {
                   child: Column(
                     children: [
 
-                      getActivIcon(),
 
                       getStepBar(progress),
 
@@ -533,13 +535,49 @@ class _State extends State<ListActivityTypeScreen> {
 
                       getFilterChips(),
 
+                      const Padding(
+                        padding: EdgeInsets.only(top: 10),
+                        child: Divider(
+                          key: Key('activity-filter-divider'),
+                          height: 1,
+                          thickness: 1,
+                          color: AppColors.gray,
+                        ),
+                      ),
+
                       isShimmerLoading == true ? buildShimmer(context) :
                       Expanded(
                         flex: 9,
-                        child: getList(context),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            getList(context),
+                            const Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: IgnorePointer(
+                                child: SizedBox(
+                                  key: Key('activity-filter-shadow'),
+                                  height: 6,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [Color(0x22000000), Colors.transparent],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
 
                       Container(
+                        key: const Key('activity-footer'),
                         margin: const EdgeInsets.only(top: 10),
                         child: Column(
                           children: [
@@ -608,13 +646,6 @@ class _State extends State<ListActivityTypeScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.fromLTRB(0, 48, 0, 0),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getStepBar(double progress)
   {
@@ -633,7 +664,7 @@ class _State extends State<ListActivityTypeScreen> {
         "What type of venue do you operate?",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -650,13 +681,13 @@ class _State extends State<ListActivityTypeScreen> {
       return Center(
           child: Text(
             'No activities found',
-            style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.hintColor),
+            style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.hintColor),
           ),
       );
     }
 
     return Container(
-      margin: EdgeInsets.fromLTRB(10, 0, 10, 0),
+      margin: const EdgeInsets.symmetric(horizontal: 15),
       child: LazyLoadScrollView(
         scrollDirection: Axis.vertical,
         scrollOffset: list.length,
@@ -668,17 +699,18 @@ class _State extends State<ListActivityTypeScreen> {
           strokeWidth: 3.0,
           displacement: 30,
           child: GridView.builder(
+            clipBehavior: Clip.hardEdge,
             shrinkWrap: true,
             primary: false,
             physics: ClampingScrollPhysics(),
             scrollDirection: Axis.vertical,
-            padding: const EdgeInsets.only(top: 10, bottom: 0, left: 0, right: 0),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             itemCount: list.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisExtent: 168,
-              mainAxisSpacing: 10.0,
-              crossAxisSpacing: 10.0,
+              mainAxisExtent: 208,
+              mainAxisSpacing: 12.0,
+              crossAxisSpacing: 12.0,
               childAspectRatio: 1.0,
             ),
             itemBuilder: (BuildContext ctxt, int index) {
@@ -693,15 +725,16 @@ class _State extends State<ListActivityTypeScreen> {
   /// Row item View
   Widget rowListItem({required VenueTypeModel model, required BuildContext context,})
   {
-    return Container(
+    return Material(
       key: ValueKey('activity-${model.id}'),
-      margin: const EdgeInsets.symmetric(horizontal: 5),
-      decoration: BoxDecoration(
-        color: model.isSelected ? AppColors.gray3 : AppColors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: model.isSelected ? AppColors.purple : AppColors.gray, width: 1),
+      color: model.isSelected ? AppColors.gray3 : AppColors.white,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: model.isSelected ? AppColors.purple : AppColors.gray, width: 1),
       ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () async {
           // Limit selection to 1 category. In review mode, choosing a new
           // activity replaces the previous one instead of blocking the tap.
@@ -736,7 +769,7 @@ class _State extends State<ListActivityTypeScreen> {
         child: Container(
           width: double.infinity,
           alignment: Alignment.center,
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -763,9 +796,8 @@ class _State extends State<ListActivityTypeScreen> {
   Widget getImage(VenueTypeModel model, BuildContext context)
   {
     return Container(
-      margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
-      width: 46,
-      height: 59,
+      width: 72,
+      height: 72,
       child: _activityArtwork(model),
     );
   }
@@ -785,7 +817,9 @@ class _State extends State<ListActivityTypeScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
+          fontWeight: FontWeight.w700,
+          height: 1.2,
           color: AppColors.darkBlack,
         ),
       ),
@@ -795,7 +829,7 @@ class _State extends State<ListActivityTypeScreen> {
   Widget getDescription(VenueTypeModel model, BuildContext context)
   {
     return Container(
-      margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
+      margin: const EdgeInsets.fromLTRB(0, 6, 0, 0),
       child: Text(
         model.description,
         textAlign: TextAlign.center,
@@ -803,8 +837,9 @@ class _State extends State<ListActivityTypeScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.black1,
+          height: 1.3,
         ),
       ),
     );

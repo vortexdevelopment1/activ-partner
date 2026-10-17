@@ -11,7 +11,7 @@ import '../CommonCode.dart';
 import '../StringExtensions.dart';
 
 class VenueDetailsScreen extends StatefulWidget {
-  const VenueDetailsScreen({Key? key}) : super(key: key);
+  const VenueDetailsScreen({super.key});
 
   @override
   State<VenueDetailsScreen> createState() => _VenueDetailsScreenState();
@@ -54,7 +54,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
     try {
 
       userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-      final String phoneKey = 'IND (+91)'+ userMobileNumber;
+      final String phoneKey = 'IND (+91)$userMobileNumber';
 
       // 2️⃣ Get UID from users_by_phone
       final phoneDoc = await FirebaseFirestore.instance
@@ -241,7 +241,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
   // To show the toolbar
   Widget getToolTab(BuildContext context)
   {
-    return Container(
+    return SizedBox(
       height: AppSize.toolTabSize,
       child: Stack(
         alignment: Alignment.center,
@@ -279,7 +279,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "Venue Name",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -293,7 +293,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -318,18 +318,18 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(100),
+              LengthLimitingTextInputFormatter(100),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Venue Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -353,7 +353,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
               "Description (optional)",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -383,7 +383,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
         maxLength: 200,
         style: TextStyle(
           fontSize:  AppSize.size_14,
-          fontFamily: 'FontRegular',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
         decoration: InputDecoration(
@@ -391,7 +391,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
           hintText: 'Briefly describe your venue',
           hintStyle: TextStyle(
             fontSize:  AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.hintColor, // Text color of the hint label
           ),
         ),
@@ -410,7 +410,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
               "Location URL",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -423,7 +423,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
               "*",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.red,
                   height: 1
               ),
@@ -450,14 +450,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Location URL', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -476,7 +476,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
+          SizedBox(
               width: 20,
               height: 20,
               child: Image.asset('assets/ic_question.png')
@@ -488,7 +488,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
               "Copy & add your venue’s location from Google Search.",
               style: TextStyle(
                   fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor,
                   height: 1
               ),
@@ -511,7 +511,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
               "Flat/Building, Floor Number (optional)",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -538,14 +538,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Flat/Building Number', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -567,7 +567,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "Area, Sector, Locality",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -581,7 +581,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -607,14 +607,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Area, Sector, Locality', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -636,7 +636,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "City/Town",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -650,7 +650,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -676,14 +676,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter City/Town', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -705,7 +705,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "State",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -719,7 +719,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -746,14 +746,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             cursorColor: AppColors.cursorBlack,
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Select State', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -775,7 +775,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "Pin Code",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -789,7 +789,7 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -819,14 +819,14 @@ class _VenueDetailsScreenState extends State<VenueDetailsScreen> {
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Pin Code', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,

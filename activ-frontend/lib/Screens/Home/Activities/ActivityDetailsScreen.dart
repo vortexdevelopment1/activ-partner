@@ -188,7 +188,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
 
 
                                                 Visibility(
-                                                  visible: (widget.activity.numberOfCourt!=null && widget.activity.numberOfCourt!="") ? true : false,
+                                                  visible: (widget.activity.numberOfCourt!="") ? true : false,
                                                   child: Container(
                                                       margin: const EdgeInsets.only(top: 10, bottom: 0),
                                                     child: Row(
@@ -210,7 +210,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                                                 ),
 
                                                 Visibility(
-                                                  visible: (widget.activity.flooringType!=null && widget.activity.flooringType!="") ? true : false,
+                                                  visible: (widget.activity.flooringType!="") ? true : false,
                                                   child: Container(
                                                     margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
                                                     child: Row(
@@ -232,7 +232,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                                                 ),
 
                                                 Visibility(
-                                                  visible: (widget.activity.maximumCapacity!=null && widget.activity.maximumCapacity!="") ? true : false,
+                                                  visible: (widget.activity.maximumCapacity!="") ? true : false,
                                                   child: Container(
                                                       margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
                                                       child: Row(
@@ -254,7 +254,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                                                 ),
 
                                                 Visibility(
-                                                  visible: (widget.activity.description!=null && widget.activity.description!="") ? true : false,
+                                                  visible: (widget.activity.description!="") ? true : false,
                                                   child: Container(
                                                       margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
                                                       child: Row(
@@ -436,7 +436,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
@@ -494,7 +494,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
         "Offers:",
         style: const TextStyle(
           fontSize: AppSize.size_16,
-          fontFamily: 'FontSemiBold',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),
@@ -507,7 +507,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
         "• $title",
         style: const TextStyle(
           fontSize: AppSize.size_14,
-          fontFamily: 'FontMedium',
+          fontFamily: 'Satoshi',
           color: AppColors.darkBlack,
         ),
       ),
@@ -534,9 +534,9 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
             margin: EdgeInsets.only(bottom: 5),
             child: const Text(
               "Venue Timing",
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: AppSize.size_16,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
             ),
@@ -555,9 +555,9 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                     Text(day),
                     const Text(
                       "Closed",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: AppSize.size_16,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkRed,
                       ),
                     ),
@@ -576,7 +576,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                     day,
                     style: const TextStyle(
                       fontSize: AppSize.size_14,
-                      fontFamily: 'FontSemiBold',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -589,7 +589,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                         "${slot['open']} - ${slot['close']}",
                         style: const TextStyle(
                           fontSize: AppSize.size_14,
-                          fontFamily: 'FontMedium',
+                          fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
                         ),
                       ),
@@ -598,7 +598,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -628,7 +628,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
               "Venue Timing",
               style: TextStyle(
                 fontSize: AppSize.size_16,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
             ),
@@ -654,7 +654,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       day,
                       style: const TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -662,7 +662,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       "Closed",
                       style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkRed,
                       ),
                     ),
@@ -696,7 +696,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                     day,
                     style: const TextStyle(
                       fontSize: AppSize.size_14,
-                      fontFamily: 'FontSemiBold',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -715,7 +715,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                           "${slot['open']} - ${slot['close']}",
                           style: const TextStyle(
                             fontSize: AppSize.size_14,
-                            fontFamily: 'FontMedium',
+                            fontFamily: 'Satoshi',
                             color: AppColors.darkBlack,
                           ),
                         ),
@@ -725,7 +725,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -770,7 +770,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
               "Venue Timing",
               style: TextStyle(
                 fontSize: AppSize.size_16,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
               ),
             ),
@@ -800,7 +800,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       day,
                       style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: isToday
                             ? AppColors.green
                             : AppColors.darkBlack,
@@ -810,7 +810,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       "Closed",
                       style: TextStyle(
                         fontSize: AppSize.size_14,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkRed,
                       ),
                     ),
@@ -854,7 +854,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                           day,
                           style: TextStyle(
                             fontSize: AppSize.size_14,
-                            fontFamily: 'FontSemiBold',
+                            fontFamily: 'Satoshi',
                             color: isToday
                                 ? AppColors.darkBlack
                                 : AppColors.darkBlack,
@@ -878,7 +878,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                               openNow ? "OPEN NOW" : "CLOSED NOW",
                               style: TextStyle(
                                 fontSize: AppSize.size_11,
-                                fontFamily: 'FontSemiBold',
+                                fontFamily: 'Satoshi',
                                 color:
                                 openNow ? Colors.green : Colors.red,
                               ),
@@ -909,7 +909,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                           (slot['open']=="-" && slot['close']=="-") ? "Closed" : "${slot['open']} - ${slot['close']}",
                           style: TextStyle(
                             fontSize: AppSize.size_14,
-                            fontFamily: (slot['open'] =="-"&& slot['close']=="-") ? 'FontSemiBold' : 'FontMedium',
+                            fontFamily: (slot['open'] =="-"&& slot['close']=="-") ? 'Satoshi' : 'Satoshi',
                             color: (slot['open'] =="-"&& slot['close']=="-") ? AppColors.red : AppColors.darkBlack,
                           ),
                         ),
@@ -919,7 +919,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -934,7 +934,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
           "• ",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
                 height: 1
             ),
@@ -954,7 +954,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
             label,
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontSemiBold',
+                fontFamily: 'Satoshi',
                 color: AppColors.darkBlack,
                 height: 1
             ),
@@ -973,7 +973,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
         answer,
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontMedium',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.4
         ),

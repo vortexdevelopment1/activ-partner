@@ -12,6 +12,7 @@ import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import '../../../StringExtensions.dart';
 import 'AddVenuePhotoUploadScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 class AddActivityAmenitiesScreen extends StatefulWidget {
   const AddActivityAmenitiesScreen({super.key});
@@ -126,19 +127,19 @@ class _AddActivityAmenitiesScreenState extends State<AddActivityAmenitiesScreen>
           backgroundColor: Colors.transparent,
           body: Column(
             children: [
+              const OnboardingHeader(),
               Expanded(
                 child: ListView(
                   controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(15, 10, 15, 16),
+                  padding: const EdgeInsets.fromLTRB(15, 0, 15, 16),
                   children: [
-                    Center(child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)),
                     getStepBarCount(5 / 6, 5, 6),
                     const SizedBox(height: 24),
                     const Text(
                       'Select amenities for this activity',
                       style: TextStyle(
                         fontSize: 25,
-                        fontFamily: 'FontSemiBold',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                         height: 1.2,
                       ),
@@ -187,7 +188,7 @@ class _AddActivityAmenitiesScreenState extends State<AddActivityAmenitiesScreen>
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontSize: AppSize.size_16,
-                                      fontFamily: 'FontSemiBold',
+                                      fontFamily: 'Satoshi',
                                       color: AppColors.darkBlack,
                                     ),
                                   ),

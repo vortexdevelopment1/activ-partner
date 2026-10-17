@@ -12,9 +12,11 @@ import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
+import 'LoginScreen.dart';
 import 'MobileNumberFormatter.dart';
 import 'VenueScreen.dart';
 import 'onboarding_widgets.dart';
+import '../Utills/browser_session.dart';
 
 class TellUsAboutScreen extends StatefulWidget {
   const TellUsAboutScreen({super.key, this.reviewMode = false});
@@ -57,7 +59,21 @@ class _State extends State<TellUsAboutScreen> {
   @override
   void initState() {
     super.initState();
-    getData();
+    getData().whenComplete(() {
+      if (!mounted || !isBrowserSession || widget.reviewMode) return;
+      for (final controller in [firstNameController, lastNameController,
+        emailController, venueOwnerMobileNumberController]) {
+        controller.addListener(_saveSessionDraft);
+      }
+    });
+  }
+
+  void _saveSessionDraft() {
+    if (!isBrowserSession || widget.reviewMode) return;
+    writeBrowserSession('owner_full_name', '${firstNameController.text.trim()} ${lastNameController.text.trim()}'.trim());
+    writeBrowserSession('owner_email', emailController.text.trim());
+    writeBrowserSession('same_as_owner_number_checked', isChecked ? 'true' : 'false');
+    writeBrowserSession('same_as_owner_number', isChecked ? 'true' : venueOwnerMobileNumberController.text.trim());
   }
 
   getData() async
@@ -181,67 +197,91 @@ class _State extends State<TellUsAboutScreen> {
     super.dispose();
   }
 
+  void _goBack() {
+    if (widget.reviewMode) {
+      Navigator.maybePop(context);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
 
     double progress = currentStep / totalSteps;
 
-    return OnboardingScaffold(
-      child: LayoutBuilder(builder: (context, constraints) {
-        return Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
+    return PopScope(
+      canPop: widget.reviewMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && !widget.reviewMode) _goBack();
+      },
+      child: OnboardingScaffold(
+        child: LayoutBuilder(builder: (context, constraints) {
+          return Column(
+            children: [
+              Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  const SizedBox(height: 12),
-                  const OnboardingLogo(),
-                  const SizedBox(height: 4),
-                  getStepBar(progress),
-                  getText(),
-                  getSubText(),
-                  getNameFields(context),
-                  getEmailLabel(),
-                  getEmailField(context),
-                  getPhoneNumberText(),
-                  getMobileNumberField(context),
-                  getPhoneVerifiedText(),
-                  const SizedBox(height: 4),
-                  getPrimaryContactNumberText(),
-                  getPrimaryContactNumberSubText(),
-                  getCheckBoxSamesOwner(),
-                  getOwnerPhoneNumberText(),
-                  getOwnerMobileNumberField(context),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 4),
+                    getStepBar(progress),
+                    getText(),
+                    getSubText(),
                   ],
                 ),
               ),
-            ),
-            Container(
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray)),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                    getNameFields(context),
+                    getEmailLabel(),
+                    getEmailField(context),
+                    getPhoneNumberText(),
+                    getMobileNumberField(context),
+                    getPhoneVerifiedText(),
+                    const SizedBox(height: 4),
+                    getPrimaryContactNumberText(),
+                    getPrimaryContactNumberSubText(),
+                    getOwnerPhoneNumberText(),
+                    getOwnerMobileNumberField(context),
+                    getCheckBoxSamesOwner(),
+                    const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-              child: Row(children: [
-                Expanded(flex: 3, child: OnboardingButton(
-                  label: 'Back', outlined: true, borderRadius: 12,
-                  onPressed: () => Navigator.maybePop(context),
+              Container(
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.gray)),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                child: Row(children: [
+                  Expanded(flex: 3, child: OnboardingButton(
+                    label: 'Back', outlined: true, borderRadius: 12,
+                    onPressed: _goBack,
+                  )),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 7, child: OnboardingButton(
+                  label: 'Next',
+                  borderRadius: 12,
+                  onPressed: () {
+                    if (validation(context)) completeProfile();
+                  },
                 )),
-                const SizedBox(width: 16),
-                Expanded(flex: 7, child: OnboardingButton(
-                label: 'Next',
-                borderRadius: 12,
-                onPressed: () {
-                  if (validation(context)) completeProfile();
-                },
-              )),
-              ]),
-            ),
-          ],
-        );
-      }),
+                ]),
+              ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
@@ -253,13 +293,6 @@ class _State extends State<TellUsAboutScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -270,7 +303,7 @@ class _State extends State<TellUsAboutScreen> {
         "Tell us about you, partner!",
         style: TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -287,7 +320,7 @@ class _State extends State<TellUsAboutScreen> {
         "We will use these details for all business communications & updates",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -305,8 +338,8 @@ class _State extends State<TellUsAboutScreen> {
             margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
             child: Row(
               children: [
-                Text(label, style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontMedium', color: AppColors.black1, height: 1)),
-                const Text("*", style: TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontMedium', color: AppColors.red, height: 1)),
+                Text(label, style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.black1, height: 1)),
+                const Text("*", style: TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.red, height: 1)),
               ],
             ),
           ),
@@ -329,10 +362,10 @@ class _State extends State<TellUsAboutScreen> {
                   FilteringTextInputFormatter.allow(RegExp("[a-zA-Z ]")),
                   LengthLimitingTextInputFormatter(100),
                 ],
-                style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.darkBlack),
+                style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.darkBlack),
                 decoration: InputDecoration(
                   hintText: hint,
-                  hintStyle: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'FontRegular', color: AppColors.hintColor),
+                  hintStyle: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.hintColor),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -365,7 +398,7 @@ class _State extends State<TellUsAboutScreen> {
             "Email Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -379,7 +412,7 @@ class _State extends State<TellUsAboutScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -396,10 +429,10 @@ class _State extends State<TellUsAboutScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -412,18 +445,18 @@ class _State extends State<TellUsAboutScreen> {
             keyboardType: TextInputType.emailAddress,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
-              new LengthLimitingTextInputFormatter(100),
+              LengthLimitingTextInputFormatter(100),
             ],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: 'Enter Email Address', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -446,7 +479,7 @@ class _State extends State<TellUsAboutScreen> {
             "Phone Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -460,7 +493,7 @@ class _State extends State<TellUsAboutScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -477,10 +510,10 @@ class _State extends State<TellUsAboutScreen> {
       decoration: BoxDecoration(
           color: AppColors.gray2,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray2, width: 1)),
       child: Padding(
@@ -498,7 +531,7 @@ class _State extends State<TellUsAboutScreen> {
                         phoneCode,
                       style: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -542,14 +575,14 @@ class _State extends State<TellUsAboutScreen> {
                   },
                   style: TextStyle(
                     fontSize:  AppSize.size_14,
-                    fontFamily: 'FontRegular',
+                    fontFamily: 'Satoshi',
                     color: AppColors.darkBlack,
                   ),
                   decoration: InputDecoration(
                     hintText: 'XX-XXXX-XXXX', // Set the hint label text
                     hintStyle: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.hintColor, // Text color of the hint label
                     ),
                     border: InputBorder.none,
@@ -577,8 +610,9 @@ class _State extends State<TellUsAboutScreen> {
     return Container(
       margin: EdgeInsets.only(top: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
+          SizedBox(
             width: 12,
             height: 12,
             child: Image.asset('assets/ic_right_green.png'),
@@ -589,9 +623,10 @@ class _State extends State<TellUsAboutScreen> {
               "Phone number is verified",
               style: TextStyle(
                   fontSize: AppSize.size_12,
-                  fontFamily: 'FontSemiBold',
+                  fontFamily: 'Satoshi',
                   color: AppColors.green,
-                  height: 1
+                  height: 1.25,
+                  leadingDistribution: TextLeadingDistribution.even,
               ),
               textAlign: TextAlign.left,
             ),
@@ -609,7 +644,7 @@ class _State extends State<TellUsAboutScreen> {
         "Venue’s primary contact number",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1
         ),
@@ -626,7 +661,7 @@ class _State extends State<TellUsAboutScreen> {
         "Members, ACTIV team, and other partners may call on this number for booking support",
         style: TextStyle(
             fontSize: AppSize.size_14,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -647,7 +682,7 @@ class _State extends State<TellUsAboutScreen> {
               "Phone Number",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
                   height: 1
               ),
@@ -661,7 +696,7 @@ class _State extends State<TellUsAboutScreen> {
               "*",
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.red,
                   height: 1
               ),
@@ -681,10 +716,10 @@ class _State extends State<TellUsAboutScreen> {
         decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: const BorderRadius.only(
-              topLeft: const Radius.circular(8),
-              topRight: const Radius.circular(8),
-              bottomLeft: const Radius.circular(8),
-              bottomRight: const Radius.circular(8),
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+              bottomLeft: Radius.circular(8),
+              bottomRight: Radius.circular(8),
             ),
             border: Border.all(color: AppColors.gray, width: 1)),
         child: Padding(
@@ -702,7 +737,7 @@ class _State extends State<TellUsAboutScreen> {
                         phoneCode,
                         style: TextStyle(
                           fontSize:  AppSize.size_14,
-                          fontFamily: 'FontRegular',
+                          fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
                         ),
                       ),
@@ -745,14 +780,14 @@ class _State extends State<TellUsAboutScreen> {
                     },
                     style: TextStyle(
                       fontSize:  AppSize.size_14,
-                      fontFamily: 'FontRegular',
+                      fontFamily: 'Satoshi',
                       color: AppColors.darkBlack,
                     ),
                     decoration: InputDecoration(
                       hintText: 'XX-XXXX-XXXX', // Set the hint label text
                       hintStyle: TextStyle(
                         fontSize:  AppSize.size_14,
-                        fontFamily: 'FontRegular',
+                        fontFamily: 'Satoshi',
                         color: AppColors.hintColor, // Text color of the hint label
                       ),
                       border: InputBorder.none,
@@ -778,7 +813,7 @@ class _State extends State<TellUsAboutScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             child: Checkbox(
@@ -787,6 +822,7 @@ class _State extends State<TellUsAboutScreen> {
                 setState(() {
                   isChecked = value!;
                 });
+                  _saveSessionDraft();
               },
               activeColor: AppColors.black, // Tick color
               checkColor: AppColors.white,  // Tick icon color
@@ -805,9 +841,10 @@ class _State extends State<TellUsAboutScreen> {
               'Same as owner number',
               style: TextStyle(
                   fontSize: AppSize.size_14,
-                  fontFamily: 'FontRegular',
+                  fontFamily: 'Satoshi',
                   color: AppColors.black1,
-                  height: 1
+                  height: 1.25,
+                  leadingDistribution: TextLeadingDistribution.even,
               ),
             ),
           ))

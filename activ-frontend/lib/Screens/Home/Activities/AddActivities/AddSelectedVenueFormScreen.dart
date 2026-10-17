@@ -10,6 +10,7 @@ import '../../../../Utills/common_utilities.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddActivityAmenitiesScreen.dart';
+import '../../../onboarding_widgets.dart';
 
 
 class AddSelectedVenueFormScreen extends StatefulWidget {
@@ -111,6 +112,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
                           mainAxisSize: MainAxisSize.max,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const OnboardingHeader(),
 
                             Expanded(
                               child: Container(
@@ -118,8 +120,6 @@ class _State extends State<AddSelectedVenueFormScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
-                                    getActivIcon(),
 
                                     getStepBarCount(4 / 6, 4, 6),
 
@@ -208,13 +208,6 @@ class _State extends State<AddSelectedVenueFormScreen> {
     );
   }
 
-  Widget getActivIcon()
-  {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        child: Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain)
-    );
-  }
 
   Widget getText()
   {
@@ -225,7 +218,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
         activityName,
         style: const TextStyle(
             fontSize: AppSize.size_25,
-            fontFamily: 'FontSemiBold',
+            fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2
         ),
@@ -242,7 +235,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
         "Provide Activity Specific Details",
         style: TextStyle(
             fontSize: AppSize.size_16,
-            fontFamily: 'FontRegular',
+            fontFamily: 'Satoshi',
             color: AppColors.black1,
             height: 1.4
         ),
@@ -260,7 +253,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
             label,
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -273,7 +266,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
@@ -290,10 +283,10 @@ class _State extends State<AddSelectedVenueFormScreen> {
       decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: const Radius.circular(8),
-            topRight: const Radius.circular(8),
-            bottomLeft: const Radius.circular(8),
-            bottomRight: const Radius.circular(8),
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(8),
           ),
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
@@ -311,14 +304,14 @@ class _State extends State<AddSelectedVenueFormScreen> {
                 : [],
             style: TextStyle(
               fontSize:  AppSize.size_14,
-              fontFamily: 'FontRegular',
+              fontFamily: 'Satoshi',
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
               hintText: hint, // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
-                fontFamily: 'FontRegular',
+                fontFamily: 'Satoshi',
                 color: AppColors.hintColor, // Text color of the hint label
               ),
               border: InputBorder.none,
@@ -337,7 +330,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
+          SizedBox(
               width: 20,
               height: 20,
               child: Image.asset('assets/ic_question.png')
@@ -349,7 +342,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
               "Maximum people that can use this activity at once",
               style: TextStyle(
                   fontSize: AppSize.size_12,
-                  fontFamily: 'FontMedium',
+                  fontFamily: 'Satoshi',
                   color: AppColors.hintColor,
                   height: 1
               ),
@@ -370,7 +363,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
             "Email Address",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.black1,
                 height: 1
             ),
@@ -384,7 +377,7 @@ class _State extends State<AddSelectedVenueFormScreen> {
             "*",
             style: TextStyle(
                 fontSize: AppSize.size_14,
-                fontFamily: 'FontMedium',
+                fontFamily: 'Satoshi',
                 color: AppColors.red,
                 height: 1
             ),
