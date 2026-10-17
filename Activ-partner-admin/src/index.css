@@ -4,20 +4,20 @@
 
 body {
   margin: 0;
-  background-color: #f5f7f6;
-  color: #17211f;
+  background-color: #fdfff5;
+  color: #1f1f1f;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: #a7f3df; color: #124e43; }
+::selection { background: #daff50; color: #000; }
 
 button, input, select, textarea { font: inherit; }
 
 .admin-main {
-  background-color: #f5f7f6;
-  scrollbar-color: #c7cfcc transparent;
+  background: linear-gradient(165deg, #fdfff5 20%, #e9f3c2 100%);
+  scrollbar-color: #c5cda9 transparent;
 }
 
 .admin-main > * {
@@ -28,15 +28,15 @@ button, input, select, textarea { font: inherit; }
 
 .admin-main h2 {
   letter-spacing: 0;
-  color: #17211f;
+  color: #1f1f1f;
 }
 
 .admin-main table thead {
-  background: #f8faf9;
+  background: #fdf6de;
 }
 
 .admin-main table th {
-  color: #76817e;
+  color: #62665a;
   letter-spacing: .04em;
 }
 
@@ -49,17 +49,31 @@ button, input, select, textarea { font: inherit; }
 }
 
 .admin-main .rounded-xl {
-  border-radius: 10px;
+  border-radius: 16px;
 }
 
 .admin-main > .space-y-5 > .bg-white,
 .admin-main > .space-y-6 > .bg-white {
-  border-color: #e1e6e4;
+  border-color: #e2e8d5;
   box-shadow: 0 1px 3px rgb(20 35 31 / 5%);
 }
 
 .admin-main select { cursor: pointer; }
-.admin-main input[type='checkbox'] { accent-color: #0f755f; }
+.admin-main input[type='checkbox'] { accent-color: #8524cc; }
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #8524cc;
+  outline-offset: 3px;
+}
+
+.auth-background {
+  background: linear-gradient(180deg, #fdfff5 15%, #e9f3c2 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-card, .btn-primary { transition: none; }
+  .metric-card:hover { transform: none; }
+}
 
 .metric-card {
   position: relative;
@@ -71,7 +85,7 @@ button, input, select, textarea { font: inherit; }
 .metric-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgb(20 35 31 / 8%);
-  border-color: #d7dfdc;
+  border-color: #c0dc56;
 }
 
 .modal-scroll-body {
@@ -84,22 +98,22 @@ button, input, select, textarea { font: inherit; }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed;
-    box-shadow: 0 1px 2px rgb(15 117 95 / 20%);
+    @apply bg-brand-ink hover:bg-neutral-800 text-brand-lime px-4 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 8%);
   }
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2 rounded-lg font-semibold transition-colors;
+    @apply bg-brand-cream hover:bg-brand-bottom text-gray-900 border border-black/80 px-4 py-2 rounded-xl font-semibold transition-colors;
     box-shadow: 0 1px 2px rgb(20 35 31 / 4%);
   }
   .btn-danger {
     @apply bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors;
   }
   .card {
-    @apply bg-white rounded-lg border border-gray-200;
+    @apply bg-white rounded-xl border border-gray-200;
     box-shadow: 0 1px 3px rgb(20 35 31 / 5%);
   }
   .input {
-    @apply w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors;
+    @apply w-full border border-[#cedce0] bg-white rounded-xl px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors;
     min-height: 40px;
   }
   .label {

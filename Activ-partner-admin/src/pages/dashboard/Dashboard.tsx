@@ -100,8 +100,8 @@ export const Dashboard: React.FC = () => {
       label: 'Total Users',
       value: totalUsers,
       icon: Users,
-      color: 'bg-blue-50 text-blue-600',
-      border: 'border-blue-100',
+      color: 'bg-primary-50 text-primary-700',
+      border: 'border-primary-100',
     },
   ];
 

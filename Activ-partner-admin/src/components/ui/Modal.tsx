@@ -22,7 +22,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, title, children, si
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-2 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-[#17211f]/55 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
       <div className={`relative flex flex-col overflow-hidden bg-white rounded-lg shadow-[0_24px_70px_rgb(8_20_17/0.24)] ring-1 ring-black/5 w-full ${sizes[size]} max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]`}>
         <div className="flex shrink-0 items-center justify-between gap-2 p-4 sm:p-5 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>

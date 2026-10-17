@@ -160,7 +160,7 @@ const FileUploadZone: React.FC<{
         </p>
         <p className="text-xs text-gray-400 mt-0.5 mb-3">PDF, JPG, JPEG, PNG · Max 5 MB</p>
         {/* Visible label-wrapped input — most reliable cross-browser file trigger */}
-        <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg cursor-pointer hover:bg-primary-700 transition-colors select-none">
+        <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-ink text-brand-lime text-sm font-medium rounded-xl cursor-pointer hover:bg-neutral-800 transition-colors select-none">
           <input
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"

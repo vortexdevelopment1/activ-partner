@@ -37,7 +37,7 @@ export const Pagination: React.FC<PaginationProps> = ({ page, totalPages: totalP
               key={pageNum}
               onClick={() => onPageChange(pageNum)}
               className={`hidden sm:block w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                page === pageNum ? 'bg-primary-600 text-white' : 'hover:bg-gray-100 text-gray-600'
+                page === pageNum ? 'bg-brand-ink text-brand-lime' : 'hover:bg-brand-bottom text-gray-600'
               }`}
             >
               {pageNum}

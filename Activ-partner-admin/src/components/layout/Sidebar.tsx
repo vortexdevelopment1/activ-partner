@@ -10,7 +10,6 @@ import {
   Percent,
   ScrollText,
   LogOut,
-  Zap,
   Landmark,
   PhoneCall,
   MessageCircleQuestion,
@@ -49,20 +48,15 @@ export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = (
   };
 
   return (
-    <aside id="admin-navigation" className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] bg-[#17211f] border-r border-white/5 flex flex-col transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+    <aside id="admin-navigation" className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] bg-brand-top border-r border-[#dce4c7] flex flex-col transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-primary-500 rounded-lg flex items-center justify-center shadow-lg shadow-primary-900/30">
-            <Zap size={16} className="text-white" />
-          </div>
-          <span className="text-lg font-bold text-white">ActivProduct</span>
-        </div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-400 mt-1 ml-11">Admin workspace</p>
+      <div className="px-6 py-6 border-b border-[#dce4c7]">
+        <img src="/activ-partner-logo.png" alt="ACTIV Partner" className="w-32 h-auto" />
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-700 mt-3">Admin workspace</p>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#3b4744_transparent]">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#c5cda9_transparent]">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -71,8 +65,8 @@ export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = (
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-gray-300 hover:bg-white/[0.07] hover:text-white'
+                  ? 'bg-brand-ink text-brand-lime shadow-sm'
+                  : 'text-gray-600 hover:bg-brand-bottom hover:text-black'
               }`
             }
           >
@@ -80,7 +74,7 @@ export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = (
               <>
                 <Icon
                   size={18}
-                  className={isActive ? 'text-white' : 'text-gray-500'}
+                  className={isActive ? 'text-brand-lime' : 'text-gray-500'}
                 />
                 {label}
               </>
@@ -90,10 +84,10 @@ export const Sidebar: React.FC<{ mobileOpen: boolean; onClose: () => void }> = (
       </nav>
 
       {/* Logout */}
-      <div className="px-3 py-4 border-t border-white/10">
+      <div className="px-3 py-4 border-t border-[#dce4c7] bg-brand-cream/50">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:bg-red-500/10 hover:text-red-300 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-700 transition-all"
         >
           <LogOut size={18} className="text-gray-500" />
           Logout
