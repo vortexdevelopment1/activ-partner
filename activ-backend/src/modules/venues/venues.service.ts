@@ -553,8 +553,12 @@ export class VenuesService {
       ? `${venue.partner.firstName || ""} ${venue.partner.lastName || ""}`.trim()
       : "";
     const signature = venue.electronicSignature || partnerName;
-    const acceptedAt = venue.termsAcceptedAt
-      ? new Date(venue.termsAcceptedAt).toLocaleString("en-IN", {
+    // Some older records contain the saved signature but predate the
+    // terms_accepted_at column. Keep the exported agreement complete for
+    // those signed records while leaving unsigned drafts blank.
+    const acceptanceDate = venue.termsAcceptedAt ?? (signature ? new Date() : null);
+    const acceptedAt = acceptanceDate
+      ? new Date(acceptanceDate).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
           day: "2-digit",
           month: "long",

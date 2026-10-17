@@ -24,6 +24,7 @@ class OnboardingStyles {
     fontFamily: 'Satoshi',
     fontSize: 28,
     height: 1.15,
+    fontWeight: FontWeight.w700,
     color: AppColors.darkBlack,
   );
 

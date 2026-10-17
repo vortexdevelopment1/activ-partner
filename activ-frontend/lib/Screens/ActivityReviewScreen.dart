@@ -197,7 +197,10 @@ class _State extends State<ActivityReviewScreen> {
       Expanded(
           child: Text(title,
               style: const TextStyle(
-                  fontFamily: 'Satoshi', fontSize: 16, height: 1.3))),
+                  fontFamily: 'Satoshi',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3))),
       TextButton.icon(
         onPressed: () => _edit(screensBack),
         style: TextButton.styleFrom(

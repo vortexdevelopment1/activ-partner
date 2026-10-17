@@ -117,8 +117,15 @@ class _State extends State<ReviewSignAgreement> {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      final uri = Uri.parse('$LEGAL_URL/partner_agreement/download');
-      final response = await (widget.client?.get(uri) ?? http.get(uri))
+      final venueId = await SharedPreference.readStr('venue_id');
+      final token = await SharedPreference.readStr('jwt_token');
+      if (venueId == null || venueId.isEmpty || token == null || token.isEmpty) {
+        throw Exception('Your session is missing. Please sign in again.');
+      }
+      final uri = Uri.parse('$BASE_URL/venues/$venueId/partner-agreement/download');
+      final headers = {'Authorization': 'Bearer $token'};
+      final response = await (widget.client?.get(uri, headers: headers) ??
+              http.get(uri, headers: headers))
           .timeout(const Duration(seconds: 30));
       _checkResponse(response, 'Unable to download the partnership agreement.');
       final data = jsonDecode(response.body)['data'];

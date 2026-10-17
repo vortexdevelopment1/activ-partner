@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontSize: titleSize,
                               height: 1.12,
                             )),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 12),
                         _requiredLabel('Email Address or Phone Number',
                             fontSize: compact ? 13 : 14),
                         const SizedBox(height: 6),
@@ -113,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 'Enter your email address.'),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 2),
                         _requiredLabel('Password',
                             fontSize: compact ? 13 : 14),
                         const SizedBox(height: 6),
@@ -151,20 +151,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 0),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _link(
-                            'Forgot Password?',
-                            () => CommonUtilities.NavigateWithPush(
-                              context,
-                              ForgotPasswordScreen(
-                                  emailId: emailController.text.trim(),
-                                  client: widget.client),
+                        Transform.translate(
+                          offset: const Offset(0, -6),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: _link(
+                              'Forgot Password?',
+                              () => CommonUtilities.NavigateWithPush(
+                                context,
+                                ForgotPasswordScreen(
+                                    emailId: emailController.text.trim(),
+                                    client: widget.client),
+                              ),
+                              fontSize: compact ? 13 : 15,
                             ),
-                            fontSize: compact ? 13 : 15,
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 12),
                         OnboardingButton(
                           key: const Key('login-submit'),
                           label: 'Login',
@@ -265,8 +268,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   TextStyle get _fieldTextStyle => OnboardingStyles.body.copyWith(
-        fontSize: 17,
+        fontSize: 16,
         fontFamily: 'Satoshi',
+        fontWeight: FontWeight.w400,
+        color: AppColors.darkBlack.withValues(alpha: 0.82),
       );
 
   InputDecoration _loginInputDecoration(String hintText) =>
@@ -305,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
       child: InkWell(
         onTap: _isSubmitting ? null : onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: EdgeInsets.zero,
           child: Text(text,
               style: OnboardingStyles.body.copyWith(
                 color: AppColors.purple,

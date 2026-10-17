@@ -200,6 +200,7 @@ class _State extends State<VenueAvailabilityScreen> {
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
             height: 1.2
         ),

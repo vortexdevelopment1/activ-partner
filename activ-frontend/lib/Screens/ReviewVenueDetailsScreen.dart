@@ -304,6 +304,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
                       style: const TextStyle(
                           fontFamily: 'Satoshi',
                           fontSize: 16,
+                          fontWeight: FontWeight.w700,
                           height: 1.4))),
               if (onEdit != null) _editButton(onEdit),
               if (trailing != null) const SizedBox(width: 12),
@@ -448,16 +449,53 @@ class _State extends State<ReviewVenueDetailsScreen> {
 
   void _commissionInfo() => showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-              title: const Text('Commission Structure'),
-              content: Text(commissionPct == null
-                  ? 'The commission rate for your venue is currently unavailable. Please try refreshing the rate.'
-                  : 'The commission for your venue in $city is $commissionLabel per booking. Rates vary by city.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'))
-              ]));
+      barrierColor: Colors.black54,
+      builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 18),
+              decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppColors.yellowTop, AppColors.yellowBottom]),
+                  borderRadius: BorderRadius.circular(30)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Commission Structure',
+                        style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.darkBlack))),
+                const SizedBox(height: 24),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        commissionPct == null
+                            ? 'The commission rate for your venue is currently unavailable. Please try refreshing the rate.'
+                            : 'The commission for your venue in $city is $commissionLabel per booking. Rates vary by city.',
+                        style: const TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            height: 1.45,
+                            color: AppColors.darkBlack))),
+                const SizedBox(height: 22),
+                Center(
+                    child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF6D4CB3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            textStyle: const TextStyle(
+                                fontFamily: 'Satoshi',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500)),
+                        child: const Text('Close')))
+              ]))));
 
   Widget _commission() => _section(
       "ACTIV's Commission Structure",
@@ -492,10 +530,16 @@ class _State extends State<ReviewVenueDetailsScreen> {
                       padding: EdgeInsets.zero,
                       alignment: Alignment.centerLeft,
                       textStyle: const TextStyle(
-                          fontFamily: 'Satoshi', fontSize: 13)),
+                          fontFamily: 'Satoshi',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
                   child: const Row(mainAxisSize: MainAxisSize.min, children: [
                     Flexible(
-                        child: Text('Learn more about how commissions work')),
+                        child: Text('Learn more about how commissions work',
+                            style: TextStyle(
+                                fontFamily: 'Satoshi',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700))),
                     SizedBox(width: 4),
                     Icon(Icons.arrow_forward, size: 16),
                   ])),
@@ -513,18 +557,6 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 fontFamily: 'Satoshi')),
       ));
 
-  IconData _amenityIcon(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('parking')) return Icons.local_parking_outlined;
-    if (lower.contains('wifi') || lower.contains('wi-fi')) return Icons.wifi;
-    if (lower.contains('locker')) return Icons.lock_outline;
-    if (lower.contains('train')) return Icons.fitness_center;
-    if (lower.contains('light')) return Icons.lightbulb_outline;
-    if (lower.contains('sound')) return Icons.speaker_outlined;
-    if (lower.contains('shower')) return Icons.shower_outlined;
-    return Icons.check_circle_outline;
-  }
-
   Widget _amenities() => _section(
       'Amenities',
       amenities.isEmpty
@@ -534,21 +566,16 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 Container(
                     constraints: const BoxConstraints(maxWidth: 330),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(
-                        color: AppColors.cream,
-                        borderRadius: BorderRadius.circular(4)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(_amenityIcon(name),
-                          size: 16, color: AppColors.hintColor),
-                      const SizedBox(width: 8),
-                      Flexible(
-                          child: Text(name,
-                              style: const TextStyle(
-                                  fontFamily: 'Satoshi',
-                                  fontSize: 12,
-                                  height: 1.3))),
-                    ])),
+                        color: AppColors.white,
+                        border: Border.all(color: AppColors.gray),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: Text(name,
+                        style: const TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 12,
+                            height: 1.3))),
             ]),
       onEdit: () => _editSection(CustomerPlacesOffer(reviewMode: true)));
 

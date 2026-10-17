@@ -176,8 +176,8 @@ class _State extends State<OTPVerificationScreen> {
       _focusNodes[index - 1].requestFocus();
     }
     setState(() {});
-    if (_controllers.every((controller) =>
-        RegExp(r'^\d$').hasMatch(controller.text))) {
+    if (_controllers
+        .every((controller) => RegExp(r'^\d$').hasMatch(controller.text))) {
       _submit();
     }
   }
@@ -203,7 +203,8 @@ class _State extends State<OTPVerificationScreen> {
 
     try {
       final response = await (widget.client?.post ?? http.post)(
-        Uri.parse('$VERIFY_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
+        Uri.parse(
+            '$VERIFY_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
         headers: {
           'accept': '*/*',
           'Content-Type': 'application/json',
@@ -236,9 +237,10 @@ class _State extends State<OTPVerificationScreen> {
             "is_profile_complete", isProfileComplete ? "true" : "false");
         await SharedPreference.addStringToSF(
             "is_active", isUserActive ? "true" : "false");
+        await _restorePartnerDraft(body['data']?['partner']);
 
         if (!mounted) return;
-        if (!isProfileComplete || (widget.isCreatingAccount && !isUserActive)) {
+        if (!isProfileComplete) {
           CommonUtilities.NavigateWithPush(context, TellUsAboutScreen());
         } else if (!isUserActive) {
           await _checkVenueAndNavigate(token);
@@ -289,6 +291,10 @@ class _State extends State<OTPVerificationScreen> {
         final String firstVenueName =
             items.isNotEmpty ? (items.first['name']?.toString() ?? '') : '';
 
+        if (items.isNotEmpty && items.first is Map) {
+          await _restoreVenueDraft(Map<String, dynamic>.from(items.first));
+        }
+
         if (total == 1 && firstStatus == 'pending') {
           if (firstVenueId.isNotEmpty) {
             await SharedPreference.addStringToSF("venue_id", firstVenueId);
@@ -319,6 +325,78 @@ class _State extends State<OTPVerificationScreen> {
       if (!mounted) return;
       CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
           context, VenueScreen());
+    }
+  }
+
+  Future<void> _restorePartnerDraft(dynamic partnerData) async {
+    if (partnerData is! Map) return;
+    final partner = Map<String, dynamic>.from(partnerData);
+    final firstName = partner['firstName']?.toString().trim() ?? '';
+    final lastName = partner['lastName']?.toString().trim() ?? '';
+    final email = partner['email']?.toString().trim() ?? '';
+    final phone = partner['phone']?.toString().trim() ?? '';
+    if (firstName.isNotEmpty || lastName.isNotEmpty) {
+      await SharedPreference.addStringToSF(
+          'owner_full_name', '$firstName $lastName'.trim());
+    }
+    if (email.isNotEmpty) {
+      await SharedPreference.addStringToSF('owner_email', email);
+    }
+    if (phone.isNotEmpty) {
+      await SharedPreference.addStringToSF('owner_mobile_number', phone);
+      await SharedPreference.addStringToSF('same_as_owner_number', 'true');
+      await SharedPreference.addStringToSF(
+          'same_as_owner_number_checked', 'true');
+    }
+  }
+
+  Future<void> _restoreVenueDraft(Map<String, dynamic> venue) async {
+    final venueId = venue['id']?.toString() ?? '';
+    if (venueId.isNotEmpty) {
+      await SharedPreference.addStringToSF('venue_id', venueId);
+    }
+    final venueName = venue['name']?.toString() ?? '';
+    if (venueName.isNotEmpty) {
+      await SharedPreference.addStringToSF('venue_name', venueName);
+    }
+
+    await SharedPreference.addStringToSF(
+        'venue_details',
+        jsonEncode({
+          'venue_name': venueName,
+          'venue_description': venue['description'] ?? '',
+          'venue_search_address': venue['address'] ?? '',
+          'venue_address': venue['address'] ?? '',
+          'venue_area': venue['flatBuilding'] ?? '',
+          'venue_city': venue['city'] ?? '',
+          'venue_state': venue['state'] ?? '',
+          'venue_pin_code': venue['zipCode'] ?? '',
+          'venue_location_url': venue['locationUrl'] ?? '',
+          'venue_latitude': venue['latitude'],
+          'venue_longitude': venue['longitude'],
+        }));
+    await SharedPreference.addStringToSF(
+        'venue_commission', venue['commission']?.toString() ?? '');
+
+    final categories = (venue['categories'] as List? ?? [])
+        .whereType<Map>()
+        .map((category) => {
+              'id': category['id'],
+              'title': category['name'],
+              'description': category['description'],
+            })
+        .toList();
+    if (categories.isNotEmpty) {
+      await SharedPreference.addStringToSF(
+          'operate_value', jsonEncode(categories));
+    }
+
+    final amenities = (venue['amenities'] as List? ?? [])
+        .map((amenity) => {'title': amenity.toString()})
+        .toList();
+    if (amenities.isNotEmpty) {
+      await SharedPreference.addStringToSF(
+          'place_offer', jsonEncode({'place_offer': amenities}));
     }
   }
 
@@ -394,7 +472,6 @@ class _State extends State<OTPVerificationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-
                   const SizedBox(height: 32),
                   const Text('Enter the 4 digit one-time code'),
                   const SizedBox(height: 8),

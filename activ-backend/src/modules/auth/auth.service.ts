@@ -280,7 +280,13 @@ export class AuthService {
     const existingUser = await this.prisma.users.findUnique({
       where: { phone_e164: phone },
       include: {
-        partner_users: { include: { partners: true } },
+        partner_users: {
+          include: {
+            partners: {
+              include: { venues: { select: { submitted_at: true } } },
+            },
+          },
+        },
       },
     });
     const existingPartner = existingUser?.partner_users?.[0]?.partners;
@@ -291,9 +297,14 @@ export class AuthService {
           'This number is already registered. Please use Login instead.',
         );
       }
-      throw new ForbiddenException(
-        'Your account is awaiting admin approval. Please try again after it is approved.',
+      const onboardingSubmitted = existingPartner.venues?.some(
+        (venue) => venue.submitted_at != null,
       );
+      if (onboardingSubmitted) {
+        throw new ForbiddenException(
+          'Your account is awaiting admin approval. Please try again after it is approved.',
+        );
+      }
     }
 
     if (intent === 'login') {

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../Style/app_colors.dart';
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
+import '../../api_calling/api_request.dart';
 import '../ContactSupportFormScreen.dart';
 
 class PartnerAgreementScreen extends StatefulWidget {
@@ -116,8 +117,15 @@ Typing the Partner's full legal name and accepting this Agreement constitutes a 
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      final uri = Uri.parse('$LEGAL_URL/partner_agreement/download');
-      final response = await (widget.client?.get(uri) ?? http.get(uri))
+      final venueId = await SharedPreference.readStr('venue_id');
+      final token = await SharedPreference.readStr('jwt_token');
+      if (venueId == null || venueId.isEmpty || token == null || token.isEmpty) {
+        throw Exception('Your session is missing. Please sign in again.');
+      }
+      final uri = Uri.parse('$BASE_URL/venues/$venueId/partner-agreement/download');
+      final headers = {'Authorization': 'Bearer $token'};
+      final response = await (widget.client?.get(uri, headers: headers) ??
+              http.get(uri, headers: headers))
           .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw Exception('Unable to download the partnership agreement.');

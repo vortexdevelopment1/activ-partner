@@ -597,6 +597,7 @@ class _State extends State<VenuePhotoListViewScreen> {
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
             height: 1.2
         ),

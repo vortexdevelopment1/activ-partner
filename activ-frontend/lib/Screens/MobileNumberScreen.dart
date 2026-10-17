@@ -64,7 +64,8 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
       if (!mounted) return;
 
       final response = await (widget.client?.post ?? http.post)(
-        Uri.parse('$REQUEST_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
+        Uri.parse(
+            '$REQUEST_OTP_URL?intent=${widget.isCreatingAccount ? 'register' : 'login'}'),
         headers: {
           'accept': '*/*',
           'Content-Type': 'application/json',
@@ -80,7 +81,8 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
             'userMobileNumber', mobileController.text);
         if (!mounted) return;
         CommonUtilities.NavigateWithPush(
-            context, OTPVerificationScreen(
+            context,
+            OTPVerificationScreen(
               client: widget.client,
               isCreatingAccount: widget.isCreatingAccount,
             ));
@@ -138,6 +140,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
                     fontFamily: 'Satoshi',
                     fontSize: 25,
                     height: 1.15,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.darkBlack,
                   ),
                 ),
@@ -157,108 +160,110 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
             ),
           ),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-
-                          const SizedBox(height: 22),
-                          const Text.rich(
-                            TextSpan(children: [
-                              TextSpan(text: 'Mobile Number'),
-                              TextSpan(
-                                text: '*',
-                                style: TextStyle(color: AppColors.red),
+            child: Stack(
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: IntrinsicHeight(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height: 22),
+                              const Text.rich(
+                                TextSpan(children: [
+                                  TextSpan(text: 'Mobile Number'),
+                                  TextSpan(
+                                    text: '*',
+                                    style: TextStyle(color: AppColors.red),
+                                  ),
+                                ]),
+                                style: TextStyle(
+                                  fontFamily: 'Satoshi',
+                                  fontSize: 14,
+                                  color: AppColors.darkBlack,
+                                ),
                               ),
-                            ]),
-                            style: TextStyle(
-                              fontFamily: 'Satoshi',
-                              fontSize: 14,
-                              color: AppColors.darkBlack,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            height: 58,
-                            child: TextFormField(
-                              key: const Key('mobile-number'),
-                              controller: mobileController,
-                              enabled: !_isSubmitting,
-                              keyboardType: TextInputType.phone,
-                              textInputAction: TextInputAction.done,
-                              autofillHints: const [
-                                AutofillHints.telephoneNumberNational
-                              ],
-                              cursorColor: Colors.black,
-                              style: OnboardingStyles.body.copyWith(fontSize: 14),
-                              inputFormatters: [MobileNumberFormatter()],
-                              decoration: OnboardingStyles.inputDecoration(
-                                hintText: '00-0000-0000',
-                              ).copyWith(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide:
-                                      const BorderSide(color: AppColors.gray),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide:
-                                      const BorderSide(color: AppColors.gray1),
-                                ),
-                                prefixIconConstraints: const BoxConstraints(
-                                    minWidth: 48, minHeight: 58),
-                                prefixIcon: Container(
-                                  width: 48,
-                                  height: 58,
-                                  alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
-                                    border: Border(
-                                      right: BorderSide(color: AppColors.gray),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                height: 58,
+                                child: TextFormField(
+                                  key: const Key('mobile-number'),
+                                  controller: mobileController,
+                                  enabled: !_isSubmitting,
+                                  keyboardType: TextInputType.phone,
+                                  textInputAction: TextInputAction.done,
+                                  autofillHints: const [
+                                    AutofillHints.telephoneNumberNational
+                                  ],
+                                  cursorColor: Colors.black,
+                                  style: OnboardingStyles.body
+                                      .copyWith(fontSize: 14),
+                                  inputFormatters: [MobileNumberFormatter()],
+                                  decoration: OnboardingStyles.inputDecoration(
+                                    hintText: '00-0000-0000',
+                                  ).copyWith(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.gray),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.gray1),
+                                    ),
+                                    prefixIconConstraints: const BoxConstraints(
+                                        minWidth: 48, minHeight: 58),
+                                    prefixIcon: Container(
+                                      width: 48,
+                                      height: 58,
+                                      alignment: Alignment.center,
+                                      decoration: const BoxDecoration(
+                                        border: Border(
+                                          right:
+                                              BorderSide(color: AppColors.gray),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        '+91',
+                                        style: OnboardingStyles.body,
+                                      ),
                                     ),
                                   ),
-                                  child: const Text(
-                                    '+91',
-                                    style: OnboardingStyles.body,
-                                  ),
+                                  onChanged: _validateNumber,
+                                  onFieldSubmitted: (_) {
+                                    if (isButtonEnabled) sendOTP();
+                                  },
                                 ),
                               ),
-                              onChanged: _validateNumber,
-                              onFieldSubmitted: (_) {
-                                if (isButtonEnabled) sendOTP();
-                              },
-                            ),
+                              const SizedBox(height: 12),
+                            ],
                           ),
-                          const SizedBox(height: 12),
-                          const Spacer(),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: OnboardingSupportMenu(
-                              buttonKey: const Key('mobile-support'),
-                              enabled: !_isSubmitting,
-                              client: widget.client,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+                DraggableOnboardingSupportMenu(
+                  buttonKey: const Key('mobile-support'),
+                  enabled: !_isSubmitting,
+                  client: widget.client,
+                ),
+              ],
             ),
           ),
           Container(
@@ -275,8 +280,8 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
             child: Row(
               children: [
                 SizedBox(
-                width: 108,
-                height: 58,
+                  width: 108,
+                  height: 58,
                   child: OnboardingButton(
                     label: 'Back',
                     outlined: true,
