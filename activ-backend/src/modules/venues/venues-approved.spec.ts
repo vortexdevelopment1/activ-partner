@@ -60,6 +60,17 @@ describe('approved partner venues', () => {
     expect(prisma.venues.findUnique).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['PUBLISHED', true, false],
+    ['ARCHIVED', true, false],
+    ['ARCHIVED', false, true],
+  ])('exposes permanent deletion eligibility for %s with booking acceptance %s', async (status, bookingAccept, expected) => {
+    const record = await prisma.venues.findUnique();
+    record.status = status;
+    record.booking_accept = bookingAccept;
+    expect((await service.findOne('venue-1')).canPermanentlyDelete).toBe(expected);
+  });
+
   it('includes activity photos, amenities and timing without legacy lookups', async () => {
     const record = await prisma.venues.findUnique();
     record.partner_venue_services[0].partner_venue_images = [{ url: '/activity.png', is_cover: true }];

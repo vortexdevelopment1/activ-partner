@@ -49,6 +49,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
 import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 import { CommissionService } from "../commission/commission.service";
+import { deleteVenue } from "./delete-venue";
 
 @Injectable()
 export class VenuesService {
@@ -1052,6 +1053,7 @@ export class VenuesService {
             : VenueStatus.DRAFT,
       isActive: venue.status === "PUBLISHED",
       bookingAccept: venue.booking_accept,
+      canPermanentlyDelete: venue.status === "ARCHIVED" && !venue.booking_accept,
       hasSeenWelcome: venue.has_seen_welcome,
       commission: Number(venue.commission_percent ?? 10),
       images: venue.partner_venue_images.map((image) => ({
@@ -1629,20 +1631,23 @@ export class VenuesService {
   async remove(
     id: string,
     currentUser: { id: string; role: string },
-  ): Promise<void> {
-    const venue = await this.findOne(id);
-
-    if (
-      currentUser.role === UserRole.PARTNER &&
-      venue.partnerId !== currentUser.id
-    ) {
-      throw new ForbiddenException("You can only delete your own venues");
-    }
-
-    await this.prisma.venues.update({
-      where: { id },
-      data: { status: "ARCHIVED", booking_accept: false },
-    });
+  ): Promise<{ permanentlyDeleted: boolean }> {
+    return this.prisma.$transaction(async (tx) => {
+      const [venue] = await tx.$queryRawUnsafe<Array<{
+        id: string; partner_id: string; status: string; booking_accept: boolean;
+      }>>('SELECT id, partner_id, status, booking_accept FROM venues WHERE id = $1::uuid FOR UPDATE', id);
+      if (!venue) throw new NotFoundException(`Venue with id ${id} not found`);
+      if (currentUser.role !== UserRole.ADMIN &&
+          (currentUser.role !== UserRole.PARTNER || venue.partner_id !== currentUser.id)) {
+        throw new ForbiddenException("You can only delete your own venues");
+      }
+      if (currentUser.role === UserRole.ADMIN && venue.status === "ARCHIVED" && !venue.booking_accept) {
+        await deleteVenue(tx, id);
+        return { permanentlyDeleted: true };
+      }
+      await tx.venues.update({ where: { id }, data: { status: "ARCHIVED", booking_accept: false } });
+      return { permanentlyDeleted: false };
+    }, { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' });
   }
 
   // Service (Activity) Images

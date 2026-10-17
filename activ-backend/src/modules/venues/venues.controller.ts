@@ -1112,9 +1112,15 @@ export class VenuesController {
   @ApiBearerAuth()
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete venue (Partner can delete own, Admin can delete any)' })
+  @ApiOperation({
+    summary: 'Delete venue (Partner can delete own, Admin can delete any)',
+    description: 'First deletion archives the venue. Deleting an archived venue with bookings disabled again as an admin permanently deletes it and its associated data. Active bookings block permanent deletion.',
+  })
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    await this.venuesService.remove(id, user);
-    return { message: 'Venue deleted successfully', data: null };
+    const result = await this.venuesService.remove(id, user);
+    return {
+      message: result.permanentlyDeleted ? 'Venue permanently deleted successfully' : 'Venue archived successfully',
+      data: result,
+    };
   }
 }

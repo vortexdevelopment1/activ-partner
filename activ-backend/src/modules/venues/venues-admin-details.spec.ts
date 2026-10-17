@@ -5,6 +5,7 @@ import { PassportModule, PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { VenuesController } from './venues.controller';
 import { VenuesService } from './venues.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -36,7 +37,10 @@ describe('admin venue detail access', () => {
 
   beforeAll(async () => {
     service = Object.assign(Object.create(VenuesService.prototype), {
-      prisma: { venues: { findUnique: jest.fn(async ({ where }) => reviews[where.id] ?? null) } },
+      prisma: {
+        venues: { findUnique: jest.fn(async ({ where }) => reviews[where.id] ?? null) },
+        users: { findUnique: jest.fn(async () => ({ name: 'Test Admin' })) },
+      },
       findOne: jest.fn(async (id: string) => {
         const review = reviews[id];
         if (!review) throw new NotFoundException('Venue not found');
@@ -54,7 +58,8 @@ describe('admin venue detail access', () => {
     });
     const module = await Test.createTestingModule({
       imports: [PassportModule], controllers: [VenuesController],
-      providers: [TestJwtStrategy, JwtAuthGuard, RolesGuard, { provide: VenuesService, useValue: service }],
+      providers: [TestJwtStrategy, JwtAuthGuard, RolesGuard, { provide: VenuesService, useValue: service },
+        { provide: CloudinaryService, useValue: {} }],
     }).compile();
     app = module.createNestApplication();
     await app.listen(0, '127.0.0.1');

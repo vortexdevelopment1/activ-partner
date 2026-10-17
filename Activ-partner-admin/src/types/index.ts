@@ -164,6 +164,7 @@ export interface VenueAvailabilityEntry {
 }
 
 export interface Venue {
+  canPermanentlyDelete?: boolean;
   id: string;
   partnerId: string;
   partner: User;
