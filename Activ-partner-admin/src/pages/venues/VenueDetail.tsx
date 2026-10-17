@@ -140,9 +140,12 @@ export const VenueDetail: React.FC = () => {
 
   const deleteMutation = useMutation({
     mutationFn: () => venuesApi.delete(id!),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['venues'] });
-      success('Venue deleted successfully.');
+      queryClient.invalidateQueries({ queryKey: ['venues-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.removeQueries({ queryKey: ['venue', id] });
+      success(response.data.message);
       navigate('/venues');
     },
     onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to delete venue'),
@@ -259,7 +262,7 @@ export const VenueDetail: React.FC = () => {
             onClick={() => setDeleteOpen(true)}
             className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
           >
-            <Trash2 size={14} /> Delete Venue
+            <Trash2 size={14} /> {venue.canPermanentlyDelete ? 'Permanently Delete' : 'Delete Venue'}
           </button>
           {venue.status === 'pending' || venue.status === 'draft' ? (
             <>
@@ -752,9 +755,11 @@ export const VenueDetail: React.FC = () => {
       />
       <ConfirmDialog
         open={deleteOpen}
-        title="Delete Venue"
-        message={`Are you sure you want to delete "${venue.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={venue.canPermanentlyDelete ? 'Permanently Delete Venue' : 'Delete Venue'}
+        message={venue.canPermanentlyDelete
+          ? `Permanently delete "${venue.name}" and its associated venue data and booking history from the database? This cannot be undone. Active bookings must be cancelled or completed first.`
+          : `Delete "${venue.name}"? This will archive the venue and disable new bookings. Deleting it again as an admin will permanently remove it from the database.`}
+        confirmLabel={venue.canPermanentlyDelete ? 'Permanently Delete' : 'Delete'}
         variant="danger"
         loading={deleteMutation.isPending}
         onConfirm={() => deleteMutation.mutate()}

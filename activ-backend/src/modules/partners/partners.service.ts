@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Partner } from './entities/partner.entity';
 import {
   GstVerificationRequest,
@@ -316,34 +316,8 @@ export class PartnersService {
   }
 
   async remove(id: string): Promise<void> {
-    const partner = await this.findOne(id);
-
-    // Delete all venues and their child records before removing the partner.
-    // Team members cascade automatically via DB onDelete: 'CASCADE'.
-    const venues = await this.venueRepository.find({
-      where: { partnerId: id },
-      select: ['id'],
-    });
-
-    if (venues.length > 0) {
-      const venueIds = venues.map((v) => v.id);
-
-      await this.venueAnswerRepository.delete({ venueId: In(venueIds) });
-      await this.venueImageRepository.delete({ venueId: In(venueIds) });
-      await this.venueServiceRepository.delete({ venueId: In(venueIds) });
-
-      // Remove venue_categories join-table rows (ManyToMany, no cascade)
-      await this.dataSource
-        .createQueryBuilder()
-        .delete()
-        .from('venue_categories')
-        .where('venue_id IN (:...ids)', { ids: venueIds })
-        .execute();
-
-      await this.venueRepository.delete({ partnerId: id });
-    }
-
-    await this.partnerRepository.remove(partner);
+    // Admin and self-service deletion share the normalized schema and guards.
+    await this.deleteAccount(id);
   }
 
   async toggleStatus(id: string): Promise<any> {

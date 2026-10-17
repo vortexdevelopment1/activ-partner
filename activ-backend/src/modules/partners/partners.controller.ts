@@ -209,7 +209,10 @@ export class PartnersController {
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete partner (Admin only)' })
+  @ApiOperation({
+    summary: 'Delete partner (Admin only)',
+    description: 'Permanently deletes the partner account and associated data in a transaction. Blocked by pending or confirmed bookings, administrator logins, or owner logins shared with another partner.',
+  })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     await this.partnersService.remove(id);
     return { message: 'Partner deleted successfully', data: null };
