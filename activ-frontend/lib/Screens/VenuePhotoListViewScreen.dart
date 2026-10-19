@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -12,7 +13,6 @@ import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import '../api_calling/progress_bar/progress_bar.dart';
 import 'onboarding_widgets.dart';
 import '../Utills/session_photo_draft.dart';
 
@@ -82,6 +82,65 @@ class _State extends State<VenuePhotoListViewScreen> {
     _coverIndex = _imageBytes.isEmpty
         ? null
         : widget.initialCoverIndex.clamp(0, _imageBytes.length - 1);
+  }
+
+  Future<void> _uploadImages(String jwtToken, String venueId) async {
+    final serviceName = (widget.currentCategory['name']?.toString() ?? '').isNotEmpty
+        ? widget.currentCategory['name'].toString()
+        : (widget.currentCategory['title']?.toString() ?? 'Activity');
+    final categoryId = widget.currentCategory['id']?.toString() ?? '';
+    final formData = FormData()
+      ..fields.add(MapEntry('serviceName', serviceName))
+      ..fields.add(const MapEntry('replaceImages', 'true'));
+    if (categoryId.isNotEmpty) {
+      formData.fields.add(MapEntry('categoryId', categoryId));
+    }
+    for (int i = 0; i < _images.length; i++) {
+      final fileName = _images[i].name.isNotEmpty ? _images[i].name : 'image_$i.jpg';
+      formData.files.add(MapEntry(
+        'images',
+        MultipartFile.fromBytes(_imageBytes[i], filename: fileName),
+      ));
+    }
+
+    final response = await Dio().post(
+      '$UPLOAD_SERVICE_IMAGES_URL/$venueId/services/images',
+      data: formData,
+      options: Options(
+        headers: {'Authorization': 'Bearer $jwtToken'},
+        validateStatus: (_) => true,
+      ),
+    );
+
+    if (response.statusCode != 201) {
+      final message = response.data is Map
+          ? response.data['message']?.toString()
+          : null;
+      throw Exception(message ?? 'Image upload failed.');
+    }
+
+    if (widget.categoryIndex == 1 && !widget.replaceOnlyCurrentCategory) {
+      VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+      VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
+    }
+    VenuePhotoListViewScreen.cachedImagesByCategory[categoryId] =
+        List.from(_imageBytes);
+    VenuePhotoListViewScreen.cachedCoverIndexByCategory[categoryId] =
+        _coverIndex ?? 0;
+    if (widget.replaceOnlyCurrentCategory) {
+      VenuePhotoListViewScreen.cachedImageBytes = [
+        for (final bytes
+            in VenuePhotoListViewScreen.cachedImagesByCategory.values)
+          ...bytes,
+      ];
+    } else if (widget.categoryIndex == 1) {
+      VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
+    } else {
+      VenuePhotoListViewScreen.cachedImageBytes = [
+        ...VenuePhotoListViewScreen.cachedImageBytes,
+        ..._imageBytes,
+      ];
+    }
   }
 
 
@@ -419,106 +478,42 @@ class _State extends State<VenuePhotoListViewScreen> {
                                               return;
                                             }
 
-                                            ProgressBar().showLoader(context);
-                                            try {
-                                              final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-                                              final venueId = checkString(await SharedPreference.readStr("venue_id"));
+                                            final values = await Future.wait<String?>([
+                                              SharedPreference.readStr("jwt_token"),
+                                              SharedPreference.readStr("venue_id"),
+                                            ]);
+                                            final jwtToken = checkString(values[0]);
+                                            final venueId = checkString(values[1]);
+                                            if (venueId.isEmpty) {
+                                              CommonUtilities.createSnackBar(context, "Venue not found. Please try again.");
+                                              return;
+                                            }
 
-                                              if (venueId.isEmpty) {
-                                                if (mounted) Navigator.of(context).pop();
-                                                if (mounted) CommonUtilities.createSnackBar(context, "Venue not found. Please try again.");
-                                                return;
-                                              }
+                                            // Start the upload, but do not make navigation wait for the
+                                            // multipart request to finish.
+                                            unawaited(_uploadImages(jwtToken, venueId).catchError((error) {
+                                              CommonUtilities.showLog("❌ Image upload failed: $error");
+                                            }));
 
-                                              // Use current category for service name
-                                              final String serviceName =
-                                                  (widget.currentCategory['name']?.toString() ?? '').isNotEmpty
-                                                      ? widget.currentCategory['name'].toString()
-                                                      : (widget.currentCategory['title']?.toString() ?? 'Activity');
-                                              final String categoryId =
-                                                  widget.currentCategory['id']?.toString() ?? '';
-
-                                              final formData = FormData();
-                                              formData.fields.add(MapEntry('serviceName', serviceName));
-                                              if (categoryId.isNotEmpty) {
-                                                formData.fields.add(MapEntry('categoryId', categoryId));
-                                              }
-                                              // The list is the complete current photo set. Replacing it
-                                              // keeps a re-save from appending the same server images again.
-                                              formData.fields.add(const MapEntry('replaceImages', 'true'));
-                                              for (int i = 0; i < _images.length; i++) {
-                                                final fileName = _images[i].name.isNotEmpty ? _images[i].name : "image_$i.jpg";
-                                                formData.files.add(MapEntry(
-                                                  'images',
-                                                  MultipartFile.fromBytes(_imageBytes[i], filename: fileName),
-                                                ));
-                                              }
-
-                                              final dio = Dio();
-                                              final response = await dio.post(
-                                                "$UPLOAD_SERVICE_IMAGES_URL/$venueId/services/images",
-                                                data: formData,
-                                                options: Options(
-                                                  headers: {'Authorization': 'Bearer $jwtToken'},
-                                                  validateStatus: (_) => true,
+                                            final reviewBuilder = VenuePhotoListViewScreen.returnToReviewBuilder;
+                                            if (reviewBuilder != null) {
+                                              VenuePhotoListViewScreen.returnToReviewBuilder = null;
+                                              CommonUtilities.NavigateWithPushReplacment(
+                                                context,
+                                                reviewBuilder(context),
+                                              );
+                                            } else {
+                                              CommonUtilities.NavigateWithPush(
+                                                context,
+                                                CategoryQuestionsScreen(
+                                                  venueId: venueId,
+                                                  currentCategory: widget.currentCategory,
+                                                  remainingCategories: widget.remainingCategories,
+                                                  categoryIndex: widget.categoryIndex,
+                                                  totalCategories: widget.totalCategories,
+                                                  accumulatedTimings: widget.accumulatedTimings,
                                                 ),
                                               );
-
-                                              if (!mounted) return;
-                                              Navigator.of(context).pop(); // close loader
-
-                                              if (response.statusCode == 201) {
-                                                if (widget.categoryIndex == 1 &&
-                                                    !widget.replaceOnlyCurrentCategory) {
-                                                  VenuePhotoListViewScreen.cachedImagesByCategory.clear();
-                                                  VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
-                                                }
-                                                VenuePhotoListViewScreen.cachedImagesByCategory[widget.currentCategory['id'].toString()] = List.from(_imageBytes);
-                                                VenuePhotoListViewScreen.cachedCoverIndexByCategory[widget.currentCategory['id'].toString()] = _coverIndex ?? 0;
-                                                if (widget.replaceOnlyCurrentCategory) {
-                                                  VenuePhotoListViewScreen.cachedImageBytes = [
-                                                    for (final bytes in VenuePhotoListViewScreen.cachedImagesByCategory.values)
-                                                      ...bytes,
-                                                  ];
-                                                } else if (widget.categoryIndex == 1) {
-                                                  VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
-                                                } else {
-                                                  VenuePhotoListViewScreen.cachedImageBytes = [
-                                                    ...VenuePhotoListViewScreen.cachedImageBytes,
-                                                    ..._imageBytes,
-                                                  ];
-                                                }
-                                                if (!mounted) return;
-                                                final reviewBuilder = VenuePhotoListViewScreen.returnToReviewBuilder;
-                                                if (reviewBuilder != null) {
-                                                  VenuePhotoListViewScreen.returnToReviewBuilder = null;
-                                                  CommonUtilities.NavigateWithPushReplacment(
-                                                    context,
-                                                    reviewBuilder(context),
-                                                  );
-                                                } else {
-                                                  CommonUtilities.NavigateWithPush(
-                                                    context,
-                                                    CategoryQuestionsScreen(
-                                                      venueId: venueId,
-                                                      currentCategory: widget.currentCategory,
-                                                      remainingCategories: widget.remainingCategories,
-                                                      categoryIndex: widget.categoryIndex,
-                                                      totalCategories: widget.totalCategories,
-                                                      accumulatedTimings: widget.accumulatedTimings,
-                                                    ),
-                                                  );
-                                                }
-                                              } else {
-                                                final msg = (response.data is Map) ? response.data['message']?.toString() : null;
-                                                CommonUtilities.createSnackBar(context, msg ?? "Image upload failed.");
-                                              }
-                                            } catch (e) {
-                                              CommonUtilities.showLog("❌ Image upload failed: $e");
-                                              if (mounted) {
-                                                Navigator.of(context).pop();
-                                                CommonUtilities.createSnackBar(context, "Image upload failed. Please try again.");
-                                              }
                                             }
                                           },
                                           child: _images.isNotEmpty

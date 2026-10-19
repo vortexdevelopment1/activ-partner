@@ -10,7 +10,6 @@ import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import '../../Style/app_colors.dart';
 import '../../Style/app_size.dart';
 import '../../api_calling/api_constant.dart';
-import '../../api_calling/progress_bar/progress_bar_new.dart';
 import '../Beans/venue_type_model.dart';
 import '../api_calling/api_request.dart';
 import 'CategoryQuestionsScreen.dart';
@@ -174,28 +173,69 @@ class _State extends State<ListActivityTypeScreen> {
       }
     } catch (e) {
       CommonUtilities.showLog("Error fetching categories: $e");
-      if (!mounted) return;
+      if (!mounted) return null;
       setState(() => isShimmerLoading = false);
     }
   }
 
-  void createVenue() async {
+  void createVenue() {
     if (_savingVenue) return;
-    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-    final existingVenueId =
-        checkString(await SharedPreference.readStr("venue_id"));
+    final venueReady = _saveVenue();
+    final selectedCategories = resultList
+        .where((model) => model.isSelected)
+        .map((model) => <String, dynamic>{
+              'id': model.id,
+              'title': model.title,
+              'name': model.title,
+              'description': model.description,
+            })
+        .toList();
+    if (selectedCategories.isEmpty || !mounted) return;
+
+    final first = selectedCategories.first;
+    final rest = selectedCategories.sublist(1);
+    CommonUtilities.NavigateWithPush(
+      context,
+      VenuePhotoUploadScreen(
+        currentCategory: first,
+        remainingCategories: rest,
+        categoryIndex: 1,
+        totalCategories: selectedCategories.length,
+        accumulatedTimings: const [],
+        venueReady: venueReady,
+      ),
+    );
+  }
+
+  Future<String?> _saveVenue() async {
+    if (_savingVenue) return null;
+    if (!mounted) return null;
+    setState(() => _savingVenue = true);
+
+    final storedValues = await Future.wait<String?>([
+      SharedPreference.readStr("jwt_token"),
+      SharedPreference.readStr("venue_id"),
+      SharedPreference.readStr("venue_details"),
+      SharedPreference.readStr("operate_value"),
+      SharedPreference.readStr("owner_mobile_number"),
+      SharedPreference.readStr("same_as_owner_number_checked"),
+      SharedPreference.readStr("same_as_owner_number"),
+      SharedPreference.readStr("venue_commission"),
+      SharedPreference.readStr("place_offer"),
+    ]);
+
+    final jwtToken = checkString(storedValues[0]);
+    final existingVenueId = checkString(storedValues[1]);
 
     // Read venue details saved from VenueScreen
-    final venueDetailsStr =
-        checkString(await SharedPreference.readStr("venue_details"));
+    final venueDetailsStr = checkString(storedValues[2]);
     Map<String, dynamic> venueDetails = {};
     if (venueDetailsStr.isNotEmpty) {
       venueDetails = jsonDecode(venueDetailsStr);
     }
 
     // Read selected categories (now a JSON array)
-    final operateValueStr =
-        checkString(await SharedPreference.readStr("operate_value"));
+    final operateValueStr = checkString(storedValues[3]);
     List<String> categoryIds = [];
     List<Map<String, dynamic>> selectedCategories = [];
     if (operateValueStr.isNotEmpty) {
@@ -218,25 +258,19 @@ class _State extends State<ListActivityTypeScreen> {
     }
 
     // Read contact phone info from TellUsAboutScreen
-    final ownerPhone =
-        checkString(await SharedPreference.readStr("owner_mobile_number"))
-            .replaceAll("-", "");
-    final sameAsOwner = checkString(
-        await SharedPreference.readStr("same_as_owner_number_checked"));
-    final venueContactRaw =
-        checkString(await SharedPreference.readStr("same_as_owner_number"));
+    final ownerPhone = checkString(storedValues[4]).replaceAll("-", "");
+    final sameAsOwner = checkString(storedValues[5]);
+    final venueContactRaw = checkString(storedValues[6]);
     final venuePhone = (sameAsOwner == "true")
         ? ownerPhone
         : venueContactRaw.replaceAll("-", "");
 
     // Read commission percentage saved from VenueScreen
-    final commissionStr =
-        checkString(await SharedPreference.readStr("venue_commission"));
+    final commissionStr = checkString(storedValues[7]);
     final double commissionPct = double.tryParse(commissionStr) ?? 0.0;
 
     // Read selected amenities from CustomerPlacesOffer
-    final placeOfferStr =
-        checkString(await SharedPreference.readStr("place_offer"));
+    final placeOfferStr = checkString(storedValues[8]);
     List<String> amenities = [];
     if (placeOfferStr.isNotEmpty) {
       final placeOfferJson = jsonDecode(placeOfferStr);
@@ -246,10 +280,6 @@ class _State extends State<ListActivityTypeScreen> {
           .where((t) => t.isNotEmpty)
           .toList();
     }
-
-    if (!mounted) return;
-    setState(() => _savingVenue = true);
-    ProgressBarNew().showLoader(context);
 
     try {
       final payload = {
@@ -323,9 +353,6 @@ class _State extends State<ListActivityTypeScreen> {
                 body: jsonEncode(payload),
               ));
 
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
       CommonUtilities.showLog("Save Venue status: ${response.statusCode}");
       CommonUtilities.showLog("Save Venue response: ${response.body}");
 
@@ -343,31 +370,16 @@ class _State extends State<ListActivityTypeScreen> {
         if (venueName.isNotEmpty) {
           await SharedPreference.addStringToSF("venue_name", venueName);
         }
-        if (!mounted) return;
-        final first = selectedCategories.first;
-        final rest = selectedCategories.sublist(1);
-        CommonUtilities.NavigateWithPush(
-            context,
-            VenuePhotoUploadScreen(
-              currentCategory: first,
-              remainingCategories: rest,
-              categoryIndex: 1,
-              totalCategories: selectedCategories.length,
-              accumulatedTimings: const [],
-            ));
+        return venueId;
       } else {
         final body = jsonDecode(response.body);
         final msg =
             body['message'] ?? 'Failed to create venue. Please try again.';
-        if (!mounted) return;
-        CommonUtilities.createSnackBar(context, msg);
+        throw Exception(msg.toString());
       }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog("Save Venue error: $e");
-      CommonUtilities.createSnackBar(
-          context, 'Network error. Please check your connection.');
+      rethrow;
     } finally {
       if (mounted) setState(() => _savingVenue = false);
     }
@@ -419,7 +431,6 @@ class _State extends State<ListActivityTypeScreen> {
       return;
     }
 
-    ProgressBarNew().showLoader(context);
     try {
       final response = await (widget.client?.patch ?? http.patch)(
         Uri.parse('$CREATE_VENUE_URL/$venueId'),
@@ -431,7 +442,6 @@ class _State extends State<ListActivityTypeScreen> {
         body: jsonEncode({'categoryIds': categoryIds}),
       );
       if (!mounted) return;
-      Navigator.pop(context);
       if (response.statusCode != 200 && response.statusCode != 201) {
         dynamic body;
         try {
@@ -448,7 +458,6 @@ class _State extends State<ListActivityTypeScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
       CommonUtilities.showLog('Review activity sync error: $e');
       CommonUtilities.createSnackBar(
           context, 'Network error. Please check your connection.');
@@ -685,6 +694,7 @@ class _State extends State<ListActivityTypeScreen> {
                               padding: const EdgeInsets.fromLTRB(8, 12, 15, 15),
                               child: OnboardingButton(
                                   label: 'Next',
+                                  loading: _savingVenue,
                                   borderRadius: 8,
                                   disabledBackgroundColor: AppColors.gray2,
                                   disabledForegroundColor: AppColors.gray1,

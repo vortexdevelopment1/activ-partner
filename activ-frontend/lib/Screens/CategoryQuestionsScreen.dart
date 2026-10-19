@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -12,7 +13,6 @@ import '../Utills/activity_question_visibility.dart';
 import '../Utills/browser_session.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import '../api_calling/progress_bar/progress_bar_new.dart';
 import 'CommonCode.dart';
 import 'ActivityReviewScreen.dart';
 import 'VenuePhotoUploadScreen.dart';
@@ -415,60 +415,19 @@ class _State extends State<CategoryQuestionsScreen> {
 
   // ─── Submit all answers ───────────────────────────────────────────────────
 
-  Future<void> _submitAnswers() async {
-    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-
-    if (!mounted) return;
-    ProgressBarNew().showLoader(context);
-
+  Future<void> _persistAnswers({
+    required String jwtToken,
+    required List<Map<String, dynamic>> answersPayload,
+    required List<Map<String, dynamic>> displayList,
+    required String categoryId,
+  }) async {
     try {
-      // Flat list of all answers; each entry carries its own questionId.
-      final List<Map<String, dynamic>> answersPayload = [];
-      final List<Map<String, dynamic>> displayList = [];
-
-      // Category-specific questions first
-      for (final section in _sections) {
-        for (final q in section.questions) {
-          final answer = _getAnswer(section.categoryId, q);
-          answersPayload.add({
-            'questionId': q.id,
-            'answer': answer ?? '',
-          });
-          displayList.add({
-            'questionId': q.id,
-            'questionText': q.questionText,
-            'questionType': q.questionType,
-            'categoryTitle': section.categoryTitle,
-            'categoryId': widget.currentCategory['id']?.toString() ?? '',
-            'answer': answer,
-          });
-        }
-      }
-
-      // Global questions last — submitted once, shown under 'General' on review
-      for (final q in _globalQuestions) {
-        final answer = _getAnswer('global', q);
-        answersPayload.add({
-          'questionId': q.id,
-          'answer': answer ?? '',
-        });
-        displayList.add({
-          'questionId': q.id,
-          'questionText': q.questionText,
-          'questionType': q.questionType,
-          'categoryTitle': 'General',
-          'categoryId': widget.currentCategory['id']?.toString() ?? '',
-          'answer': answer,
-        });
-      }
-
-      // Replace this activity's answers while preserving the other activities.
       List<dynamic> existingList = [];
-      final existingRaw = checkString(await SharedPreference.readStr('activity_questions_display'));
+      final existingRaw = checkString(
+          await SharedPreference.readStr('activity_questions_display'));
       if (existingRaw.isNotEmpty) {
         existingList = jsonDecode(existingRaw) as List<dynamic>;
       }
-      final categoryId = widget.currentCategory['id']?.toString() ?? '';
       final titles = displayList.map((q) => q['categoryTitle']).toSet();
       existingList.removeWhere((q) =>
           isPlaceholderActivityQuestion(q['questionText']) ||
@@ -485,58 +444,95 @@ class _State extends State<CategoryQuestionsScreen> {
         },
         body: jsonEncode({'answers': answersPayload}),
       );
-
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
       CommonUtilities.showLog('Submit answers status: ${response.statusCode}');
-      CommonUtilities.showLog('Submit answers body: ${response.body}');
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        await SharedPreference.addStringToSF('activity_questions_display', jsonEncode(existingList));
-        if (!mounted) return;
-        if (widget.reviewMode) {
-          Navigator.pop(context, true);
-          return;
-        }
-
-        final accumulated = List<Map<String, dynamic>>.from(widget.accumulatedTimings)
-          ..removeWhere((entry) => entry['id'] == categoryId)
-          ..add({
-            'id': categoryId,
-            'title': widget.currentCategory['title']?.toString() ?? '',
-            'timing': <String, dynamic>{},
-          });
-
-        if (widget.remainingCategories.isNotEmpty) {
-          final nextCategory = widget.remainingCategories.first;
-          CommonUtilities.NavigateWithPush(
-              context,
-              VenuePhotoUploadScreen(
-                currentCategory: nextCategory,
-                remainingCategories: widget.remainingCategories.sublist(1),
-                categoryIndex: widget.categoryIndex + 1,
-                totalCategories: widget.totalCategories,
-                accumulatedTimings: accumulated,
-              ));
-        } else {
-          CommonUtilities.NavigateWithPush(
-              context,
-              ActivityReviewScreen(
-                activityId: widget.venueId,
-                categoryTimings: accumulated,
-              ));
-        }
+        await SharedPreference.addStringToSF(
+            'activity_questions_display', jsonEncode(existingList));
       } else {
-        final body = jsonDecode(response.body);
-        final msg = body['message'] ?? 'Failed to save answers. Please try again.';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.join(', ') : msg.toString());
+        CommonUtilities.showLog('Submit answers failed: ${response.body}');
       }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog('Submit answers error: $e');
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+    }
+  }
+
+  Future<void> _submitAnswers() async {
+    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
+    if (!mounted) return;
+
+    // Flat list of all answers; each entry carries its own questionId.
+    final List<Map<String, dynamic>> answersPayload = [];
+    final List<Map<String, dynamic>> displayList = [];
+
+    // Category-specific questions first
+    for (final section in _sections) {
+      for (final q in section.questions) {
+        final answer = _getAnswer(section.categoryId, q);
+        answersPayload.add({'questionId': q.id, 'answer': answer ?? ''});
+        displayList.add({
+          'questionId': q.id,
+          'questionText': q.questionText,
+          'questionType': q.questionType,
+          'categoryTitle': section.categoryTitle,
+          'categoryId': widget.currentCategory['id']?.toString() ?? '',
+          'answer': answer,
+        });
+      }
+    }
+
+    // Global questions last — submitted once, shown under 'General' on review
+    for (final q in _globalQuestions) {
+      final answer = _getAnswer('global', q);
+      answersPayload.add({'questionId': q.id, 'answer': answer ?? ''});
+      displayList.add({
+        'questionId': q.id,
+        'questionText': q.questionText,
+        'questionType': q.questionType,
+        'categoryTitle': 'General',
+        'categoryId': widget.currentCategory['id']?.toString() ?? '',
+        'answer': answer,
+      });
+    }
+
+    final categoryId = widget.currentCategory['id']?.toString() ?? '';
+    unawaited(_persistAnswers(
+      jwtToken: jwtToken,
+      answersPayload: answersPayload,
+      displayList: displayList,
+      categoryId: categoryId,
+    ));
+
+    if (widget.reviewMode) {
+      Navigator.pop(context, true);
+      return;
+    }
+
+    final accumulated = List<Map<String, dynamic>>.from(widget.accumulatedTimings)
+      ..removeWhere((entry) => entry['id'] == categoryId)
+      ..add({
+        'id': categoryId,
+        'title': widget.currentCategory['title']?.toString() ?? '',
+        'timing': <String, dynamic>{},
+      });
+
+    if (widget.remainingCategories.isNotEmpty) {
+      final nextCategory = widget.remainingCategories.first;
+      CommonUtilities.NavigateWithPush(
+          context,
+          VenuePhotoUploadScreen(
+            currentCategory: nextCategory,
+            remainingCategories: widget.remainingCategories.sublist(1),
+            categoryIndex: widget.categoryIndex + 1,
+            totalCategories: widget.totalCategories,
+            accumulatedTimings: accumulated,
+          ));
+    } else {
+      CommonUtilities.NavigateWithPush(
+          context,
+          ActivityReviewScreen(
+            activityId: widget.venueId,
+            categoryTimings: accumulated,
+          ));
     }
   }
 
@@ -919,8 +915,14 @@ class _State extends State<CategoryQuestionsScreen> {
                           // Content
                           if (_isLoading)
                             const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: Center(child: CircularProgressIndicator()),
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Column(children: [
+                                AppSkeleton(height: 58),
+                                SizedBox(height: 14),
+                                AppSkeleton(height: 58),
+                                SizedBox(height: 14),
+                                AppSkeleton(height: 58),
+                              ]),
                             )
                           else if (_errorMessage.isNotEmpty)
                             Padding(

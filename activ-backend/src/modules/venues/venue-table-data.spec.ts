@@ -5,12 +5,15 @@ import { VenuesService } from './venues.service';
 
 describe('relational venue data', () => {
   it('creates venue, activity, amenity and image records without writing JSON content', async () => {
-    const tx = { venues: { create: jest.fn() }, partner_venue_profiles: { create: jest.fn() },
+    const tx = { $queryRaw: jest.fn(), venues: { create: jest.fn(), findMany: jest.fn(async () => []) }, partner_venue_profiles: { create: jest.fn() },
       partner_venue_amenities: { createMany: jest.fn() }, partner_venue_services: { create: jest.fn() } };
     const prisma = { partners: { findUnique: jest.fn(async () => ({ id: 'partner' })) },
       partner_service_categories: { findMany: jest.fn(async () => [{ id: 'category', name: 'Badminton', slug: 'badminton' }]) },
       activities: { findMany: jest.fn(async () => []) }, $transaction: jest.fn(async (callback) => callback(tx)) };
-    const service = Object.assign(Object.create(VenuesService.prototype), { prisma });
+    const service = Object.assign(Object.create(VenuesService.prototype), {
+      prisma,
+      commissionService: { getCommissionByCity: jest.fn(async () => ({ commissionPercentage: 10 })) },
+    });
     const amenities = ['Parking', 'Monitored Parking', 'Drinking Water', 'Changing Rooms',
       'Restrooms', 'Seating Area', 'Charging Stations', 'Caf\u00e9', 'Wheelchair Support',
       'Fire Safety', 'Waiting Area'];

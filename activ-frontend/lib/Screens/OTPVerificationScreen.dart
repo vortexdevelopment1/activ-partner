@@ -309,23 +309,27 @@ class _State extends State<OTPVerificationScreen> {
         } else if (total == 1 && firstStatus == 'draft') {
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, VenueScreen(changeReason: items.first['changesRequested'] == true ? items.first['rejectionReason']?.toString() : null));
+              context, items.first['changesRequested'] == true
+                  ? VenueScreen(changeReason: items.first['rejectionReason']?.toString())
+                  : TellUsAboutScreen());
         } else {
-          // No venue yet or unexpected state — start venue onboarding
+          // No venue yet or unexpected incomplete state — restart from the
+          // first onboarding page. Draft values remain in local storage and
+          // are restored by the onboarding screens.
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, VenueScreen());
+              context, TellUsAboutScreen());
         }
       } else {
         // Fallback: continue onboarding
         CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-            context, VenueScreen());
+            context, TellUsAboutScreen());
       }
     } catch (e) {
       CommonUtilities.showLog("My venues error: $e");
       if (!mounted) return;
       CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-          context, VenueScreen());
+          context, TellUsAboutScreen());
     }
   }
 

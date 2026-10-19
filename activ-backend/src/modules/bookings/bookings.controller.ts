@@ -23,6 +23,7 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { BookingStatus } from '../../common/enums/booking-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { User } from '../users/entities/user.entity';
+import { BookingPayoutQueryDto } from './dto/booking-payout-query.dto';
 
 @ApiTags('Bookings')
 @ApiBearerAuth()
@@ -122,11 +123,10 @@ export class BookingsController {
   @ApiOperation({ summary: "Get the current partner's payout transaction history" })
   @ApiQuery({ name: 'status', enum: ['success', 'pending', 'failed'], required: false })
   async getPayoutHistory(
-    @Query() pagination: PaginationDto,
+    @Query() query: BookingPayoutQueryDto,
     @CurrentUser() user: User,
-    @Query('status') status?: 'success' | 'pending' | 'failed',
   ) {
-    const data = await this.bookingsService.getPayoutHistory(user, pagination, status);
+    const data = await this.bookingsService.getPayoutHistory(user, query);
     return { message: 'Payout history fetched successfully', data };
   }
 

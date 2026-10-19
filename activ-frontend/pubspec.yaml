@@ -46,7 +46,6 @@ dependencies:
   image_cropper: ^9.0.0 # Image Cropping Tool
   device_info_plus: ^11.3.0
   path_provider: ^2.1.5 # For Image Picker
-  flutter_spinkit: ^5.2.1 # For Loader
   shared_preferences: ^2.5.1
   overlay_support: ^2.1.0
   no_context_navigation: ^3.0.0  #Is used to Navigation from one screen to other when context not available

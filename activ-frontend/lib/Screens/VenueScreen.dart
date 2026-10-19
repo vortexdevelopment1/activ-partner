@@ -581,21 +581,16 @@ class _State extends State<VenueScreen> {
                                             async {
                                               if(validation(context))
                                               {
-                                                await _fetchCommission(cityController.text);
-                                                if (!mounted || _commissionPct == null || _commissionLoading) return;
-                                               /* AuthService authService = AuthService();
-                                                 authService.uploadFacilitiesName().then((value) async
-                                                {
-                                                });*/
-
-                                                await _saveDraft();
-                                                String venueDetailsSave = checkString(await SharedPreference.readStr("venue_details"));
-                                                CommonUtilities.showLog("Saved operate_value => $venueDetailsSave");
-
-                                                if (!mounted) return;
                                                 if (widget.reviewMode) {
+                                                  await _fetchCommission(cityController.text);
+                                                  if (!mounted || _commissionPct == null || _commissionLoading) return;
+                                                  await _saveDraft();
                                                   Navigator.pop(context, true);
                                                 } else {
+                                                  // Persist and refresh the commission in the background so the
+                                                  // next onboarding page opens without waiting for the network.
+                                                  unawaited(_saveDraft());
+                                                  unawaited(_fetchCommission(cityController.text));
                                                   CommonUtilities.NavigateWithPush(context, CustomerPlacesOffer());
                                                 }
                                               }else{}

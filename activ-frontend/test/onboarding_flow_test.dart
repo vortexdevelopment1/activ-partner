@@ -274,6 +274,10 @@ void main() {
     await showScreen(tester, ManageSlotsScreen(client: client));
     await tester.tap(find.text('Tue'));
     await tester.tap(find.text('Copy to all').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Copy schedule to all days'), findsOneWidget);
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
     final discount = find.byKey(const Key('slot-discount-Monday-0'));
     await tester.ensureVisible(discount);
     await tester.enterText(discount, '600');
@@ -739,6 +743,7 @@ void main() {
   });
 
   testWidgets('agreement download decodes the published PDF', (tester) async {
+    SharedPreferences.setMockInitialValues({'venue_id': 'venue-1', 'jwt_token': 'token'});
     FilePicker? original;
     try {
       original = FilePicker.platform;
@@ -2698,7 +2703,7 @@ void main() {
   for (final creatingAccount in [true, false]) {
     testWidgets(creatingAccount
         ? 'Create Account restarts at personal details after OTP for a saved profile'
-        : 'Login using OTP still resumes venue setup for a saved profile', (tester) async {
+        : 'Login using OTP restores personal details for an ordinary draft', (tester) async {
       SharedPreferences.setMockInitialValues({
         'owner_full_name': 'Virat Kohli',
         'owner_email': 'virat@example.com',
@@ -2719,7 +2724,7 @@ void main() {
           }}), 200);
         }
         return http.Response(jsonEncode({'data': {
-          'total': 1, 'items': [{'id': 'venue-1', 'status': 'draft'}],
+          'total': 1, 'items': [{'id': 'venue-1', 'name': 'Spartna Club', 'status': 'draft'}],
         }}), 200);
       });
       await showScreen(tester, LoginScreen(client: client));
@@ -2735,17 +2740,11 @@ void main() {
       expect(tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen)).isCreatingAccount, creatingAccount);
       await tester.enterText(digit(0), '1234');
       await tester.pumpAndSettle();
-      if (creatingAccount) {
-        expect(find.byType(TellUsAboutScreen), findsOneWidget);
-        expect(find.byType(VenueScreen), findsNothing);
-        expect(find.text('3/10'), findsOneWidget);
-        expect(find.text('Virat'), findsOneWidget);
-        expect(requests.where((request) => request.method == 'GET'), isEmpty);
-      } else {
-        expect(find.byType(VenueScreen), findsOneWidget);
-        expect(find.byType(TellUsAboutScreen), findsNothing);
-        expect(requests.where((request) => request.method == 'GET'), hasLength(1));
-      }
+      expect(find.byType(TellUsAboutScreen), findsOneWidget);
+      expect(find.byType(VenueScreen), findsNothing);
+      expect(find.text('3/10'), findsOneWidget);
+      expect(find.text('Virat'), findsOneWidget);
+      expect(requests.where((request) => request.method == 'GET'), hasLength(1));
       expect((await SharedPreferences.getInstance()).getString('venue_details'), contains('Spartna Club'));
       expect(tester.takeException(), isNull);
     });

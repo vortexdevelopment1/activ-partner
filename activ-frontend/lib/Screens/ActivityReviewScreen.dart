@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
 import '../Utills/activity_question_visibility.dart';
+import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
@@ -73,6 +74,67 @@ class _State extends State<ActivityReviewScreen> {
       _activities.length - 1,
     );
     _loadQuestions();
+    _restoreUploadedPhotos();
+  }
+
+  Future<void> _restoreUploadedPhotos() async {
+    final token = await SharedPreference.readStr('jwt_token');
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse('$BASE_URL/venues/${widget.activityId}/activities/full'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return;
+
+      final decoded = jsonDecode(response.body);
+      final rawServices = decoded is Map ? decoded['data'] : null;
+      final services = rawServices is List
+          ? rawServices
+          : rawServices is Map
+              ? rawServices['items']
+              : null;
+      if (services is! List) return;
+
+      final categoryId = _activity['id']?.toString() ?? '';
+      final service = services
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .firstWhere(
+            (value) => value['categoryId']?.toString() == categoryId ||
+                value['name']?.toString().toLowerCase() == _title.toLowerCase(),
+            orElse: () => <String, dynamic>{},
+          );
+      final urls = (service['imageUrls'] as List? ?? [])
+          .map((value) => value.toString())
+          .where((value) => value.isNotEmpty)
+          .toList();
+      if (urls.isEmpty) return;
+
+      final downloaded = await Future.wait(
+        urls.map((url) async {
+          final imageResponse = await http.get(Uri.parse(url));
+          return imageResponse.statusCode == 200 &&
+                  imageResponse.bodyBytes.isNotEmpty
+              ? Uint8List.fromList(imageResponse.bodyBytes)
+              : null;
+        }),
+      );
+      final photos = downloaded.whereType<Uint8List>().toList();
+      if (photos.isEmpty) return;
+
+      final coverUrl = service['coverImageUrl']?.toString();
+      final rawCoverIndex = coverUrl == null ? -1 : urls.indexOf(coverUrl);
+      final coverIndex = rawCoverIndex >= 0 && rawCoverIndex < photos.length
+          ? rawCoverIndex
+          : 0;
+      VenuePhotoListViewScreen.cachedImagesByCategory[categoryId] = photos;
+      VenuePhotoListViewScreen.cachedCoverIndexByCategory[categoryId] = coverIndex;
+      if (mounted) setState(() {});
+    } catch (e) {
+      CommonUtilities.showLog('Existing activity photos restore failed: $e');
+    }
   }
 
   Future<void> _loadQuestions() async {

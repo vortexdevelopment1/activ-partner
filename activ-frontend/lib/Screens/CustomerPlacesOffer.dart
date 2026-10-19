@@ -79,14 +79,27 @@ class _State extends State<CustomerPlacesOffer> {
       {
         final list = jsonDecode(response.body)['data'] as List<dynamic>;
         final raw = await SharedPreference.readStr('place_offer');
-        final saved = raw == null || raw.isEmpty ? <dynamic>[] : (jsonDecode(raw)['place_offer'] as List);
-        final selectedIds = saved.map((e) => e['id']?.toString()).toSet();
+        final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
+        final saved = decoded is Map && decoded['place_offer'] is List
+            ? decoded['place_offer'] as List
+            : <dynamic>[];
+        final Set<String> selectedIds = saved
+            .whereType<Map>()
+            .map((e) => e['id']?.toString().trim() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final Set<String> selectedTitles = saved
+            .whereType<Map>()
+            .map((e) => e['title']?.toString().trim().toLowerCase() ?? '')
+            .where((title) => title.isNotEmpty)
+            .toSet();
         if (!mounted) return;
 
         setState(() {
           resultList = list.map((e) => VenueTypeModel.fromJson(e)).toList();
           for (final model in resultList) {
-            model.isSelected = selectedIds.contains(model.id);
+            model.isSelected = selectedIds.contains(model.id.toString()) ||
+                selectedTitles.contains(model.title.trim().toLowerCase());
           }
           isSelectedValue = resultList.any((model) => model.isSelected);
           isShimmerLoading = false;

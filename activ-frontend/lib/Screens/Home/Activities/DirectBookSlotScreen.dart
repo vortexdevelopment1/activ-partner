@@ -37,11 +37,12 @@ class DirectBookSlotScreen extends StatefulWidget {
 class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   late DateTime _selectedDate;
   late String _selectedCourt;
-  _BookableSlot? _selectedSlot;
+  final List<_BookableSlot> _selectedSlots = [];
   bool _saving = false;
   bool _loadingSlots = false;
   String? _slotError;
   List<_BookableSlot>? _serverSlots;
+  List<String>? _serverCourts;
 
   String get _activityName =>
       widget.activityData['name']?.toString() ?? widget.activity.title;
@@ -52,9 +53,12 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       widget.activity.activityId;
 
   List<String> get _courts {
+    if (_serverCourts != null && _serverCourts!.isNotEmpty)
+      return _serverCourts!;
     final count = int.tryParse(widget.activity.numberOfCourt) ??
         int.tryParse(widget.activityData['numberOfCourt']?.toString() ?? '') ??
-        int.tryParse(widget.activityData['number_of_court']?.toString() ?? '') ??
+        int.tryParse(
+            widget.activityData['number_of_court']?.toString() ?? '') ??
         1;
     return List.generate(count < 1 ? 1 : count,
         (index) => 'Court ${(index + 1).toString().padLeft(2, '0')}');
@@ -100,8 +104,6 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
   }
 
-  bool get _hasAvailableSlot => _slots.any((slot) => slot.isAvailable);
-
   Future<void> _loadSlots() async {
     if (!mounted || _serviceId.isEmpty || widget.venueId.isEmpty) return;
     setState(() {
@@ -129,25 +131,59 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       }
       final data = body['data'] is Map ? body['data'] as Map : const {};
       final slots = data['slots'] is List ? data['slots'] as List : const [];
+      final courts = data['courts'] is List
+          ? (data['courts'] as List)
+              .map((court) => court.toString())
+              .where((court) => court.isNotEmpty)
+              .toList()
+          : const <String>[];
       if (!mounted) return;
       setState(() {
+        if (courts.isNotEmpty) _serverCourts = courts;
         _serverSlots = slots
             .whereType<Map>()
-            .where((slot) => slot['status']?.toString() != 'not_operational')
-            .map((slot) => _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
+            .map((slot) =>
+                _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
             .toList();
-        _selectedSlot = null;
+        _selectedSlots.clear();
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _serverSlots = null;
         _slotError = error.toString().replaceFirst('Exception: ', '');
-        _selectedSlot = null;
+        _selectedSlots.clear();
       });
     } finally {
       if (mounted) setState(() => _loadingSlots = false);
     }
+  }
+
+  Future<List<_BookableSlot>> _loadSlotsForDate(DateTime date) async {
+    final token = await SharedPreference.readStr('jwt_token');
+    if (token == null || token.isEmpty) {
+      throw Exception('Please sign in again.');
+    }
+    final uri = Uri.parse(
+            '$BASE_URL/venues/${widget.venueId}/activities/$_serviceId/slots')
+        .replace(queryParameters: {
+      'date': DateFormat('yyyy-MM-dd').format(date),
+      'court': _selectedCourt,
+    });
+    final response = await (widget.client?.get ?? http.get)(uri,
+            headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(body['message'] ?? 'Unable to load slots.');
+    }
+    final data = body['data'] is Map ? body['data'] as Map : const {};
+    final slots = data['slots'] is List ? data['slots'] as List : const [];
+    return slots
+        .whereType<Map>()
+        .map(
+            (slot) => _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
+        .toList();
   }
 
   dynamic _readTimingForSelectedActivity() {
@@ -155,7 +191,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         widget.activity.operateValue['id']?.toString();
     final availability = widget.activityData['availability'];
     if (availability is Map && categoryId != null) {
-      final scoped = availability[categoryId] ?? availability[categoryId.toString()];
+      final scoped =
+          availability[categoryId] ?? availability[categoryId.toString()];
       if (scoped != null) return scoped;
     }
     if (widget.activityData['venueTiming'] != null) {
@@ -171,8 +208,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     if (value is! List) return const [];
     return [
       for (final slot in value.whereType<Map>())
-        if (_slotFromMap(slot) != null)
-          _slotFromMap(slot)!
+        if (_slotFromMap(slot) != null) _slotFromMap(slot)!
     ];
   }
 
@@ -183,7 +219,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     final startTime = _toApiTime(open.toString());
     final endTime = _toApiTime(close.toString());
     return _BookableSlot(
-      label: '${_normalTime(open.toString())} - ${_normalTime(close.toString())}',
+      label:
+          '${_normalTime(open.toString())} - ${_normalTime(close.toString())}',
       startTime: startTime,
       endTime: endTime,
       price: slot['discountedPrice']?.toString() ??
@@ -269,7 +306,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                 TextFormField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email optional'),
+                  decoration:
+                      const InputDecoration(labelText: 'Email optional'),
                 ),
                 const SizedBox(height: 22),
                 SizedBox(
@@ -294,8 +332,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     child: const Text('Reserve Slot',
-                        style:
-                            TextStyle(fontFamily: 'Satoshi', fontSize: 16)),
+                        style: TextStyle(fontFamily: 'Satoshi', fontSize: 16)),
                   ),
                 ),
               ],
@@ -332,7 +369,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     if (date == null || !mounted) return;
     setState(() {
       _selectedDate = date;
-      _selectedSlot = null;
+      _selectedSlots.clear();
     });
     await _loadSlots();
   }
@@ -350,20 +387,56 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     if (court != null && mounted) {
       setState(() {
         _selectedCourt = court;
-        _selectedSlot = null;
+        _selectedSlots.clear();
       });
       await _loadSlots();
     }
   }
 
   Future<void> _reserve() async {
-    if (_selectedSlot == null || !_selectedSlot!.isAvailable) {
-      _message('Please select a slot.');
+    if (_selectedSlots.isEmpty) {
+      _message('Please select at least one slot.');
       return;
     }
 
-    final participant = await _participantDetails();
-    if (participant == null || !mounted) return;
+    final details = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _WalkInParticipantScreen(
+          slots: _selectedSlots.map((slot) => slot.label).toList(),
+        ),
+      ),
+    );
+    if (details == null || !mounted) return;
+    final participant = <String, String>{
+      'participantName': details['participantName']!,
+      'participantPhone': details['participantPhone']!,
+      if (details['participantEmail']?.isNotEmpty == true)
+        'participantEmail': details['participantEmail']!,
+    };
+    final payment = <String, String>{
+      'paymentMethod': details['paymentMethod']!,
+      'paymentStatus': details['paymentStatus']!,
+      if (details['amountPaise']?.isNotEmpty == true)
+        'amountPaise': details['amountPaise']!,
+      if (details['notes']?.isNotEmpty == true) 'notes': details['notes']!,
+    };
+
+    final confirmed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _WalkInReviewScreen(
+          venueName: widget.venueName,
+          activityName: _activityName,
+          court: _selectedCourt,
+          date: _selectedDate,
+          slots: _selectedSlots.map((slot) => slot.label).toList(),
+          participant: participant,
+          payment: payment,
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
 
     setState(() => _saving = true);
     try {
@@ -373,32 +446,57 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       }
 
       final response = await (widget.client?.post ?? http.post)(
-              Uri.parse(
-                  '$BASE_URL/venues/${widget.venueId}/activities/${widget.activity.activityId}/walk-in'),
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({
-                'court': _selectedCourt,
-                'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-                'slots': [
-                  {
-                    'startTime': _selectedSlot!.startTime,
-                    'endTime': _selectedSlot!.endTime,
-                  }
-                ],
-                ...participant,
-              }))
-          .timeout(const Duration(seconds: 15));
+          Uri.parse(
+              '$BASE_URL/venues/${widget.venueId}/activities/${widget.activity.activityId}/walk-in'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'court': _selectedCourt,
+            'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+            'slots': _selectedSlots
+                .map((slot) => {
+                      'startTime': slot.startTime,
+                      'endTime': slot.endTime,
+                    })
+                .toList(),
+            'idempotencyKey':
+                '${DateTime.now().microsecondsSinceEpoch}-${_selectedSlots.first.startTime}',
+            ...payment,
+            ...participant,
+          })).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (!mounted) return;
-        _message('Slot booked successfully.');
-        Navigator.pop(context);
+        final body = jsonDecode(response.body);
+        final bookAnother = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+                builder: (_) => _WalkInSuccessScreen(
+                      venueName: widget.venueName,
+                      activityName: _activityName,
+                      date: DateFormat('dd MMM yyyy').format(_selectedDate),
+                      slots: _selectedSlots.map((slot) => slot.label).toList(),
+                      court: _selectedCourt,
+                      participantName: participant['participantName']!,
+                      participantPhone: participant['participantPhone']!,
+                      participantEmail: participant['participantEmail'],
+                      paymentMethod: payment['paymentMethod']!,
+                      reservationId: body['data']?['id']?.toString() ??
+                          body['id']?.toString(),
+                    )));
+        if (!mounted) return;
+        if (bookAnother == true) {
+          _selectedSlots.clear();
+          await _loadSlots();
+        } else {
+          Navigator.pop(context, true);
+        }
       } else if (response.statusCode == 409) {
         await _loadSlots();
-        throw Exception('That slot is already reserved. Please choose another slot.');
+        throw Exception(
+            'That slot is already reserved. Please choose another slot.');
       } else {
         throw Exception(_errorMessage(response.body));
       }
@@ -409,6 +507,103 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _continueToSlotSelection() async {
+    if (_loadingSlots || _slots.isEmpty) {
+      _message('No slots are available for this date.');
+      return;
+    }
+    final selected = await Navigator.push<List<_BookableSlot>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _WalkInSlotSelectionScreen(
+          date: _selectedDate,
+          slots: _slots,
+          selectedSlots: _selectedSlots,
+          loadSlots: _loadSlotsForDate,
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _selectedSlots
+        ..clear()
+        ..addAll(selected);
+    });
+    if (_selectedSlots.isNotEmpty) await _reserve();
+  }
+
+  Future<Map<String, String>?> _paymentDetails() async {
+    var method = 'Cash';
+    var status = 'PAID';
+    final notes = TextEditingController();
+    final amount = TextEditingController();
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+                title: const Text('Payment details'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  DropdownButtonFormField<String>(
+                      value: method,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment method'),
+                      items: const [
+                        DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                        DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                        DropdownMenuItem(value: 'Card', child: Text('Card')),
+                        DropdownMenuItem(value: 'Other', child: Text('Other')),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => method = value ?? method)),
+                  DropdownButtonFormField<String>(
+                      value: status,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment status'),
+                      items: const [
+                        DropdownMenuItem(value: 'PAID', child: Text('Paid')),
+                        DropdownMenuItem(
+                            value: 'PENDING', child: Text('Pending')),
+                        DropdownMenuItem(
+                            value: 'PARTIAL', child: Text('Partially paid')),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => status = value ?? status)),
+                  TextField(
+                      controller: amount,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                          labelText: 'Total amount (₹, optional)')),
+                  TextField(
+                      controller: notes,
+                      decoration:
+                          const InputDecoration(labelText: 'Notes (optional)')),
+                ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Back')),
+                  ElevatedButton(
+                      onPressed: () => Navigator.pop(context, {
+                            'paymentMethod': method,
+                            'paymentStatus': status,
+                            if (amount.text.trim().isNotEmpty)
+                              'amountPaise':
+                                  ((int.tryParse(amount.text.trim()) ?? 0) *
+                                          100)
+                                      .toString(),
+                            if (notes.text.trim().isNotEmpty)
+                              'notes': notes.text.trim()
+                          }),
+                      child: const Text('Continue'))
+                ],
+              )),
+    );
+    notes.dispose();
+    amount.dispose();
+    return result;
   }
 
   String _errorMessage(String body) {
@@ -481,36 +676,29 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                       _picker(DateFormat('dd MMMM yyyy').format(_selectedDate),
                           Icons.calendar_today_outlined, _pickDate,
                           iconColor: _purple),
-                      if (slots.isNotEmpty) ...[
-                        const SizedBox(height: 30),
-                        _label('Select Slot', required: true),
-                        const SizedBox(height: 10),
-                        if (_loadingSlots)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 10),
-                            child: LinearProgressIndicator(),
-                          ),
-                        if (_slotError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(_slotError!,
-                                style: const TextStyle(
-                                    fontFamily: 'Satoshi',
-                                    fontSize: 13,
-                                    color: Color(0xFFFF6B6B))),
-                          ),
-                        ...slots.map(_slotTile),
-                      ] else ...[
-                        const SizedBox(height: 26),
-                        Text(
-                            _loadingSlots
-                                ? 'Loading slots...'
-                                : 'No slots available for this date.',
-                            style: const TextStyle(
-                                fontFamily: 'Satoshi',
-                                fontSize: 15,
-                                color: Color(0xFF686868))),
-                      ],
+                      if (_loadingSlots)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 18),
+                          child: LinearProgressIndicator(),
+                        ),
+                      if (_slotError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 18),
+                          child: Text(_slotError!,
+                              style: const TextStyle(
+                                  fontFamily: 'Satoshi',
+                                  fontSize: 13,
+                                  color: Color(0xFFFF6B6B))),
+                        ),
+                      if (!_loadingSlots && slots.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 18),
+                          child: Text('No slots available for this date.',
+                              style: TextStyle(
+                                  fontFamily: 'Satoshi',
+                                  fontSize: 15,
+                                  color: Color(0xFF686868))),
+                        ),
                     ],
                   ),
                 ),
@@ -522,8 +710,11 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                       height: 56,
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed:
-                            _saving || !_hasAvailableSlot ? null : _reserve,
+                        onPressed: _saving ||
+                                _loadingSlots ||
+                                !slots.any((slot) => slot.isAvailable)
+                            ? null
+                            : _continueToSlotSelection,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1F1F1F),
                           disabledBackgroundColor: Colors.grey.shade500,
@@ -547,76 +738,6 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     );
   }
 
-  Widget _slotTile(_BookableSlot slot) {
-    final selected = slot.label == _selectedSlot?.label;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: !slot.isAvailable
-            ? const Color(0xFFF3F3F3)
-            : selected
-                ? const Color(0xFFF6EBFF)
-                : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-              color: selected
-                  ? _purple
-                  : slot.isAvailable
-                      ? _border
-                      : const Color(0xFFD0D0D0)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: slot.isAvailable
-              ? () => setState(() => _selectedSlot = slot)
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(children: [
-              Expanded(
-                child: Text(slot.label,
-                    style: TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 15,
-                        color: slot.isAvailable
-                            ? const Color(0xFF202124)
-                            : const Color(0xFF8A8A8A))),
-              ),
-              if (!slot.isAvailable) ...[
-                Text(slot.statusLabel,
-                    style: const TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 12,
-                        color: Color(0xFF8A8A8A))),
-                const SizedBox(width: 8),
-              ],
-              if (slot.price != null && slot.price!.isNotEmpty)
-                Text('\u20b9 ${slot.price}',
-                    style: const TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 14,
-                        color: Color(0xFF202124))),
-              const SizedBox(width: 8),
-              Icon(
-                  !slot.isAvailable
-                      ? Icons.block
-                      : selected
-                          ? Icons.check_circle
-                          : Icons.circle_outlined,
-                  size: 22,
-                  color: !slot.isAvailable
-                      ? const Color(0xFF9A9A9A)
-                      : selected
-                          ? _purple
-                          : const Color(0xFFB9BFC4)),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _label(String text, {bool required = false}) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Text.rich(
@@ -627,9 +748,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                   text: ' *', style: TextStyle(color: Color(0xFFFF6B6B))),
           ]),
           style: const TextStyle(
-              fontFamily: 'Satoshi',
-              fontSize: 18,
-              color: Color(0xFF202124)),
+              fontFamily: 'Satoshi', fontSize: 18, color: Color(0xFF202124)),
         ),
       );
 
@@ -646,9 +765,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                fontFamily: 'Satoshi',
-                fontSize: 16,
-                color: Color(0xFF202124))),
+                fontFamily: 'Satoshi', fontSize: 16, color: Color(0xFF202124))),
       );
 
   Widget _picker(String value, IconData icon, VoidCallback onTap,
@@ -682,6 +799,777 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       );
 }
 
+class _WalkInParticipantScreen extends StatefulWidget {
+  const _WalkInParticipantScreen({required this.slots});
+
+  final List<String> slots;
+
+  @override
+  State<_WalkInParticipantScreen> createState() =>
+      _WalkInParticipantScreenState();
+}
+
+class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _name;
+  late final TextEditingController _phone;
+  late final TextEditingController _email;
+  late final TextEditingController _amount;
+  late final TextEditingController _notes;
+  String _paymentMethod = 'Cash';
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController();
+    _phone = TextEditingController();
+    _email = TextEditingController();
+    _amount = TextEditingController();
+    _notes = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _amount.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _input(String hint) => InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(28),
+            borderSide: const BorderSide(color: Color(0xFFD4D8B8))),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(28),
+            borderSide: const BorderSide(color: Color(0xFFD4D8B8))),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(28),
+            borderSide: const BorderSide(color: _purple, width: 1.5)),
+      );
+
+  void _review() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final digits = _phone.text.replaceAll(RegExp(r'\D'), '');
+    Navigator.pop(context, {
+      'participantName': _name.text.trim(),
+      'participantPhone': '+91$digits',
+      'participantEmail': _email.text.trim(),
+      'paymentMethod': _paymentMethod,
+      'paymentStatus': 'PAID',
+      'amountPaise': _amount.text.trim().isEmpty
+          ? ''
+          : ((int.tryParse(_amount.text.trim()) ?? 0) * 100).toString(),
+      'notes': _notes.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                child: Row(children: [
+                  Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 2,
+                    child: IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back)),
+                  ),
+                  const SizedBox(width: 18),
+                  const Text('Participant Details',
+                      style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 25,
+                          fontWeight: FontWeight.w700)),
+                ]),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${widget.slots.length} slot(s) selected',
+                                style: const TextStyle(
+                                    fontFamily: 'Satoshi',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            ...widget.slots.map((slot) => Padding(
+                                padding: const EdgeInsets.only(bottom: 3),
+                                child: Text(slot,
+                                    style: const TextStyle(
+                                        fontFamily: 'Satoshi',
+                                        fontSize: 15,
+                                        color: Color(0xFF666666))))),
+                          ]),
+                    ),
+                    const SizedBox(height: 22),
+                    const Text('Customer Name',
+                        style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            color: Color(0xFF5F6064))),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                        controller: _name,
+                        decoration: _input('Enter full name'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Enter customer name'
+                                : null),
+                    const SizedBox(height: 18),
+                    const Text('Mobile Number',
+                        style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            color: Color(0xFF5F6064))),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                        controller: _phone,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 10,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10)
+                        ],
+                        decoration: _input('10-digit mobile')
+                            .copyWith(prefixText: '+91 ', counterText: ''),
+                        validator: (value) => (value ?? '').length == 10
+                            ? null
+                            : 'Enter a valid 10 digit mobile number'),
+                    const SizedBox(height: 18),
+                    const Text('Email (optional)',
+                        style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            color: Color(0xFF5F6064))),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: _input('Email address')),
+                    const SizedBox(height: 22),
+                    const Text('Payment Method',
+                        style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontSize: 16,
+                            color: Color(0xFF5F6064))),
+                    ...[
+                      'Cash',
+                      'UPI',
+                      'Card',
+                      'Other'
+                    ].map((method) => RadioListTile<String>(
+                        contentPadding: EdgeInsets.zero,
+                        activeColor: Colors.black,
+                        title: Text(method),
+                        value: method,
+                        groupValue: _paymentMethod,
+                        onChanged: (value) => setState(
+                            () => _paymentMethod = value ?? _paymentMethod))),
+                    TextFormField(
+                        controller: _amount,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        decoration: _input('Amount (₹, optional)')),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                        controller: _notes,
+                        decoration: _input('Notes (optional)'),
+                        maxLines: 2),
+                  ],
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                  child: Row(children: [
+                    Expanded(
+                        child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(54),
+                                foregroundColor: const Color(0xFF5F6064),
+                                side:
+                                    const BorderSide(color: Color(0xFFD4D8B8)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28))),
+                            child: const Text('Back'))),
+                    const SizedBox(width: 14),
+                    Expanded(
+                        child: ElevatedButton(
+                            onPressed: _review,
+                            style: ElevatedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(54),
+                                backgroundColor: const Color(0xFF1F1F1F),
+                                foregroundColor: _lime,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28))),
+                            child: const Text('Review'))),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
+class _WalkInSlotSelectionScreen extends StatefulWidget {
+  const _WalkInSlotSelectionScreen({
+    required this.date,
+    required this.slots,
+    required this.selectedSlots,
+    required this.loadSlots,
+  });
+
+  final DateTime date;
+  final List<_BookableSlot> slots;
+  final List<_BookableSlot> selectedSlots;
+  final Future<List<_BookableSlot>> Function(DateTime date) loadSlots;
+
+  @override
+  State<_WalkInSlotSelectionScreen> createState() =>
+      _WalkInSlotSelectionScreenState();
+}
+
+class _WalkInSlotSelectionScreenState
+    extends State<_WalkInSlotSelectionScreen> {
+  late DateTime _date = widget.date;
+  late List<_BookableSlot> _slots = [...widget.slots];
+  late final List<_BookableSlot> _selectedSlots = [...widget.selectedSlots];
+  bool _loadingDate = false;
+
+  Future<void> _changeDate(int days) async {
+    final next = DateTime(_date.year, _date.month, _date.day + days);
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    if (next.isBefore(todayOnly) || _loadingDate) return;
+    setState(() => _loadingDate = true);
+    try {
+      final slots = await widget.loadSlots(next);
+      if (!mounted) return;
+      setState(() {
+        _date = next;
+        _slots = slots;
+        _selectedSlots.clear();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() => _loadingDate = false);
+    }
+  }
+
+  String _sectionFor(_BookableSlot slot) {
+    final hour = int.tryParse(slot.startTime.split(':').first) ?? 0;
+    if (hour < 12) return 'Morning';
+    if (hour < 16) return 'Afternoon';
+    if (hour < 21) return 'Evening';
+    return 'Night';
+  }
+
+  Color _statusColor(_BookableSlot slot) {
+    if (slot.isAvailable) return const Color(0xFF39B54A);
+    if (slot.status == 'walk_in_reserved') return Colors.orange;
+    if (slot.status == 'activ_booking') return const Color(0xFF1687FF);
+    return const Color(0xFFFF5B5B);
+  }
+
+  void _toggle(_BookableSlot slot) {
+    if (!slot.isAvailable) return;
+    setState(() {
+      final index = _selectedSlots.indexWhere((item) =>
+          item.startTime == slot.startTime && item.endTime == slot.endTime);
+      if (index >= 0) {
+        _selectedSlots.removeAt(index);
+      } else {
+        _selectedSlots.add(slot);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const sections = ['Morning', 'Afternoon', 'Evening', 'Night'];
+    return Scaffold(
+      backgroundColor: _background,
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+            child: Row(children: [
+              Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                elevation: 2,
+                child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back)),
+              ),
+              const SizedBox(width: 18),
+              const Text('Select Slot',
+                  style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 27,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF202124))),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton(
+                onPressed: _loadingDate ? null : () => _changeDate(-1),
+                icon: const Icon(Icons.chevron_left, size: 28)),
+            SizedBox(
+              width: 230,
+              child: Text(DateFormat('dd MMMM yyyy, EEEE').format(_date),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF202124))),
+            ),
+            IconButton(
+                onPressed: _loadingDate ? null : () => _changeDate(1),
+                icon: const Icon(Icons.chevron_right, size: 28)),
+          ]),
+          const SizedBox(height: 22),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 36),
+              children: [
+                for (final section in sections)
+                  if (_slots.any((slot) => _sectionFor(slot) == section)) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 10),
+                      child: Row(children: [
+                        Icon(
+                          section == 'Morning'
+                              ? Icons.wb_sunny_outlined
+                              : section == 'Afternoon'
+                                  ? Icons.wb_sunny
+                                  : section == 'Evening'
+                                      ? Icons.wb_twilight
+                                      : Icons.nightlight_round,
+                          color: _purple,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(section,
+                            style: const TextStyle(
+                                fontFamily: 'Satoshi',
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                    ..._slots
+                        .where((slot) => _sectionFor(slot) == section)
+                        .map((slot) => _slotCard(slot)),
+                  ],
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+              child: Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                        foregroundColor: const Color(0xFF202124),
+                        side: const BorderSide(color: Color(0xFF202124)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                    child: const Text('Back'),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _selectedSlots.isEmpty
+                        ? null
+                        : () => Navigator.pop(context, _selectedSlots),
+                    style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                        backgroundColor: const Color(0xFF1F1F1F),
+                        foregroundColor: _lime,
+                        disabledBackgroundColor: Colors.grey.shade500,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                    child: const Text('Next'),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _slotCard(_BookableSlot slot) {
+    final selected = _selectedSlots.any((item) =>
+        item.startTime == slot.startTime && item.endTime == slot.endTime);
+    final statusColor = _statusColor(slot);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Material(
+        color: slot.isAvailable
+            ? selected
+                ? const Color(0xFFF5E9FF)
+                : Colors.white
+            : const Color(0xFFE4E5E9),
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          onTap: slot.isAvailable ? () => _toggle(slot) : null,
+          borderRadius: BorderRadius.circular(11),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                    color: selected ? _purple : const Color(0xFFD6E0E3))),
+            child: Row(children: [
+              Icon(
+                  selected
+                      ? Icons.check_box_outlined
+                      : Icons.check_box_outline_blank,
+                  color: selected ? _purple : const Color(0xFFCFDDE1),
+                  size: 25),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Text(slot.label,
+                      style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 15,
+                          color: Color(0xFF555555)))),
+              Text(slot.isAvailable ? 'Available' : slot.statusLabel,
+                  style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalkInReviewScreen extends StatelessWidget {
+  const _WalkInReviewScreen({
+    required this.venueName,
+    required this.activityName,
+    required this.court,
+    required this.date,
+    required this.slots,
+    required this.participant,
+    required this.payment,
+  });
+
+  final String venueName;
+  final String activityName;
+  final String court;
+  final DateTime date;
+  final List<String> slots;
+  final Map<String, String> participant;
+  final Map<String, String> payment;
+
+  Widget _card({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(22)),
+        child: child,
+      );
+
+  Text _line(String label, String value, {bool bold = false}) => Text.rich(
+        TextSpan(children: [
+          TextSpan(text: '$label: '),
+          TextSpan(
+              text: value,
+              style: TextStyle(fontWeight: bold ? FontWeight.w700 : null)),
+        ]),
+        style: const TextStyle(
+            fontFamily: 'Satoshi', fontSize: 17, color: Color(0xFF202124)),
+      );
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 14),
+              child: Row(children: [
+                Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 2,
+                    child: IconButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        icon: const Icon(Icons.arrow_back))),
+                const SizedBox(width: 18),
+                const Text('Review Booking',
+                    style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 27,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 26),
+                children: [
+                  const Text('Review Walk-In Booking',
+                      style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+                  _card(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _line('Venue', venueName),
+                          const SizedBox(height: 8),
+                          _line('Activity', activityName),
+                          const SizedBox(height: 8),
+                          _line('Court', court),
+                          const SizedBox(height: 8),
+                          _line('Date',
+                              DateFormat('dd MMMM yyyy, EEEE').format(date)),
+                          const Divider(height: 28),
+                          ...slots.map((slot) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(slot,
+                                  style: const TextStyle(
+                                      fontFamily: 'Satoshi', fontSize: 17)))),
+                          const Divider(height: 28),
+                          _line('Customer', participant['participantName']!,
+                              bold: true),
+                          const SizedBox(height: 14),
+                          _line('Phone', participant['participantPhone']!),
+                          if (participant['participantEmail']?.isNotEmpty ==
+                              true) ...[
+                            const SizedBox(height: 14),
+                            _line('Email', participant['participantEmail']!),
+                          ],
+                          const SizedBox(height: 14),
+                          _line('Payment method',
+                              payment['paymentMethod']!.toUpperCase()),
+                          if (payment['amountPaise']?.isNotEmpty == true) ...[
+                            const SizedBox(height: 8),
+                            _line('Amount',
+                                '₹ ${(int.parse(payment['amountPaise']!) / 100).toStringAsFixed(0)}'),
+                          ],
+                          if (payment['notes']?.isNotEmpty == true) ...[
+                            const SizedBox(height: 14),
+                            _line('Notes', payment['notes']!),
+                          ],
+                        ]),
+                  ),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: Row(children: [
+                  Expanded(
+                      child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(54),
+                              foregroundColor: const Color(0xFF5F6064),
+                              side: const BorderSide(color: Color(0xFFD4D8B8)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28))),
+                          child: const Text('Edit'))),
+                  const SizedBox(width: 14),
+                  Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(54),
+                              backgroundColor: const Color(0xFF1F1F1F),
+                              foregroundColor: _lime,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28))),
+                          child: const Text('Confirm'))),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
+class _WalkInSuccessScreen extends StatelessWidget {
+  const _WalkInSuccessScreen(
+      {required this.venueName,
+      required this.activityName,
+      required this.date,
+      required this.slots,
+      required this.court,
+      required this.participantName,
+      required this.participantPhone,
+      this.participantEmail,
+      required this.paymentMethod,
+      this.reservationId});
+
+  final String venueName;
+  final String activityName;
+  final String date;
+  final List<String> slots;
+  final String court;
+  final String participantName;
+  final String participantPhone;
+  final String? participantEmail;
+  final String paymentMethod;
+  final String? reservationId;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _background,
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 30),
+          children: [
+            Center(
+                child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: const BoxDecoration(
+                        color: Color(0xFF70B43C), shape: BoxShape.circle),
+                    child: const Icon(Icons.check,
+                        color: Colors.white, size: 92))),
+            const SizedBox(height: 26),
+            const Text('Walk-In Slot Reserved!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 27,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            const Text(
+                'This time slot is now blocked on the ACTIV app to prevent double bookings.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 17,
+                    color: Color(0xFF666666),
+                    height: 1.35)),
+            const SizedBox(height: 30),
+            const Text('Slot Details',
+                style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            _detailsCard([
+              _detail(Icons.location_on_outlined, venueName),
+              _detail(Icons.calendar_month_outlined, date),
+              _detail(Icons.sports_tennis_outlined, '$court · $activityName'),
+              ...slots.map((slot) => _detail(Icons.access_time, slot)),
+            ]),
+            const SizedBox(height: 26),
+            const Text('Participant Details',
+                style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            _detailsCard([
+              _detail(Icons.account_circle_outlined, participantName),
+              _detail(Icons.phone_outlined, participantPhone),
+              if (participantEmail?.isNotEmpty == true)
+                _detail(Icons.email_outlined, participantEmail!),
+              _detail(Icons.payments_outlined, paymentMethod),
+            ]),
+            if (reservationId != null) ...[
+              const SizedBox(height: 14),
+              Text('Reservation: $reservationId',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.grey)),
+            ],
+            const SizedBox(height: 32),
+            OutlinedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    foregroundColor: const Color(0xFF202124),
+                    side: const BorderSide(color: Color(0xFF202124)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16))),
+                child: const Text('Book Another Slot')),
+            const SizedBox(height: 14),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(context, false),
+                style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    backgroundColor: Colors.black,
+                    foregroundColor: _lime,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16))),
+                child: const Text('Back To Activity Management')),
+          ],
+        ),
+      );
+
+  Widget _detailsCard(List<Widget> children) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(24)),
+        child: Column(children: children),
+      );
+
+  Widget _detail(IconData icon, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(children: [
+          Icon(icon, color: const Color(0xFF777777), size: 28),
+          const SizedBox(width: 16),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(fontFamily: 'Satoshi', fontSize: 17))),
+        ]),
+      );
+}
+
 class _BookableSlot {
   const _BookableSlot({
     required this.label,
@@ -702,6 +1590,7 @@ class _BookableSlot {
   String get statusLabel => switch (status) {
         'walk_in_reserved' => 'Reserved',
         'activ_booking' => 'Booked',
+        'not_operational' => 'Not Operational',
         _ => 'Unavailable',
       };
 
@@ -709,11 +1598,23 @@ class _BookableSlot {
     final start = json['startTime']?.toString() ?? '';
     final end = json['endTime']?.toString() ?? '';
     return _BookableSlot(
-      label: '$start - $end',
+      label: '${_displayTime(start)} - ${_displayTime(end)}',
       startTime: start,
       endTime: end,
       status: json['status']?.toString() ?? 'available',
     );
+  }
+
+  static String _displayTime(String value) {
+    final trimmed = value.trim();
+    if (trimmed.contains('AM') || trimmed.contains('PM')) return trimmed;
+    final parts = trimmed.split(':');
+    if (parts.length < 2) return trimmed;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    final suffix = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $suffix';
   }
 }
 
@@ -768,9 +1669,7 @@ class _CourtPickerSheet extends StatelessWidget {
                     final court = courts[index];
                     final selected = court == selectedCourt;
                     return Material(
-                      color: selected
-                          ? const Color(0xFFF6E7FF)
-                          : Colors.white,
+                      color: selected ? const Color(0xFFF6E7FF) : Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                         side: BorderSide(
@@ -784,8 +1683,7 @@ class _CourtPickerSheet extends StatelessWidget {
                         child: SizedBox(
                           height: 58,
                           child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 22),
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
                             child: Row(children: [
                               Expanded(
                                 child: Text(court,

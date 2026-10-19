@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
-  ServiceUnavailableException,
   Logger,
 } from "@nestjs/common";
 import type { Category } from "../categories/entities/category.entity";
@@ -101,15 +100,18 @@ export class VenuesService {
     }
 
     const categorySlugs = categories.map((category) => category.slug);
-    const activities = await this.prisma.activities.findMany({
-      where: { sport_code: { in: categorySlugs }, status: "PUBLISHED" },
-    });
+    const [activities, { commissionPercentage }] = await Promise.all([
+      this.prisma.activities.findMany({
+        where: { sport_code: { in: categorySlugs }, status: "PUBLISHED" },
+      }),
+      this.commissionService.getCommissionByCity(
+        venueData.city ?? "",
+        venueData.state,
+      ),
+    ]);
     const now = new Date();
     const venueId = randomUUID();
     const contactPhone = venueData.venuePhone || venueData.phone || null;
-    const { commissionPercentage } = await this.commissionService.getCommissionByCity(
-      venueData.city ?? '', venueData.state,
-    );
 
     const existingVenue = await this.prisma.$transaction(async (tx) => {
       // Serialize creation per partner so simultaneous retries cannot both insert.
@@ -278,7 +280,7 @@ export class VenuesService {
   }
 
   // Partner submits venue for admin review (draft → pending)
-  async submitForReview(venueId: string, partnerId: string): Promise<Venue> {
+  async submitForReview(venueId: string, partnerId: string): Promise<any> {
     const venue = await this.prisma.venues.findUnique({
       where: { id: venueId },
     });
@@ -291,66 +293,22 @@ export class VenuesService {
       throw new ForbiddenException("You can only submit your own venues");
     }
 
-    if (venue.status !== "DRAFT") {
-      throw new BadRequestException(
-        "Only draft venues can be submitted for review",
-      );
-    }
-
     const signedVenue = await this.findOne(venueId);
     if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
       throw new BadRequestException("Please sign the partnership agreement before finishing");
     }
-    // Temporarily disabled by default while the MSG91 template is configured.
-    // Re-enable explicitly without changing the signing/submission flow.
-    if (process.env.SIGNED_AGREEMENT_EMAIL_ENABLED === 'true') {
-      const recipient = signedVenue.partner?.email?.trim();
-      if (!recipient) {
-        throw new BadRequestException("Please enter your email in partner details before finishing");
-      }
-      // Keep a delivery receipt so retrying Finish after a later submission failure
-      // does not send the same agreement again.
-      const receipt = await this.prisma.audit_events.findFirst({
-        where: {
-          action: "partner_agreement.emailed", entity_type: "venues", entity_id: venueId,
-          after_json: { path: ['signedAt'], equals: new Date(signedVenue.termsAcceptedAt).toISOString() },
-        },
-      });
-      if (!receipt) {
-        const agreement = await this.generatePartnerAgreementPdf(venueId, {
-          id: partnerId, role: UserRole.PARTNER,
-        });
-        try {
-          await this.mailService.sendSignedPartnerAgreementEmail({
-            toEmail: recipient,
-            partnerName: signedVenue.electronicSignature.trim(),
-            venueName: signedVenue.name,
-            signedAt: new Date(signedVenue.termsAcceptedAt),
-            agreement,
-          });
-        } catch (error) {
-          // Provider errors can contain credentials, recipient addresses or message
-          // content. Log only diagnostic codes, never the raw provider response.
-          this.logger.error(
-            `Signed agreement email failed: code=${error?.code || 'UNKNOWN'} status=${error?.responseCode || 'unknown'}`,
-          );
-          if (error?.code === 'EAUTH' || error?.code === 'MSG91_CONFIG') {
-            throw new ServiceUnavailableException(
-              "Agreement email is temporarily unavailable. Please contact support@activ.live. Your signature is saved.",
-            );
-          }
-          throw new ServiceUnavailableException(
-            "We couldn't email your signed agreement. Please try Finish again.",
-          );
-        }
-        await this.prisma.audit_events.create({ data: {
-          id: randomUUID(),
-          action: "partner_agreement.emailed", entity_type: "venues", entity_id: venueId,
-          after_json: { email: recipient, signedAt: new Date(signedVenue.termsAcceptedAt).toISOString() },
-        } });
-      }
-
+    if (venue.submitted_at) {
+      const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
+      return {
+        ...signedVenue,
+        agreementEmailSent: emailResult.sent,
+        agreementEmailError: emailResult.error,
+      };
     }
+    if (venue.status !== "DRAFT") {
+      throw new BadRequestException("Only draft venues can be submitted for review");
+    }
+    const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
 
     const [submission] = await this.prisma.$transaction([
       this.prisma.venues.updateMany({
@@ -375,7 +333,75 @@ export class VenuesService {
         { partnerId, venueId },
       );
     }
-    return this.findOne(venueId);
+    return {
+      ...(await this.findOne(venueId)),
+      agreementEmailSent: emailResult.sent,
+      agreementEmailError: emailResult.error,
+    };
+  }
+
+  private async sendSignedAgreementIfNeeded(
+    venueId: string,
+    partnerId: string,
+    signedVenue: any,
+  ): Promise<{ sent: boolean; error?: string }> {
+    const recipient = signedVenue.partner?.email?.trim();
+    if (!recipient) {
+      return { sent: false, error: 'Registration succeeded, but no registered email address is available.' };
+    }
+    const signedAt = new Date(signedVenue.termsAcceptedAt);
+    const signedAtIso = signedAt.toISOString();
+    const receipt = await this.prisma.audit_events.findFirst({
+      where: {
+        action: 'partner_agreement.emailed', entity_type: 'venues', entity_id: venueId,
+        after_json: { path: ['signedAt'], equals: signedAtIso },
+      },
+    });
+    if (receipt) return { sent: true };
+
+    const agreement = await this.generatePartnerAgreementPdf(venueId, {
+      id: partnerId, role: UserRole.PARTNER,
+    });
+    const partnerName = [signedVenue.partner?.firstName, signedVenue.partner?.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || signedVenue.electronicSignature.trim();
+    try {
+      await this.mailService.sendSignedAgreementEmailViaGmail({
+        toEmail: recipient,
+        partnerName,
+        venueName: signedVenue.name,
+        signedAt,
+        pdfBuffer: Buffer.from(agreement.base64, 'base64'),
+        filename: agreement.filename,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Signed agreement email failed: code=${error?.code || 'UNKNOWN'} status=${error?.responseCode || 'unknown'}`,
+      );
+      return {
+        sent: false,
+        error: 'Registration succeeded, but the agreement email could not be sent. You can retry it from this screen.',
+      };
+    }
+
+    await this.prisma.audit_events.create({ data: {
+      id: randomUUID(),
+      action: 'partner_agreement.emailed', entity_type: 'venues', entity_id: venueId,
+      after_json: { email: recipient, signedAt: signedAtIso },
+    } });
+    return { sent: true };
+  }
+
+  async retrySignedAgreementEmail(venueId: string, partnerId: string): Promise<{ sent: boolean; error?: string }> {
+    const signedVenue = await this.findOne(venueId);
+    if (signedVenue.partnerId !== partnerId && signedVenue.partner?.id !== partnerId) {
+      throw new ForbiddenException('You can only retry your own agreement email');
+    }
+    if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
+      throw new BadRequestException('Please sign the partnership agreement before retrying the email');
+    }
+    return this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
   }
 
   // Partner saves legal info with uploaded document URLs
@@ -531,6 +557,7 @@ export class VenuesService {
   async generatePartnerAgreementPdf(
     venueId: string,
     currentUser: { id: string; role: string },
+    signatureOverride?: string,
   ): Promise<{ base64: string; filename: string; mimeType: string }> {
     const venue = await this.findOne(venueId);
 
@@ -563,11 +590,14 @@ export class VenuesService {
     const partnerName = venue.partner
       ? `${venue.partner.firstName || ""} ${venue.partner.lastName || ""}`.trim()
       : "";
-    const signature = venue.electronicSignature || partnerName;
-    // Some older records contain the saved signature but predate the
-    // terms_accepted_at column. Keep the exported agreement complete for
-    // those signed records while leaving unsigned drafts blank.
-    const acceptanceDate = venue.termsAcceptedAt ?? (signature ? new Date() : null);
+    const hasSignature = signatureOverride !== undefined
+      ? signatureOverride.trim().length > 0
+      : Boolean(venue.electronicSignature?.trim());
+    const signature = signatureOverride !== undefined
+      ? signatureOverride.trim()
+      : venue.electronicSignature?.trim() ?? '';
+    const acceptanceDate = hasSignature ? venue.termsAcceptedAt : null;
+    const isAccepted = hasSignature && Boolean(venue.termsAcceptedAt);
     const acceptedAt = acceptanceDate
       ? new Date(acceptanceDate).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
@@ -582,11 +612,17 @@ export class VenuesService {
     // Row top-Y positions (PDF points, bottom-up) measured from the
     // template's Agreement Acceptance table on page 3.
     const rows: Array<{ top: number; value: string }> = [
-      { top: 603.14, value: signature }, // Partner Name
+      { top: 603.14, value: partnerName }, // Partner Name
       { top: 564.88, value: venue.name || "" }, // Venue Name
       { top: 526.63, value: venue.partner?.email || "" }, // Registered Email
       { top: 488.38, value: venue.partner?.phone || "" }, // Registered Mobile
       { top: 450.06, value: acceptedAt }, // Date & Time of Acceptance
+      {
+        top: 411.72,
+        value: isAccepted
+            ? "Electronic Acceptance via ACTIV Venue Partner App"
+            : "",
+      }, // Acceptance Method
       { top: 357.33, value: signature }, // Electronic Signature
     ];
 
@@ -596,7 +632,7 @@ export class VenuesService {
       page3.drawRectangle({
         x: 328,
         y: row.top - 16,
-        width: 210,
+        width: 405,
         height: 32,
         color: rgb(1, 1, 1),
       });
@@ -831,18 +867,32 @@ export class VenuesService {
     );
 
     // Match by IDs: activity titles can be customized independently of categories.
-    return venues.map((venue) => ({
-      ...venue,
-      services: (venue.services || []).map((service) => ({
-        ...service,
-        answers: (venue.answers || []).filter(
-          (a) =>
-            a.venueServiceId === service.id ||
-            (!a.venueServiceId &&
-              a.question?.categoryId === service.categoryId),
+    return Promise.all(
+      venues.map(async (venue) => ({
+        ...venue,
+        services: await Promise.all(
+          (venue.services || []).map(async (service) => {
+            // Some lightweight public-venue tests provide only the venue
+            // projection; production Prisma clients always expose this model.
+            const stats = this.prisma.partner_venue_services
+              ? await this.getActivityManagement(service.id, partnerId)
+              : null;
+            return {
+              ...service,
+              ...(stats
+                ? { bookingCount: stats.bookingCount, earnings: stats.earnings }
+                : {}),
+              answers: (venue.answers || []).filter(
+                (a) =>
+                  a.venueServiceId === service.id ||
+                  (!a.venueServiceId &&
+                    a.question?.categoryId === service.categoryId),
+              ),
+            };
+          }),
         ),
       })),
-    }));
+    );
   }
 
   async findApproved(pagination: PaginationDto, categoryId?: string) {
@@ -939,6 +989,40 @@ export class VenuesService {
       (service) =>
         service.status === VenueServiceStatus.APPROVED && service.isActive,
     );
+    const publicServices = services.map((service) => {
+      const serviceAvailability = (service as any).availability ?? [];
+      const timing = Object.fromEntries(
+        serviceAvailability.map((day: any) => [
+          day.day[0].toUpperCase() + day.day.slice(1).toLowerCase(),
+          day.slots.map((slot) => ({
+            open: slot.openTime,
+            close: slot.closeTime,
+            openTime: slot.openTime,
+            closeTime: slot.closeTime,
+            capacity: slot.capacity,
+            price: slot.price,
+            discountedPrice: slot.discountedPrice,
+          })),
+        ]),
+      );
+      return {
+        ...service,
+        // Backward-compatible names used by the existing consumer app.
+        activity_id: service.id,
+        activityName: service.name,
+        operate_value: {
+          id: service.categoryId,
+          title: service.name,
+          categoryName: service.category?.name ?? service.name,
+        },
+        venue_timing: timing,
+        venue_amenities: { place_offer: service.amenities ?? [] },
+        // Keep the normalized availability while also exposing the day-keyed
+        // shape used by the user app's current slot picker.
+        venueTiming: timing,
+        timing,
+      };
+    });
     // The user app needs activity content, not partner identity or legal documents.
     return {
       id: venue.id,
@@ -961,7 +1045,9 @@ export class VenuesService {
       bookingAccept: true,
       openingTime: venue.openingTime,
       closingTime: venue.closingTime,
-      services,
+      services: publicServices,
+      // The consumer app historically reads activities rather than services.
+      activities: publicServices,
       categories: venue.categories.filter((category) =>
         services.some((service) => service.categoryId === category.id),
       ),
@@ -1169,6 +1255,123 @@ export class VenuesService {
       : {};
   }
 
+  /**
+   * The user app still reads the legacy facilities/slots projection. Keep it
+   * in sync with the partner scheduling tables whenever a partner saves a
+   * schedule or an activity becomes approved. This is deliberately a data
+   * sync, not a schema change.
+   */
+  private async syncLegacyActivitySlots(venueId: string): Promise<void> {
+    const prisma = this.prisma as any;
+    if (!prisma.facilities || !prisma.slots || !prisma.activities) return;
+
+    const services = await prisma.partner_venue_services.findMany({
+      where: { venue_id: venueId, status: "APPROVED" },
+      include: { partner_service_categories: true },
+    });
+
+    for (const service of services) {
+      const category = service.partner_service_categories;
+      const activity = await prisma.activities.findFirst({
+        where: {
+          status: "PUBLISHED",
+          OR: [
+            { sport_code: category.slug },
+            { name: { equals: service.title, mode: "insensitive" } },
+            { name: { equals: category.name, mode: "insensitive" } },
+          ],
+        },
+      });
+      if (!activity) {
+        this.logger.warn(
+          `No published catalogue activity found for ${service.title} (${category.slug}); legacy slots were not generated`,
+        );
+        continue;
+      }
+
+      await prisma.venue_activities.upsert({
+        where: { venue_id_activity_id: { venue_id: venueId, activity_id: activity.id } },
+        create: { venue_id: venueId, activity_id: activity.id, status: "APPROVED" },
+        update: { status: "APPROVED" },
+      });
+
+      let facility = service.facility_id
+        ? await prisma.facilities.findUnique({ where: { id: service.facility_id } })
+        : await prisma.facilities.findFirst({
+            where: { venue_id: venueId, activity_id: activity.id },
+          });
+      if (!facility) {
+        facility = await prisma.facilities.create({
+          data: {
+            id: randomUUID(),
+            venue_id: venueId,
+            activity_id: activity.id,
+            name: service.title || activity.name,
+            capacity: service.capacity ?? 1,
+          },
+        });
+      }
+      if (service.facility_id !== facility.id) {
+        await prisma.partner_venue_services.update({
+          where: { id: service.id },
+          data: { facility_id: facility.id },
+        });
+      }
+
+      const windows = await prisma.partner_venue_availability.findMany({
+        where: { venue_id: venueId, service_category_id: service.service_category_id },
+        orderBy: [{ day: "asc" }, { sort_order: "asc" }],
+      });
+      if (!windows.length) continue;
+
+      const horizonStart = new Date();
+      horizonStart.setUTCHours(0, 0, 0, 0);
+      const horizonEnd = new Date(horizonStart);
+      horizonEnd.setUTCDate(horizonEnd.getUTCDate() + 180);
+      const existing = await prisma.slots.findMany({
+        where: {
+          facility_id: facility.id,
+          starts_at: { gte: horizonStart, lt: horizonEnd },
+        },
+      });
+      const existingKeys = new Set(
+        existing.map((slot: any) => `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`),
+      );
+      const data: any[] = [];
+      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const duration = Math.max(30, service.min_duration_minutes ?? 60);
+
+      for (let date = new Date(horizonStart); date < horizonEnd; date.setUTCDate(date.getUTCDate() + 1)) {
+        const day = dayNames[date.getUTCDay()];
+        for (const window of windows.filter((entry: any) => entry.day.toLowerCase() === day)) {
+          const open = this.timeToMinutes(window.open_time);
+          const close = this.timeToMinutes(window.close_time);
+          for (let start = open; start + duration <= close; start += duration) {
+            const startsAt = new Date(Date.UTC(
+              date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
+              Math.floor(start / 60), start % 60,
+            ));
+            const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+            const key = `${startsAt.toISOString()}|${endsAt.toISOString()}`;
+            if (existingKeys.has(key)) continue;
+            existingKeys.add(key);
+            const discounted = Number(window.discounted_price_paise ?? 0);
+            data.push({
+              id: randomUUID(),
+              facility_id: facility.id,
+              starts_at: startsAt,
+              ends_at: endsAt,
+              capacity: Number(window.capacity || service.capacity || 1),
+              status: "AVAILABLE",
+              price_paise: BigInt(discounted > 0 ? discounted : Number(window.price_paise ?? service.price_per_hour_paise ?? 0)),
+            });
+          }
+        }
+      }
+      if (data.length) await prisma.slots.createMany({ data });
+    }
+  }
+
   async setAvailability(
     venueId: string,
     venueTiming: Record<
@@ -1236,6 +1439,7 @@ export class VenuesService {
         });
       }
     });
+    await this.syncLegacyActivitySlots(venueId);
     const availability = mapVenueAvailability(
       await this.prisma.partner_venue_availability.findMany({
         where: { venue_id: venueId },
@@ -1582,38 +1786,65 @@ export class VenuesService {
       partner.partner_users[0];
     if (!partnerUser?.users.email) return;
 
-    // Generate a strong readable password
-    const password = this.generatePassword();
-
-    // Hash and save — also activate the partner account
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const now = new Date();
-    await this.prisma.$transaction([
-      this.prisma.users.update({
-        where: { id: partnerUser.user_id },
-        data: {
-          password_hash: hashedPassword,
-          status: "ACTIVE",
-          updated_at: now,
-        },
-      }),
-      this.prisma.partners.update({
-        where: { id: partner.id },
-        data: { status: "ACTIVE", updated_at: now },
-      }),
-    ]);
-
-    // Send email with credentials
-    await this.mailService.sendPartnerApprovalEmail({
-      toEmail: partnerUser.users.email,
-      partnerName:
-        partnerUser.users.name ||
-        partner.partner_business_profiles?.owner_name ||
-        partner.partner_business_profiles?.business_name ||
-        partner.legal_name,
-      venueName: venue.name,
-      password,
+    // Approval endpoints can be retried by an admin or client. Only send the
+    // welcome/login message once after MSG91 has accepted it.
+    const approvalEmailReceipt = await this.prisma.audit_events.findFirst({
+      where: {
+        action: "partner_approval.email_sent",
+        entity_type: "venues",
+        entity_id: venue.id,
+      },
     });
+    if (!approvalEmailReceipt) {
+      // Generate a strong readable password
+      const password = this.generatePassword();
+
+      // Hash and save — also activate the partner account
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const now = new Date();
+      await this.prisma.$transaction([
+        this.prisma.users.update({
+          where: { id: partnerUser.user_id },
+          data: {
+            password_hash: hashedPassword,
+            status: "ACTIVE",
+            updated_at: now,
+          },
+        }),
+        this.prisma.partners.update({
+          where: { id: partner.id },
+          data: { status: "ACTIVE", updated_at: now },
+        }),
+      ]);
+
+      // Send email with credentials
+      const emailSent = await this.mailService.sendPartnerApprovalEmail({
+        toEmail: partnerUser.users.email,
+        partnerName:
+          partnerUser.users.name ||
+          partner.partner_business_profiles?.owner_name ||
+          partner.partner_business_profiles?.business_name ||
+          partner.legal_name,
+        venueName: venue.name,
+        password,
+      });
+
+      if (emailSent) {
+        await this.prisma.audit_events.create({
+          data: {
+            id: randomUUID(),
+            action: "partner_approval.email_sent",
+            entity_type: "venues",
+            entity_id: venue.id,
+            actor_id: null,
+            after_json: {
+              templateId: "MSG91_APPROVAL_TEMPLATE_ID",
+              recipient: partnerUser.users.email,
+            },
+          },
+        });
+      }
+    }
 
     await this.notificationsService.notify(
       partner.id,
@@ -2439,9 +2670,64 @@ export class VenuesService {
           }),
         ])
       : ([0, null, [], [], null] as const);
+    const [walkIns, walkInAvailability] = await Promise.all([
+      this.prisma.partner_walk_in_reservations.findMany({
+      where: {
+        venue_service_id: service.id,
+        status: { not: "CANCELLED" },
+      },
+      orderBy: { starts_at: "desc" },
+      }),
+      this.prisma.partner_venue_availability.findMany({
+        where: {
+          venue_id: service.venue_id,
+          service_category_id: service.service_category_id,
+        },
+      }),
+    ]);
+    const fallbackWalkInAmount = (reservation: (typeof walkIns)[number]) => {
+      if (Number(reservation.amount_paise ?? 0) > 0) {
+        return Number(reservation.amount_paise);
+      }
+      const day = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][reservation.starts_at.getUTCDay()];
+      const start = reservation.starts_at.getUTCHours() * 60 + reservation.starts_at.getUTCMinutes();
+      const end = reservation.ends_at.getUTCHours() * 60 + reservation.ends_at.getUTCMinutes();
+      const window = walkInAvailability.find((candidate) =>
+        candidate.day === day &&
+        start >= this.timeToMinutes(candidate.open_time) &&
+        end <= this.timeToMinutes(candidate.close_time),
+      );
+      if (!window) return 0;
+      const discounted = Number(window.discounted_price_paise ?? 0);
+      return discounted > 0 ? discounted : Number(window.price_paise ?? 0);
+    };
+    const walkInRevenuePaise = walkIns.reduce(
+      (sum, reservation) => sum + fallbackWalkInAmount(reservation),
+      0,
+    );
+    const walkInBookings = walkIns.map((reservation) => ({
+      id: reservation.id,
+      customerName: reservation.participant_name ?? "Walk-in Customer",
+      activity: service.title,
+      startsAt: reservation.starts_at,
+      endsAt: reservation.ends_at,
+      status:
+        reservation.status === "COMPLETED"
+          ? "Completed"
+          : reservation.status === "NO_SHOW"
+            ? "No Show"
+            : reservation.starts_at <= new Date() && reservation.ends_at > new Date()
+              ? "Ongoing"
+              : "Upcoming",
+      amount: fallbackWalkInAmount(reservation) / 100,
+      participants: reservation.participant_count ?? 1,
+      source: "WALK_IN",
+      phone: reservation.participant_phone_e164,
+    }));
     return {
       id: service.id,
       venueId: service.venue_id,
+      venueName: service.venues.name,
       categoryId: service.service_category_id,
       name: service.title,
       description: this.answerAsText(
@@ -2487,10 +2773,10 @@ export class VenuesService {
       recommendedFor: this.answerAsList(
         this.valueOrFallback(activityDetails.recommendedFor, recommendedFor),
       ),
-      bookingCount: facilityId ? count : null,
+      bookingCount: (facilityId ? count : 0) + walkIns.length,
       earnings: facilityId
-        ? Number(revenue?._sum.total_paise ?? 0) / 100
-        : null,
+        ? Number(revenue?._sum.total_paise ?? 0) / 100 + walkInRevenuePaise / 100
+        : walkInRevenuePaise / 100,
       occupancy: occupancy?._sum.capacity
         ? Math.round(
             (Number(occupancy._sum.booked_quantity ?? 0) /
@@ -2498,7 +2784,8 @@ export class VenuesService {
               100,
           )
         : null,
-      bookings: bookings.map((b) => ({
+      bookings: [
+        ...bookings.map((b) => ({
         id: b.id,
         customerName: b.users.name ?? "Customer",
         activity: service.title,
@@ -2518,7 +2805,10 @@ export class VenuesService {
                   : "Pending Payment",
         amount: Number(b.total_paise) / 100,
         participants: b.booking_attempts?.quantity ?? 1,
+        source: "ACTIV",
       })),
+        ...walkInBookings,
+      ].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()),
       reviews: reviews.map((r) => ({
         id: r.id,
         name: r.users.name ?? "Customer",
@@ -3146,6 +3436,7 @@ export class VenuesService {
         updated_at: new Date(),
       },
     });
+    if (approved) await this.syncLegacyActivitySlots(record.venues.id);
     const saved = await this.findOwnedActivity(
       serviceId,
       record.venues.partner_id,
@@ -3354,42 +3645,110 @@ export class VenuesService {
     if (service.status !== "APPROVED")
       throw new BadRequestException("Activity must be approved");
 
-    // Conflict check against existing reserved walk-ins for same court+date
     const requestedSlots = dto.slots.map((slot) => ({
       ...slot,
       startsAt: this.walkInDateTime(dto.date, slot.startTime),
       endsAt: this.walkInDateTime(dto.date, slot.endTime),
     }));
-    const dayStart = new Date(`${dto.date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${dto.date}T23:59:59.999Z`);
-    const existing = await this.prisma.partner_walk_in_reservations.findMany({
-      where: {
-        venue_service_id: serviceId,
-        status: "RESERVED",
-        starts_at: { lt: dayEnd },
-        ends_at: { gt: dayStart },
-        notes: dto.court ? { contains: `Court: ${dto.court}` } : undefined,
-      },
-    });
-
-    for (const res of existing) {
-      for (const newSlot of requestedSlots) {
-        const conflict = newSlot.startsAt < res.ends_at && newSlot.endsAt > res.starts_at;
-        if (conflict)
-          throw new ConflictException(
-            "One or more selected slots are already walk-in reserved",
-          );
+    if (!requestedSlots.length) {
+      throw new BadRequestException("Select at least one slot");
+    }
+    for (const slot of requestedSlots) {
+      if (slot.endsAt <= slot.startsAt) {
+        throw new BadRequestException("Slot end time must be after start time");
       }
     }
-
+    const dayStart = new Date(`${dto.date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${dto.date}T23:59:59.999Z`);
     const notes = [
       dto.court ? `Court: ${dto.court}` : null,
       dto.participantEmail ? `Email: ${dto.participantEmail}` : null,
+      dto.paymentMethod ? `Payment method: ${dto.paymentMethod}` : null,
+      dto.paymentStatus ? `Payment status: ${dto.paymentStatus}` : null,
+      dto.notes?.trim() ? `Note: ${dto.notes.trim()}` : null,
+      dto.idempotencyKey ? `Idempotency-Key: ${dto.idempotencyKey}` : null,
     ].filter((value): value is string => Boolean(value));
 
-    const reservations = await this.prisma.$transaction(
-      requestedSlots.map((slot) =>
-        this.prisma.partner_walk_in_reservations.create({
+    const reservations = await this.prisma.$transaction(async (tx) => {
+      // Serialize reservations for the same activity/date/court. This closes
+      // the race between the conflict read and the inserts.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${serviceId}:${dto.date}:${dto.court ?? "all"}`}))`;
+      if (dto.idempotencyKey) {
+        const previous = await tx.partner_walk_in_reservations.findFirst({
+          where: {
+            venue_service_id: serviceId,
+            partner_id: partnerId,
+            status: { not: "CANCELLED" },
+            notes: { contains: `Idempotency-Key: ${dto.idempotencyKey}` },
+          },
+        });
+        if (previous) {
+          return [previous];
+        }
+      }
+      const dayName = new Date(`${dto.date}T00:00:00Z`)
+        .toLocaleDateString("en-US", { weekday: "long" })
+        .toLowerCase();
+      const windows = await tx.partner_venue_availability.findMany({
+        where: {
+          venue_id: venueId,
+          service_category_id: service.service_category_id,
+          day: dayName,
+        },
+      });
+      if (!windows.length || requestedSlots.some((slot) => {
+        const start = this.timeToMinutes(slot.startTime);
+        const end = this.timeToMinutes(slot.endTime);
+        return !windows.some((window) => start >= this.timeToMinutes(window.open_time) && end <= this.timeToMinutes(window.close_time));
+      })) {
+        throw new BadRequestException("One or more selected slots are outside operating hours");
+      }
+      const configuredAmountFor = (slot: { startTime: string; endTime: string }) => {
+        const start = this.timeToMinutes(slot.startTime);
+        const end = this.timeToMinutes(slot.endTime);
+        const window = windows.find((candidate) =>
+          start >= this.timeToMinutes(candidate.open_time) &&
+          end <= this.timeToMinutes(candidate.close_time),
+        );
+        if (!window) return 0;
+        const discounted = Number(window.discounted_price_paise ?? 0);
+        return discounted > 0 ? discounted : Number(window.price_paise ?? 0);
+      };
+      if (service.facility_id) {
+        const activBookings = await tx.bookings.findMany({
+          where: {
+            status: { not: "CANCELLED" },
+            starts_at: { lt: dayEnd },
+            slots: {
+              facility_id: service.facility_id,
+              ends_at: { gt: dayStart },
+            },
+          },
+          include: { slots: true },
+        });
+        if (activBookings.some((booking) => requestedSlots.some((slot) =>
+          slot.startsAt < booking.slots.ends_at && slot.endsAt > booking.slots.starts_at))) {
+          throw new ConflictException("One or more selected slots are already booked by ACTIV");
+        }
+      }
+      const existing = await tx.partner_walk_in_reservations.findMany({
+        where: {
+          venue_service_id: serviceId,
+          status: "RESERVED",
+          starts_at: { lt: dayEnd },
+          ends_at: { gt: dayStart },
+          notes: dto.court ? { contains: `Court: ${dto.court}` } : undefined,
+        },
+      });
+      for (const res of existing) {
+        for (const newSlot of requestedSlots) {
+          if (newSlot.startsAt < res.ends_at && newSlot.endsAt > res.starts_at) {
+            throw new ConflictException("One or more selected slots are already walk-in reserved");
+          }
+        }
+      }
+      return Promise.all(requestedSlots.map((slot) =>
+        tx.partner_walk_in_reservations.create({
           data: {
             id: randomUUID(),
             partner_id: partnerId,
@@ -3401,12 +3760,15 @@ export class VenuesService {
             starts_at: slot.startsAt,
             ends_at: slot.endsAt,
             status: "RESERVED",
+            amount_paise: dto.amountPaise == null
+              ? BigInt(configuredAmountFor(slot))
+              : BigInt(dto.amountPaise),
             notes: notes.join("\n") || null,
             updated_at: new Date(),
           },
         }),
-      ),
-    );
+      ));
+    });
 
     return {
       id: reservations[0]?.id,
@@ -3506,6 +3868,8 @@ export class VenuesService {
     const notes = String(reservation.notes ?? "");
     const courtMatch = notes.match(/^Court: (.+)$/m);
     const emailMatch = notes.match(/^Email: (.+)$/m);
+    const paymentMethodMatch = notes.match(/^Payment method: (.+)$/m);
+    const paymentStatusMatch = notes.match(/^Payment status: (.+)$/m);
     return {
       id: reservation.id,
       venueServiceId: reservation.venue_service_id,
@@ -3522,6 +3886,9 @@ export class VenuesService {
       participantName: reservation.participant_name,
       participantPhone: reservation.participant_phone_e164,
       participantEmail: emailMatch?.[1] ?? null,
+      paymentMethod: paymentMethodMatch?.[1] ?? null,
+      paymentStatus: paymentStatusMatch?.[1] ?? null,
+      amountPaise: reservation.amount_paise?.toString() ?? null,
       status: reservation.status.toLowerCase(),
       createdAt: reservation.created_at,
     };

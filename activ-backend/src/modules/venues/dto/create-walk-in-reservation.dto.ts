@@ -55,4 +55,28 @@ export class CreateWalkInReservationDto {
   @IsOptional()
   @IsString()
   participantEmail?: string;
+
+  @ApiPropertyOptional({ example: 'Cash' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ example: 'PAID' })
+  @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @ApiPropertyOptional({ example: 50000, description: 'Total amount in paise' })
+  @IsOptional()
+  amountPaise?: number;
+
+  @ApiPropertyOptional({ example: 'Walk-in customer' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({ description: 'Client-generated key used to make retries safe' })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

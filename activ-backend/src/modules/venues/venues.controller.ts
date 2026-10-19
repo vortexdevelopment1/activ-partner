@@ -150,8 +150,13 @@ export class VenuesController {
   async downloadPartnerAgreement(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
+    @Query('signature') signature?: string,
   ) {
-    const data = await this.venuesService.generatePartnerAgreementPdf(id, user);
+    const data = await this.venuesService.generatePartnerAgreementPdf(
+      id,
+      user,
+      signature,
+    );
     return { message: 'Partner agreement generated successfully', data };
   }
 
@@ -243,6 +248,16 @@ export class VenuesController {
   ) {
     const data = await this.venuesService.submitForReview(id, user.id);
     return { message: 'Venue submitted for review successfully', data };
+  }
+
+  @Post(':id/partner-agreement/email')
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry sending the signed partnership agreement email' })
+  async retryPartnerAgreementEmail(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const data = await this.venuesService.retrySignedAgreementEmail(id, user.id);
+    return { message: data.sent ? 'Agreement email sent' : 'Agreement email was not sent', data };
   }
 
   @Get('my-venues')

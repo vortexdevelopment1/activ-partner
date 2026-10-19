@@ -12,6 +12,7 @@ import { TeamMember } from '../team/entities/team-member.entity';
 import { Venue } from '../venues/entities/venue.entity';
 import { TeamModule } from '../team/team.module';
 import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AdminNotificationsModule } from '../admin-notifications/admin-notificat
     PassportModule,
     TeamModule,
     AdminNotificationsModule,
+    MailModule,
     TypeOrmModule.forFeature([Partner, TeamMember, Venue]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

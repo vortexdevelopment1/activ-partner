@@ -17,6 +17,7 @@ describe('venue corrections before approval', () => {
         updateMany: jest.fn(async ({ data }) => { Object.assign(record, data); return { count: 1 }; }),
       },
       partner_venue_services: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      audit_events: { findFirst: jest.fn().mockResolvedValue({ id: 'existing-email-receipt' }) },
       $transaction: jest.fn((operations) => Promise.all(operations)),
     };
     notificationsService = { notify: jest.fn().mockResolvedValue(undefined) };

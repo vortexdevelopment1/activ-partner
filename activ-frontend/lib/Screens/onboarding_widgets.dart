@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -195,14 +196,15 @@ class OnboardingButton extends StatelessWidget {
         ),
         onPressed: loading ? null : onPressed,
         child: loading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.yellow,
-                  semanticsLabel: 'Loading',
-                ),
+            ? Shimmer.fromColors(
+                baseColor: AppColors.yellow.withValues(alpha: 0.45),
+                highlightColor: AppColors.yellow.withValues(alpha: 0.95),
+                child: Text('$label…',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: fontSize,
+                        color: AppColors.yellow)),
               )
             : icon == null
                 ? Text(label, textAlign: TextAlign.center)
@@ -217,6 +219,27 @@ class OnboardingButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class AppSkeleton extends StatelessWidget {
+  const AppSkeleton({super.key, this.width = double.infinity, this.height = 18, this.radius = 8});
+
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) => Shimmer.fromColors(
+        baseColor: AppColors.gray2,
+        highlightColor: AppColors.white,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+              color: AppColors.gray2,
+              borderRadius: BorderRadius.circular(radius)),
+        ),
+      );
 }
 
 class OnboardingSupportMenu extends StatefulWidget {
@@ -658,7 +681,17 @@ class _LoginFaqDialogState extends State<_LoginFaqDialog> {
                   behavior: ScrollConfiguration.of(context)
                       .copyWith(scrollbars: false),
                   child: _loading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(children: [
+                            AppSkeleton(height: 48),
+                            SizedBox(height: 12),
+                            AppSkeleton(height: 48),
+                            SizedBox(height: 12),
+                            AppSkeleton(height: 48),
+                            SizedBox(height: 12),
+                            AppSkeleton(height: 48),
+                          ]))
                       : _error != null
                           ? Center(
                               child: Column(

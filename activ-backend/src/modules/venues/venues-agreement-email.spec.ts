@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { VenuesService } from './venues.service';
 import { PDFDocument } from 'pdf-lib';
 
@@ -19,12 +19,11 @@ describe('Finish agreement email', () => {
         update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       partner_venue_services: { updateMany: jest.fn().mockResolvedValue({}) },
       audit_events: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
-      $transaction: jest.fn().mockImplementation((operations) => Promise.all(operations)),
+      $transaction: jest.fn((operations) => Promise.all(operations)),
     };
-    mailService = { sendSignedPartnerAgreementEmail: jest.fn().mockResolvedValue(undefined) };
+    mailService = { sendSignedAgreementEmailViaGmail: jest.fn().mockResolvedValue('gmail-message-id') };
     service = Object.assign(Object.create(VenuesService.prototype), {
-      prisma, mailService, logger: { error: jest.fn() }, findOne: jest.fn().mockResolvedValue(signedVenue),
-      adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) },
+      prisma, mailService, adminNotificationsService: { notify: jest.fn() }, logger: { error: jest.fn() }, findOne: jest.fn().mockResolvedValue(signedVenue),
       generatePartnerAgreementPdf: jest.fn().mockResolvedValue({ base64: 'JVBERg==', filename: 'signed.pdf', mimeType: 'application/pdf' }),
     });
   });
@@ -34,14 +33,12 @@ describe('Finish agreement email', () => {
     else process.env.SIGNED_AGREEMENT_EMAIL_ENABLED = originalEmailEnabled;
   });
 
-  it.each([undefined, 'false'])('submits for admin review with email bypassed (%s)', async (enabled) => {
-    if (enabled === undefined) delete process.env.SIGNED_AGREEMENT_EMAIL_ENABLED;
-    else process.env.SIGNED_AGREEMENT_EMAIL_ENABLED = enabled;
-    mailService.sendSignedPartnerAgreementEmail.mockRejectedValue(new Error('Not configured'));
-    await expect(service.submitForReview('venue-1', 'partner-1')).resolves.toBe(signedVenue);
-    expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
-    expect(service.generatePartnerAgreementPdf).not.toHaveBeenCalled();
-    expect(prisma.audit_events.create).not.toHaveBeenCalled();
+  it('sends the agreement before completing review submission', async () => {
+    const result = await service.submitForReview('venue-1', 'partner-1');
+    expect(result).toMatchObject({ agreementEmailSent: true });
+    expect(mailService.sendSignedAgreementEmailViaGmail).toHaveBeenCalled();
+    expect(service.generatePartnerAgreementPdf).toHaveBeenCalled();
+    expect(prisma.audit_events.create).toHaveBeenCalled();
     expect(prisma.venues.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: { submitted_at: expect.any(Date), review_status: 'pending', rejection_reason: null },
     }));
@@ -49,34 +46,43 @@ describe('Finish agreement email', () => {
       data: { status: 'PENDING', updated_at: expect.any(Date) },
     }));
     expect(prisma.$transaction).toHaveBeenCalled();
-    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
-      'venue_submitted', expect.any(String), expect.any(String),
-      { partnerId: 'partner-1', venueId: 'venue-1' },
-    );
   });
 
   it('emails the signed agreement to the saved profile email on Finish', async () => {
     await service.submitForReview('venue-1', 'partner-1');
-    expect(mailService.sendSignedPartnerAgreementEmail).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mailService.sendSignedAgreementEmailViaGmail).toHaveBeenCalledWith(expect.objectContaining({
       toEmail: 'registered@example.com', partnerName: 'Lalit Jangid',
-      agreement: expect.objectContaining({ filename: 'signed.pdf' }),
+      filename: 'signed.pdf', pdfBuffer: expect.any(Buffer),
     }));
     expect(prisma.audit_events.create).toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalled();
   });
 
-  it('surfaces delivery failure and leaves submission available to retry', async () => {
-    mailService.sendSignedPartnerAgreementEmail.mockRejectedValue(new Error('SMTP unavailable'));
-    await expect(service.submitForReview('venue-1', 'partner-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+  it('keeps registration under review when delivery fails and exposes retry state', async () => {
+    mailService.sendSignedAgreementEmailViaGmail.mockRejectedValue(new Error('Gmail unavailable'));
+    const result = await service.submitForReview('venue-1', 'partner-1');
+    expect(result).toMatchObject({ agreementEmailSent: false, agreementEmailError: expect.stringContaining('retry') });
+    expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.audit_events.create).not.toHaveBeenCalled();
   });
 
   it('does not resend a delivered agreement on submission retry', async () => {
     prisma.audit_events.findFirst.mockResolvedValue({ id: 'receipt' });
     await service.submitForReview('venue-1', 'partner-1');
-    expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
+    expect(mailService.sendSignedAgreementEmailViaGmail).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('handles repeated Finish requests after the venue is already submitted', async () => {
+    prisma.venues.findUnique
+      .mockResolvedValueOnce({ id: 'venue-1', partner_id: 'partner-1', status: 'DRAFT' })
+      .mockResolvedValueOnce({ id: 'venue-1', partner_id: 'partner-1', status: 'PENDING', submitted_at: new Date() });
+    prisma.audit_events.findFirst.mockResolvedValue({ id: 'receipt' });
+    await service.submitForReview('venue-1', 'partner-1');
+    const result = await service.submitForReview('venue-1', 'partner-1');
+    expect(result).toMatchObject({ agreementEmailSent: true });
+    expect(mailService.sendSignedAgreementEmailViaGmail).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('does not duplicate admin notifications when Finish is retried', async () => {
@@ -91,17 +97,16 @@ describe('Finish agreement email', () => {
     expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
 
-  it('explains authentication failures without exposing SMTP details', async () => {
-    mailService.sendSignedPartnerAgreementEmail.mockRejectedValue(
+  it('logs provider diagnostics without exposing them to the partner', async () => {
+    mailService.sendSignedAgreementEmailViaGmail.mockRejectedValue(
       Object.assign(new Error('sensitive provider response'), { code: 'EAUTH', responseCode: 535 }),
     );
-    await expect(service.submitForReview('venue-1', 'partner-1')).rejects.toThrow(
-      'Agreement email is temporarily unavailable. Please contact support@activ.live. Your signature is saved.',
-    );
+    const result = await service.submitForReview('venue-1', 'partner-1');
+    expect(result.agreementEmailError).toContain('could not be sent');
     expect((service as any).logger.error).toHaveBeenCalledWith(
       'Signed agreement email failed: code=EAUTH status=535',
     );
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalled();
   });
 
   it('requires the signature and saved email', async () => {
@@ -109,8 +114,10 @@ describe('Finish agreement email', () => {
     await expect(service.submitForReview('venue-1', 'partner-1')).rejects.toBeInstanceOf(BadRequestException);
     signedVenue.electronicSignature = 'Lalit';
     signedVenue.partner.email = '';
-    await expect(service.submitForReview('venue-1', 'partner-1')).rejects.toBeInstanceOf(BadRequestException);
-    expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
+    const result = await service.submitForReview('venue-1', 'partner-1');
+    expect(result.agreementEmailSent).toBe(false);
+    expect(result.agreementEmailError).toContain('no registered email');
+    expect(mailService.sendSignedAgreementEmailViaGmail).not.toHaveBeenCalled();
   });
 
   it('builds a readable signed PDF from the official agreement template', async () => {
@@ -125,7 +132,7 @@ describe('Finish agreement email', () => {
 
   it('rejects another partner before sending mail', async () => {
     await expect(service.submitForReview('venue-1', 'other')).rejects.toBeInstanceOf(ForbiddenException);
-    expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
+    expect(mailService.sendSignedAgreementEmailViaGmail).not.toHaveBeenCalled();
   });
 
   it('preserves the signature date when Finish retries accepting the same terms', async () => {

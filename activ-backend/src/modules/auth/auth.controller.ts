@@ -8,7 +8,10 @@ import {
   HttpStatus,
   Patch,
   Query,
+  Headers,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -27,11 +30,49 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { User } from '../users/entities/user.entity';
 import { Partner } from '../partners/entities/partner.entity';
+import { GoogleOAuthService } from '../mail/google-oauth.service';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly googleOAuthService: GoogleOAuthService,
+  ) {}
+
+  @Get('google/connect')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Start the protected Gmail OAuth setup flow' })
+  googleConnect(
+    @Headers('x-google-oauth-setup-key') setupKey: string,
+    @Res() response: Response,
+  ) {
+    return response.redirect(this.googleOAuthService.createAuthorizationUrl(setupKey));
+  }
+
+  @Public()
+  @Get('google/callback')
+  @ApiOperation({ summary: 'Complete the Gmail OAuth setup flow' })
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Res() response: Response,
+  ) {
+    try {
+      if (error) throw new Error('Google authorization was declined.');
+      await this.googleOAuthService.completeAuthorization(code, state);
+      return response.status(HttpStatus.OK).type('html').send(
+        '<h1>Google Gmail authorization completed successfully.</h1><p>Authorized Gmail account verified.</p><p>Configure the refresh token securely in your backend environment.</p>',
+      );
+    } catch (callbackError) {
+      return response.status(HttpStatus.BAD_REQUEST).type('html').send(
+        '<h1>Google Gmail authorization was not completed.</h1><p>Check the backend configuration and try again.</p>',
+      );
+    }
+  }
 
   @Public()
   @Post('login')

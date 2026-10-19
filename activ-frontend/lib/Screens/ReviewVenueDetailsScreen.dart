@@ -428,10 +428,7 @@ class _State extends State<ReviewVenueDetailsScreen> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           commissionLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+              ? const AppSkeleton(width: 42, height: 18, radius: 4)
               : Text(value,
                   textAlign: TextAlign.right,
                   style: const TextStyle(
@@ -671,8 +668,14 @@ class _State extends State<ReviewVenueDetailsScreen> {
 
               if (loading)
                 const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()))
+                    padding: EdgeInsets.all(24),
+                    child: Column(children: [
+                      AppSkeleton(height: 110),
+                      SizedBox(height: 16),
+                      AppSkeleton(height: 150),
+                      SizedBox(height: 16),
+                      AppSkeleton(height: 110),
+                    ]))
               else if (loadError != null)
                 TextButton.icon(
                     onPressed: _loadData,
