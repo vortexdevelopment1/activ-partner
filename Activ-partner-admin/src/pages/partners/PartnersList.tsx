@@ -71,13 +71,13 @@ export const PartnersList: React.FC = () => {
             placeholder="Search partners..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="input pl-9 w-52"
+            className="input pl-9 w-full sm:w-52"
           />
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">

@@ -32,7 +32,7 @@ describe('post-approval venue updates', () => {
         findUnique: jest.fn().mockResolvedValue(record), count: jest.fn().mockResolvedValue(1) } };
     notify = jest.fn().mockResolvedValue(undefined);
     service = Object.assign(Object.create(VenuesService.prototype), {
-      prisma, notificationsService: { notify },
+      prisma, notificationsService: { notify }, adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) },
       findOne: jest.fn().mockResolvedValue({ id: 'venue-1', partnerId: 'partner-1', name: 'Updated Arena' }),
     });
   });
@@ -46,6 +46,10 @@ describe('post-approval venue updates', () => {
     expect(result).toMatchObject({ venueId: 'venue-1', status: 'pending', name: 'Updated Arena', createdAt: now });
     expect(tx.venues.update).not.toHaveBeenCalled();
     expect(tx.partner_venue_profiles.upsert).not.toHaveBeenCalled();
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
+      'venue_request_submitted', expect.any(String), expect.any(String),
+      { partnerId: 'partner-1', venueId: 'venue-1', venueRequestId: result.id },
+    );
   });
 
   it('rejects duplicate pending requests', async () => {
@@ -53,6 +57,7 @@ describe('post-approval venue updates', () => {
     await expect(service.submitVenueUpdateRequest('venue-1', 'partner-1', { name: 'Updated' }))
       .rejects.toBeInstanceOf(ConflictException);
     expect(tx.partner_venue_update_requests.create).not.toHaveBeenCalled();
+    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
 
   it('rejects another partner and an unapproved venue', async () => {

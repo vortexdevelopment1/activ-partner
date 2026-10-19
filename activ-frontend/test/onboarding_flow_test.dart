@@ -2751,6 +2751,30 @@ void main() {
     });
   }
 
+  testWidgets('OTP resumes requested corrections with the admin reason and saved venue', (tester) async {
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/verify-otp')) {
+        return http.Response(jsonEncode({'data': {
+          'accessToken': 'test-token', 'isProfileComplete': true,
+          'partner': {'isActive': false},
+        }}), 200);
+      }
+      return http.Response(jsonEncode({'data': {'total': 1, 'items': [{
+        'id': 'existing-venue', 'name': 'Existing Arena', 'status': 'draft',
+        'changesRequested': true, 'rejectionReason': 'Upload clearer venue photos',
+      }]}}), 200);
+    });
+    await showScreen(tester, OTPVerificationScreen(client: client));
+    await tester.enterText(digit(0), '1234');
+    await tester.pumpAndSettle();
+    expect(find.byType(VenueScreen), findsOneWidget);
+    expect(tester.widget<VenueScreen>(find.byType(VenueScreen)).changeReason, 'Upload clearer venue photos');
+    expect(find.textContaining('Changes requested by admin:'), findsOneWidget);
+    expect((await SharedPreferences.getInstance()).getString('venue_id'), 'existing-venue');
+    expect(find.text('Existing Arena'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Create Account intent survives Edit Number from a root OTP screen', (tester) async {
     await showScreen(tester, const OTPVerificationScreen(isCreatingAccount: true));
     await tester.tap(find.byKey(const Key('otp-edit-number')));

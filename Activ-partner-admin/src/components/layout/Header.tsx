@@ -13,7 +13,7 @@ export const Header: React.FC<HeaderProps> = ({ title, onOpenMenu }) => {
   const { user } = useAuthStore();
 
   return (
-    <header className="h-[68px] shrink-0 bg-brand-top/95 border-b border-[#dce4c7] grid grid-cols-[auto_1fr_auto] md:grid-cols-[1fr_minmax(20rem,42rem)_1fr] items-center gap-3 px-4 sm:px-6 sticky top-0 z-10 backdrop-blur-md">
+    <header className="h-[68px] min-w-0 shrink-0 bg-brand-top/95 border-b border-[#dce4c7] grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 sm:gap-3 sm:px-6 sticky top-0 z-20">
       <div className="flex items-center gap-4 justify-self-start">
         <button type="button" onClick={onOpenMenu} aria-label="Open navigation" aria-controls="admin-navigation" className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100"><Menu size={22} /></button>
         {title && (
@@ -36,8 +36,8 @@ export const Header: React.FC<HeaderProps> = ({ title, onOpenMenu }) => {
               {user?.firstName?.[0]?.toUpperCase() ?? 'A'}
             </span>
           </div>
-          <div className="hidden sm:block">
-            <p className="text-sm font-medium text-gray-900 leading-none">
+          <div className="hidden min-w-0 max-w-[8rem] xl:max-w-[12rem] sm:block">
+            <p className="truncate text-sm font-medium text-gray-900 leading-none">
               {user?.firstName} {user?.lastName}
             </p>
             <p className="text-xs text-gray-400 mt-0.5 capitalize">{user?.role}</p>

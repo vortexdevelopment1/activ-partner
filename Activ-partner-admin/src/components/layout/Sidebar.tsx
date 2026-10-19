@@ -35,6 +35,7 @@ export const navItems = [
   { to: '/legal', icon: ScrollText, label: 'Legal' },
   { to: '/bank-accounts', icon: Landmark, label: 'Bank Accounts' },
   { to: '/support/callback', icon: PhoneCall, label: 'Support' },
+  { to: '/support/requests', icon: MessageCircleQuestion, label: 'Support Requests' },
   { to: '/logs', icon: History, label: 'Logs' },
 ];
 

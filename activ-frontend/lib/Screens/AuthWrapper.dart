@@ -18,6 +18,7 @@ import 'VenueScreen.dart';
 import 'LoginScreen.dart';
 import 'session_navigation.dart';
 import '../Utills/browser_session.dart';
+import '../Utills/venue_onboarding_draft.dart';
 
 /*
 class AuthWrapper extends StatelessWidget {
@@ -202,7 +203,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await SharedPreference.addStringToSF("is_profile_complete", apiIsProfileComplete ? "true" : "false");
       await SharedPreference.addStringToSF("is_active", apiIsActive ? "true" : "false");
 
-      if (stack.isNotEmpty && _restoreStack(stack)) return;
+      final needsReviewRefresh = apiIsProfileComplete && !apiIsActive &&
+          stack.any((entry) => entry['page'] == 'submitted');
+      if (!needsReviewRefresh && stack.isNotEmpty && _restoreStack(stack)) return;
 
       if (!apiIsProfileComplete) {
         _finish(TellUsAboutScreen());
@@ -258,7 +261,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
           }
           _finish(const ContactSupportScreen());
         } else if (total == 1 && firstStatus == 'draft') {
-          _finish(VenueScreen());
+          await restoreVenueOnboardingDraft(Map<String, dynamic>.from(items.first));
+          if (!mounted) return;
+          _finish(VenueScreen(changeReason: items.first['changesRequested'] == true ? items.first['rejectionReason']?.toString() : null));
         } else if (total == 0) {
           // Profile complete but no venue yet — continue onboarding
           _finish(VenueScreen());

@@ -10,10 +10,12 @@ describe('activity management on the current schema', () => {
     record = { id: 'activity', venue_id: 'venue', service_category_id: 'badminton',
       facility_id: 'facility', title: 'Badminton', status: 'APPROVED', description: 'Indoor',
       onboarding_data: {}, is_active: true, partner_venue_images: [], partner_service_amenities: [],
-      venues: { partner_id: 'partner' } };
+      venues: { partner_id: 'partner', name: 'Arena' } };
     prisma = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      venues: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       partner_venue_services: { findUnique: jest.fn(async () => record),
-        findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data) },
+        findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data), count: jest.fn().mockResolvedValue(0) },
       partner_venue_answers: { findMany: jest.fn(async () => []) },
       slots: { findMany: jest.fn(async () => [{ id: 'slot' }]), updateMany: jest.fn(),
         aggregate: jest.fn(async () => ({ _sum: { capacity: 10, booked_quantity: 4 } })) },
@@ -26,7 +28,8 @@ describe('activity management on the current schema', () => {
       partner_service_paused_slots: { createMany: jest.fn(), findMany: jest.fn(async () => [{ slot_id: 'owned-slot' }]), deleteMany: jest.fn() },
     };
     prisma.$transaction = jest.fn(async (callback) => callback(prisma));
-    service = Object.assign(Object.create(VenuesService.prototype), { prisma });
+    service = Object.assign(Object.create(VenuesService.prototype), { prisma,
+      adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) } });
   });
 
   it('rejects another partner before accessing bookings or changing data', async () => {
@@ -118,5 +121,31 @@ describe('activity management on the current schema', () => {
     await service.updateActivityManagement('activity', 'partner', {}, true);
     expect(prisma.partner_venue_services.update.mock.calls[0][0].data)
       .toMatchObject({ status: 'ARCHIVED', is_active: false });
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
+      'activity_removed', expect.any(String), expect.any(String),
+      { partnerId: 'partner', venueId: 'venue', serviceId: 'activity' },
+    );
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
+      'venue_auto_deactivated', expect.any(String), expect.any(String), { partnerId: 'partner', venueId: 'venue' },
+    );
+  });
+
+  it('does not announce automatic deactivation when activities remain', async () => {
+    prisma.partner_venue_services.count.mockResolvedValue(1);
+    await service.removeService('activity', 'partner');
+    expect(prisma.venues.updateMany).not.toHaveBeenCalled();
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not announce deactivation again when bookings were already disabled', async () => {
+    prisma.venues.updateMany.mockResolvedValue({ count: 0 });
+    await service.updateActivityManagement('activity', 'partner', {}, true);
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send removal alerts when the archive transaction fails', async () => {
+    prisma.partner_venue_services.update.mockRejectedValue(new Error('Update failed'));
+    await expect(service.updateActivityManagement('activity', 'partner', {}, true)).rejects.toThrow('Update failed');
+    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
 });

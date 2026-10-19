@@ -14,6 +14,7 @@ import { BankAccountsList } from './pages/bank-accounts/BankAccountsList';
 import { BankAccountDetail } from './pages/bank-accounts/BankAccountDetail';
 import { CallbackList } from './pages/support/CallbackList';
 import { CallbackDetail } from './pages/support/CallbackDetail';
+import { SupportRequests } from './pages/support/SupportRequests';
 import { FAQsList } from './pages/faqs/FAQsList';
 import { GstVerificationList } from './pages/gst-verification/GstVerificationList';
 import { GstVerificationDetail } from './pages/gst-verification/GstVerificationDetail';
@@ -48,6 +49,8 @@ export default function App() {
         <Route path="logs" element={<LogsList />} />
         <Route path="support/callback" element={<CallbackList />} />
         <Route path="support/callback/:id" element={<CallbackDetail />} />
+        <Route path="support/requests" element={<SupportRequests />} />
+        <Route path="support/requests/:id" element={<SupportRequests />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

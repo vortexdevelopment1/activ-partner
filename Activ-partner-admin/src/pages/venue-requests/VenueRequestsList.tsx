@@ -62,7 +62,7 @@ export const VenueRequestsList: React.FC = () => {
             placeholder="Search by venue name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="input pl-9 w-60"
+            className="input pl-9 w-full sm:w-60"
           />
         </div>
       </div>
@@ -87,7 +87,7 @@ export const VenueRequestsList: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">

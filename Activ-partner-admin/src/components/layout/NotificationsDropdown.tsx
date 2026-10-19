@@ -5,6 +5,8 @@ import { Bell, CheckCheck, Radio } from 'lucide-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { adminNotificationsApi } from '../../api/admin-notifications.api';
 import type { AdminNotification } from '../../types';
+import { openAdminNotification } from '../../utils/notificationNavigation';
+import { useToast } from '../../hooks/useToast';
 
 const POLL_INTERVAL = 30_000;
 
@@ -13,6 +15,7 @@ export const NotificationsDropdown: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const { data: countData } = useQuery({
     queryKey: ['admin-notifications-unread-count'],
@@ -21,7 +24,7 @@ export const NotificationsDropdown: React.FC = () => {
   });
   const unreadCount: number = countData?.data?.data?.count ?? 0;
 
-  const { data: listData, isLoading } = useQuery({
+  const { data: listData, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-notifications-list'],
     queryFn: () => adminNotificationsApi.list(),
     refetchInterval: open ? POLL_INTERVAL : false,
@@ -39,40 +42,42 @@ export const NotificationsDropdown: React.FC = () => {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  const handleMarkAllRead = async () => {
-    await adminNotificationsApi.markAllRead();
-    queryClient.invalidateQueries({ queryKey: ['admin-notifications-unread-count'] });
-    queryClient.invalidateQueries({ queryKey: ['admin-notifications-list'] });
+  useEffect(() => {
+    if (!open) return;
+    const onEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [open]);
+
+  const refreshReadStatus = () => {
+    void queryClient.invalidateQueries({ queryKey: ['admin-notifications-unread-count'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-notifications-list'] });
   };
 
-  const handleItemClick = async (n: AdminNotification) => {
+  const handleMarkAllRead = async () => {
     try {
-      if (!n.isRead) {
-        await adminNotificationsApi.markRead(n.id);
-        queryClient.invalidateQueries({ queryKey: ['admin-notifications-unread-count'] });
-        queryClient.invalidateQueries({ queryKey: ['admin-notifications-list'] });
-      }
-    } finally {
-      const data = n.data ?? {};
-      let destination = '/dashboard';
-      if (data.venueRequestId) destination = `/venue-requests/${encodeURIComponent(data.venueRequestId)}`;
-      else if (data.bankAccountId) destination = `/bank-accounts/${encodeURIComponent(data.bankAccountId)}`;
-      else if (data.gstVerificationId) destination = `/gst-verification/${encodeURIComponent(data.gstVerificationId)}`;
-      else if (data.callbackId) destination = `/support/callback/${encodeURIComponent(data.callbackId)}`;
-      else if (data.venueId) destination = `/venues/${encodeURIComponent(data.venueId)}`;
-      else if (n.type === 'activity_added' || n.type === 'activity_removed') destination = '/activity-approvals';
-      else if (n.type === 'partner_profile_updated') destination = '/partners';
-      else if (n.type.startsWith('venue_')) destination = '/venues';
-
-      setOpen(false);
-      navigate(destination);
+      await adminNotificationsApi.markAllRead();
+      refreshReadStatus();
+    } catch {
+      toast.error('Could not mark notifications as read. Please try again.');
     }
+  };
+
+  const handleItemClick = (n: AdminNotification) => {
+    setOpen(false);
+    openAdminNotification(n, {
+      navigate,
+      markRead: adminNotificationsApi.markRead,
+      onRead: refreshReadStatus,
+      onReadError: () => toast.error('Notification opened, but could not mark it as read.'),
+    });
   };
 
   return (
     <div className="relative" ref={containerRef}>
       <button
         aria-label="Notifications"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
       >
@@ -85,7 +90,7 @@ export const NotificationsDropdown: React.FC = () => {
       </button>
 
       {open && (
-        <div className="fixed top-16 inset-x-3 sm:absolute sm:top-auto sm:inset-x-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
+        <div className="admin-popover fixed top-[72px] inset-x-3 sm:absolute sm:top-auto sm:inset-x-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h4 className="text-sm font-semibold text-gray-900">Notifications</h4>
             {unreadCount > 0 && (
@@ -99,9 +104,14 @@ export const NotificationsDropdown: React.FC = () => {
             )}
           </div>
 
-          <div className="max-h-[calc(100dvh-8rem)] sm:max-h-96 overflow-y-auto">
+          <div className="max-h-[min(calc(var(--app-visual-height,100dvh)-9rem),24rem)] overflow-y-auto overscroll-contain">
             {isLoading ? (
               <p className="text-center text-sm text-gray-400 py-10">Loading...</p>
+            ) : isError ? (
+              <div role="alert" className="text-center text-sm text-gray-500 py-10 px-4">
+                <p>Could not load notifications.</p>
+                <button type="button" onClick={() => refetch()} className="text-primary-700 underline mt-2">Try again</button>
+              </div>
             ) : notifications.length === 0 ? (
               <div className="text-center py-10">
                 <Radio size={24} className="mx-auto text-gray-200 mb-2" />
@@ -120,7 +130,7 @@ export const NotificationsDropdown: React.FC = () => {
                     {!n.isRead && (
                       <span className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-1.5 shrink-0" />
                     )}
-                    <div className={n.isRead ? 'pl-4' : ''}>
+                    <div className={`min-w-0 flex-1 ${n.isRead ? 'pl-4' : ''}`}>
                       <p className="text-sm font-medium text-gray-900">{n.title}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{n.body}</p>
                       <p className="text-[11px] text-gray-400 mt-1">

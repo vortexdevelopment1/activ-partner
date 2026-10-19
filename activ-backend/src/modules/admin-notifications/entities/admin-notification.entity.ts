@@ -7,6 +7,14 @@ import {
 } from 'typeorm';
 
 export enum AdminNotificationType {
+  PARTNER_REGISTERED = 'partner_registered',
+  VENUE_SUBMITTED = 'venue_submitted',
+  ACTIVITY_SUBMITTED = 'activity_submitted',
+  VENUE_REQUEST_SUBMITTED = 'venue_request_submitted',
+  GST_VERIFICATION_SUBMITTED = 'gst_verification_submitted',
+  BANK_ACCOUNT_SUBMITTED = 'bank_account_submitted',
+  CALLBACK_REQUESTED = 'callback_requested',
+  SUPPORT_REQUESTED = 'support_requested',
   VENUE_AUTO_DEACTIVATED = 'venue_auto_deactivated',
   ACTIVITY_ADDED = 'activity_added',
   ACTIVITY_REMOVED = 'activity_removed',

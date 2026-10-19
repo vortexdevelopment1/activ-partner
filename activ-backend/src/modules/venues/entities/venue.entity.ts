@@ -19,8 +19,7 @@ import { VenueAnswer } from './venue-answer.entity';
 
 @Entity('venues')
 export class Venue {
-  // Derived from archive status and booking acceptance; not a database column.
-  canPermanentlyDelete?: boolean;
+  changesRequested?: boolean;
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

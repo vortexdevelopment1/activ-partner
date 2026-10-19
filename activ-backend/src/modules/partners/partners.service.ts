@@ -68,7 +68,7 @@ export class PartnersService {
     const now = new Date();
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const userWithPhone = await tx.users.findUnique({ where: { phone_e164: phone } });
         const userWithEmail = email
           ? await tx.users.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
@@ -157,6 +157,13 @@ export class PartnersService {
           updatedAt: partner.updated_at,
         };
       });
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.PARTNER_REGISTERED,
+        'New partner created',
+        `${created.businessName || 'A partner'} was added to ACTIV.`,
+        { partnerId: created.id },
+      );
+      return created;
     } catch (error: any) {
       if (error instanceof ConflictException || error instanceof BadRequestException) throw error;
       if (error?.code === 'P2002') {
@@ -427,7 +434,14 @@ export class PartnersService {
       : null;
 
     const request = this.gstVerificationRepo.create({ partnerId, ...dto, gstDocUrl });
-    return this.gstVerificationRepo.save(request);
+    const saved = await this.gstVerificationRepo.save(request);
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.GST_VERIFICATION_SUBMITTED,
+      'GST verification submitted',
+      'A partner submitted GST details for review.',
+      { partnerId, gstVerificationId: saved.id },
+    );
+    return saved;
   }
 
   async findMyGstVerification(partnerId: string): Promise<GstVerificationRequest> {

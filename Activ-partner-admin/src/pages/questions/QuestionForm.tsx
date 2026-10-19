@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { Modal } from '../../components/ui/Modal';
 import { categoriesApi } from '../../api/categories.api';
 import type { Question } from '../../types';
@@ -47,11 +48,6 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
   onSubmit,
   initial,
 }) => {
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
-  const [typeMenuOpensUp, setTypeMenuOpensUp] = useState(false);
-  const typeMenuRef = useRef<HTMLDivElement>(null);
-  const typeButtonRef = useRef<HTMLButtonElement>(null);
-
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.getAll({ limit: 100 }),
@@ -73,7 +69,6 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const { fields, append, remove } = useFieldArray({ control, name: 'options' });
   const questionType = watch('questionType');
-  const selectedQuestionType = QUESTION_TYPES.find((type) => type.value === questionType);
   const needsOptions = OPTION_TYPES.includes(questionType);
   const hasLengthLimit = ['text', 'textarea', 'number'].includes(questionType);
 
@@ -96,44 +91,8 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
         minLength: initial?.minLength ?? null,
         maxLength: initial?.maxLength ?? null,
       });
-      setTypeMenuOpen(false);
     }
   }, [open, initial, reset]);
-
-  useEffect(() => {
-    if (!typeMenuOpen) return;
-
-    const closeMenu = (event: MouseEvent) => {
-      if (!typeMenuRef.current?.contains(event.target as Node)) {
-        setTypeMenuOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setTypeMenuOpen(false);
-        typeButtonRef.current?.focus();
-      }
-    };
-
-    document.addEventListener('mousedown', closeMenu);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('mousedown', closeMenu);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [typeMenuOpen]);
-
-  const toggleTypeMenu = () => {
-    if (!typeMenuOpen && typeButtonRef.current) {
-      const buttonRect = typeButtonRef.current.getBoundingClientRect();
-      const scrollBody = typeButtonRef.current.closest('.modal-scroll-body');
-      const boundary = scrollBody?.getBoundingClientRect();
-      const spaceBelow = (boundary?.bottom ?? window.innerHeight) - buttonRect.bottom;
-      const spaceAbove = buttonRect.top - (boundary?.top ?? 0);
-      setTypeMenuOpensUp(spaceBelow < 250 && spaceAbove > spaceBelow);
-    }
-    setTypeMenuOpen((current) => !current);
-  };
 
   return (
     <Modal
@@ -161,56 +120,9 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
           <div>
             <label className="label">Question Type *</label>
             <input type="hidden" {...register('questionType', { required: true })} />
-            <div ref={typeMenuRef} className="relative">
-              <button
-                ref={typeButtonRef}
-                type="button"
-                className="input flex w-full items-center justify-between gap-2 text-left"
-                aria-haspopup="listbox"
-                aria-expanded={typeMenuOpen}
-                onClick={toggleTypeMenu}
-              >
-                <span>{selectedQuestionType?.label ?? 'Select question type'}</span>
-                <ChevronDown
-                  size={16}
-                  className={`shrink-0 text-gray-500 transition-transform ${typeMenuOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-              {typeMenuOpen && (
-                <div
-                  role="listbox"
-                  aria-label="Question Type"
-                  className={`absolute left-0 z-30 max-h-52 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg ${
-                    typeMenuOpensUp ? 'bottom-full mb-1' : 'top-full mt-1'
-                  }`}
-                >
-                  {QUESTION_TYPES.map((type) => (
-                    <button
-                      key={type.value}
-                      type="button"
-                      role="option"
-                      aria-selected={questionType === type.value}
-                      className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-primary-50 ${
-                        questionType === type.value
-                          ? 'bg-primary-50 font-medium text-primary-700'
-                          : 'text-gray-700'
-                      }`}
-                      onClick={() => {
-                        setValue('questionType', type.value, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                        setTypeMenuOpen(false);
-                        typeButtonRef.current?.focus();
-                      }}
-                    >
-                      <span>{type.label}</span>
-                      {questionType === type.value && <Check size={15} />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <SelectMenu value={questionType ?? "text"} options={QUESTION_TYPES.map(type => ({ ...type }))}
+              ariaLabel="Question Type" placeholder="Select question type"
+              onChange={value => setValue("questionType", value, { shouldDirty: true, shouldValidate: true })} />
           </div>
           <div>
             <label className="label">Category</label>

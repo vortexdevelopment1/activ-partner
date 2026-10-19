@@ -16,14 +16,15 @@ describe('Finish agreement email', () => {
       partner: { email: 'registered@example.com' } };
     prisma = {
       venues: { findUnique: jest.fn().mockResolvedValue({ id: 'venue-1', partner_id: 'partner-1', status: 'DRAFT' }),
-        update: jest.fn().mockResolvedValue({}) },
+        update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       partner_venue_services: { updateMany: jest.fn().mockResolvedValue({}) },
       audit_events: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
-      $transaction: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn().mockImplementation((operations) => Promise.all(operations)),
     };
     mailService = { sendSignedPartnerAgreementEmail: jest.fn().mockResolvedValue(undefined) };
     service = Object.assign(Object.create(VenuesService.prototype), {
       prisma, mailService, logger: { error: jest.fn() }, findOne: jest.fn().mockResolvedValue(signedVenue),
+      adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) },
       generatePartnerAgreementPdf: jest.fn().mockResolvedValue({ base64: 'JVBERg==', filename: 'signed.pdf', mimeType: 'application/pdf' }),
     });
   });
@@ -41,13 +42,17 @@ describe('Finish agreement email', () => {
     expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
     expect(service.generatePartnerAgreementPdf).not.toHaveBeenCalled();
     expect(prisma.audit_events.create).not.toHaveBeenCalled();
-    expect(prisma.venues.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { submitted_at: expect.any(Date) },
+    expect(prisma.venues.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { submitted_at: expect.any(Date), review_status: 'pending', rejection_reason: null },
     }));
     expect(prisma.partner_venue_services.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: { status: 'PENDING', updated_at: expect.any(Date) },
     }));
     expect(prisma.$transaction).toHaveBeenCalled();
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
+      'venue_submitted', expect.any(String), expect.any(String),
+      { partnerId: 'partner-1', venueId: 'venue-1' },
+    );
   });
 
   it('emails the signed agreement to the saved profile email on Finish', async () => {
@@ -72,6 +77,18 @@ describe('Finish agreement email', () => {
     await service.submitForReview('venue-1', 'partner-1');
     expect(mailService.sendSignedPartnerAgreementEmail).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('does not duplicate admin notifications when Finish is retried', async () => {
+    prisma.venues.updateMany.mockResolvedValue({ count: 0 });
+    await service.submitForReview('venue-1', 'partner-1');
+    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
+  });
+
+  it('does not notify admins when the submission transaction fails', async () => {
+    prisma.$transaction.mockRejectedValue(new Error('Submission failed'));
+    await expect(service.submitForReview('venue-1', 'partner-1')).rejects.toThrow('Submission failed');
+    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
 
   it('explains authentication failures without exposing SMTP details', async () => {

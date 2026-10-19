@@ -20,6 +20,7 @@ interface RejectModalProps {
   onConfirm: (reason: string, notes: string) => void;
   onCancel: () => void;
   loading?: boolean;
+  mode?: 'reject' | 'suspend';
 }
 
 export const RejectModal: React.FC<RejectModalProps> = ({
@@ -28,14 +29,18 @@ export const RejectModal: React.FC<RejectModalProps> = ({
   onConfirm,
   onCancel,
   loading,
+  mode = 'reject',
 }) => {
+  const suspending = mode === 'suspend';
+  const action = suspending ? 'Suspend' : 'Reject';
+  const reasonLabel = suspending ? 'Suspension' : 'Rejection';
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
   const handleConfirm = () => {
     if (!reason) {
-      setError('Please select a rejection reason.');
+      setError(`Please select a ${reasonLabel.toLowerCase()} reason.`);
       return;
     }
     setError('');
@@ -51,22 +56,22 @@ export const RejectModal: React.FC<RejectModalProps> = ({
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Reject Venue" size="md">
+    <Modal open={open} onClose={handleClose} title={`${action} Venue`} size="md">
       <div className="space-y-4">
         <div className="flex gap-3">
           <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
             <XCircle size={20} className="text-red-600" />
           </div>
           <p className="text-sm text-gray-700 pt-2">
-            Rejecting{' '}
+            {suspending ? 'Suspending' : 'Rejecting'}{' '}
             <span className="font-semibold text-gray-900">"{venueName}"</span>.
-            The partner will be notified with the reason below.
+            {suspending ? 'Provide the suspension reason below.' : 'The partner will be notified with the reason below.'}
           </p>
         </div>
 
         <div>
-          <label className="label">Rejection Reason *</label>
-          <SelectMenu value={reason} placeholder="Select a reason..." ariaLabel="Rejection reason"
+          <label className="label">{reasonLabel} Reason *</label>
+          <SelectMenu value={reason} placeholder="Select a reason..." ariaLabel={`${reasonLabel} reason`}
             options={REJECTION_REASONS.map((item) => ({ value: item, label: item }))}
             onChange={(next) => { setReason(next); setError(''); }} />
           {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
@@ -93,7 +98,7 @@ export const RejectModal: React.FC<RejectModalProps> = ({
             disabled={loading}
             className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60 transition-colors"
           >
-            {loading ? 'Rejecting...' : 'Reject Venue'}
+            {loading ? (suspending ? 'Suspending...' : 'Rejecting...') : `${action} Venue`}
           </button>
         </div>
       </div>

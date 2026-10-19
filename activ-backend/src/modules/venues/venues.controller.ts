@@ -1114,7 +1114,7 @@ export class VenuesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Delete venue (Partner can delete own, Admin can delete any)',
-    description: 'First deletion archives the venue. Deleting an archived venue with bookings disabled again as an admin permanently deletes it and its associated data. Active bookings block permanent deletion.',
+    description: 'Admin deletion permanently removes the venue and its associated data in one request. Active bookings block permanent deletion. Partner deletion archives the venue and disables new bookings.',
   })
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const result = await this.venuesService.remove(id, user);

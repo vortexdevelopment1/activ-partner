@@ -23,7 +23,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <AlertTriangle size={22} className={variant === 'danger' ? 'text-red-500' : 'text-amber-500'} />
       </div>
       <p className="text-gray-600 text-sm">{message}</p>
-      <div className="flex gap-3 w-full">
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 w-full">
         <button onClick={onCancel} className="flex-1 btn-secondary">Cancel</button>
         <button
           onClick={onConfirm}

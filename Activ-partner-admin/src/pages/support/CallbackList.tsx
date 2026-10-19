@@ -59,7 +59,7 @@ export const CallbackList: React.FC = () => {
             placeholder="Search by name, phone or venue..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="input pl-9 w-72"
+            className="input pl-9 w-full sm:w-72"
           />
         </div>
       </div>
@@ -84,7 +84,7 @@ export const CallbackList: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">

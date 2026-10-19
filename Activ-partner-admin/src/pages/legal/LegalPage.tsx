@@ -93,12 +93,12 @@ export const LegalPage: React.FC = () => {
       {/* Card */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         {/* Tabs */}
-        <div className="flex border-b border-gray-100">
+        <div className="flex overflow-x-auto border-b border-gray-100">
           {TABS.map((tab) => (
             <button
               key={tab.type}
               onClick={() => setActiveTab(tab.type)}
-              className={`px-6 py-3.5 text-sm font-medium transition-colors ${
+              className={`shrink-0 px-4 sm:px-6 py-3.5 text-sm font-medium transition-colors ${
                 activeTab === tab.type
                   ? 'border-b-2 border-primary-600 text-primary-700'
                   : 'text-gray-500 hover:text-gray-800'
@@ -110,7 +110,7 @@ export const LegalPage: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
               Loading...
@@ -130,7 +130,7 @@ export const LegalPage: React.FC = () => {
                 </p>
               )}
               <textarea
-                className="w-full min-h-[500px] border border-gray-200 rounded-lg p-4 text-sm text-gray-800 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full min-h-[50dvh] sm:min-h-[500px] border border-gray-200 rounded-lg p-4 text-sm text-gray-800 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 placeholder={`Enter ${TABS.find((t) => t.type === activeTab)?.label ?? ''} content here...`}
                 value={contentMap[activeTab]}
                 onChange={(e) =>

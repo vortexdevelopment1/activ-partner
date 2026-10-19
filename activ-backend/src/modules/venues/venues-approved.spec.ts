@@ -60,15 +60,12 @@ describe('approved partner venues', () => {
     expect(prisma.venues.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['PUBLISHED', true, false],
-    ['ARCHIVED', true, false],
-    ['ARCHIVED', false, true],
-  ])('exposes permanent deletion eligibility for %s with booking acceptance %s', async (status, bookingAccept, expected) => {
+  it('exposes editable corrections and returns resubmitted drafts as pending', async () => {
     const record = await prisma.venues.findUnique();
-    record.status = status;
-    record.booking_accept = bookingAccept;
-    expect((await service.findOne('venue-1')).canPermanentlyDelete).toBe(expected);
+    Object.assign(record, { status: 'DRAFT', review_status: 'pending', rejection_reason: 'Fix photos', submitted_at: null });
+    expect(await service.findOne('venue-1')).toMatchObject({ status: 'draft', changesRequested: true, rejectionReason: 'Fix photos' });
+    Object.assign(record, { submitted_at: now, rejection_reason: null });
+    expect(await service.findOne('venue-1')).toMatchObject({ status: 'pending', changesRequested: false, rejectionReason: null });
   });
 
   it('includes activity photos, amenities and timing without legacy lookups', async () => {

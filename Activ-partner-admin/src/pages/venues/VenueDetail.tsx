@@ -41,7 +41,7 @@ const questionLabel = (answer: VenueAnswer) => {
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="grid min-w-0 grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+    <div className="detail-row">
       <span className="text-xs text-gray-400 pt-0.5">{label}</span>
       <span className="min-w-0 text-sm text-gray-800 [overflow-wrap:anywhere]">{value}</span>
     </div>
@@ -104,6 +104,7 @@ export const VenueDetail: React.FC = () => {
   });
 
   const venue: Venue | undefined = data?.data?.data;
+  const isSuspending = venue?.status === 'approved';
 
   const approveMutation = useMutation({
     mutationFn: () => venuesApi.approve(id!),
@@ -117,14 +118,16 @@ export const VenueDetail: React.FC = () => {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (reason: string) => venuesApi.reject(id!, reason),
+    mutationFn: (reason: string) => venuesApi.processApproval(id!, {
+      status: isSuspending ? 'suspended' : 'rejected', reason,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['venue', id] });
       queryClient.invalidateQueries({ queryKey: ['venues'] });
-      success('Venue rejected.');
+      success(isSuspending ? 'Venue suspended.' : 'Venue rejected.');
       setRejectOpen(false);
     },
-    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to reject'),
+    onError: (err: any) => error(err?.response?.data?.message ?? (isSuspending ? 'Failed to suspend' : 'Failed to reject')),
   });
 
   const requestChangesMutation = useMutation({
@@ -233,7 +236,7 @@ export const VenueDetail: React.FC = () => {
     <div className="space-y-5 max-w-5xl">
       {/* Back + title */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={() => navigate(-1)}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
@@ -241,7 +244,7 @@ export const VenueDetail: React.FC = () => {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold text-gray-900">{venue.name}</h2>
               <Badge status={venue.status} />
               {!venue.isActive && (
@@ -262,7 +265,7 @@ export const VenueDetail: React.FC = () => {
             onClick={() => setDeleteOpen(true)}
             className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 sm:px-4"
           >
-            <Trash2 size={14} /> {venue.canPermanentlyDelete ? 'Permanently Delete' : 'Delete Venue'}
+            <Trash2 size={14} /> Delete Venue
           </button>
           {venue.status === 'pending' || venue.status === 'draft' ? (
             <>
@@ -290,7 +293,7 @@ export const VenueDetail: React.FC = () => {
               onClick={() => setRejectOpen(true)}
               className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
             >
-              Suspend / Reject
+              Suspend
             </button>
           ) : venue.status === 'rejected' || venue.status === 'suspended' ? (
             <button
@@ -306,14 +309,14 @@ export const VenueDetail: React.FC = () => {
       {/* Rejection reason banner */}
       {venue.rejectionReason && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-red-700">Rejection Reason</p>
-          <p className="text-sm text-red-600 mt-1">{venue.rejectionReason}</p>
+          <p className="text-sm font-medium text-red-700">{venue.changesRequested ? 'Changes Requested' : venue.status === 'suspended' ? 'Suspension Reason' : 'Rejection Reason'}</p>
+          <p className="text-sm text-red-600 mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{venue.rejectionReason}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid min-w-0 grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Left column — main info */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="min-w-0 xl:col-span-2 space-y-5">
           {/* Venue Info */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -335,15 +338,15 @@ export const VenueDetail: React.FC = () => {
                 <InfoRow label="Venue Phone" value={(venue as any).venuePhone} />
               )}
               {(venue as any).locationUrl && (
-                <div className="flex gap-3">
-                  <span className="text-xs text-gray-400 w-32 shrink-0 pt-0.5">Location URL</span>
+                <div className="detail-row">
+                  <span>Location URL</span>
                   <a
                     href={(venue as any).locationUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-primary-600 hover:underline flex items-center gap-1"
+                    className="min-w-0 text-sm text-primary-600 hover:underline [overflow-wrap:anywhere]"
                   >
-                    <Link2 size={12} /> {(venue as any).locationUrl}
+                    <Link2 size={12} className="inline mr-1" />{(venue as any).locationUrl}
                   </a>
                 </div>
               )}
@@ -376,8 +379,8 @@ export const VenueDetail: React.FC = () => {
                     )}
                     <div className="space-y-2">
                       {group.entries.map((avail, idx) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <span className="text-xs font-medium text-gray-600 w-24 shrink-0 capitalize pt-1">
+                        <div key={idx} className="grid grid-cols-[4.5rem_minmax(0,1fr)] sm:grid-cols-[6rem_minmax(0,1fr)] items-start gap-2 sm:gap-3">
+                          <span className="text-xs font-medium text-gray-600 capitalize pt-1">
                             {avail.day}
                           </span>
                           <div className="flex flex-wrap gap-2">
@@ -424,7 +427,7 @@ export const VenueDetail: React.FC = () => {
                         />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="font-medium text-gray-900 text-sm">{svc.name}</p>
                           {svc.pricePerHour != null && (
                             <p className="text-sm font-semibold text-primary-700 shrink-0">
@@ -435,7 +438,7 @@ export const VenueDetail: React.FC = () => {
                         {svc.description && (
                           <p className="text-xs text-gray-500 mt-0.5">{svc.description}</p>
                         )}
-                        <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
                           {svc.capacity && <span>Capacity: {svc.capacity}</span>}
                           <span>Min: {svc.minDuration} min</span>
                           {svc.maxDuration && <span>Max: {svc.maxDuration} min</span>}
@@ -447,7 +450,7 @@ export const VenueDetail: React.FC = () => {
                     </div>
                     {/* Multiple service images */}
                     {Array.isArray((svc as any).imageUrls) && (svc as any).imageUrls.length > 1 && (
-                      <div className="mt-2 grid grid-cols-4 gap-1.5">
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                         {(svc as any).imageUrls.map((url: string, i: number) => (
                           <img
                             key={i}
@@ -489,7 +492,7 @@ export const VenueDetail: React.FC = () => {
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <Image size={16} className="text-gray-400" /> Photos ({venue.images.length})
               </h3>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {venue.images.map((img) => (
                   <div
                     key={img.id}
@@ -741,6 +744,7 @@ export const VenueDetail: React.FC = () => {
       />
       <RejectModal
         open={rejectOpen}
+        mode={isSuspending ? 'suspend' : 'reject'}
         venueName={venue.name}
         loading={rejectMutation.isPending}
         onConfirm={(reason) => rejectMutation.mutate(reason)}
@@ -755,11 +759,9 @@ export const VenueDetail: React.FC = () => {
       />
       <ConfirmDialog
         open={deleteOpen}
-        title={venue.canPermanentlyDelete ? 'Permanently Delete Venue' : 'Delete Venue'}
-        message={venue.canPermanentlyDelete
-          ? `Permanently delete "${venue.name}" and its associated venue data and booking history from the database? This cannot be undone. Active bookings must be cancelled or completed first.`
-          : `Delete "${venue.name}"? This will archive the venue and disable new bookings. Deleting it again as an admin will permanently remove it from the database.`}
-        confirmLabel={venue.canPermanentlyDelete ? 'Permanently Delete' : 'Delete'}
+        title="Delete Venue"
+        message={`Permanently delete "${venue.name}" and its associated venue data and booking history from the database? This cannot be undone. Active bookings must be cancelled or completed first.`}
+        confirmLabel="Delete"
         variant="danger"
         loading={deleteMutation.isPending}
         onConfirm={() => deleteMutation.mutate()}

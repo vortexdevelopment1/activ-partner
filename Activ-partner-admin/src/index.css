@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep the browser's native reveal button from competing with our toggle. */
+.admin-password-input::-ms-reveal,
+.admin-password-input::-ms-clear {
+  display: none;
+}
+
 body {
   margin: 0;
   background-color: #fdfff5;
@@ -14,6 +20,34 @@ body {
 ::selection { background: #daff50; color: #000; }
 
 button, input, select, textarea { font: inherit; }
+
+html, body, #root { min-width: 0; min-height: 100%; }
+input, select, textarea { min-width: 0; max-width: 100%; }
+img, video, canvas { max-width: 100%; }
+
+/* Long user content must contribute a small minimum width to flex/grid tracks. */
+:where(.admin-main, .modal-scroll-body, .admin-popover) {
+  overflow-wrap: anywhere;
+}
+:where(.admin-main, .modal-scroll-body) :where(.flex, .grid) > :where(div, section, article, form, fieldset, span, p, a) {
+  min-width: 0;
+}
+:where(.admin-main, .modal-scroll-body, .admin-popover) svg { flex-shrink: 0; }
+.admin-main :where(.overflow-x-auto, .overflow-x-scroll) { max-width: 100%; overscroll-behavior-x: contain; }
+.detail-row { display: grid; min-width: 0; grid-template-columns: minmax(0, 6rem) minmax(0, 1fr); gap: .75rem; }
+.detail-row > * { min-width: 0; overflow-wrap: anywhere; }
+.detail-row > :first-child { font-size: .75rem; color: #6b7280; padding-top: .125rem; }
+.detail-row > :last-child { font-size: .875rem; color: #1f2937; }
+@media (min-width: 640px) { .detail-row { grid-template-columns: 8rem minmax(0, 1fr); } }
+@media (hover: none) { .group button { opacity: 1; } }
+@media (max-width: 639px) {
+  /* 16px inputs prevent Safari from zooming the entire layout on focus. */
+  :where(.admin-main, .modal-scroll-body, .auth-background, .admin-popover) :where(input:not([type='checkbox']):not([type='radio']), select, textarea) { font-size: 16px; }
+  .admin-main table { min-width: 40rem; }
+  .admin-main :where(th, td) { max-width: 20rem; }
+  .modal-scroll-body :where(.flex.justify-end, .flex.gap-3.w-full) { flex-wrap: wrap; }
+  :where(.btn-primary, .btn-secondary, .btn-danger) { min-height: 44px; }
+}
 
 .admin-main {
   background: linear-gradient(165deg, #fdfff5 20%, #e9f3c2 100%);
