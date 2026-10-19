@@ -1243,6 +1243,123 @@ export class VenuesService {
       : {};
   }
 
+  /**
+   * The user app still reads the legacy facilities/slots projection. Keep it
+   * in sync with the partner scheduling tables whenever a partner saves a
+   * schedule or an activity becomes approved. This is deliberately a data
+   * sync, not a schema change.
+   */
+  private async syncLegacyActivitySlots(venueId: string): Promise<void> {
+    const prisma = this.prisma as any;
+    if (!prisma.facilities || !prisma.slots || !prisma.activities) return;
+
+    const services = await prisma.partner_venue_services.findMany({
+      where: { venue_id: venueId, status: "APPROVED" },
+      include: { partner_service_categories: true },
+    });
+
+    for (const service of services) {
+      const category = service.partner_service_categories;
+      const activity = await prisma.activities.findFirst({
+        where: {
+          status: "PUBLISHED",
+          OR: [
+            { sport_code: category.slug },
+            { name: { equals: service.title, mode: "insensitive" } },
+            { name: { equals: category.name, mode: "insensitive" } },
+          ],
+        },
+      });
+      if (!activity) {
+        this.logger.warn(
+          `No published catalogue activity found for ${service.title} (${category.slug}); legacy slots were not generated`,
+        );
+        continue;
+      }
+
+      await prisma.venue_activities.upsert({
+        where: { venue_id_activity_id: { venue_id: venueId, activity_id: activity.id } },
+        create: { venue_id: venueId, activity_id: activity.id, status: "APPROVED" },
+        update: { status: "APPROVED" },
+      });
+
+      let facility = service.facility_id
+        ? await prisma.facilities.findUnique({ where: { id: service.facility_id } })
+        : await prisma.facilities.findFirst({
+            where: { venue_id: venueId, activity_id: activity.id },
+          });
+      if (!facility) {
+        facility = await prisma.facilities.create({
+          data: {
+            id: randomUUID(),
+            venue_id: venueId,
+            activity_id: activity.id,
+            name: service.title || activity.name,
+            capacity: service.capacity ?? 1,
+          },
+        });
+      }
+      if (service.facility_id !== facility.id) {
+        await prisma.partner_venue_services.update({
+          where: { id: service.id },
+          data: { facility_id: facility.id },
+        });
+      }
+
+      const windows = await prisma.partner_venue_availability.findMany({
+        where: { venue_id: venueId, service_category_id: service.service_category_id },
+        orderBy: [{ day: "asc" }, { sort_order: "asc" }],
+      });
+      if (!windows.length) continue;
+
+      const horizonStart = new Date();
+      horizonStart.setUTCHours(0, 0, 0, 0);
+      const horizonEnd = new Date(horizonStart);
+      horizonEnd.setUTCDate(horizonEnd.getUTCDate() + 180);
+      const existing = await prisma.slots.findMany({
+        where: {
+          facility_id: facility.id,
+          starts_at: { gte: horizonStart, lt: horizonEnd },
+        },
+      });
+      const existingKeys = new Set(
+        existing.map((slot: any) => `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`),
+      );
+      const data: any[] = [];
+      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const duration = Math.max(30, service.min_duration_minutes ?? 60);
+
+      for (let date = new Date(horizonStart); date < horizonEnd; date.setUTCDate(date.getUTCDate() + 1)) {
+        const day = dayNames[date.getUTCDay()];
+        for (const window of windows.filter((entry: any) => entry.day.toLowerCase() === day)) {
+          const open = this.timeToMinutes(window.open_time);
+          const close = this.timeToMinutes(window.close_time);
+          for (let start = open; start + duration <= close; start += duration) {
+            const startsAt = new Date(Date.UTC(
+              date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
+              Math.floor(start / 60), start % 60,
+            ));
+            const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+            const key = `${startsAt.toISOString()}|${endsAt.toISOString()}`;
+            if (existingKeys.has(key)) continue;
+            existingKeys.add(key);
+            const discounted = Number(window.discounted_price_paise ?? 0);
+            data.push({
+              id: randomUUID(),
+              facility_id: facility.id,
+              starts_at: startsAt,
+              ends_at: endsAt,
+              capacity: Number(window.capacity || service.capacity || 1),
+              status: "AVAILABLE",
+              price_paise: BigInt(discounted > 0 ? discounted : Number(window.price_paise ?? service.price_per_hour_paise ?? 0)),
+            });
+          }
+        }
+      }
+      if (data.length) await prisma.slots.createMany({ data });
+    }
+  }
+
   async setAvailability(
     venueId: string,
     venueTiming: Record<
@@ -1310,6 +1427,7 @@ export class VenuesService {
         });
       }
     });
+    await this.syncLegacyActivitySlots(venueId);
     const availability = mapVenueAvailability(
       await this.prisma.partner_venue_availability.findMany({
         where: { venue_id: venueId },
@@ -3245,6 +3363,7 @@ export class VenuesService {
         updated_at: new Date(),
       },
     });
+    if (approved) await this.syncLegacyActivitySlots(record.venues.id);
     const saved = await this.findOwnedActivity(
       serviceId,
       record.venues.partner_id,
