@@ -20,9 +20,9 @@ export const CommissionsList: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<Commission | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [defaultRate, setDefaultRate] = useState('5');
+  const [defaultRate, setDefaultRate] = useState('');
 
-  const { data: defaultData, isLoading: isDefaultLoading } = useQuery({
+  const { data: defaultData, isFetching: isDefaultLoading, isError: isDefaultError, refetch: refetchDefault } = useQuery({
     queryKey: ['commissions', 'default'],
     queryFn: commissionsApi.getDefault,
   });
@@ -83,6 +83,10 @@ export const CommissionsList: React.FC = () => {
   });
 
   const saveDefaultRate = () => {
+    if (isDefaultLoading || isDefaultError || defaultRate.trim() === '') {
+      error('Wait for the commission rate to load before saving');
+      return;
+    }
     const rate = Number(defaultRate);
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
       error('Enter a commission percentage between 0 and 100');
@@ -139,8 +143,10 @@ export const CommissionsList: React.FC = () => {
                 min="0"
                 max="100"
                 step="0.01"
-                value={defaultRate}
-                disabled={isDefaultLoading || defaultMutation.isPending}
+                value={isDefaultLoading || isDefaultError ? '' : defaultRate}
+                placeholder={isDefaultLoading ? 'Loading...' : isDefaultError ? 'Unavailable' : 'Enter rate'}
+                aria-busy={isDefaultLoading}
+                disabled={isDefaultLoading || isDefaultError || defaultMutation.isPending}
                 onChange={(event) => setDefaultRate(event.target.value)}
                 className="input w-full"
               />
@@ -148,13 +154,19 @@ export const CommissionsList: React.FC = () => {
             <button
               type="button"
               onClick={saveDefaultRate}
-              disabled={isDefaultLoading || defaultMutation.isPending}
+              disabled={isDefaultLoading || isDefaultError || defaultRate.trim() === '' || defaultMutation.isPending}
               className="btn-primary flex items-center gap-2 whitespace-nowrap"
             >
               <Save size={16} /> {defaultMutation.isPending ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
+        {isDefaultError && (
+          <p role="alert" className="mt-3 text-sm text-red-600">
+            Could not load the current commission rate.{' '}
+            <button type="button" onClick={() => refetchDefault()} className="font-medium underline">Retry</button>
+          </p>
+        )}
       </section>
 
       <div>
