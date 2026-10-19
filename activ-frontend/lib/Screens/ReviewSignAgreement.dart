@@ -122,7 +122,8 @@ class _State extends State<ReviewSignAgreement> {
       if (venueId == null || venueId.isEmpty || token == null || token.isEmpty) {
         throw Exception('Your session is missing. Please sign in again.');
       }
-      final uri = Uri.parse('$BASE_URL/venues/$venueId/partner-agreement/download');
+      final uri = Uri.parse('$BASE_URL/venues/$venueId/partner-agreement/download')
+          .replace(queryParameters: {'signature': _signature.text.trim()});
       final headers = {'Authorization': 'Bearer $token'};
       final response = await (widget.client?.get(uri, headers: headers) ??
               http.get(uri, headers: headers))
@@ -177,10 +178,18 @@ class _State extends State<ReviewSignAgreement> {
               http.post(submitUri, headers: headers))
           .timeout(const Duration(seconds: 30));
       _checkResponse(submit, 'Failed to submit the venue.');
+      String? emailWarning;
+      try {
+        final submitData = jsonDecode(submit.body)['data'];
+        if (submitData is Map && submitData['agreementEmailSent'] == false) {
+          emailWarning = submitData['agreementEmailError']?.toString() ??
+              'Registration succeeded, but the agreement email could not be sent. You can retry it from this screen.';
+        }
+      } catch (_) {/* A successful response without metadata is still valid. */}
       if (!mounted) return;
       CommonUtilities.firstTimeLoginSignup = 'yes';
       CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-          context, ContactSupportScreen());
+          context, ContactSupportScreen(emailWarning: emailWarning));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -240,11 +249,7 @@ class _State extends State<ReviewSignAgreement> {
                                     ? null
                                     : _download,
                             icon: _downloading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
+                                ? const AppSkeleton(width: 22, height: 22, radius: 4)
                                 : const Icon(Icons.file_download_outlined,
                                     color: Colors.black)),
                       ]),
@@ -256,8 +261,17 @@ class _State extends State<ReviewSignAgreement> {
                                 border: Border.all(color: AppColors.gray),
                                 borderRadius: BorderRadius.circular(8)),
                             child: _loading
-                                ? const Center(
-                                    child: CircularProgressIndicator())
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Column(children: [
+                                      AppSkeleton(height: 42),
+                                      SizedBox(height: 12),
+                                      AppSkeleton(height: 42),
+                                      SizedBox(height: 12),
+                                      AppSkeleton(height: 42),
+                                      SizedBox(height: 12),
+                                      AppSkeleton(height: 42),
+                                    ]))
                                 : _error != null
                                     ? Center(
                                         child: Padding(

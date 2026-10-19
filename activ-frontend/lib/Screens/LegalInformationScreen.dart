@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:activ_app/Screens/PdfViewerPage.dart';
@@ -5,7 +6,6 @@ import 'package:dio/dio.dart' as dio_pkg;
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:activ_app/Style/constants_messages.dart';
-import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1700,8 +1700,6 @@ class _State extends State<LegalInformationScreen> {
     }
 
     if (!mounted) return;
-    ProgressBar().showLoader(context);
-
     try {
       final formData = dio_pkg.FormData();
       // Text fields (per API spec)
@@ -1744,7 +1742,7 @@ class _State extends State<LegalInformationScreen> {
       CommonUtilities.showLog('Sending files: ${formData.files.map((e) => e.key).toList()}');
 
       final dio = dio_pkg.Dio();
-      final response = await dio.patch(
+      final request = dio.patch(
         '$BASE_URL/venues/$venueId/legal',
         data: formData,
         options: dio_pkg.Options(
@@ -1752,30 +1750,22 @@ class _State extends State<LegalInformationScreen> {
           validateStatus: (_) => true,
         ),
       );
+      unawaited(request.then((response) {
+        CommonUtilities.showLog('Legal info status: ${response.statusCode}');
+        CommonUtilities.showLog('Legal info response: ${response.data}');
+      }).catchError((error) {
+        CommonUtilities.showLog('❌ Legal info error: $error');
+      }));
 
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
-      CommonUtilities.showLog('Legal info status: ${response.statusCode}');
-      CommonUtilities.showLog('Legal info response: ${response.data}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        CommonUtilities.showLog('✅ Legal info saved successfully');
+      if (mounted) {
         CommonUtilities.NavigateWithPush(context, ReviewVenueDetailsScreen());
-      } else {
-        final data = response.data;
-        String msg = 'Failed to save legal information.';
-        if (data is Map) {
-          final m = data['message'];
-          msg = m is List ? m.join(', ') : m?.toString() ?? msg;
-        }
-        CommonUtilities.createSnackBar(context, msg);
       }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog('❌ Legal info error: $e');
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+            context, 'Network error. Please check your connection.');
+      }
     }
   }
 

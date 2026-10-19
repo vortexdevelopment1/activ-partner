@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:http/http.dart' as http;
@@ -7,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../Style/app_size.dart';
-import '../api_calling/progress_bar/progress_bar_new.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
@@ -102,14 +102,6 @@ class _State extends State<TellUsAboutScreen> {
   }
 
   void completeProfile() async {
-    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-
-    if (jwtToken.isEmpty) {
-      CommonUtilities.createSnackBar(
-          context, 'Session expired. Please verify your phone number again.');
-      return;
-    }
-
     final firstName = firstNameController.text.trim();
     final lastName = lastNameController.text.trim();
     final email = emailController.text.trim();
@@ -128,9 +120,32 @@ class _State extends State<TellUsAboutScreen> {
       isChecked ? "true" : venueOwnerMobileNumberController.text.trim());
 
     if (!mounted) return;
-    ProgressBarNew().showLoader(context);
+    final payload = {
+      "firstName": firstName,
+      "lastName": lastName,
+      "email": email,
+      "businessName": "",
+      "contactPhone": contactPhone,
+    };
 
+    // The form data is already persisted locally. Move to the next step
+    // immediately and sync the profile without blocking the onboarding UI.
+    if (!widget.reviewMode) {
+      CommonUtilities.NavigateWithPush(context, VenueScreen());
+      unawaited(_persistProfile(payload));
+      return;
+    }
+
+    await _persistProfile(payload);
+  }
+
+  Future<void> _persistProfile(Map<String, dynamic> payload) async {
     try {
+      final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
+      if (jwtToken.isEmpty) {
+        throw Exception(
+            'Session expired. Please verify your phone number again.');
+      }
       final response = await http.patch(
         Uri.parse(COMPLETE_PROFILE_URL),
         headers: {
@@ -138,39 +153,28 @@ class _State extends State<TellUsAboutScreen> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $jwtToken',
         },
-        body: jsonEncode({
-          "firstName": firstName,
-          "lastName": lastName,
-          "email": email,
-          "businessName": "",
-          "contactPhone": contactPhone,
-        }),
+        body: jsonEncode(payload),
       );
-
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
 
       CommonUtilities.showLog("Complete Profile status: ${response.statusCode}");
       CommonUtilities.showLog("Complete Profile response: ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         await SharedPreference.addStringToSF("is_profile_complete", "true");
-        if (!mounted) return;
-        if (widget.reviewMode) {
-          Navigator.pop(context, true);
-        } else {
-          CommonUtilities.NavigateWithPush(context, VenueScreen());
-        }
+        if (mounted && widget.reviewMode) Navigator.pop(context, true);
       } else {
         final body = jsonDecode(response.body);
         final msg = body['message'] ?? 'Failed to save profile. Please try again.';
-        CommonUtilities.createSnackBar(context, msg);
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          CommonUtilities.createSnackBar(context, msg);
+        }
       }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog("Complete Profile error: $e");
-      CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        CommonUtilities.createSnackBar(
+            context, 'Network error. Please check your connection.');
+      }
     }
   }
 

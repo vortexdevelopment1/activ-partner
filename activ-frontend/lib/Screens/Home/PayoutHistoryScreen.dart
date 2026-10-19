@@ -179,7 +179,7 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
     });
     try {
       final token = await SharedPreference.readStr('jwt_token') ?? '';
-      final uri = Uri.parse('$BASE_URL/payouts/my').replace(queryParameters: {
+      final uri = Uri.parse('$BASE_URL/bookings/payout-history').replace(queryParameters: {
         ..._filters(_range, _status),
         'page': '$page',
         'limit': '20'
@@ -358,7 +358,14 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
   Widget _record(Map<String, dynamic> record) {
     final status = record['status'],
         date = DateTime.tryParse((record['payoutDate'] ?? '').toString());
-    return Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => PayoutTransactionDetailsScreen(
+                  bookingId: record['id'].toString(), client: widget.client))),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -421,8 +428,198 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
               child: Text(record['failureReason'].toString(),
                   style: _text(14, color: Colors.red.shade700))),
       ]),
+      ),
     );
   }
+}
+
+class PayoutTransactionDetailsScreen extends StatefulWidget {
+  const PayoutTransactionDetailsScreen(
+      {super.key, required this.bookingId, this.client});
+  final String bookingId;
+  final http.Client? client;
+
+  @override
+  State<PayoutTransactionDetailsScreen> createState() =>
+      _PayoutTransactionDetailsScreenState();
+}
+
+class _PayoutTransactionDetailsScreenState
+    extends State<PayoutTransactionDetailsScreen> {
+  Map<String, dynamic>? _data;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse('$BASE_URL/bookings/${widget.bookingId}/payout-statement'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+      _check(response);
+      final data = jsonDecode(response.body)['data'];
+      if (mounted) setState(() => _data = Map<String, dynamic>.from(data));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error is StateError
+            ? error.message
+            : 'Unable to load transaction details. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _money(dynamic value) => NumberFormat('#,##0.00', 'en_IN')
+      .format((value as num?)?.toDouble() ?? 0);
+
+  String _date(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+    return date == null
+        ? '-'
+        : DateFormat('d MMM yyyy, hh:mm a').format(date.toLocal());
+  }
+
+  Widget _card(Widget child) => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFD5DADA))),
+        child: child,
+      );
+
+  Widget _line(String label, dynamic value, {bool bold = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Text(label, style: _text(16, bold: bold))),
+          const SizedBox(width: 12),
+          Flexible(
+              child: Text(value?.toString() ?? '-',
+                  textAlign: TextAlign.right, style: _text(16, bold: bold)))
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _data;
+    return _shell(
+      context,
+      'Transaction Details',
+      _loading
+          ? const Center(child: CircularProgressIndicator(color: _purple))
+          : _error != null
+              ? Center(child: Text(_error!, style: _text(15)))
+              : data == null
+                  ? const SizedBox.shrink()
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                      children: [
+                        _card(Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                _statusChip(data['status']),
+                                const Spacer(),
+                                Flexible(
+                                    child: _statusChip(
+                                        data['isGstRegistered'] == true
+                                            ? 'GST Registered Venue'
+                                            : 'Non-GST Registered Venue',
+                                        color: data['isGstRegistered'] == true
+                                            ? _purple
+                                            : const Color(0xFFFF5757)))
+                              ]),
+                              const SizedBox(height: 24),
+                              Text('Amount Received', style: _text(15)),
+                              const SizedBox(height: 4),
+                              Text('₹${_money(data['amountReceived'])}',
+                                  style: _text(30, bold: true)),
+                              const SizedBox(height: 22),
+                              Text('Payout Date', style: _text(15, bold: true)),
+                              const SizedBox(height: 4),
+                              Text(_date(data['payoutDate']), style: _text(16))
+                            ])),
+                        _card(Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Payout Breakdown',
+                                  style: _text(20, bold: true)),
+                              const SizedBox(height: 12),
+                              _line('Total Booking Amount',
+                                  '+  ₹${_money(data['grossBookingAmount'])}'),
+                              _line(
+                                  'ACTIV Commission (${data['commissionPercent']}%)',
+                                  '-  ₹${_money(data['activCommission'])}'),
+                              _line('GST on Commission (18%)',
+                                  '-  ₹${_money(data['gstOnCommission'])}'),
+                              const Divider(color: Color(0xFF8BC48B)),
+                              _line('Net Received',
+                                  '₹${_money(data['netReceived'])}',
+                                  bold: true)
+                            ])),
+                        _card(Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Transaction & Slot Details',
+                                  style: _text(20, bold: true)),
+                              const SizedBox(height: 12),
+                              _line('Activity Name', data['activityName']),
+                              _line('Date', data['slotDate']),
+                              _line('Slot Time', data['slotTime']),
+                              _line('Slot Base Price',
+                                  '₹ ${_money(data['slotBasePrice'])}'),
+                              _line('Booking ID', data['bookingId']),
+                              _line('Transaction ID', data['transactionId'])
+                            ])),
+                        if (data['bank'] is Map)
+                          _card(Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Expanded(
+                                      child: Text('Credited Bank Account Details',
+                                          style: _text(18, bold: true))),
+                                  _statusChip(data['bank']['verified'] == true
+                                      ? 'Verified'
+                                      : 'Pending',
+                                      color: data['bank']['verified'] == true
+                                          ? Colors.green
+                                          : Colors.orange)
+                                ]),
+                                const SizedBox(height: 12),
+                                Text(data['bank']['accountHolderName'] ?? '-',
+                                    style: _text(16)),
+                                Text(data['bank']['bankName'] ?? '-',
+                                    style: _text(16)),
+                                Text(data['bank']['accountNumber'] ?? '-',
+                                    style: _text(16)),
+                                Text('IFSC: ${data['bank']['ifscCode'] ?? '-'}',
+                                    style: _text(16))
+                              ]))
+                      ],
+                    ),
+    );
+  }
+
+  Widget _statusChip(dynamic value, {Color? color}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+          color: color ??
+              (value == 'success' ? Colors.green : const Color(0xFFE19400)),
+          borderRadius: BorderRadius.circular(22)),
+      child: Text(value == 'success' ? 'Success' : value.toString(),
+          overflow: TextOverflow.ellipsis,
+          style: _text(14, bold: true, color: Colors.white)));
 }
 
 class ExportPayoutReportScreen extends StatefulWidget {

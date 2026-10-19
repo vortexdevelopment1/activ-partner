@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../../Style/app_colors.dart';
 
@@ -8,10 +8,17 @@ class WorkSpace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.transparent,
-      child: SpinKitFadingCircle(
-          color: AppColors.black),
+    return Shimmer.fromColors(
+      baseColor: AppColors.gray2,
+      highlightColor: AppColors.white,
+      child: Container(
+        width: 96,
+        height: 14,
+        decoration: BoxDecoration(
+          color: AppColors.gray2,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
     );
   }
 }

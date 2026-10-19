@@ -12,7 +12,6 @@ import 'onboarding_widgets.dart';
 import 'ContactSupportScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'TellUsAboutScreen.dart';
-import 'VenueScreen.dart';
 import 'MobileNumberScreen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
@@ -308,23 +307,25 @@ class _State extends State<OTPVerificationScreen> {
         } else if (total == 1 && firstStatus == 'draft') {
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, VenueScreen());
+              context, TellUsAboutScreen());
         } else {
-          // No venue yet or unexpected state — start venue onboarding
+          // No venue yet or unexpected incomplete state — restart from the
+          // first onboarding page. Draft values remain in local storage and
+          // are restored by the onboarding screens.
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, VenueScreen());
+              context, TellUsAboutScreen());
         }
       } else {
         // Fallback: continue onboarding
         CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-            context, VenueScreen());
+            context, TellUsAboutScreen());
       }
     } catch (e) {
       CommonUtilities.showLog("My venues error: $e");
       if (!mounted) return;
       CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-          context, VenueScreen());
+          context, TellUsAboutScreen());
     }
   }
 
@@ -392,7 +393,16 @@ class _State extends State<OTPVerificationScreen> {
     }
 
     final amenities = (venue['amenities'] as List? ?? [])
-        .map((amenity) => {'title': amenity.toString()})
+        .map((amenity) {
+          if (amenity is Map) {
+            return {
+              if (amenity['id'] != null) 'id': amenity['id'],
+              'title': amenity['title'] ?? amenity['name'] ?? '',
+            };
+          }
+          return {'title': amenity.toString()};
+        })
+        .where((amenity) => amenity['title'].toString().trim().isNotEmpty)
         .toList();
     if (amenities.isNotEmpty) {
       await SharedPreference.addStringToSF(

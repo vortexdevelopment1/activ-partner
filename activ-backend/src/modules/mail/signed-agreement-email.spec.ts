@@ -1,45 +1,79 @@
+import * as nodemailer from 'nodemailer';
 import { MailService } from './mail.service';
 
-describe('signed agreement email via MSG91', () => {
-  const originalFetch = global.fetch;
-  const params = { toEmail: 'registered@example.com', partnerName: 'Lalit Jangid',
+jest.mock('nodemailer', () => ({ createTransport: jest.fn() }));
+
+describe('signed agreement email via Google Workspace SMTP', () => {
+  const params = {
+    toEmail: 'registered@example.com', partnerName: 'Lalit Jangid',
     venueName: 'Spartna Club', signedAt: new Date('2026-10-16T10:00:00Z'),
-    agreement: { base64: 'JVBERg==', filename: 'signed.pdf', mimeType: 'application/pdf' } };
+    agreement: { base64: 'JVBERg==', filename: 'signed.pdf', mimeType: 'application/pdf' },
+  };
   let config: Record<string, string>;
   let service: MailService;
+  let sendMail: jest.Mock;
+  let close: jest.Mock;
+
   beforeEach(() => {
-    config = { MSG91_AUTHKEY: 'test-key', MSG91_AGREEMENT_TEMPLATE_ID: 'signedagreement', MSG91_DOMAIN: 'mail.activ.co.in' };
+    (nodemailer.createTransport as jest.Mock).mockClear();
+    config = {
+      MAIL_HOST: 'smtp.gmail.com', MAIL_PORT: '587', MAIL_USER: 'support@activ.live',
+      MAIL_PASS: 'app-password', MAIL_FROM_EMAIL: 'support@activ.live',
+    };
+    sendMail = jest.fn().mockResolvedValue({ messageId: 'mail-1' });
+    close = jest.fn();
+    (nodemailer.createTransport as jest.Mock).mockReturnValue({ sendMail, close });
     service = Object.assign(Object.create(MailService.prototype), {
       configService: { get: (key: string, fallback?: string) => config[key] ?? fallback },
+      googleOAuthService: { sendEmail: jest.fn().mockResolvedValue('gmail-1') },
     });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'success' }) });
   });
-  afterEach(() => { global.fetch = originalFetch; });
-  it('uses MSG91, the saved partner email and a base64 PDF attachment', async () => {
+
+  it('sends the required message and PDF through the Gmail API service', async () => {
+    const pdfBuffer = Buffer.from('pdf');
+    const messageId = await service.sendSignedAgreementEmailViaGmail({
+      toEmail: params.toEmail,
+      partnerName: params.partnerName,
+      venueName: params.venueName,
+      signedAt: params.signedAt,
+      pdfBuffer,
+      filename: params.agreement.filename,
+    });
+    expect(messageId).toBe('gmail-1');
+    expect((service as any).googleOAuthService.sendEmail).toHaveBeenCalledWith({
+      recipientEmail: params.toEmail,
+      recipientName: params.partnerName,
+      subject: 'Your Signed Partnership Agreement – ACTIV Partner',
+      text: expect.stringContaining('Your Partnership Agreement has been successfully signed.'),
+      pdfBuffer,
+      filename: 'signed.pdf',
+    });
+  });
+
+  it('sends the signed PDF through the authorized support mailbox', async () => {
     await service.sendSignedPartnerAgreementEmail(params);
-    const [url, options] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(url).toBe('https://control.msg91.com/api/v5/email/send');
-    expect(options.headers.authkey).toBe('test-key');
-    expect(JSON.parse(options.body)).toMatchObject({
-      from: { name: 'ACTIV Partner', email: 'no-reply@activ.co.in' },
-      domain: 'mail.activ.co.in', template_id: 'signedagreement',
-      reply_to: [{ email: 'support@activ.live' }],
-      recipients: [{ to: [{ email: params.toEmail, name: params.partnerName }],
-        variables: { partnerName: 'Lalit Jangid', venueName: 'Spartna Club', signedAt: expect.stringContaining('(IST)') } }],
-      attachments: [{ fileName: 'signed.pdf', file: 'data:application/pdf;base64,JVBERg==' }],
-    });
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({
+      host: 'smtp.gmail.com', port: 587, secure: false,
+      auth: { user: 'support@activ.live', pass: 'app-password' },
+    }));
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      from: { name: 'ACTIV Partner Support', address: 'support@activ.live' },
+      to: { name: 'Lalit Jangid', address: 'registered@example.com' },
+      subject: 'Your Signed Partnership Agreement – ACTIV Partner',
+      attachments: [{ filename: 'signed.pdf', content: Buffer.from('JVBERg==', 'base64'), contentType: 'application/pdf' }],
+    }));
+    expect(close).toHaveBeenCalled();
   });
-  it('requires the actual template ID', async () => {
-    delete config.MSG91_AGREEMENT_TEMPLATE_ID;
-    await expect(service.sendSignedPartnerAgreementEmail(params)).rejects.toMatchObject({ code: 'MSG91_CONFIG' });
-    expect(global.fetch).not.toHaveBeenCalled();
+
+  it('requires SMTP credentials', async () => {
+    delete config.MAIL_PASS;
+    await expect(service.sendSignedPartnerAgreementEmail(params)).rejects.toMatchObject({ code: 'SMTP_CONFIG' });
+    expect(nodemailer.createTransport).not.toHaveBeenCalled();
   });
-  it.each([
-    { ok: false, status: 401, body: { message: 'private error' } },
-    { ok: true, status: 200, body: { status: 'fail' } },
-    { ok: true, status: 200, body: { success: false } },
-  ])('rejects unsuccessful provider responses', async ({ ok, status, body }) => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok, status, json: async () => body });
-    await expect(service.sendSignedPartnerAgreementEmail(params)).rejects.toMatchObject({ code: 'MSG91_SEND', responseCode: status });
+
+  it('does not hide provider failures', async () => {
+    sendMail.mockRejectedValue(Object.assign(new Error('provider rejected'), { code: 'EAUTH', responseCode: 535 }));
+    await expect(service.sendSignedPartnerAgreementEmail(params)).rejects.toMatchObject({ code: 'EAUTH', responseCode: 535 });
+    expect(close).toHaveBeenCalled();
   });
 });

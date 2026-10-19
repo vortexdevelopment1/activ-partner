@@ -274,6 +274,10 @@ void main() {
     await showScreen(tester, ManageSlotsScreen(client: client));
     await tester.tap(find.text('Tue'));
     await tester.tap(find.text('Copy to all').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Copy schedule to all days'), findsOneWidget);
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
     final discount = find.byKey(const Key('slot-discount-Monday-0'));
     await tester.ensureVisible(discount);
     await tester.enterText(discount, '600');

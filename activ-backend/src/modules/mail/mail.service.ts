@@ -1,10 +1,36 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
+import { GoogleOAuthService } from './google-oauth.service';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private readonly googleOAuthService: GoogleOAuthService,
+  ) {}
+
+  async sendSignedAgreementEmailViaGmail(params: {
+    toEmail: string;
+    partnerName: string;
+    venueName: string;
+    signedAt: Date;
+    pdfBuffer: Buffer;
+    filename: string;
+  }): Promise<string> {
+    const signedAt = params.signedAt.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short',
+    });
+    return this.googleOAuthService.sendEmail({
+      recipientEmail: params.toEmail,
+      recipientName: params.partnerName,
+      subject: 'Your Signed Partnership Agreement – ACTIV Partner',
+      text: `Dear ${params.partnerName},\n\nThank you for completing your registration with ACTIV Partner.\n\nYour Partnership Agreement has been successfully signed.\n\nPlease find a copy of your signed Partnership Agreement attached for your records.\n\nOur team will review your venue registration and notify you of the next steps.\n\nBest regards,\nACTIV Partner Support Team`,
+      pdfBuffer: params.pdfBuffer,
+      filename: params.filename,
+    });
+  }
 
   async sendSignedPartnerAgreementEmail(params: {
     toEmail: string;
@@ -16,44 +42,34 @@ export class MailService {
     const signedAt = params.signedAt.toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short',
     });
-    const authkey = this.configService.get<string>('MSG91_AUTHKEY');
-    const templateId = this.configService.get<string>('MSG91_AGREEMENT_TEMPLATE_ID');
-    const domain = this.configService.get<string>('MSG91_DOMAIN', 'activ.co.in');
-    if (!authkey || !templateId?.trim()) {
-      throw Object.assign(new Error('Configure MSG91_AUTHKEY and MSG91_AGREEMENT_TEMPLATE_ID'), {
-        code: 'MSG91_CONFIG',
-      });
+    const host = this.configService.get<string>('MAIL_HOST', 'smtp.gmail.com');
+    const port = Number(this.configService.get<string>('MAIL_PORT', '587'));
+    const user = this.configService.get<string>('MAIL_USER')?.trim();
+    const pass = this.configService.get<string>('MAIL_PASS');
+    const fromEmail = this.configService.get<string>('MAIL_FROM_EMAIL', 'support@activ.live');
+    if (!user || !pass || !fromEmail) {
+      throw Object.assign(new Error('SMTP agreement email is not configured'), { code: 'SMTP_CONFIG' });
     }
-    const response = await fetch('https://control.msg91.com/api/v5/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', authkey },
-      signal: AbortSignal.timeout(30000),
-      body: JSON.stringify({
-      from: { name: 'ACTIV Partner', email: 'no-reply@activ.co.in' },
-      reply_to: [{ email: 'support@activ.live' }],
-      domain,
-      template_id: templateId.trim(),
-      recipients: [{
-        to: [{ email: params.toEmail, name: params.partnerName }],
-        variables: {
-          partnerName: params.partnerName,
-          venueName: params.venueName,
-          signedAt: `${signedAt} (IST)`,
-          supportEmail: 'support@activ.live',
-        },
-      }],
-      attachments: [{
-        fileName: params.agreement.filename,
-        file: `data:${params.agreement.mimeType};base64,${params.agreement.base64}`,
-      }],
-      }),
+    const transport = nodemailer.createTransport({
+      host, port, secure: port === 465,
+      auth: { user, pass },
+      connectionTimeout: 30000, greetingTimeout: 30000, socketTimeout: 30000,
     });
-    const result = await response.json();
-    if (!response.ok || result?.status === 'fail' || result?.status === 'error' || result?.success === false) {
-      // Never expose provider responses containing partner data or credentials.
-      throw Object.assign(new Error('MSG91 rejected signed agreement email'), {
-        code: 'MSG91_SEND', responseCode: response.status,
+    try {
+      await transport.sendMail({
+        from: { name: 'ACTIV Partner Support', address: fromEmail },
+        to: { name: params.partnerName, address: params.toEmail },
+        replyTo: 'support@activ.live',
+        subject: 'Your Signed Partnership Agreement – ACTIV Partner',
+        text: `Hello ${params.partnerName},\n\nPlease find your signed partnership agreement attached.\n\nVenue: ${params.venueName}\nAccepted: ${signedAt} (IST)\n\nACTIV Partner Support`,
+        attachments: [{
+          filename: params.agreement.filename,
+          content: Buffer.from(params.agreement.base64, 'base64'),
+          contentType: params.agreement.mimeType,
+        }],
       });
+    } finally {
+      transport.close();
     }
   }
 
@@ -62,12 +78,16 @@ export class MailService {
     partnerName: string;
     venueName: string;
     password: string;
-  }) {
-    const { toEmail, partnerName, password } = params;
+  }): Promise<boolean> {
+    const { toEmail, partnerName, venueName, password } = params;
     const authkey = this.configService.get<string>('MSG91_AUTHKEY');
     const fromEmail = this.configService.get<string>('MSG91_FROM_EMAIL');
     const domain = this.configService.get<string>('MSG91_DOMAIN');
     const appLink = this.configService.get<string>('PARTNER_APP_URL', 'https://activ.co.in/login');
+    const templateId = this.configService.get<string>(
+      'MSG91_APPROVAL_TEMPLATE_ID',
+      'partnerapprovaltemplate',
+    );
 
     const body = {
       recipients: [
@@ -78,12 +98,13 @@ export class MailService {
             email: toEmail,
             newPassword: password,
             appLink,
+            venueName,
           },
         },
       ],
       from: { email: fromEmail },
       domain,
-      template_id: 'partnerapprovaltemplate',
+      template_id: templateId,
     };
 
     try {
@@ -99,11 +120,14 @@ export class MailService {
       const result = await response.json() as any;
       if (!response.ok) {
         this.logger.error(`MSG91 approval email failed for ${toEmail}: ${JSON.stringify(result)}`);
+        return false;
       } else {
         this.logger.log(`Approval email sent to ${toEmail} via MSG91`);
+        return true;
       }
     } catch (error) {
       this.logger.error(`Failed to send approval email to ${toEmail}: ${error.message}`);
+      return false;
     }
   }
 

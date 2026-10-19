@@ -11,7 +11,6 @@ import '../Utills/common_utilities.dart';
 import '../Utills/activity_question_visibility.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import '../api_calling/progress_bar/progress_bar_new.dart';
 import 'CommonCode.dart';
 import 'VenueTimingScreen.dart';
 import 'onboarding_widgets.dart';
@@ -277,8 +276,6 @@ class _State extends State<SelectedVenueFormScreen> {
     }
 
     if (!mounted) return;
-    ProgressBarNew().showLoader(context);
-
     try {
       // Build the answers payload: [{ questionId, answer }]
       final List<Map<String, dynamic>> answersPayload = _questions.map((q) {
@@ -299,8 +296,6 @@ class _State extends State<SelectedVenueFormScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
       CommonUtilities.showLog('Submit answers status: ${response.statusCode}');
       CommonUtilities.showLog('Submit answers response: ${response.body}');
 
@@ -313,7 +308,6 @@ class _State extends State<SelectedVenueFormScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
       CommonUtilities.showLog('❌ Submit answers error: $e');
       CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
     }
@@ -649,8 +643,14 @@ class _State extends State<SelectedVenueFormScreen> {
                               getSubText(),
                               if (_isLoading)
                                 const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 40),
-                                  child: Center(child: CircularProgressIndicator()),
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Column(children: [
+                                    AppSkeleton(height: 58),
+                                    SizedBox(height: 14),
+                                    AppSkeleton(height: 58),
+                                    SizedBox(height: 14),
+                                    AppSkeleton(height: 58),
+                                  ]),
                                 )
                               else if (_errorMessage.isNotEmpty)
                                 Padding(

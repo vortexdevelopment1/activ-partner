@@ -22,6 +22,8 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { PrismaService } from '../../prisma/prisma.service';
+import { BookingPayoutQueryDto } from './dto/booking-payout-query.dto';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
@@ -40,6 +42,7 @@ export class BookingsService {
     @InjectRepository(BankAccount)
     private readonly bankAccountRepository: Repository<BankAccount>,
     private readonly notificationsService: NotificationsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private generateBookingReference(): string {
@@ -114,6 +117,24 @@ export class BookingsService {
     };
   }
 
+  private resolveNormalizedSlotPrice(
+    rows: Array<{ day: string; open_time: string; close_time: string; price_paise: bigint; discounted_price_paise: bigint }>,
+    bookingDate: string,
+    startTime: string,
+    fallbackPricePerHour: number,
+  ): { price: number; discountedPrice: number } {
+    const dayName = new Date(bookingDate).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const startMinutes = this.to24hMinutes(startTime);
+    const matched = rows.find((row) => row.day.toLowerCase() === dayName &&
+      startMinutes >= this.to24hMinutes(row.open_time) &&
+      startMinutes < this.to24hMinutes(row.close_time));
+    if (!matched) return { price: fallbackPricePerHour, discountedPrice: 0 };
+    return {
+      price: Number(matched.price_paise) / 100 || fallbackPricePerHour,
+      discountedPrice: Number(matched.discounted_price_paise) / 100 || 0,
+    };
+  }
+
   async create(createBookingDto: CreateBookingDto, userId: string): Promise<Booking> {
     const { venueId, serviceId, bookingDate, startTime, endTime, notes, categoryId } = createBookingDto;
 
@@ -164,13 +185,22 @@ export class BookingsService {
 
     // Resolve price from JSONB availability slot; fallback to service.pricePerHour
     const venue = await this.venueRepository.findOne({ where: { id: venueId } });
-    const { price: slotPrice, discountedPrice: slotDiscountedPrice } = this.resolveSlotPrice(
-      venue,
-      categoryId,
-      bookingDate,
-      startTime,
-      Number(service.pricePerHour),
+    const fallbackPrice = Number(service.pricePerHour);
+    const normalizedAvailability = categoryId
+      ? await this.prisma.partner_venue_availability.findMany({
+          where: { venue_id: venueId, service_category_id: categoryId },
+          select: { day: true, open_time: true, close_time: true, price_paise: true, discounted_price_paise: true },
+        })
+      : [];
+    const normalizedPrice = this.resolveNormalizedSlotPrice(
+      normalizedAvailability, bookingDate, startTime, fallbackPrice,
     );
+    const { price: legacyPrice, discountedPrice: legacyDiscountedPrice } = this.resolveSlotPrice(
+      venue, categoryId, bookingDate, startTime, fallbackPrice,
+    );
+    const { price: slotPrice, discountedPrice: slotDiscountedPrice } = normalizedAvailability.length
+      ? normalizedPrice
+      : { price: legacyPrice, discountedPrice: legacyDiscountedPrice };
 
     // Use discountedPrice when set (> 0), otherwise use base price
     const effectivePrice = slotDiscountedPrice > 0 ? slotDiscountedPrice : slotPrice;
@@ -361,6 +391,12 @@ export class BookingsService {
     return 'failed';
   }
 
+  private mapCurrentPayoutStatus(status: string): 'success' | 'pending' | 'failed' {
+    if (status === 'CAPTURED') return 'success';
+    if (status === 'CREATED' || status === 'AUTHORIZED') return 'pending';
+    return 'failed';
+  }
+
   private computeBreakdown(totalAmount: number, commissionPercent: number) {
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const activCommission = round2((totalAmount * commissionPercent) / 100);
@@ -375,55 +411,68 @@ export class BookingsService {
   }
 
   async getPayoutStatement(bookingId: string, currentUser: { id: string; role: string }) {
-    const booking = await this.bookingRepository.findOne({
-      where: { id: bookingId },
-      relations: ['venue', 'venue.partner', 'service'],
+    const payment = await this.prisma.payments.findFirst({
+      where: { booking_id: bookingId },
+      include: {
+        bookings: {
+          include: {
+            slots: { include: { facilities: { include: { venues: true, activities: true } } } },
+          },
+        },
+      },
     });
-    if (!booking) throw new NotFoundException('Booking not found');
-    if (currentUser.role === UserRole.PARTNER && booking.venue.partnerId !== currentUser.id) {
+    const booking = payment?.bookings;
+    const venue = booking?.slots.facilities.venues;
+    if (!payment || !booking || !venue) throw new NotFoundException('Booking not found');
+    if (currentUser.role === UserRole.PARTNER && venue.partner_id !== currentUser.id) {
       throw new ForbiddenException('You can only view payouts for your own venues');
     }
 
-    const payment = await this.paymentRepository.findOne({ where: { bookingId: booking.id } });
     const { commissionPercent, activCommission, gstOnCommission, netReceived } =
-      this.computeBreakdown(Number(booking.totalAmount), Number(booking.venue.commission ?? 5));
+      this.computeBreakdown(
+        Number(booking.total_paise) / 100,
+        Number(venue.commission_percent ?? 5),
+      );
 
-    const partner = booking.venue.partner;
-    const isGstRegistered = !!(partner?.gstNumber && partner?.gstVerifiedAt);
+    const legal = await this.prisma.partner_venue_legal_documents.findUnique({
+      where: { venue_id: venue.id },
+    });
+    const isGstRegistered = Boolean(legal?.gst_number && legal?.gstin_doc_url);
 
-    const bankAccount = await this.bankAccountRepository.findOne({
-      where: { partnerId: booking.venue.partnerId },
-      order: { updatedAt: 'DESC' },
+    const bankAccount = await this.prisma.partner_bank_accounts.findFirst({
+      where: { partner_id: venue.partner_id },
+      orderBy: { updated_at: 'desc' },
     });
 
     // Settlement follows a T+7 cycle from when the payment succeeded.
-    const payoutDate = payment?.updatedAt
-      ? new Date(new Date(payment.updatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+    const payoutDate = payment.updated_at
+      ? new Date(new Date(payment.updated_at).getTime() + 7 * 24 * 60 * 60 * 1000)
       : null;
+    const slot = booking.slots;
 
     return {
-      status: payment ? this.mapPayoutStatus(payment.status) : 'pending',
+      status: this.mapCurrentPayoutStatus(payment.status),
       isGstRegistered,
-      grossBookingAmount: Number(booking.totalAmount),
+      grossBookingAmount: Number(booking.total_paise) / 100,
       commissionPercent,
       activCommission,
       gstOnCommission,
       netReceived,
       amountReceived: netReceived,
       payoutDate,
-      activityName: booking.service?.name ?? '',
-      slotDate: booking.bookingDate,
-      slotTime: `${booking.startTime} to ${booking.endTime}`,
-      slotBasePrice: Number(booking.totalAmount),
-      bookingId: booking.bookingReference,
-      transactionId: payment?.transactionId ?? '',
+      activityName: slot.facilities.activities.name,
+      slotDate: slot.starts_at.toISOString().slice(0, 10),
+      slotTime: `${slot.starts_at.toISOString().slice(11, 16)} to ${slot.ends_at.toISOString().slice(11, 16)}`,
+      slotBasePrice: Number(booking.total_paise) / 100,
+      bookingId: booking.public_code,
+      transactionId: payment.provider_payment_id ?? payment.provider_order_id ?? '',
       bank: bankAccount
         ? {
-            accountHolderName: bankAccount.accountHolderName,
-            bankName: bankAccount.bankName,
-            accountNumber: this.maskAccountNumber(bankAccount.accountNumber),
-            ifscCode: bankAccount.ifscCode,
-            verified: bankAccount.status === BankAccountStatus.APPROVED,
+            accountHolderName: bankAccount.account_holder_name,
+            bankName: bankAccount.bank_name,
+            accountNumber: this.maskAccountNumber(bankAccount.account_number),
+            ifscCode: bankAccount.ifsc_code,
+            verified: bankAccount.status === 'APPROVED',
           }
         : null,
     };
@@ -431,49 +480,56 @@ export class BookingsService {
 
   async getPayoutHistory(
     currentUser: { id: string; role: string },
-    pagination: PaginationDto,
-    status?: 'success' | 'pending' | 'failed',
+    query: BookingPayoutQueryDto,
   ) {
-    const qb = this.paymentRepository
-      .createQueryBuilder('payment')
-      .innerJoinAndSelect('payment.booking', 'booking')
-      .innerJoinAndSelect('booking.venue', 'venue')
-      .where('venue.partnerId = :partnerId', { partnerId: currentUser.id })
-      .orderBy('payment.updatedAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.limit);
-
-    if (status === 'success') {
-      qb.andWhere('payment.status = :s', { s: PaymentStatus.SUCCESS });
-    } else if (status === 'pending') {
-      qb.andWhere('payment.status IN (:...s)', { s: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] });
-    } else if (status === 'failed') {
-      qb.andWhere('payment.status IN (:...s)', {
-        s: [PaymentStatus.FAILED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED],
-      });
+    const where: any = {
+      bookings: { slots: { facilities: { venues: { partner_id: currentUser.id } } } },
+    };
+    if (query.startDate || query.endDate) {
+      where.updated_at = {
+        ...(query.startDate ? { gte: new Date(`${query.startDate}T00:00:00.000Z`) } : {}),
+        ...(query.endDate ? { lte: new Date(`${query.endDate}T23:59:59.999Z`) } : {}),
+      };
     }
+    if (query.status === 'success') where.status = 'CAPTURED';
+    if (query.status === 'pending') where.status = { in: ['CREATED', 'AUTHORIZED'] };
+    if (query.status === 'failed') where.status = { in: ['FAILED', 'REFUND_PENDING', 'REFUNDED', 'EXCEPTION_REVIEW'] };
 
-    const [payments, total] = await qb.getManyAndCount();
+    const [payments, total] = await Promise.all([
+      this.prisma.payments.findMany({
+        where,
+        include: {
+          bookings: { include: { slots: { include: { facilities: { include: { venues: true } } } } } },
+        },
+        orderBy: { updated_at: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.payments.count({ where }),
+    ]);
 
     const items = payments.map((payment) => {
       const { netReceived } = this.computeBreakdown(
-        Number(payment.booking.totalAmount),
-        Number(payment.booking.venue.commission ?? 5),
+        Number(payment.bookings.total_paise) / 100,
+        Number(payment.bookings.slots.facilities.venues.commission_percent ?? 5),
       );
       return {
-        id: payment.booking.id,
-        date: payment.booking.bookingDate,
+        id: payment.bookings.id,
+        reference: payment.provider_payment_id || payment.provider_order_id || payment.bookings.public_code,
+        date: payment.bookings.starts_at,
+        payoutDate: payment.updated_at,
+        amount: netReceived,
         netReceived,
-        status: this.mapPayoutStatus(payment.status),
+        status: this.mapCurrentPayoutStatus(payment.status),
       };
     });
 
     return {
       items,
       total,
-      page: pagination.page,
-      limit: pagination.limit,
-      totalPages: Math.ceil(total / pagination.limit),
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
     };
   }
 

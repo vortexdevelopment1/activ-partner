@@ -5,7 +5,6 @@ import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/Utills/timing_copy_confirmation.dart';
-import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -1096,7 +1095,6 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
           e['id']?.toString() ?? '': e['timing'],
     };
 
-    ProgressBar().showLoader(context);
     try {
       final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
 
@@ -1113,8 +1111,6 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // dismiss loader
-
       CommonUtilities.showLog("Venue availability status: ${response.statusCode}");
       CommonUtilities.showLog("Venue availability response: ${response.body}");
 
@@ -1128,7 +1124,6 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
       CommonUtilities.showLog("❌ Venue timing error: $e");
       CommonUtilities.createSnackBar(context, 'Network error. Please check your connection.');
     }
