@@ -2754,6 +2754,7 @@ export class VenuesService {
       bookings: [
         ...bookings.map((b) => ({
         id: b.id,
+        bookingReference: b.booking_reference,
         customerName: b.users.name ?? "Customer",
         activity: service.title,
         startsAt: b.starts_at,

@@ -43,6 +43,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   String? _slotError;
   List<_BookableSlot>? _serverSlots;
   List<String>? _serverCourts;
+  int _slotLoadGeneration = 0;
 
   String get _activityName =>
       widget.activityData['name']?.toString() ?? widget.activity.title;
@@ -105,7 +106,11 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   Future<void> _loadSlots() async {
-    if (!mounted || _serviceId.isEmpty || widget.venueId.isEmpty) return;
+    if (!mounted ||
+        _loadingSlots ||
+        _serviceId.isEmpty ||
+        widget.venueId.isEmpty) return;
+    final generation = ++_slotLoadGeneration;
     setState(() {
       _loadingSlots = true;
       _slotError = null;
@@ -137,7 +142,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
               .where((court) => court.isNotEmpty)
               .toList()
           : const <String>[];
-      if (!mounted) return;
+      if (!mounted || generation != _slotLoadGeneration) return;
       setState(() {
         if (courts.isNotEmpty) _serverCourts = courts;
         _serverSlots = slots
@@ -148,14 +153,16 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         _selectedSlots.clear();
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _slotLoadGeneration) return;
       setState(() {
         _serverSlots = null;
         _slotError = error.toString().replaceFirst('Exception: ', '');
         _selectedSlots.clear();
       });
     } finally {
-      if (mounted) setState(() => _loadingSlots = false);
+      if (mounted && generation == _slotLoadGeneration) {
+        setState(() => _loadingSlots = false);
+      }
     }
   }
 
@@ -778,7 +785,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: _saving ? null : onTap,
+          onTap: (_saving || _loadingSlots) ? null : onTap,
           child: Container(
             height: 50,
             padding: const EdgeInsets.symmetric(horizontal: 14),

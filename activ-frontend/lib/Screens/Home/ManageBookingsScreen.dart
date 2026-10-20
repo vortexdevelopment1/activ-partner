@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/svg.dart';
 
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
+import '../Menu/MenuScreen.dart';
 
 enum _BookingStatus { upcoming, ongoing, canceled, noShow, completed, pending }
 
 class _Booking {
   _Booking({
     required this.id,
+    required this.reference,
     required this.customerName,
     required this.phone,
     required this.email,
@@ -29,6 +32,7 @@ class _Booking {
   });
 
   final String id;
+  final String reference;
   final String customerName;
   final String phone;
   final String email;
@@ -53,6 +57,11 @@ class _Booking {
     final total = double.tryParse(json['totalAmount']?.toString() ?? '') ?? 0;
     return _Booking(
       id: json['id']?.toString() ?? '',
+      reference: (json['bookingReference'] ??
+              json['booking_reference'] ??
+              json['public_code'] ??
+              json['id'])
+          .toString(),
       customerName:
           '$first $last'.trim().isEmpty ? 'Customer' : '$first $last'.trim(),
       phone: user['phone']?.toString() ?? '0',
@@ -79,6 +88,11 @@ class _Booking {
     final total = double.tryParse(json['amount']?.toString() ?? '') ?? 0;
     return _Booking(
       id: json['id']?.toString() ?? '',
+      reference: (json['bookingReference'] ??
+              json['booking_reference'] ??
+              json['public_code'] ??
+              json['id'])
+          .toString(),
       customerName: json['customerName']?.toString() ?? 'Customer',
       phone: json['phone']?.toString() ?? '0',
       email: json['email']?.toString() ?? '0',
@@ -121,10 +135,16 @@ class _Booking {
 }
 
 class ManageBookingsScreen extends StatefulWidget {
-  const ManageBookingsScreen({super.key, this.venueId = '', this.client});
+  const ManageBookingsScreen({
+    super.key,
+    this.venueId = '',
+    this.client,
+    this.managerLayout = false,
+  });
 
   final String venueId;
   final http.Client? client;
+  final bool managerLayout;
 
   @override
   State<ManageBookingsScreen> createState() => _ManageBookingsScreenState();
@@ -142,6 +162,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   bool _saving = false;
   String _searchQuery = '';
   String _venueId = '';
+  String _venueName = '';
+  String _avatarUrl = '';
   String? _error;
 
   @override
@@ -149,7 +171,31 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     super.initState();
     _client = widget.client ?? http.Client();
     _venueId = widget.venueId;
+    if (widget.managerLayout) _loadManagerAvatar();
     _load();
+  }
+
+  Future<void> _loadManagerAvatar() async {
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      if (token.isEmpty) return;
+      final response = await _client.get(Uri.parse(AUTH_PROFILE_URL), headers: {
+        'accept': '*/*',
+        'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final body = jsonDecode(response.body);
+      final member = body['data']?['member'];
+      if (member is! Map) return;
+      var avatar =
+          (member['avatarUrl'] ?? member['profileImage'] ?? '').toString();
+      if (avatar.startsWith('/')) {
+        avatar = Uri.parse(BASE_URL).resolve(avatar).toString();
+      }
+      if (mounted) setState(() => _avatarUrl = avatar);
+    } catch (_) {
+      // The default profile image remains visible if the avatar cannot load.
+    }
   }
 
   @override
@@ -164,6 +210,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       if (_searchQuery.isEmpty) return true;
       final q = _searchQuery.toLowerCase();
       return booking.customerName.toLowerCase().contains(q) ||
+          booking.reference.toLowerCase().contains(q) ||
           booking.id.toLowerCase().contains(q) ||
           booking.activity.toLowerCase().contains(q);
     }).toList();
@@ -202,7 +249,10 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     if (token == null || token.isEmpty) {
       throw Exception('Please sign in again.');
     }
-    return {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json'
+    };
   }
 
   Future<void> _load() async {
@@ -213,6 +263,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     try {
       final headers = await _headers();
       var venueId = _venueId;
+      var venueName = _venueName;
       List services = const [];
       if (venueId.isEmpty) {
         final venues = await _client
@@ -225,6 +276,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         final items = body['data'] is List ? body['data'] as List : const [];
         final venue = items.isEmpty ? null : items.last;
         venueId = venue is Map ? venue['id']?.toString() ?? '' : '';
+        venueName = venue is Map ? venue['name']?.toString() ?? '' : '';
         services = venue is Map && venue['services'] is List
             ? venue['services'] as List
             : const [];
@@ -240,12 +292,15 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         final venue = items.whereType<Map>().cast<Map>().firstWhere(
             (item) => item['id']?.toString() == venueId,
             orElse: () => const {});
-        services = venue['services'] is List ? venue['services'] as List : const [];
+        venueName = venue['name']?.toString() ?? '';
+        services =
+            venue['services'] is List ? venue['services'] as List : const [];
       }
       if (venueId.isEmpty) {
         if (mounted) {
           setState(() {
             _venueId = '';
+            _venueName = '';
             _bookings.clear();
           });
         }
@@ -253,10 +308,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       }
       final collected = <_Booking>[];
       for (final service in services.whereType<Map>()) {
-        final serviceId = (service['id'] ??
-                service['activityId'] ??
-                service['activity_id'])
-            ?.toString();
+        final serviceId =
+            (service['id'] ?? service['activityId'] ?? service['activity_id'])
+                ?.toString();
         if (serviceId == null || serviceId.isEmpty) continue;
         final response = await _client
             .get(Uri.parse('$BASE_URL/venues/activities/$serviceId/management'),
@@ -280,6 +334,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       if (mounted) {
         setState(() {
           _venueId = venueId;
+          _venueName = venueName;
           _bookings
             ..clear()
             ..addAll(collected);
@@ -306,8 +361,19 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(body['message'] ?? 'Unable to update booking.');
       }
+      booking.status = switch (action) {
+        'no-show' => _BookingStatus.noShow,
+        'check-in' => _BookingStatus.ongoing,
+        'complete' => _BookingStatus.completed,
+        _ => booking.status,
+      };
+      if (mounted) {
+        setState(() {});
+        Navigator.of(context).pop();
+      }
+      // Refresh the shared booking list in the background so the next view
+      // uses the server state without requiring a manual pull-to-refresh.
       await _load();
-      if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         CommonUtilities.createSnackBar(
@@ -328,12 +394,20 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 32),
+              padding: widget.managerLayout
+                  ? const EdgeInsets.fromLTRB(20, 12, 20, 32)
+                  : const EdgeInsets.fromLTRB(28, 28, 28, 32),
               children: [
-                _buildAppBar(),
-                const SizedBox(height: 30),
-                _buildStats(),
-                const SizedBox(height: 24),
+                widget.managerLayout ? _buildManagerHeader() : _buildAppBar(),
+                if (widget.managerLayout) ...[
+                  const SizedBox(height: 18),
+                  _buildManagerGreeting(),
+                  const SizedBox(height: 44),
+                ] else ...[
+                  const SizedBox(height: 30),
+                  _buildStats(),
+                  const SizedBox(height: 24),
+                ],
                 _buildTabs(),
                 const SizedBox(height: 18),
                 _buildSearch(),
@@ -370,8 +444,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
           child: Container(
             width: 48,
             height: 48,
-            decoration:
-                const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            decoration: const BoxDecoration(
+                color: Colors.white, shape: BoxShape.circle),
             child: const Icon(Icons.arrow_back,
                 size: 22, color: Color(0xFF1F1F1F)),
           ),
@@ -385,6 +459,80 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                 color: Color(0xFF1F1F1F))),
       ]);
 
+  Widget _buildManagerHeader() {
+    return SizedBox(
+      height: 42,
+      child: Row(
+        children: [
+          InkWell(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => MenuScreen(client: widget.client),
+              ),
+            ),
+            borderRadius: BorderRadius.circular(20),
+            child: ClipOval(
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: _avatarUrl.isEmpty
+                    ? Image.asset(
+                        'assets/ic_profile_logo.png',
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        _avatarUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          'assets/ic_profile_logo.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Image.asset('assets/logo.png',
+              width: 70, height: 36, fit: BoxFit.contain),
+          const Spacer(),
+          SvgPicture.asset(
+            'assets/ic_notifications.svg',
+            width: 22,
+            height: 22,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManagerGreeting() {
+    final venue = _venueName.isEmpty ? 'your venue' : _venueName;
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(
+            text: 'Hi! 👋 Here\'s what\'s happening at ',
+            style: TextStyle(
+              fontSize: 14,
+              fontFamily: 'Satoshi',
+              color: Color(0xFF1F1F1F),
+            ),
+          ),
+          TextSpan(
+            text: venue,
+            style: const TextStyle(
+              fontSize: 14,
+              fontFamily: 'Satoshi',
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1F1F1F),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStats() => Column(children: [
         Row(children: [
           Expanded(
@@ -392,9 +540,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                   Icons.calendar_today_outlined, const Color(0xFF3F3F3F))),
           const SizedBox(width: 18),
           Expanded(
-              child: _statCard('Total Revenue',
-                  _money.format(_totalRevenue), Icons.currency_rupee,
-                  const Color(0xFF9D38EB))),
+              child: _statCard('Total Revenue', _money.format(_totalRevenue),
+                  Icons.currency_rupee, const Color(0xFF9D38EB))),
         ]),
         const SizedBox(height: 16),
         Row(children: [
@@ -431,7 +578,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(value,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 24,
                     fontFamily: 'Satoshi',
                     fontWeight: FontWeight.w700,
@@ -441,7 +588,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   }
 
   Widget _buildTabs() => Container(
-      height: 58,
+      height: widget.managerLayout ? 38 : 58,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
           color: Colors.white,
@@ -472,29 +619,31 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       })));
 
   Widget _buildSearch() => Container(
-      height: 56,
+      height: widget.managerLayout ? 38 : 56,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE5E7EB))),
       child: Row(children: [
-        const Icon(Icons.search, size: 22, color: Color(0xFF9E9E9E)),
+        Icon(Icons.search,
+            size: widget.managerLayout ? 17 : 22,
+            color: const Color(0xFF9E9E9E)),
         const SizedBox(width: 10),
         Expanded(
             child: TextField(
                 controller: _searchCtrl,
                 onChanged: (value) =>
                     setState(() => _searchQuery = value.trim()),
-                style: const TextStyle(
-                    fontSize: 14,
+                style: TextStyle(
+                    fontSize: widget.managerLayout ? 12 : 14,
                     fontFamily: 'Satoshi',
                     color: Color(0xFF1F1F1F)),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                     border: InputBorder.none,
                     hintText: 'Search by name, booking id...',
                     hintStyle: TextStyle(
-                        fontSize: 14,
+                        fontSize: widget.managerLayout ? 12 : 14,
                         fontFamily: 'Satoshi',
                         color: Color(0xFF9E9E9E)),
                     isDense: true))),
@@ -507,7 +656,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         onTap: () => _showBookingDetails(booking),
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(widget.managerLayout ? 16 : 20),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -518,8 +667,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
             Row(children: [
               Expanded(
                   child: Text(booking.customerName,
-                      style: const TextStyle(
-                          fontSize: 15,
+                      style: TextStyle(
+                          fontSize: widget.managerLayout ? 13 : 15,
                           fontFamily: 'Satoshi',
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF1F1F1F)))),
@@ -527,16 +676,16 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
             ]),
             const SizedBox(height: 8),
             Text('${booking.activity}  |  ${booking.date}  |  ${booking.time}',
-                style: const TextStyle(
-                    fontSize: 13,
+                style: TextStyle(
+                    fontSize: widget.managerLayout ? 11 : 13,
                     fontFamily: 'Satoshi',
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF7F7F7F))),
             const SizedBox(height: 12),
             Text(
                 '${_money.format(booking.totalAmount)}  |  ${booking.participants} ${booking.participants == 1 ? 'person' : 'persons'}',
-                style: const TextStyle(
-                    fontSize: 15,
+                style: TextStyle(
+                    fontSize: widget.managerLayout ? 13 : 15,
                     fontFamily: 'Satoshi',
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF1F1F1F))),
@@ -552,9 +701,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         Text(_error!,
             textAlign: TextAlign.center,
             style: const TextStyle(
-                fontSize: 14,
-                fontFamily: 'Satoshi',
-                color: Color(0xFFFE6B6B))),
+                fontSize: 14, fontFamily: 'Satoshi', color: Color(0xFFFE6B6B))),
         const SizedBox(height: 10),
         TextButton.icon(
             onPressed: _load,
@@ -586,35 +733,60 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 22, 28, 26),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              const Expanded(
-                  child: Text('Booking details',
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .86,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 26),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  const Expanded(
+                      child: Text('Booking details',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontFamily: 'Satoshi',
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1F1F1F)))),
+                  IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, size: 22)),
+                ]),
+                const SizedBox(height: 18),
+                _detailSection('Customer information', [
+                  ('Full Name', booking.customerName),
+                  ('Phone Number', booking.phone),
+                ]),
+                const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                _detailSection('Booking information', [
+                  ('Booking ID', booking.reference),
+                  ('Activity', booking.activity),
+                  ('Date', booking.date),
+                  ('Time', booking.time),
+                  ('Participants', '${booking.participants} people'),
+                  ('Booked On', booking.bookedOn),
+                ]),
+                const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                _detailSection('Payment information', [
+                  ('Payment Mode', booking.paymentMode),
+                  ('Total Amount', _money.format(booking.totalAmount)),
+                ]),
+                const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: const Text('Manage Booking',
                       style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 16,
                           fontFamily: 'Satoshi',
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1F1F1F)))),
-              IconButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close, size: 22)),
-            ]),
-            const SizedBox(height: 18),
-            _detailSection('Customer information', [
-              ('Full Name', booking.customerName),
-              ('Status', _statusLabels[booking.status]!),
-            ]),
-            const Divider(height: 30, color: Color(0xFFE5E7EB)),
-            _detailSection('Booking information', [
-              ('Activity', booking.activity),
-              ('Date', booking.date),
-              ('Time', booking.time),
-              ('Persons', booking.participants.toString()),
-              ('Amount', _money.format(booking.totalAmount)),
-            ]),
-          ]),
+                          color: Color(0xFF1F1F1F))),
+                ),
+                const SizedBox(height: 14),
+                _buildManageActions(booking),
+              ]),
+            ),
+          ),
         ),
       ),
     );
@@ -631,8 +803,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
         const SizedBox(height: 18),
         for (var i = 0; i < items.length; i += 2)
           Padding(
-              padding:
-                  EdgeInsets.only(bottom: i + 2 < items.length ? 18 : 0),
+              padding: EdgeInsets.only(bottom: i + 2 < items.length ? 18 : 0),
               child:
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(child: _detailItem(items[i].$1, items[i].$2)),
@@ -653,12 +824,46 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
               fontWeight: FontWeight.w500,
               color: Color(0xFF7F7F7F))),
       const SizedBox(height: 3),
-      Text(value,
-          style: const TextStyle(
-              fontSize: 14,
-              fontFamily: 'Satoshi',
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1F1F1F))),
+      Row(
+        children: [
+          Expanded(
+            child: label == 'Booking ID'
+                ? FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(value,
+                        maxLines: 1,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F1F1F))),
+                  )
+                : Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Satoshi',
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F1F1F))),
+          ),
+          if (label == 'Booking ID')
+            IconButton(
+              tooltip: 'Copy booking ID',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              icon: const Icon(Icons.copy_outlined, size: 15),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: value));
+                if (mounted) {
+                  CommonUtilities.createSnackBar(context, 'Booking ID copied');
+                }
+              },
+            ),
+        ],
+      ),
     ]);
   }
 

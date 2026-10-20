@@ -123,6 +123,8 @@ flutter:
     - assets/ic_ownership.png
     - assets/ic_photo.png
     - assets/ic_uploading.png
+    - assets/bank_verification.svg
+    - assets/bank_verification_icon.svg
     - assets/ic_arts.png
     - assets/ic_cock.png
     - assets/ic_dance.png

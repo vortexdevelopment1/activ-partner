@@ -20,6 +20,18 @@ flutter build web
 flutter test
 ```
 
+For Flutter Web in Chrome, use the WebAssembly/Skwasm renderer when testing or
+deploying on devices/emulators that repeatedly lose the CanvasKit WebGL context:
+
+```sh
+flutter run -d chrome --wasm
+flutter build web --wasm
+```
+
+The regular `flutter build web` command uses CanvasKit in Flutter 3.47.7. The
+Skwasm build avoids the CanvasKit `MakeGrContext`/`Cannot dispose picture`
+context-loss loop; it does not change the app's widgets or API behavior.
+
 Run these commands from `activ-frontend`. Restart or rebuild after changing
 `.env` so the bundled asset is refreshed. Build-time `--dart-define` values can
 still override either URL, including setting a URL to blank. For Render-only builds,

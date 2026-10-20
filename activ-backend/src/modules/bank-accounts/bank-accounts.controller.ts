@@ -93,6 +93,34 @@ export class BankAccountsController {
     return { message: 'Bank accounts fetched successfully', data };
   }
 
+  @Patch(':id')
+  @Roles(UserRole.PARTNER)
+  @ApiOperation({ summary: 'Update a rejected bank account and resubmit it for verification' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('cancelledCheque', {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['.jpg', '.jpeg', '.png', '.pdf'];
+      cb(allowed.includes(extname(file.originalname).toLowerCase())
+        ? null : new BadRequestException('Only JPG, JPEG, PNG and PDF files are allowed'),
+        allowed.includes(extname(file.originalname).toLowerCase()));
+    },
+    storage: memoryStorage(),
+  }))
+  async updateRejected(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+    @Body() dto: SubmitBankAccountDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Please upload a cancelled cheque.');
+    const cancelledChequeUrl = await this.cloudinaryService.uploadFile(file, 'activ/bank-docs', 'auto');
+    const data = await this.bankAccountsService.updateRejected(
+      id, user.id, dto, cancelledChequeUrl,
+    );
+    return { message: 'Bank account updated and resubmitted for verification', data };
+  }
+
   @Get('summary')
   @Roles(UserRole.PARTNER)
   async summary(@CurrentUser() user: any) {

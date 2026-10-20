@@ -17,6 +17,7 @@ model partner_amenity_catalog {
 
 model bookings {
   id                           String                        @id @db.Uuid
+  booking_reference            String                        @unique @default(dbgenerated("generate_booking_reference()"))
   public_code                  String                        @unique
   user_id                      String                        @db.Uuid
   slot_id                      String                        @db.Uuid

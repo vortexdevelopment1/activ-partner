@@ -279,30 +279,6 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
                                   const SizedBox(height: 20),
                                   _supportNotice(),
                                 ])),
-              Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  const ContactSupportFormScreen())),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: const Color(0xFFD8F34A),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12))),
-                      child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('Contact Support',
-                              style: _text(20,
-                                  bold: true, color: const Color(0xFFD8F34A)))),
-                    ),
-                  )),
             ]),
           ))),
         ),
@@ -624,6 +600,26 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
                     'Document changes are not allowed once verified. Contact ACTIV Support for any updates.',
                     style:
                         _text(14, color: _mutedPurple).copyWith(height: 1.45)),
+                const SizedBox(height: 14),
+                SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  const ContactSupportFormScreen())),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _purple,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(9))),
+                      child: Text('Contact Support',
+                          style: _text(13, bold: true, color: Colors.white)),
+                    )),
               ])),
         ]),
       );

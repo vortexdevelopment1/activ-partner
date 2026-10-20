@@ -46,6 +46,9 @@ export class TeamMember {
   @Column({ unique: true })
   phone: string;
 
+  // Profile photo is stored on the linked current-schema users record.
+  avatarUrl?: string;
+
   @Column({ name: 'phone_otp', nullable: true })
   @Exclude()
   phoneOtp: string;

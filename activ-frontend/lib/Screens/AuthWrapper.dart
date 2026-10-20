@@ -12,6 +12,7 @@ import '../api_calling/api_request.dart';
 import 'ContactSupportScreen.dart';
 import 'GetStartedScreen.dart';
 import 'Home/HomeScreen.dart' show HomeScreen;
+import 'Home/ManagerHomeScreen.dart';
 import 'LegalInformationScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
@@ -46,7 +47,6 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 */
-
 
 /*
 class AuthWrapper extends StatelessWidget {
@@ -142,10 +142,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final token = await SharedPreference.readStr("jwt_token");
       final hasToken = token != null && token.isNotEmpty;
 
-      final stack = isBrowserSession ? SessionNavigation.savedStack() : <Map<String, dynamic>>[];
+      final stack = isBrowserSession
+          ? SessionNavigation.savedStack()
+          : <Map<String, dynamic>>[];
 
       if (!hasToken) {
-        if (stack.isNotEmpty && stack.every(SessionNavigation.isPublic) && _restoreStack(stack)) return;
+        if (stack.isNotEmpty &&
+            stack.every(SessionNavigation.isPublic) &&
+            _restoreStack(stack)) return;
         _finish(const GetStartedScreen());
         return;
       }
@@ -162,16 +166,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      // Team members: just validate token is still alive, then go to HomeScreen
+      // Team members can only manage bookings; keep them out of partner screens.
       if (userType == "team_member") {
         final response = await (widget.client?.get ?? http.get)(
           Uri.parse(AUTH_PROFILE_URL),
           headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
         );
-        CommonUtilities.showLog("AuthWrapper team-member status: ${response.statusCode}");
+        CommonUtilities.showLog(
+            "AuthWrapper team-member status: ${response.statusCode}");
         if (response.statusCode == 200 || response.statusCode == 201) {
-          if (stack.isNotEmpty && _restoreStack(stack)) return;
-          _finish(HomeScreen());
+          _finish(ManagerHomeScreen(client: widget.client));
         } else {
           await SharedPreference.clearSF();
           _finish(const LoginScreen());
@@ -185,8 +189,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
       );
 
-      CommonUtilities.showLog("AuthWrapper auth-profile status: ${response.statusCode}");
-      CommonUtilities.showLog("AuthWrapper auth-profile response: ${response.body}");
+      CommonUtilities.showLog(
+          "AuthWrapper auth-profile status: ${response.statusCode}");
+      CommonUtilities.showLog(
+          "AuthWrapper auth-profile response: ${response.body}");
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         await SharedPreference.clearSF();
@@ -195,12 +201,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
 
       final body = jsonDecode(response.body);
-      final bool apiIsProfileComplete = body['data']?['isProfileComplete'] == true;
+      final profileData = body['data'];
+      final bool isTeamMemberProfile = profileData is Map &&
+          (profileData['userType'] == 'team_member' ||
+              profileData['member'] is Map);
+      if (isTeamMemberProfile) {
+        await SharedPreference.addStringToSF('user_type', 'team_member');
+        await SharedPreference.addStringToSF('permissions',
+            jsonEncode(profileData['member']?['permissions'] ?? {}));
+        await SharedPreference.addStringToSF('is_active', 'true');
+        _finish(ManagerHomeScreen(client: widget.client));
+        return;
+      }
+      final bool apiIsProfileComplete =
+          body['data']?['isProfileComplete'] == true;
       final bool apiIsActive = body['data']?['partner']?['isActive'] == true;
 
       // Update local values with fresh API data
-      await SharedPreference.addStringToSF("is_profile_complete", apiIsProfileComplete ? "true" : "false");
-      await SharedPreference.addStringToSF("is_active", apiIsActive ? "true" : "false");
+      await SharedPreference.addStringToSF(
+          "is_profile_complete", apiIsProfileComplete ? "true" : "false");
+      await SharedPreference.addStringToSF(
+          "is_active", apiIsActive ? "true" : "false");
 
       if (stack.isNotEmpty && _restoreStack(stack)) return;
 
@@ -232,22 +253,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
         },
       );
 
-      CommonUtilities.showLog("AuthWrapper my-venues status: ${response.statusCode}");
+      CommonUtilities.showLog(
+          "AuthWrapper my-venues status: ${response.statusCode}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
         final data = body['data'];
         final int total = (data?['total'] as num?)?.toInt() ?? 0;
-        final List items = (data?['items'] ?? data?['venues'] ?? data?['data'] ?? []) as List;
-        final String firstStatus = items.isNotEmpty
-            ? (items.first['status']?.toString() ?? '')
-            : '';
-        final String firstVenueId = items.isNotEmpty
-            ? (items.first['id']?.toString() ?? '')
-            : '';
-        final String firstVenueName = items.isNotEmpty
-            ? (items.first['name']?.toString() ?? '')
-            : '';
+        final List items =
+            (data?['items'] ?? data?['venues'] ?? data?['data'] ?? []) as List;
+        final String firstStatus =
+            items.isNotEmpty ? (items.first['status']?.toString() ?? '') : '';
+        final String firstVenueId =
+            items.isNotEmpty ? (items.first['id']?.toString() ?? '') : '';
+        final String firstVenueName =
+            items.isNotEmpty ? (items.first['name']?.toString() ?? '') : '';
 
         if (total == 1 && firstStatus == 'pending') {
           if (firstVenueId.isNotEmpty) {

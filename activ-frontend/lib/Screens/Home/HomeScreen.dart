@@ -17,7 +17,9 @@ import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
 import 'ManageBookingsScreen.dart';
+import 'ManagerHomeScreen.dart';
 import 'dashboard_setup_cards.dart';
+import 'NotificationsScreen.dart';
 
 // ── Dummy data models ─────────────────────────────────────────────────────────
 
@@ -109,6 +111,7 @@ class _State extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _redirectTeamMemberIfNeeded();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (CommonUtilities.firstTimeLoginSignup == 'yes') {
         CommonUtilities.firstTimeLoginSignup = '';
@@ -118,6 +121,16 @@ class _State extends State<HomeScreen> {
     _fetchVenueName();
     _loadUserPermissions();
     _loadProfilePhoto();
+  }
+
+  Future<void> _redirectTeamMemberIfNeeded() async {
+    final userType = checkString(await SharedPreference.readStr('user_type'));
+    if (userType != 'team_member' || !mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => ManagerHomeScreen(client: widget.client),
+      ),
+    );
   }
 
   Future<void> _loadUserPermissions() async {
@@ -573,7 +586,10 @@ class _State extends State<HomeScreen> {
           Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
           const Spacer(),
           InkWell(
-            onTap: () {},
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                    builder: (_) => NotificationsScreen(client: widget.client))),
             borderRadius: BorderRadius.circular(4),
             child: SvgPicture.asset(
               'assets/ic_notifications.svg',

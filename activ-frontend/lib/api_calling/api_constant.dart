@@ -109,6 +109,7 @@ String get AUTH_PROFILE_URL => "$BASE_URL/auth/partner/auth-profile";
 String get CHANGE_PARTNER_PASSWORD_URL =>
     "$BASE_URL/auth/partner/change-password";
 String get NOTIFICATION_PREFERENCES_URL => "$BASE_URL/notification-preferences";
+String get NOTIFICATIONS_URL => "$BASE_URL/notifications";
 String get DELETE_PARTNER_ACCOUNT_URL => "$BASE_URL/partners/account";
 String get SUPPORT_EMAIL_URL => "$BASE_URL/support/email";
 String get SUPPORT_CALLBACK_URL => "$BASE_URL/support/callback";

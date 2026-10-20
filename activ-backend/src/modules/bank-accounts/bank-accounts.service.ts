@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BankAccountStatus } from './entities/bank-account.entity';
@@ -60,6 +65,63 @@ export class BankAccountsService {
       where: { partner_id: partnerId }, orderBy: { created_at: 'desc' },
     });
     return records.map((record) => this.map(record));
+  }
+
+  async updateRejected(
+    id: string,
+    partnerId: string,
+    dto: SubmitBankAccountDto,
+    cancelledChequeUrl: string,
+  ) {
+    const existing = await this.prisma.partner_bank_accounts.findFirst({
+      where: { id, partner_id: partnerId },
+    });
+    if (!existing) throw new NotFoundException('Bank account record not found');
+    if (existing.status !== 'REJECTED') {
+      throw new BadRequestException('Only rejected bank accounts can be updated.');
+    }
+    const pending = await this.prisma.partner_bank_accounts.findFirst({
+      where: { partner_id: partnerId, status: 'UNDER_REVIEW' },
+      select: { id: true },
+    });
+    if (pending && pending.id !== id) {
+      throw new ConflictException(
+        'Another bank account is already under review. Please use that account or wait for the review to finish.',
+      );
+    }
+    let updated;
+    try {
+      updated = await this.prisma.partner_bank_accounts.updateMany({
+        where: { id, partner_id: partnerId, status: 'REJECTED' },
+        data: {
+          account_holder_name: dto.accountHolderName.trim(),
+          bank_name: dto.bankName.trim(),
+          account_number: dto.accountNumber,
+          ifsc_code: dto.ifscCode,
+          account_type: dto.accountType,
+          branch_name: dto.branchName?.trim() || null,
+          cancelled_cheque_url: cancelledChequeUrl,
+          status: 'UNDER_REVIEW',
+          rejection_reason: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          has_seen_verified_screen: false,
+          updated_at: new Date(),
+        },
+      });
+    } catch (error) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(
+          'Another bank account is already under review. Please use that account or wait for the review to finish.',
+        );
+      }
+      throw error;
+    }
+    if (!updated.count) {
+      throw new BadRequestException(
+          'This rejected bank account has already been updated. Refresh and try again.');
+    }
+    return this.findOne(id, partnerId);
   }
 
   async findAll(pagination: PaginationDto, status?: BankAccountStatus) {

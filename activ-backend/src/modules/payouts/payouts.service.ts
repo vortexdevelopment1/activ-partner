@@ -93,7 +93,39 @@ export class PayoutsService {
         const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
         return `"${safe.replace(/"/g, '""')}"`;
       };
-      buffer = Buffer.from('\uFEFF' + [headings, ...values].map((row) => row.map(cell).join(',')).join('\r\n'), 'utf8');
+      if (!rows.length) {
+        buffer = Buffer.from('\uFEFF' + headings.map(cell).join(','), 'utf8');
+      } else {
+        const total = rows.reduce((sum, row) => sum + row.amount, 0);
+        const successful = rows
+          .filter((row) => row.status === 'success')
+          .reduce((sum, row) => sum + row.amount, 0);
+        const pending = rows
+          .filter((row) => row.status === 'pending')
+          .reduce((sum, row) => sum + row.amount, 0);
+        const failed = rows
+          .filter((row) => row.status === 'failed')
+          .reduce((sum, row) => sum + row.amount, 0);
+        const line = (row: string[]) => row.map(cell).join(',');
+        const report = [
+          ['ACTIVPULSE BOOKING PRIVATE LIMITED'],
+          ['Payout Statement'],
+          ['Reporting Period', `${query.startDate ?? 'All dates'} - ${query.endDate ?? 'All dates'}`],
+          [],
+          headings,
+          ...values,
+          [],
+          ['Summary'],
+          ['Total Payouts', String(rows.length)],
+          ['Total Amount (INR)', total.toFixed(2)],
+          ['Successful Amount (INR)', successful.toFixed(2)],
+          ['Pending Amount (INR)', pending.toFixed(2)],
+          ['Failed Amount (INR)', failed.toFixed(2)],
+          [],
+          ['Note', 'Bank account numbers are masked for security.'],
+        ];
+        buffer = Buffer.from('\uFEFF' + report.map(line).join('\r\n'), 'utf8');
+      }
     } else {
       buffer = await this.pdf(query, rows, values);
     }
