@@ -164,7 +164,7 @@ export interface VenueAvailabilityEntry {
 }
 
 export interface Venue {
-  canPermanentlyDelete?: boolean;
+  changesRequested?: boolean;
   id: string;
   partnerId: string;
   partner: User;
@@ -335,6 +335,14 @@ export interface CallbackRequest {
 }
 
 export type AdminNotificationType =
+  | 'partner_registered'
+  | 'venue_submitted'
+  | 'activity_submitted'
+  | 'venue_request_submitted'
+  | 'gst_verification_submitted'
+  | 'bank_account_submitted'
+  | 'callback_requested'
+  | 'support_requested'
   | 'venue_auto_deactivated'
   | 'activity_added'
   | 'activity_removed'

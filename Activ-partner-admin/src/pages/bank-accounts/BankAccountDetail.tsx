@@ -22,7 +22,7 @@ import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/document
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="grid grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] gap-3">
+    <div className="detail-row">
       <span className="text-xs text-gray-400 pt-0.5">{label}</span>
       <span className="text-sm text-gray-800 break-words">{value}</span>
     </div>

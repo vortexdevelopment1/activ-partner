@@ -14,7 +14,7 @@ describe('bank account persistence', () => {
       findMany: jest.fn().mockResolvedValue([record]), updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     }, bookings: { aggregate: jest.fn().mockResolvedValue({ _sum: { total_paise: 12000n } }) },
     partner_payouts: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount_paise: 8000n } }) } };
-    service = new BankAccountsService(prisma);
+    service = new BankAccountsService(prisma, { notify: jest.fn().mockResolvedValue(undefined) } as any);
   });
 
   it('writes submitted details to the normalized database table with authenticated partner ownership', async () => {
@@ -26,6 +26,10 @@ describe('bank account persistence', () => {
       cancelled_cheque_url: '/uploads/cheque.pdf', status: 'UNDER_REVIEW',
     }) });
     expect(saved.status).toBe('under_review');
+    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
+      'bank_account_submitted', expect.any(String), expect.any(String),
+      { partnerId: 'partner', bankAccountId: 'account' },
+    );
     expect(saved.accountType).toBe(dto.accountType);
     const loaded = await service.findByPartner('partner');
     expect(loaded[0]).toMatchObject(saved);
@@ -38,6 +42,7 @@ describe('bank account persistence', () => {
     prisma.partner_bank_accounts.findFirst.mockResolvedValue(null);
     await expect(service.submit('partner', dto)).rejects.toThrow('cancelled cheque');
     expect(prisma.partner_bank_accounts.create).not.toHaveBeenCalled();
+    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
 
   it('scopes individual account reads to the requesting partner', async () => {

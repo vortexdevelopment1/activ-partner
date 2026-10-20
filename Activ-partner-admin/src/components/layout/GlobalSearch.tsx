@@ -101,7 +101,7 @@ export const GlobalSearch: React.FC = () => {
         className="rounded-lg p-2 text-gray-500 hover:bg-gray-50 md:hidden"><Search size={19} /></button>
 
       {open && (
-        <div id="admin-search-results" className="fixed left-3 right-3 top-16 z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-[min(34rem,calc(100vw-2rem))]">
+        <div id="admin-search-results" className="admin-popover fixed left-3 right-3 top-[72px] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl md:absolute md:left-0 md:right-0 md:top-full md:mt-2 md:w-full">
           <div className="flex items-center gap-2 border-b border-gray-100 p-3 md:hidden">
             <Search size={18} className="shrink-0 text-gray-400" />
             <input ref={mobileInputRef} type="search" value={query}
@@ -110,7 +110,7 @@ export const GlobalSearch: React.FC = () => {
               className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             <button type="button" aria-label="Close search" onClick={() => setOpen(false)} className="p-1 text-gray-500"><X size={18} /></button>
           </div>
-          <div className="max-h-[min(70dvh,34rem)] overflow-y-auto py-2">
+          <div className="max-h-[min(calc(var(--app-visual-height,100dvh)-10rem),34rem)] overflow-y-auto overscroll-contain py-2">
             {groups.map((group) => (
               <div key={group.key} className="pb-1">
                 <h3 className="px-4 pb-1 pt-2 text-xs font-semibold uppercase text-gray-400">{group.title}</h3>

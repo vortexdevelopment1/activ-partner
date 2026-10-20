@@ -170,7 +170,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">

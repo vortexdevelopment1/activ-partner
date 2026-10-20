@@ -81,17 +81,19 @@ export const Login: React.FC = () => {
                   autoComplete="current-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
-                  className={`input min-h-[52px] pr-12 ${errors.password ? 'border-red-400 focus:ring-red-500/20 focus:border-red-400' : ''}`}
+                  className={`input admin-password-input min-h-[52px] pr-14 ${errors.password ? 'border-red-400 focus:ring-red-500/20 focus:border-red-400' : ''}`}
                   {...register('password', { required: 'Password is required' })}
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  aria-controls="password"
                   aria-pressed={showPassword}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <Eye size={18} aria-hidden="true" /> : <EyeOff size={18} aria-hidden="true" />}
                 </button>
               </div>
               {errors.password && (

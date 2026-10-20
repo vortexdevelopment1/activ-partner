@@ -255,7 +255,7 @@ export class VenuesService {
       if (existing.status === "ARCHIVED") {
         await this.prisma.$transaction([
           this.prisma.venues.update({ where: { id: existing.id },
-            data: { status: "DRAFT", review_status: null, rejection_reason: null } }),
+            data: { status: "DRAFT", review_status: null, rejection_reason: null, submitted_at: null } }),
           this.prisma.partner_venue_services.updateMany({
             where: { venue_id: existing.id, status: "REJECTED" },
             data: { status: "DRAFT", rejection_reason: null, updated_at: new Date() },
@@ -297,24 +297,26 @@ export class VenuesService {
     if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
       throw new BadRequestException("Please sign the partnership agreement before finishing");
     }
+    if (venue.submitted_at) {
+      const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
+      return {
+        ...signedVenue,
+        agreementEmailSent: emailResult.sent,
+        agreementEmailError: emailResult.error,
+      };
+    }
     if (venue.status !== "DRAFT") {
-      if (venue.submitted_at) {
-        const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
-        return {
-          ...signedVenue,
-          agreementEmailSent: emailResult.sent,
-          agreementEmailError: emailResult.error,
-        };
-      }
       throw new BadRequestException("Only draft venues can be submitted for review");
     }
     const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
 
-    await this.prisma.$transaction([
-      this.prisma.venues.update({
-        where: { id: venueId },
+    const [submission] = await this.prisma.$transaction([
+      this.prisma.venues.updateMany({
+        where: { id: venueId, submitted_at: null },
         data: {
           submitted_at: new Date(),
+          review_status: VenueStatus.PENDING,
+          rejection_reason: null,
         },
       }),
       this.prisma.partner_venue_services.updateMany({
@@ -323,6 +325,14 @@ export class VenuesService {
       }),
     ]);
 
+    if (submission.count > 0) {
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.VENUE_SUBMITTED,
+        'Venue submitted for review',
+        `${venue.name} is ready for admin review.`,
+        { partnerId, venueId },
+      );
+    }
     return {
       ...(await this.findOne(venueId)),
       agreementEmailSent: emailResult.sent,
@@ -956,6 +966,7 @@ export class VenuesService {
       approvedBy: review.approved_by,
       approvedByName: approver?.name?.trim() || null,
       rejectionReason: review.rejection_reason,
+      changesRequested: review.status === 'DRAFT' && !review.submitted_at && review.review_status === VenueStatus.PENDING && !!review.rejection_reason,
       partner: {
         ...venue.partner,
         aadhaarName: legal?.aadhaar_name ?? null,
@@ -1140,10 +1151,11 @@ export class VenuesService {
           ? VenueStatus.APPROVED
           : venue.status === "ARCHIVED"
             ? VenueStatus.REJECTED
-            : VenueStatus.DRAFT,
+            : venue.submitted_at ? VenueStatus.PENDING : VenueStatus.DRAFT,
+      rejectionReason: venue.rejection_reason,
+      changesRequested: venue.status === 'DRAFT' && !venue.submitted_at && venue.review_status === VenueStatus.PENDING && !!venue.rejection_reason,
       isActive: venue.status === "PUBLISHED",
       bookingAccept: venue.booking_accept,
-      canPermanentlyDelete: venue.status === "ARCHIVED" && !venue.booking_accept,
       hasSeenWelcome: venue.has_seen_welcome,
       commission: Number(venue.commission_percent ?? 10),
       images: venue.partner_venue_images.map((image) => ({
@@ -1673,6 +1685,36 @@ export class VenuesService {
       throw new NotFoundException(`Venue with id ${id} not found`);
     }
 
+    if (approvalDto.status === VenueStatus.PENDING) {
+      const reason = approvalDto.reason?.trim();
+      if (!reason) throw new BadRequestException('A reason is required when requesting changes');
+      if (venue.status !== 'DRAFT') {
+        throw new BadRequestException('Changes can only be requested before venue approval');
+      }
+      await this.prisma.$transaction([
+        this.prisma.venues.update({ where: { id }, data: {
+          status: 'DRAFT', submitted_at: null, review_status: VenueStatus.PENDING,
+          rejection_reason: reason, approved_at: null, approved_by: null,
+        } }),
+        this.prisma.partner_venue_services.updateMany({
+          where: { venue_id: id, status: { in: ['DRAFT', 'PENDING'] } },
+          data: { status: 'DRAFT', submitted_at: null, updated_at: new Date() },
+        }),
+      ]);
+      const updated = await this.findOne(id);
+      await this.notificationsService.notify(updated.partnerId, NotificationType.ADMIN_UPDATE,
+        'Changes requested for your venue', `${updated.name}: ${reason}`, { venueId: id });
+      await this.pushNotificationsService.sendToPartner(updated.partnerId,
+        'Changes requested for your venue', `${updated.name}: ${reason}`,
+        { type: 'venue_changes_requested', venueId: id });
+      if (updated.partner?.email) {
+        await this.mailService.sendVenueChangesRequestedEmail({
+          toEmail: updated.partner.email, venueName: updated.name, reason,
+        });
+      }
+      return updated;
+    }
+
     if (
       approvalDto.status === VenueStatus.REJECTED ||
       approvalDto.status === VenueStatus.SUSPENDED
@@ -1876,7 +1918,7 @@ export class VenuesService {
           (currentUser.role !== UserRole.PARTNER || venue.partner_id !== currentUser.id)) {
         throw new ForbiddenException("You can only delete your own venues");
       }
-      if (currentUser.role === UserRole.ADMIN && venue.status === "ARCHIVED" && !venue.booking_accept) {
+      if (currentUser.role === UserRole.ADMIN) {
         await deleteVenue(tx, id);
         return { permanentlyDeleted: true };
       }
@@ -2196,22 +2238,7 @@ export class VenuesService {
   }
 
   async removeService(serviceId: string, partnerId: string): Promise<void> {
-    const service = await this.findManagedActivity(serviceId, partnerId);
     await this.updateActivityManagement(serviceId, partnerId, {}, true);
-    await this.adminNotificationsService.notify(
-      AdminNotificationType.ACTIVITY_REMOVED,
-      "Activity removed",
-      `"${service.title}" was removed from ${service.venues.name}`,
-      { partnerId, venueId: service.venue_id, serviceId },
-    );
-    const remaining = await this.prisma.partner_venue_services.count({
-      where: { venue_id: service.venue_id, status: { not: "ARCHIVED" } },
-    });
-    if (remaining === 0)
-      await this.prisma.venues.update({
-        where: { id: service.venue_id },
-        data: { booking_accept: false },
-      });
   }
 
   async getVenueStats() {
@@ -2310,6 +2337,12 @@ export class VenuesService {
         },
       });
     });
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.VENUE_REQUEST_SUBMITTED,
+      'Venue change request submitted',
+      'A partner submitted venue changes for review.',
+      { partnerId, venueId, venueRequestId: request.id },
+    );
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -2793,12 +2826,15 @@ export class VenuesService {
     dto: ManageActivityDto,
     archive = false,
   ) {
-    await this.findManagedActivity(serviceId, partnerId);
+    const managed = await this.findManagedActivity(serviceId, partnerId);
     if (dto.name !== undefined && !dto.name.trim())
       throw new BadRequestException("Activity name is required");
     if (dto.isActive === false && !dto.reason?.trim())
       throw new BadRequestException("Choose a reason to pause bookings");
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (archive) {
+        await tx.$queryRawUnsafe('SELECT id FROM venues WHERE id = $1::uuid FOR UPDATE', managed.venue_id);
+      }
       const service = await tx.partner_venue_services.findUniqueOrThrow({
         where: { id: serviceId },
       });
@@ -2885,7 +2921,7 @@ export class VenuesService {
         !Array.isArray(service.onboarding_data)
           ? (service.onboarding_data as Record<string, unknown>)
           : {};
-      return tx.partner_venue_services.update({
+      const updated = await tx.partner_venue_services.update({
         where: { id: serviceId },
         data: {
           ...(archive ? { status: "ARCHIVED" } : {}),
@@ -2916,7 +2952,38 @@ export class VenuesService {
           updated_at: new Date(),
         },
       });
+      let autoDeactivated = false;
+      if (archive) {
+        const remaining = await tx.partner_venue_services.count({
+          where: { venue_id: managed.venue_id, status: { not: 'ARCHIVED' } },
+        });
+        if (remaining === 0) {
+          const changed = await tx.venues.updateMany({
+            where: { id: managed.venue_id, booking_accept: true },
+            data: { booking_accept: false },
+          });
+          autoDeactivated = changed.count > 0;
+        }
+      }
+      return { updated, autoDeactivated };
     });
+    if (archive) {
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.ACTIVITY_REMOVED,
+        'Activity removed',
+        `"${managed.title}" was removed from ${managed.venues.name}.`,
+        { partnerId, venueId: managed.venue_id, serviceId },
+      );
+      if (result.autoDeactivated) {
+        await this.adminNotificationsService.notify(
+          AdminNotificationType.VENUE_AUTO_DEACTIVATED,
+          'Venue bookings automatically disabled',
+          `Bookings for ${managed.venues.name} were disabled because its last activity was removed.`,
+          { partnerId, venueId: managed.venue_id },
+        );
+      }
+    }
+    return result.updated;
   }
 
   private async findOwnedActivity(
@@ -3152,6 +3219,12 @@ export class VenuesService {
     });
     const saved = await this.findOwnedActivity(serviceId, partnerId);
 
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.ACTIVITY_SUBMITTED,
+      'Activity submitted for review',
+      `${saved.name} is ready for admin review.`,
+      { partnerId, venueId: saved.venueId, serviceId: saved.id },
+    );
     await this.notificationsService.notify(
       partnerId,
       NotificationType.ACTIVITY_UNDER_REVIEW,

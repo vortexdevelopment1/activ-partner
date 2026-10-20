@@ -743,6 +743,7 @@ void main() {
   });
 
   testWidgets('agreement download decodes the published PDF', (tester) async {
+    SharedPreferences.setMockInitialValues({'venue_id': 'venue-1', 'jwt_token': 'token'});
     FilePicker? original;
     try {
       original = FilePicker.platform;
@@ -2702,7 +2703,7 @@ void main() {
   for (final creatingAccount in [true, false]) {
     testWidgets(creatingAccount
         ? 'Create Account restarts at personal details after OTP for a saved profile'
-        : 'Login using OTP still resumes venue setup for a saved profile', (tester) async {
+        : 'Login using OTP restores personal details for an ordinary draft', (tester) async {
       SharedPreferences.setMockInitialValues({
         'owner_full_name': 'Virat Kohli',
         'owner_email': 'virat@example.com',
@@ -2723,7 +2724,7 @@ void main() {
           }}), 200);
         }
         return http.Response(jsonEncode({'data': {
-          'total': 1, 'items': [{'id': 'venue-1', 'status': 'draft'}],
+          'total': 1, 'items': [{'id': 'venue-1', 'name': 'Spartna Club', 'status': 'draft'}],
         }}), 200);
       });
       await showScreen(tester, LoginScreen(client: client));
@@ -2739,21 +2740,39 @@ void main() {
       expect(tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen)).isCreatingAccount, creatingAccount);
       await tester.enterText(digit(0), '1234');
       await tester.pumpAndSettle();
-      if (creatingAccount) {
-        expect(find.byType(TellUsAboutScreen), findsOneWidget);
-        expect(find.byType(VenueScreen), findsNothing);
-        expect(find.text('3/10'), findsOneWidget);
-        expect(find.text('Virat'), findsOneWidget);
-        expect(requests.where((request) => request.method == 'GET'), isEmpty);
-      } else {
-        expect(find.byType(VenueScreen), findsOneWidget);
-        expect(find.byType(TellUsAboutScreen), findsNothing);
-        expect(requests.where((request) => request.method == 'GET'), hasLength(1));
-      }
+      expect(find.byType(TellUsAboutScreen), findsOneWidget);
+      expect(find.byType(VenueScreen), findsNothing);
+      expect(find.text('3/10'), findsOneWidget);
+      expect(find.text('Virat'), findsOneWidget);
+      expect(requests.where((request) => request.method == 'GET'), hasLength(1));
       expect((await SharedPreferences.getInstance()).getString('venue_details'), contains('Spartna Club'));
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('OTP resumes requested corrections with the admin reason and saved venue', (tester) async {
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/verify-otp')) {
+        return http.Response(jsonEncode({'data': {
+          'accessToken': 'test-token', 'isProfileComplete': true,
+          'partner': {'isActive': false},
+        }}), 200);
+      }
+      return http.Response(jsonEncode({'data': {'total': 1, 'items': [{
+        'id': 'existing-venue', 'name': 'Existing Arena', 'status': 'draft',
+        'changesRequested': true, 'rejectionReason': 'Upload clearer venue photos',
+      }]}}), 200);
+    });
+    await showScreen(tester, OTPVerificationScreen(client: client));
+    await tester.enterText(digit(0), '1234');
+    await tester.pumpAndSettle();
+    expect(find.byType(VenueScreen), findsOneWidget);
+    expect(tester.widget<VenueScreen>(find.byType(VenueScreen)).changeReason, 'Upload clearer venue photos');
+    expect(find.textContaining('Changes requested by admin:'), findsOneWidget);
+    expect((await SharedPreferences.getInstance()).getString('venue_id'), 'existing-venue');
+    expect(find.text('Existing Arena'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Create Account intent survives Edit Number from a root OTP screen', (tester) async {
     await showScreen(tester, const OTPVerificationScreen(isCreatingAccount: true));

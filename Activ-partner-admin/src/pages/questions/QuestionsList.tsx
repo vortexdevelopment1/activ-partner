@@ -90,15 +90,13 @@ export const QuestionsList: React.FC = () => {
     onMutate: () => allQuestions,
   });
 
-  const moveQuestion = (sourceId: string, targetId: string, after: boolean) => {
+  const moveQuestion = (sourceId: string, targetId: string) => {
     if (reorderMutation.isPending || sourceId === targetId) return;
     const visible = [...visibleQuestions];
     const sourceIndex = visible.findIndex((q) => q.id === sourceId);
-    if (sourceIndex < 0 || !visible.some((q) => q.id === targetId)) return;
-    const [source] = visible.splice(sourceIndex, 1);
     const targetIndex = visible.findIndex((q) => q.id === targetId);
-    visible.splice(targetIndex + (after ? 1 : 0), 0, source);
-    if (visible.every((q, index) => q.id === visibleQuestions[index].id)) return;
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    [visible[sourceIndex], visible[targetIndex]] = [visible[targetIndex], visible[sourceIndex]];
 
     const moved = visible[Symbol.iterator]();
     const next = allQuestions.map((q, index) => {
@@ -228,7 +226,7 @@ export const QuestionsList: React.FC = () => {
         ) : visibleQuestions.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No questions found.</div>
         ) : (
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="w-8 px-4 py-3" />
@@ -264,15 +262,14 @@ export const QuestionsList: React.FC = () => {
                   onDrop={(event) => {
                     event.preventDefault();
                     const sourceId = event.dataTransfer.getData('text/plain') || draggingId;
-                    const after = event.clientY > event.currentTarget.getBoundingClientRect().top + event.currentTarget.clientHeight / 2;
                     setDraggingId(null);
                     setDropTargetId(null);
-                    if (sourceId) moveQuestion(sourceId, q.id, after);
+                    if (sourceId) moveQuestion(sourceId, q.id);
                   }}>
                   <td className="px-4 py-3 text-gray-300">
                     <button type="button" draggable={!reorderMutation.isPending}
                       aria-label={`Reorder ${q.questionText}`}
-                      title="Drag to reorder; use arrow keys to move"
+                      title="Drag onto another question to swap positions; use arrow keys to move"
                       disabled={reorderMutation.isPending}
                       className="hidden sm:inline-flex cursor-grab rounded p-1 hover:bg-gray-100 hover:text-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 active:cursor-grabbing disabled:cursor-not-allowed"
                       onDragStart={(event) => {
@@ -284,10 +281,10 @@ export const QuestionsList: React.FC = () => {
                       onKeyDown={(event) => {
                         if (event.key === 'ArrowUp' && index > 0) {
                           event.preventDefault();
-                          moveQuestion(q.id, visibleQuestions[index - 1].id, false);
+                          moveQuestion(q.id, visibleQuestions[index - 1].id);
                         } else if (event.key === 'ArrowDown' && index < visibleQuestions.length - 1) {
                           event.preventDefault();
-                          moveQuestion(q.id, visibleQuestions[index + 1].id, true);
+                          moveQuestion(q.id, visibleQuestions[index + 1].id);
                         }
                       }}>
                       <GripVertical size={14} />
@@ -295,11 +292,11 @@ export const QuestionsList: React.FC = () => {
                     <div className="flex sm:hidden flex-col">
                       <button type="button" aria-label={`Move ${q.questionText} up`}
                         disabled={index === 0 || reorderMutation.isPending}
-                        onClick={() => moveQuestion(q.id, visibleQuestions[index - 1].id, false)}
+                        onClick={() => moveQuestion(q.id, visibleQuestions[index - 1].id)}
                         className="p-1 text-gray-500 disabled:opacity-30"><ChevronUp size={16} /></button>
                       <button type="button" aria-label={`Move ${q.questionText} down`}
                         disabled={index === visibleQuestions.length - 1 || reorderMutation.isPending}
-                        onClick={() => moveQuestion(q.id, visibleQuestions[index + 1].id, true)}
+                        onClick={() => moveQuestion(q.id, visibleQuestions[index + 1].id)}
                         className="p-1 text-gray-500 disabled:opacity-30"><ChevronDown size={16} /></button>
                     </div>
                   </td>

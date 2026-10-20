@@ -1,11 +1,9 @@
-import { google } from 'googleapis';
+import * as google from 'googleapis/build/src/apis/gmail';
 import { GoogleOAuthService } from './google-oauth.service';
 
-jest.mock('googleapis', () => ({
-  google: {
-    auth: { OAuth2: jest.fn() },
-    gmail: jest.fn(),
-  },
+jest.mock('googleapis/build/src/apis/gmail', () => ({
+  auth: { OAuth2: jest.fn() },
+  gmail: jest.fn(),
 }));
 
 describe('GoogleOAuthService', () => {

@@ -12,6 +12,17 @@ export const Layout: React.FC = () => {
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
   useEffect(() => {
+    const update = () => document.documentElement.style.setProperty('--app-visual-height', `${window.visualViewport?.height ?? window.innerHeight}px`);
+    update();
+    window.visualViewport?.addEventListener('resize', update);
+    window.addEventListener('resize', update);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update);
+      window.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--app-visual-height');
+    };
+  }, []);
+  useEffect(() => {
     if (!menuOpen) return;
     const onEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
     document.addEventListener('keydown', onEscape);

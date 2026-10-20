@@ -92,7 +92,7 @@ export const UsersList: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">

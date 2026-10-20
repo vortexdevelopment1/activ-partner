@@ -4,7 +4,8 @@ import { PartnersService } from './partners.service';
 describe('PartnersService admin create', () => {
   const buildService = (tx: any) => Object.assign(
     Object.create(PartnersService.prototype),
-    { prisma: { $transaction: (callback: (client: any) => unknown) => callback(tx) } },
+    { prisma: { $transaction: (callback: (client: any) => unknown) => callback(tx) },
+      adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) } },
   ) as PartnersService;
 
   it('creates the current user, partner, owner link and profile schema', async () => {

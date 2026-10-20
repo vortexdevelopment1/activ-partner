@@ -88,6 +88,42 @@ export class MailService {
     }
   }
 
+  async sendVenueChangesRequestedEmail(params: {
+    toEmail: string; venueName: string; reason: string;
+  }): Promise<boolean> {
+    const authkey = this.configService.get<string>('MSG91_AUTHKEY');
+    const templateId = this.configService.get<string>('MSG91_VENUE_CHANGES_TEMPLATE_ID');
+    if (!authkey || !templateId?.trim()) {
+      this.logger.warn('Venue changes email not sent: configure MSG91_AUTHKEY and MSG91_VENUE_CHANGES_TEMPLATE_ID');
+      return false;
+    }
+    try {
+      const response = await fetch('https://control.msg91.com/api/v5/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', authkey },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          from: { email: this.configService.get<string>('MSG91_FROM_EMAIL') },
+          domain: this.configService.get<string>('MSG91_DOMAIN'),
+          template_id: templateId.trim(),
+          recipients: [{ to: [{ email: params.toEmail }], variables: {
+            venueName: params.venueName, reason: params.reason,
+            instructions: 'Sign in with your phone OTP, update your venue details and submit again for review.',
+          } }],
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || result?.status === 'fail' || result?.status === 'error' || result?.success === false) {
+        this.logger.warn('Venue changes email was rejected by the provider');
+        return false;
+      }
+      return true;
+    } catch {
+      this.logger.warn('Venue changes email delivery failed');
+      return false;
+    }
+  }
+
   async sendPartnerApprovalEmail(params: {
     toEmail: string;
     partnerName: string;

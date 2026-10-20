@@ -24,7 +24,7 @@ export const Toast: React.FC = () => {
       {toasts.map((toast) => (
         <div key={toast.id} className={`flex items-start gap-3 p-3 rounded-xl border shadow-lg ${colors[toast.type]}`}>
           {icons[toast.type]}
-          <p className="flex-1 text-sm text-gray-800">{toast.message}</p>
+          <p className="min-w-0 flex-1 text-sm text-gray-800 [overflow-wrap:anywhere]">{toast.message}</p>
           <button onClick={() => remove(toast.id)} className="text-gray-400 hover:text-gray-600">
             <X size={14} />
           </button>

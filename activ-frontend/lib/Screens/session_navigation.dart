@@ -45,7 +45,7 @@ class SessionNavigation extends NavigatorObserver {
     if (page is TellUsAboutScreen)
       return {'page': 'partner', 'review': page.reviewMode};
     if (page is VenueScreen)
-      return {'page': 'venue', 'review': page.reviewMode};
+      return {'page': 'venue', 'review': page.reviewMode, if (page.changeReason != null) 'changeReason': page.changeReason};
     if (page is CustomerPlacesOffer)
       return {'page': 'amenities', 'review': page.reviewMode};
     if (page is ListActivityTypeScreen)
@@ -150,7 +150,7 @@ class SessionNavigation extends NavigatorObserver {
       'forgot' => ForgotPasswordScreen(emailId: data['email'] ?? ''),
       'reset' => ResetPasswordScreen(emailId: data['email'] ?? ''),
       'partner' => TellUsAboutScreen(reviewMode: review),
-      'venue' => VenueScreen(reviewMode: review),
+      'venue' => VenueScreen(reviewMode: review, changeReason: data['changeReason'] as String?),
       'amenities' => CustomerPlacesOffer(reviewMode: review),
       'sports' => ListActivityTypeScreen(
           reviewMode: review, initialCategoryId: data['category']),

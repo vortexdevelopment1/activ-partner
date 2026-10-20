@@ -10,10 +10,15 @@ import { BankAccountStatus } from './entities/bank-account.entity';
 import { SubmitBankAccountDto } from './dto/submit-bank-account.dto';
 import { ReviewBankAccountDto } from './dto/review-bank-account.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 
 @Injectable()
 export class BankAccountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly adminNotificationsService: AdminNotificationsService,
+  ) {}
 
   private map(record: any, reviewedByName: string | null = null) {
     const owner = record.partners?.partner_users?.[0]?.users;
@@ -53,6 +58,12 @@ export class BankAccountsService {
         account_type: dto.accountType, branch_name: dto.branchName?.trim() || null,
         cancelled_cheque_url: cancelledChequeUrl, status: 'UNDER_REVIEW', updated_at: new Date(),
       } });
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.BANK_ACCOUNT_SUBMITTED,
+        'Bank account submitted',
+        'A partner submitted bank account details for review.',
+        { partnerId, bankAccountId: record.id },
+      );
       return this.map(record);
     } catch (error) {
       if (error.code === 'P2002') throw new BadRequestException('A bank account submission is already under review.');

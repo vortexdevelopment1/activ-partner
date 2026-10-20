@@ -24,7 +24,8 @@ import 'TellUsAboutScreen.dart';
 import 'onboarding_widgets.dart';
 
 class VenueScreen extends StatefulWidget {
-  const VenueScreen({super.key, this.reviewMode = false, this.client});
+  const VenueScreen({super.key, this.reviewMode = false, this.client, this.changeReason});
+  final String? changeReason;
   final bool reviewMode;
   final http.Client? client;
 
@@ -310,6 +311,14 @@ class _State extends State<VenueScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
+                                    if (widget.changeReason?.trim().isNotEmpty == true)
+                                      Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.symmetric(vertical: 12),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(color: const Color(0xfffff3d6), borderRadius: BorderRadius.circular(12)),
+                                        child: Text('Changes requested by admin:\n${widget.changeReason}\n\nUpdate your details and submit again for review.'),
+                                      ),
                                     getVenueNameLabel(),
                                     getVenueNameField(context),
 

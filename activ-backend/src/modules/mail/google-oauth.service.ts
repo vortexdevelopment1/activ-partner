@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { google } from 'googleapis';
+// Load only Gmail instead of the generated clients for every Google API.
+import * as google from 'googleapis/build/src/apis/gmail';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';

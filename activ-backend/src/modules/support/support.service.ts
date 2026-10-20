@@ -9,6 +9,8 @@ import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { MailService } from '../mail/mail.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 
 @Injectable()
 export class SupportService {
@@ -16,6 +18,7 @@ export class SupportService {
     private readonly mailService: MailService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly prisma: PrismaService,
+    private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
 
   async createCallback(dto: CreateCallbackRequestDto, partnerId?: string) {
@@ -43,6 +46,12 @@ export class SupportService {
       },
     });
 
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.CALLBACK_REQUESTED,
+      'New callback request',
+      `${dto.partnerName || 'A partner'} requested a callback.`,
+      { callbackId: saved.id, ...(partnerId ? { partnerId } : {}) },
+    );
     await this.mailService.sendCallbackRequestEmail({
       partnerName: dto.partnerName,
       partnerEmail: dto.email,
@@ -156,7 +165,7 @@ export class SupportService {
         ]
       : [];
 
-    return this.prisma.partner_support_requests.create({
+    const saved = await this.prisma.partner_support_requests.create({
       data: {
         id: randomUUID(),
         partner_id: partnerId,
@@ -167,6 +176,13 @@ export class SupportService {
         updated_at: new Date(),
       },
     });
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.SUPPORT_REQUESTED,
+      'New support request',
+      'A partner submitted a support message.',
+      { partnerId, supportRequestId: saved.id },
+    );
+    return saved;
   }
 
   async findAllEmails(

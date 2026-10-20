@@ -33,13 +33,10 @@ async function main() {
     await tx.payments.create({ data: { id: ids.payment, booking_id: ids.booking, provider: 'test', amount_paise: 100n, updated_at: now } });
     const service = Object.assign(Object.create(VenuesService.prototype), { prisma: { $transaction: callback => callback(tx) } });
     const admin = { id: ids.user, role: 'admin' };
-    assert.deepEqual(await service.remove(ids.venue, admin), { permanentlyDeleted: false });
-    const archived = await tx.venues.findUnique({ where: { id: ids.venue } });
-    assert.equal(archived.status, 'ARCHIVED');
-    assert.equal(archived.booking_accept, false);
     await tx.$executeRawUnsafe('SAVEPOINT venue_delete_guard');
     await assert.rejects(service.remove(ids.venue, admin), /cancel or complete/);
     await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT venue_delete_guard');
+    assert.equal((await tx.venues.findUnique({ where: { id: ids.venue } })).status, 'PUBLISHED');
     await tx.bookings.update({ where: { id: ids.booking }, data: { status: 'COMPLETED' } });
     assert.deepEqual(await service.remove(ids.venue, admin), { permanentlyDeleted: true });
     for (const [model, id] of [['venues', ids.venue], ['facilities', ids.facility], ['slots', ids.slot], ['bookings', ids.booking], ['payments', ids.payment], ['partner_venue_services', ids.service], ['partner_venue_answers', ids.answer], ['partner_venue_images', ids.image]]) {
@@ -53,6 +50,6 @@ async function main() {
   }, { timeout: 120000, maxWait: 15000, isolationLevel: 'Serializable' });
 }
 main().catch(error => {
-  if (error === rollback) console.log('Archive, permanent deletion, booking guard, child cleanup and venue isolation verified. All synthetic records rolled back.');
+  if (error === rollback) console.log('Single-request permanent deletion, booking guard, child cleanup and venue isolation verified. All synthetic records rolled back.');
   else { console.error('Verification failed:', error.code || error.message); process.exitCode = 1; }
 }).finally(() => db.$disconnect());

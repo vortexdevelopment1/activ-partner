@@ -25,9 +25,10 @@ export const Pagination: React.FC<PaginationProps> = ({ page, totalPages: totalP
       </p>
       <div className="flex items-center gap-1">
         <button
+          type="button" aria-label="Previous page"
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
-          className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronLeft size={16} />
         </button>
@@ -44,9 +45,10 @@ export const Pagination: React.FC<PaginationProps> = ({ page, totalPages: totalP
             </button>
         ))}
         <button
+          type="button" aria-label="Next page"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
-          className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronRight size={16} />
         </button>

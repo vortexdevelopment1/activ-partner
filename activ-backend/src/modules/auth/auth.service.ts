@@ -33,6 +33,8 @@ import { ResetPasswordDto, VerifyPasswordResetCodeDto } from './dto/reset-passwo
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VenueStatus } from '../../common/enums/venue-status.enum';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 
 @Injectable()
 export class AuthService {
@@ -50,6 +52,7 @@ export class AuthService {
     private teamMemberRepository: Repository<TeamMember>,
     @InjectRepository(Venue)
     private venueRepository: Repository<Venue>,
+    private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
 
   // ─── User Auth ─────────────────────────────────────────────────────────────
@@ -263,6 +266,12 @@ export class AuthService {
     });
 
     const saved = await this.partnerRepository.save(partner);
+    await this.adminNotificationsService.notify(
+      AdminNotificationType.PARTNER_REGISTERED,
+      'New partner registered',
+      `${saved.businessName || saved.firstName || 'A partner'} registered with ACTIV.`,
+      { partnerId: saved.id },
+    );
     const tokens = await this.generatePartnerTokens(saved);
     const { password, phoneOtp, otpExpiresAt, resetPasswordCode, resetPasswordCodeExpiresAt, ...partnerWithoutSensitive } = saved as any;
 
@@ -316,7 +325,7 @@ export class AuthService {
       });
       const partner = user?.partner_users?.[0]?.partners;
       if (partner) {
-        if (partner.status !== 'ACTIVE') {
+        if (partner.status !== 'ACTIVE' && !(await this.canResumeVenueCorrections(partner))) {
           throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
         }
       } else {
@@ -411,7 +420,7 @@ export class AuthService {
       if (!partner) {
         throw new NotFoundException('No account was found for this number. Please create an account first.');
       }
-      if (partner.status !== 'ACTIVE') {
+      if (partner.status !== 'ACTIVE' && !(await this.canResumeVenueCorrections(partner))) {
         throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
       }
     }
@@ -456,12 +465,14 @@ export class AuthService {
         });
       }
 
+      let isNewPartner = false;
       let link = await tx.partner_users.findFirst({
         where: { user_id: user.id },
         include: { partners: { include: { partner_business_profiles: true } } },
       });
 
       if (!link) {
+        isNewPartner = true;
         const partnerId = randomUUID();
         await tx.partners.create({
           data: {
@@ -491,17 +502,33 @@ export class AuthService {
         });
       }
 
-      return { user, link };
+      return { user, link, isNewPartner };
     }, {
       maxWait: 10000,
       timeout: 15000,
     });
 
+    if (account.isNewPartner) {
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.PARTNER_REGISTERED,
+        'New partner registered',
+        `${account.link.partners.legal_name || 'A partner'} registered with ACTIV.`,
+        { partnerId: account.link.partners.id },
+      );
+    }
     return this.buildPartnerAuthResponse(
       account.link.partners,
       account.user,
       account.link.role,
     );
+  }
+
+  private async canResumeVenueCorrections(partner: { id: string; status: string }): Promise<boolean> {
+    if (partner.status !== 'PENDING') return false;
+    return !!(await this.prisma.venues.findFirst({ where: {
+      partner_id: partner.id, status: 'DRAFT', submitted_at: null,
+      review_status: 'pending', rejection_reason: { not: null },
+    }, select: { id: true } }));
   }
 
   private async completeTeamMemberLogin(teamMember: TeamMember) {

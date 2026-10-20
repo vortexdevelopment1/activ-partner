@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Eye, RefreshCw, RotateCcw, Search, ScrollText, X } from 'lucide-react';
 import { logsApi, type ActivityLog } from '../../api/logs.api';
 import { Pagination } from '../../components/ui/Pagination';
+import { Modal } from '../../components/ui/Modal';
 import { actionLabel, localDateBoundary, resourceLabel } from './logPresentation';
 
 const limit = 25;
@@ -120,7 +121,7 @@ export const LogsList: React.FC = () => {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -170,17 +171,13 @@ export const LogsList: React.FC = () => {
         {total > limit && <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />}
       </div>
 
-      {selectedLog && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-        onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedLog(null); }}>
-        <div role="dialog" aria-modal="true" aria-label="Event details"
-          className="bg-white rounded-lg w-full max-w-lg shadow-xl p-5 space-y-4">
+      {selectedLog && <Modal open onClose={() => setSelectedLog(null)} title="Event details" size="lg">
+        <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold text-gray-900">{actionLabel(selectedLog)}</h3>
               <p className="text-sm text-gray-500 mt-1">{new Date(selectedLog.createdAt).toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'medium' })}</p>
             </div>
-            <button type="button" onClick={() => setSelectedLog(null)} title="Close" aria-label="Close event details"
-              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"><X size={18} /></button>
           </div>
           <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm border-t border-gray-100 pt-4">
             <dt className="text-gray-500">Result</dt>
@@ -207,7 +204,7 @@ export const LogsList: React.FC = () => {
             </dd>
           </dl>
         </div>
-      </div>}
+      </Modal>}
     </div>
   );
 };

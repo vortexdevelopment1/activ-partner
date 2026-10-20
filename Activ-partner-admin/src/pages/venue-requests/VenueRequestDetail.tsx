@@ -20,8 +20,8 @@ import { VENUE_REQUEST_FIELD_KEYS, type Venue, type VenueUpdateRequest } from '.
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="flex gap-3">
-      <span className="text-xs text-gray-400 w-36 shrink-0 pt-0.5">{label}</span>
+    <div className="detail-row">
+      <span>{label}</span>
       <span className="text-sm text-gray-800">{value}</span>
     </div>
   ) : null;
@@ -202,7 +202,7 @@ export const VenueRequestDetail: React.FC = () => {
         {changedFields.length === 0 ? (
           <p className="px-5 py-6 text-sm text-gray-400">No change data available.</p>
         ) : (
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide w-44">

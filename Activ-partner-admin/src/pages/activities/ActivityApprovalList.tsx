@@ -91,7 +91,7 @@ export const ActivityApprovalList: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto"><table className="w-full text-sm">
+            <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/60">
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -205,7 +205,7 @@ export const ActivityApprovalList: React.FC = () => {
       >
         {detailTarget && (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Activity Name</p>
                 <p className="text-gray-900 font-medium">{detailTarget.name}</p>

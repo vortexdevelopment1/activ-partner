@@ -1,3 +1,4 @@
+import { Modal } from '../../components/ui/Modal';
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
@@ -769,25 +770,40 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-white rounded-lg shadow-[0_24px_70px_rgb(8_20_17/0.24)] ring-1 ring-black/5 w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Create Venue</h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Step {step + 1} of {STEPS.length} — {STEPS[step]}
-            </p>
-          </div>
-          <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X size={18} className="text-gray-500" />
+    <Modal open={open} onClose={handleClose} title="Create Venue" size="xl"
+      subtitle={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
+      footer={<div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            onClick={step === 0 ? handleClose : () => setStep(s => s - 1)}
+            className="btn-secondary flex items-center gap-1.5 text-sm"
+            disabled={mutation.isPending}
+          >
+            <ChevronLeft size={14} />
+            {step === 0 ? 'Cancel' : 'Back'}
           </button>
-        </div>
 
+          {step < STEPS.length - 1 ? (
+            <button
+              onClick={() => {
+                if (step === 1) setStep1Submitted(true);
+                if (step === 5) setStep4Submitted(true);
+                if (canNext()) setStep(s => s + 1);
+              }}
+              disabled={step !== 1 && step !== 5 && !canNext()}
+              className="btn-primary flex items-center gap-1.5 text-sm"
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          ) : (
+            <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
+              className="btn-primary text-sm min-w-[120px]"
+            >
+              {mutation.isPending ? 'Creating…' : 'Create Venue'}
+            </button>
+          )}
+</div>}>
         {/* Progress bar */}
-        <div className="px-4 sm:px-6 pt-3 pb-1 shrink-0">
+        <div className="pb-4 shrink-0">
           <div className="flex gap-1.5">
             {STEPS.map((_, i) => (
               <div key={i}
@@ -799,7 +815,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 space-y-4">
+      <div className="space-y-4">
 
           {/* ── Step 1: Partner & Basics ── */}
           {step === 0 && (
@@ -832,7 +848,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                 </div>
 
                 {showPartnerDropdown && !form.partnerId && !showNewPartnerForm && (
-                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  <div className="w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                     <div className="max-h-44 overflow-y-auto">
                       {partners.length === 0 ? (
                         <p className="px-4 py-3 text-sm text-gray-400">No partners found</p>
@@ -1026,7 +1042,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
 
                 {/* Suggestions dropdown */}
                 {addressSuggestions.length > 0 && (
-                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                  <div className="w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[min(13rem,35dvh)] overflow-y-auto overscroll-contain">
                     {addressSuggestions.map(s => (
                       <button key={s.placeId} type="button"
                         className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-start gap-2.5 transition-colors"
@@ -1362,40 +1378,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
               </p>
             </>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-gray-100 shrink-0">
-          <button
-            onClick={step === 0 ? handleClose : () => setStep(s => s - 1)}
-            className="btn-secondary flex items-center gap-1.5 text-sm"
-            disabled={mutation.isPending}
-          >
-            <ChevronLeft size={14} />
-            {step === 0 ? 'Cancel' : 'Back'}
-          </button>
-
-          {step < STEPS.length - 1 ? (
-            <button
-              onClick={() => {
-                if (step === 1) setStep1Submitted(true);
-                if (step === 5) setStep4Submitted(true);
-                if (canNext()) setStep(s => s + 1);
-              }}
-              disabled={step !== 1 && step !== 5 && !canNext()}
-              className="btn-primary flex items-center gap-1.5 text-sm"
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          ) : (
-            <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
-              className="btn-primary text-sm min-w-[120px]"
-            >
-              {mutation.isPending ? 'Creating…' : 'Create Venue'}
-            </button>
-          )}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };

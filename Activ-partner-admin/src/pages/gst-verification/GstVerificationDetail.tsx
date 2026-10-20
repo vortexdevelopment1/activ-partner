@@ -49,8 +49,8 @@ const GstDocument: React.FC<{ src: string }> = ({ src }) => {
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
-    <div className="flex gap-3">
-      <span className="text-xs text-gray-400 w-36 shrink-0 pt-0.5">{label}</span>
+    <div className="detail-row">
+      <span>{label}</span>
       <span className="text-sm text-gray-800">{value}</span>
     </div>
   ) : null;
