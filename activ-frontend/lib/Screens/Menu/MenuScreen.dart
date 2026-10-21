@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../../Style/app_colors.dart';
 import '../../Utills/common_utilities.dart';
@@ -35,7 +36,10 @@ class _MenuScreenState extends State<MenuScreen> {
   bool _isPartner = true;
   String _profileName = 'Partner';
   String _profileEmail = '';
+  String _profilePhone = '';
+  String _profileRole = 'Manager';
   String _avatarUrl = '';
+  bool _uploadingAvatar = false;
 
   @override
   void initState() {
@@ -74,11 +78,15 @@ class _MenuScreenState extends State<MenuScreen> {
 
       String name = '';
       String email = '';
+      String phone = '';
+      String role = 'Manager';
       String avatar = '';
 
       if (member is Map) {
         name = checkString(member['fullName'] ?? member['name']);
         email = checkString(member['email']);
+        phone = checkString(member['phone'] ?? member['phoneNumber']);
+        role = checkString(member['role'] ?? member['designation']);
         avatar = checkString(member['avatarUrl'] ?? member['profileImage']);
       } else if (partner is Map) {
         final firstName = checkString(partner['firstName']);
@@ -98,6 +106,10 @@ class _MenuScreenState extends State<MenuScreen> {
       setState(() {
         if (name.isNotEmpty) _profileName = name;
         _profileEmail = email;
+        _profilePhone = phone;
+        if (role.isNotEmpty) {
+          _profileRole = role[0].toUpperCase() + role.substring(1);
+        }
         _avatarUrl = avatar;
       });
     } catch (e) {
@@ -117,6 +129,112 @@ class _MenuScreenState extends State<MenuScreen> {
         MaterialPageRoute<void>(
             builder: (_) => ProfileScreen(client: widget.client)));
     if (mounted) await _loadProfileHeader();
+  }
+
+  Future<void> _changePhotoFromMenu() async {
+    if (_uploadingAvatar) return;
+    try {
+      final photo = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          imageQuality: 85);
+      if (photo == null || !mounted) return;
+      setState(() => _uploadingAvatar = true);
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final avatarPath =
+          _isPartner ? '/partners/avatar' : '/team/profile/avatar';
+      final request =
+          http.MultipartRequest('PATCH', Uri.parse('$BASE_URL$avatarPath'))
+            ..headers['Authorization'] = 'Bearer $token'
+            ..files.add(http.MultipartFile.fromBytes(
+                'avatar', await photo.readAsBytes(),
+                filename: photo.name));
+      final client = widget.client ?? http.Client();
+      late http.Response response;
+      try {
+        response = await http.Response.fromStream(
+            await client.send(request).timeout(const Duration(seconds: 30)));
+      } finally {
+        if (widget.client == null) client.close();
+      }
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Upload failed');
+      }
+      await _loadProfileHeader();
+    } catch (_) {
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+            context, 'Unable to update photo. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  Future<void> _removePhotoFromMenu() async {
+    if (_uploadingAvatar) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final client = widget.client ?? http.Client();
+      late http.Response response;
+      try {
+        final avatarPath =
+            _isPartner ? '/partners/avatar' : '/team/profile/avatar';
+        response =
+            await client.delete(Uri.parse('$BASE_URL$avatarPath'), headers: {
+          'Authorization': 'Bearer $token',
+          'accept': '*/*',
+        }).timeout(const Duration(seconds: 30));
+      } finally {
+        if (widget.client == null) client.close();
+      }
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Remove failed');
+      }
+      await _loadProfileHeader();
+    } catch (_) {
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+            context, 'Unable to remove photo. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  Future<void> _showPhotoOptions() async {
+    if (_uploadingAvatar) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Change Profile Photo'),
+              onTap: () => Navigator.pop(sheetContext, 'change'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Remove Profile Photo',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.pop(sheetContext, 'remove'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'change') await _changePhotoFromMenu();
+    if (action == 'remove') await _removePhotoFromMenu();
   }
 
   @override
@@ -156,6 +274,31 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   List<_ProfileMenuItem> _menuItems() {
+    if (!_isPartner) {
+      return [
+        _ProfileMenuItem(
+          title: 'My Details',
+          icon: Icons.person_outline_rounded,
+          onTap: _openProfile,
+        ),
+        _ProfileMenuItem(
+          title: 'Help & Support',
+          icon: Icons.support_agent_rounded,
+          onTap: () => CommonUtilities.NavigateWithPush(
+            context,
+            HelpSupportScreen(client: widget.client),
+          ),
+        ),
+        _ProfileMenuItem(
+          title: 'App Controls',
+          icon: Icons.logout_rounded,
+          onTap: () => CommonUtilities.NavigateWithPush(
+            context,
+            SettingsScreen(client: widget.client),
+          ),
+        ),
+      ];
+    }
     return [
       _ProfileMenuItem(
         title: 'Partner Details',
@@ -267,11 +410,11 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
             child: FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text('Hey, Partner!',
+          child: Text(_isPartner ? 'Hey, Partner!' : 'Hey, $_profileRole!',
               style: TextStyle(
                   fontSize: 26,
                   fontFamily: 'Satoshi',
@@ -315,12 +458,17 @@ class _MenuScreenState extends State<MenuScreen> {
                       maximumSize: const Size.square(24),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    onPressed: _openProfile,
+                    onPressed: _showPhotoOptions,
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints.tightFor(width: 24, height: 24),
-                    icon: const Icon(Icons.camera_alt,
-                        color: Color(0xFFA536F5), size: 18),
+                    icon: _uploadingAvatar
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.camera_alt,
+                            color: Color(0xFFA536F5), size: 18),
                   ),
                 )),
           ])),
@@ -333,7 +481,10 @@ class _MenuScreenState extends State<MenuScreen> {
           width: double.infinity,
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(_profileEmail.isNotEmpty ? _profileEmail : ' ',
+            child: Text(
+                _isPartner
+                    ? (_profileEmail.isNotEmpty ? _profileEmail : ' ')
+                    : (_profilePhone.isNotEmpty ? _profilePhone : ' '),
                 style: const TextStyle(
                     fontSize: 15,
                     fontFamily: 'Satoshi',

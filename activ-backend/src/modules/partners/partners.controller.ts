@@ -103,6 +103,15 @@ export class PartnersController {
     return { message: 'Avatar updated successfully', data };
   }
 
+  @Delete('avatar')
+  @Roles(UserRole.PARTNER)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove partner avatar (Partner only)' })
+  async removeAvatar(@CurrentUser() partner: Partner) {
+    const data = await this.partnersService.removeAvatar(partner.id);
+    return { message: 'Avatar removed successfully', data };
+  }
+
   @Patch('legal')
   @Roles(UserRole.PARTNER)
   @ApiOperation({

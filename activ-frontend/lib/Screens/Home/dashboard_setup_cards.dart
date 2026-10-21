@@ -17,7 +17,7 @@ class DashboardSetupCards extends StatefulWidget {
 
 class _DashboardSetupCardsState extends State<DashboardSetupCards> {
   final _dismissed = <String>{};
-  final _pages = PageController(viewportFraction: .9);
+  final _pages = PageController(viewportFraction: .96);
   int _index = 0;
 
   @override
@@ -45,7 +45,7 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
       if (widget.teamRequired && !_dismissed.contains('team')) 'team'
     ];
     if (tasks.isEmpty) return const SizedBox.shrink();
-    final height = 190 +
+    final height = 168 +
         (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 32) * 8;
     return Padding(
         padding: const EdgeInsets.only(bottom: 16),
@@ -62,11 +62,21 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                     final pricing = task == 'pricing';
                     return Container(
                         key: Key('setup-$task'),
-                        margin: const EdgeInsets.symmetric(horizontal: 6),
-                        padding: const EdgeInsets.all(18),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
                         decoration: BoxDecoration(
-                            color: const Color(0xFFE0F2F4),
-                            borderRadius: BorderRadius.circular(8),
+                            gradient: const LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Color(0xFFD2F3F6),
+                                  Color(0xFFEAF9FA),
+                                  Colors.white,
+                                  Colors.white,
+                                  Color(0xFFE4EEF5),
+                                ],
+                                stops: [0, .25, .5, .75, 1]),
+                            borderRadius: BorderRadius.circular(28),
                             border: Border.all(color: const Color(0xFFD2DFE0))),
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,7 +116,7 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                                               });
                                             })),
                                   ]),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 5),
                               Text(
                                   pricing
                                       ? "Congratulations on your venue's approval! Set your prices per slot and start accepting bookings."
@@ -118,15 +128,15 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                               const Spacer(),
                               SizedBox(
                                   width: double.infinity,
-                                  height: 42,
+                                      height: 38,
                                   child: TextButton(
                                       style: TextButton.styleFrom(
                                           backgroundColor:
                                               const Color(0xFFA634EB),
                                           foregroundColor: Colors.white,
                                           shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8))),
+                                                  borderRadius:
+                                                      BorderRadius.circular(9))),
                                       onPressed: pricing
                                           ? widget.onPricing
                                           : widget.onTeam,

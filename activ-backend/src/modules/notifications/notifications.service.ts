@@ -16,6 +16,7 @@ export class NotificationsService {
     type: string;
     title: string;
     body: string;
+    data: unknown;
     read_at: Date | null;
     created_at: Date;
   }, partnerId: string): Notification {
@@ -25,7 +26,9 @@ export class NotificationsService {
       type: notification.type as NotificationType,
       title: notification.title,
       body: notification.body,
-      data: null,
+      data: notification.data && typeof notification.data === 'object'
+          ? notification.data as Record<string, any>
+          : null,
       isRead: notification.read_at !== null,
       createdAt: notification.created_at,
     };
@@ -61,6 +64,7 @@ export class NotificationsService {
           type,
           title,
           body,
+          data: data ?? undefined,
           status: 'SENT',
           sent_at: now,
         },

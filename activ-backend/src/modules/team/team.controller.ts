@@ -9,6 +9,9 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TeamService } from './team.service';
@@ -17,13 +20,43 @@ import { UpdateTeamMemberDto } from './dto/update-team-member.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @ApiTags('Team')
 @ApiBearerAuth()
 @Roles(UserRole.PARTNER)
 @Controller('team')
 export class TeamController {
-  constructor(private readonly teamService: TeamService) {}
+  constructor(
+    private readonly teamService: TeamService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
+
+  @Patch('profile/avatar')
+  @Roles(UserRole.TEAM_MEMBER)
+  @UseInterceptors(FileInterceptor('avatar', { storage: memoryStorage() }))
+  async updateProfileAvatar(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Avatar image file is required');
+    const avatarUrl = await this.cloudinaryService.uploadFile(
+      file,
+      'activ/avatars',
+      'image',
+    );
+    await this.teamService.updateAvatar(user.id, avatarUrl);
+    return { message: 'Profile photo updated successfully', data: { avatarUrl } };
+  }
+
+  @Delete('profile/avatar')
+  @Roles(UserRole.TEAM_MEMBER)
+  async removeProfileAvatar(@CurrentUser() user: any) {
+    await this.teamService.removeAvatar(user.id);
+    return { message: 'Profile photo removed successfully' };
+  }
 
   @Get()
   @ApiOperation({ summary: 'List all team members (Partner only)' })

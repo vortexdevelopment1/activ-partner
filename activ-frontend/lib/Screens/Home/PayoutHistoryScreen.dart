@@ -260,11 +260,15 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
                                       : const Color(0xFF484848)),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8))),
-                          child: Text(option.value,
-                              style: _text(15,
-                                  color: _status == option.key
-                                      ? Colors.white
-                                      : const Color(0xFF484848))),
+                          child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(option.value,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: _text(15,
+                                      color: _status == option.key
+                                          ? Colors.white
+                                          : const Color(0xFF484848)))),
                         ))
                     .toList();
                 return constraints.maxWidth < 290 ||
@@ -272,8 +276,8 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
                     ? Wrap(spacing: 10, runSpacing: 8, children: controls)
                     : Row(children: [
                         for (var i = 0; i < controls.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 8),
-                          Expanded(flex: [2, 5, 4, 3][i], child: controls[i]),
+                          if (i > 0) const SizedBox(width: 10),
+                          Expanded(child: controls[i]),
                         ]
                       ]);
               }),
@@ -356,78 +360,60 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
       );
 
   Widget _record(Map<String, dynamic> record) {
-    final status = record['status'],
+    final status = record['status'].toString(),
         date = DateTime.tryParse((record['payoutDate'] ?? '').toString());
+    final statusLabel = status == 'success'
+        ? 'Success'
+        : status == 'failed'
+            ? 'Failed'
+            : 'Pending';
+    final statusColor = status == 'success'
+        ? const Color(0xFF12D000)
+        : status == 'failed'
+            ? const Color(0xFFFF5757)
+            : const Color(0xFFE39700);
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(16),
       onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
               builder: (_) => PayoutTransactionDetailsScreen(
                   bookingId: record['id'].toString(), client: widget.client))),
       child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFD5DADA))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-              child: Text((record['reference'] ?? '').toString(),
-                  style: _text(16, bold: true))),
-          const SizedBox(width: 10),
-          Icon(
-              status == 'success'
-                  ? Icons.check_circle_outline
-                  : status == 'failed'
-                      ? Icons.error_outline
-                      : Icons.schedule,
-              color: status == 'success'
-                  ? Colors.green.shade700
-                  : status == 'failed'
-                      ? Colors.red.shade700
-                      : _purple)
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFD5DADA))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(
+                    date == null
+                        ? '-'
+                        : DateFormat('d MMM yyyy').format(date.toLocal()),
+                    style: _text(18, bold: true))),
+            const Icon(Icons.chevron_right, size: 28),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Text('₹ ', style: _text(16)),
+            Text(
+                NumberFormat('#,##0.00', 'en_IN')
+                    .format((record['amount'] as num?)?.toDouble() ?? 0),
+                style: _text(20, bold: true)),
+            const Spacer(),
+            Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(22)),
+                child: Text(statusLabel,
+                    style: _text(14, color: Colors.white, bold: true))),
+          ]),
         ]),
-        const SizedBox(height: 12),
-        Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.currency_rupee, size: 20),
-                Text(
-                    NumberFormat('#,##0.##', 'en_IN')
-                        .format(record['amount'] ?? 0),
-                    style: _text(20, bold: true))
-              ]),
-              Text(
-                  status == 'success'
-                      ? 'Successful'
-                      : status == 'failed'
-                          ? 'Failed'
-                          : 'Pending',
-                  style: _text(14)),
-            ]),
-        if (date != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(DateFormat('d MMM yyyy').format(date.toLocal()),
-                  style: _text(14))),
-        if (record['bankName'] != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                  '${record['bankName']}${record['accountLast4'] == null ? '' : ' | XXXX ${record['accountLast4']}'}',
-                  style: _text(14))),
-        if ((record['failureReason'] ?? '').toString().isNotEmpty)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(record['failureReason'].toString(),
-                  style: _text(14, color: Colors.red.shade700))),
-      ]),
       ),
     );
   }
@@ -448,7 +434,7 @@ class _PayoutTransactionDetailsScreenState
     extends State<PayoutTransactionDetailsScreen> {
   Map<String, dynamic>? _data;
   String? _error;
-  bool _loading = true;
+  bool _loading = true, _downloading = false;
 
   @override
   void initState() {
@@ -487,10 +473,49 @@ class _PayoutTransactionDetailsScreenState
         : DateFormat('d MMM yyyy, hh:mm a').format(date.toLocal());
   }
 
+  Future<void> _downloadStatement() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(
+            '$BASE_URL/bookings/${widget.bookingId}/payout-statement/download'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 45));
+      _check(response);
+      final data = Map<String, dynamic>.from(jsonDecode(response.body)['data']);
+      final filename = data['filename'] as String? ??
+          'ACTIV_Transaction_${widget.bookingId}.pdf';
+      final bytes = base64Decode(data['base64'] as String);
+      final saved = await FilePicker.platform.saveFile(
+            dialogTitle: 'Save transaction statement',
+            fileName: filename,
+            type: FileType.custom,
+            allowedExtensions: const ['pdf'],
+            bytes: bytes,
+          ) !=
+          null;
+      if (saved && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Transaction statement downloaded.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error is StateError
+                ? error.message
+                : 'Unable to download the transaction statement.')));
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
   Widget _card(Widget child) => Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
@@ -498,14 +523,142 @@ class _PayoutTransactionDetailsScreenState
         child: child,
       );
 
-  Widget _line(String label, dynamic value, {bool bold = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
+  Widget _line(String label, dynamic value,
+          {bool bold = false, Color? valueColor}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: Text(label, style: _text(16, bold: bold))),
-          const SizedBox(width: 12),
-          Flexible(
-              child: Text(value?.toString() ?? '-',
-                  textAlign: TextAlign.right, style: _text(16, bold: bold)))
+          Expanded(
+              flex: 6,
+              child: FittedBox(
+                  alignment: Alignment.centerLeft,
+                  fit: BoxFit.scaleDown,
+                  child: Text(label,
+                      maxLines: 1, style: _text(14, bold: bold)))),
+          const SizedBox(width: 8),
+          Expanded(
+              flex: 4,
+              child: FittedBox(
+                  alignment: Alignment.centerRight,
+                  fit: BoxFit.scaleDown,
+                  child: Text(value?.toString() ?? '-',
+                      maxLines: 1,
+                      textAlign: TextAlign.right,
+                      style: _text(14, bold: bold, color: valueColor ??
+                          const Color(0xFF202020)))))
+        ]),
+      );
+
+  Widget _gstLine({required bool gstRegistered, required dynamic value}) {
+    final message = gstRegistered
+        ? 'GST on Commission (18%): GST is charged on the ACTIV Platform '
+            'Service Fee (Commission). GST-registered venues may claim this '
+            'amount as Input Tax Credit (ITC), subject to applicable GST laws.'
+        : 'GST on Commission (18%): GST is charged on the ACTIV Platform '
+            'Service Fee (Commission). Since this venue is not registered '
+            'under GST, this amount is not eligible for Input Tax Credit (ITC).';
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+              flex: 7,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('GST on Commission (18%)', style: _text(14)),
+                const SizedBox(width: 4),
+                Tooltip(
+                    message: message,
+                    child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => _showGstInfo(gstRegistered, message),
+                        child: const Icon(Icons.info_outline,
+                            color: _purple, size: 21)))
+              ])),
+          const SizedBox(width: 8),
+          Expanded(
+              flex: 3,
+              child: FittedBox(
+                  alignment: Alignment.centerRight,
+                  fit: BoxFit.scaleDown,
+                  child: Text(value?.toString() ?? '-',
+                      maxLines: 1,
+                      textAlign: TextAlign.right,
+                      style: _text(14, color: const Color(0xFF9C35E8)))))
+        ]));
+  }
+
+  Future<void> _showGstInfo(bool gstRegistered, String message) async {
+    await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black54,
+        builder: (dialogContext) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 18),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFF1ECF6),
+                    borderRadius: BorderRadius.circular(30)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                          gstRegistered
+                              ? 'GST Registered Venue'
+                              : 'Non-GST Registered Venue',
+                          style: _text(22, bold: true))),
+                  const SizedBox(height: 24),
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(message,
+                          style: _text(16).copyWith(height: 1.45))),
+                  const SizedBox(height: 22),
+                  Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF6D4CB3),
+                              backgroundColor: const Color(0xFFE7DDF2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 9),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24)),
+                              textStyle: _text(16)),
+                          child: const Text('Close')))
+                ]))));
+  }
+
+  Widget _bankDetailsCard(Map<String, dynamic> bank) => _card(
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.account_balance_outlined,
+                color: Color(0xFF8A8A8A), size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+                child: FittedBox(
+                    alignment: Alignment.centerLeft,
+                    fit: BoxFit.scaleDown,
+                    child: Text('Credited Bank Account Details',
+                        maxLines: 1, style: _text(16, bold: true)))),
+            const SizedBox(width: 12),
+            Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                    color: bank['verified'] == true
+                        ? Colors.green
+                        : const Color(0xFFFFB52E),
+                    borderRadius: BorderRadius.circular(22)),
+                child: Text(bank['verified'] == true ? 'Verified' : 'Pending',
+                    style: _text(11, bold: true, color: Colors.white))),
+          ]),
+          const SizedBox(height: 12),
+          Text(bank['accountHolderName']?.toString() ?? '-', style: _text(16)),
+          const SizedBox(height: 10),
+          Text(bank['bankName']?.toString() ?? '-', style: _text(16)),
+          const SizedBox(height: 10),
+          Text('A/C No. ${bank['accountNumber'] ?? '-'}', style: _text(16)),
+          const SizedBox(height: 10),
+          Text('IFSC: ${bank['ifscCode'] ?? '-'}', style: _text(16)),
         ]),
       );
 
@@ -529,7 +682,7 @@ class _PayoutTransactionDetailsScreenState
                             children: [
                               Row(children: [
                                 _statusChip(data['status']),
-                                const Spacer(),
+                                const SizedBox(width: 64),
                                 Flexible(
                                     child: _statusChip(
                                         data['isGstRegistered'] == true
@@ -539,29 +692,34 @@ class _PayoutTransactionDetailsScreenState
                                             ? _purple
                                             : const Color(0xFFFF5757)))
                               ]),
-                              const SizedBox(height: 24),
-                              Text('Amount Received', style: _text(15)),
+                              const SizedBox(height: 16),
+                              Text('Amount Received', style: _text(14)),
                               const SizedBox(height: 4),
                               Text('₹${_money(data['amountReceived'])}',
-                                  style: _text(30, bold: true)),
-                              const SizedBox(height: 22),
-                              Text('Payout Date', style: _text(15, bold: true)),
+                                  style: _text(26, bold: true)),
+                              const SizedBox(height: 16),
+                              Text('Payout Date', style: _text(14, bold: true)),
                               const SizedBox(height: 4),
-                              Text(_date(data['payoutDate']), style: _text(16))
+                              Text(_date(data['payoutDate']), style: _text(14))
                             ])),
                         _card(Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Payout Breakdown',
-                                  style: _text(20, bold: true)),
-                              const SizedBox(height: 12),
+                                  style: _text(16, bold: true)),
+                              const SizedBox(height: 8),
                               _line('Total Booking Amount',
-                                  '+  ₹${_money(data['grossBookingAmount'])}'),
+                                  '+  ₹${_money(data['grossBookingAmount'])}',
+                                  valueColor: const Color(0xFF12C900)),
                               _line(
                                   'ACTIV Commission (${data['commissionPercent']}%)',
-                                  '-  ₹${_money(data['activCommission'])}'),
-                              _line('GST on Commission (18%)',
-                                  '-  ₹${_money(data['gstOnCommission'])}'),
+                                  '-  ₹${_money(data['activCommission'])}',
+                                  valueColor: const Color(0xFFFF5757)),
+                              _gstLine(
+                                  gstRegistered:
+                                      data['isGstRegistered'] == true,
+                                  value:
+                                      '-  ₹${_money(data['gstOnCommission'])}'),
                               const Divider(color: Color(0xFF8BC48B)),
                               _line('Net Received',
                                   '₹${_money(data['netReceived'])}',
@@ -571,8 +729,8 @@ class _PayoutTransactionDetailsScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Transaction & Slot Details',
-                                  style: _text(20, bold: true)),
-                              const SizedBox(height: 12),
+                                  style: _text(16, bold: true)),
+                              const SizedBox(height: 8),
                               _line('Activity Name', data['activityName']),
                               _line('Date', data['slotDate']),
                               _line('Slot Time', data['slotTime']),
@@ -582,44 +740,33 @@ class _PayoutTransactionDetailsScreenState
                               _line('Transaction ID', data['transactionId'])
                             ])),
                         if (data['bank'] is Map)
-                          _card(Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  Expanded(
-                                      child: Text('Credited Bank Account Details',
-                                          style: _text(18, bold: true))),
-                                  _statusChip(data['bank']['verified'] == true
-                                      ? 'Verified'
-                                      : 'Pending',
-                                      color: data['bank']['verified'] == true
-                                          ? Colors.green
-                                          : Colors.orange)
-                                ]),
-                                const SizedBox(height: 12),
-                                Text(data['bank']['accountHolderName'] ?? '-',
-                                    style: _text(16)),
-                                Text(data['bank']['bankName'] ?? '-',
-                                    style: _text(16)),
-                                Text(data['bank']['accountNumber'] ?? '-',
-                                    style: _text(16)),
-                                Text('IFSC: ${data['bank']['ifscCode'] ?? '-'}',
-                                    style: _text(16))
-                              ]))
+                          _bankDetailsCard(
+                              Map<String, dynamic>.from(data['bank'] as Map)),
                       ],
                     ),
+      action: IconButton(
+          tooltip: 'Download statement',
+          onPressed: _downloading ? null : _downloadStatement,
+          icon: _downloading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.file_download_outlined, size: 30)),
     );
   }
 
   Widget _statusChip(dynamic value, {Color? color}) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
           color: color ??
               (value == 'success' ? Colors.green : const Color(0xFFE19400)),
           borderRadius: BorderRadius.circular(22)),
       child: Text(value == 'success' ? 'Success' : value.toString(),
+          maxLines: 1,
+          softWrap: false,
           overflow: TextOverflow.ellipsis,
-          style: _text(14, bold: true, color: Colors.white)));
+          style: _text(12, bold: true, color: Colors.white)));
 }
 
 class ExportPayoutReportScreen extends StatefulWidget {
@@ -707,46 +854,57 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
               Text('Select Format', style: _text(20, bold: true)),
               const SizedBox(height: 18),
               for (final format in ['pdf', 'csv']) ...[
-                Material(
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      side: BorderSide(
-                          color: _format == format
-                              ? const Color(0xFFB9D749)
-                              : const Color(0xFFD5DADA),
-                          width: _format == format ? 2 : 1)),
-                  child: InkWell(
-                      borderRadius: BorderRadius.circular(24),
-                      onTap: _downloading
-                          ? null
-                          : () => setState(() => _format = format),
-                      child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 24),
-                          child: Row(children: [
-                            Icon(
-                                _format == format
-                                    ? Icons.check_circle
-                                    : Icons.radio_button_unchecked,
-                                color:
-                                    _format == format ? _purple : Colors.grey,
-                                size: 24),
-                            const SizedBox(width: 22),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Text(format.toUpperCase(),
-                                      style: _text(28, bold: true)),
-                                  const SizedBox(height: 4),
-                                  Text('${format.toUpperCase()} Document',
-                                      style: _text(16,
-                                          color: const Color(0xFF484848))),
-                                ])),
-                          ]))),
-                ),
+                Container(
+                    padding: EdgeInsets.all(_format == format ? 2 : 1),
+                    decoration: BoxDecoration(
+                        gradient: _format == format
+                            ? const LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Color(0xFF424242),
+                                  Color(0xFFB9D749),
+                                ])
+                            : null,
+                        color: _format == format
+                            ? null
+                            : const Color(0xFFD5DADA),
+                        borderRadius: BorderRadius.circular(24)),
+                    child: Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      child: InkWell(
+                          borderRadius: BorderRadius.circular(22),
+                          onTap: _downloading
+                              ? null
+                              : () => setState(() => _format = format),
+                          child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 24),
+                              child: Row(children: [
+                                Icon(
+                                    _format == format
+                                        ? Icons.check_circle
+                                        : Icons.radio_button_unchecked,
+                                    color: _format == format
+                                        ? _purple
+                                        : Colors.grey,
+                                    size: 24),
+                                const SizedBox(width: 22),
+                                Expanded(
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                      Text(format.toUpperCase(),
+                                          style: _text(28, bold: true)),
+                                      const SizedBox(height: 4),
+                                      Text('${format.toUpperCase()} Document',
+                                          style: _text(16,
+                                              color: const Color(0xFF484848))),
+                                    ])),
+                              ]))),
+                    )),
                 const SizedBox(height: 14),
               ],
             ]),

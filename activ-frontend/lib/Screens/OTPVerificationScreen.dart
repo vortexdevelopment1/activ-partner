@@ -11,6 +11,7 @@ import '../api_calling/api_request.dart';
 import 'onboarding_widgets.dart';
 import 'ContactSupportScreen.dart';
 import 'Home/HomeScreen.dart';
+import 'Home/ManagerHomeScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
 import 'MobileNumberScreen.dart';
@@ -224,6 +225,8 @@ class _State extends State<OTPVerificationScreen> {
         final bool isProfileComplete =
             body['data']?['isProfileComplete'] == true;
         final bool isUserActive = body['data']?['partner']?['isActive'] == true;
+        final bool isTeamMember = body['data']?['userType'] == 'team_member' ||
+            body['data']?['member'] != null;
 
         if (token.isEmpty) {
           CommonUtilities.showLog(
@@ -238,10 +241,26 @@ class _State extends State<OTPVerificationScreen> {
             "is_profile_complete", isProfileComplete ? "true" : "false");
         await SharedPreference.addStringToSF(
             "is_active", isUserActive ? "true" : "false");
-        await _restorePartnerDraft(body['data']?['partner']);
+        if (isTeamMember) {
+          final member = body['data']?['member'];
+          await SharedPreference.addStringToSF("user_type", "team_member");
+          await SharedPreference.addStringToSF(
+              "permissions",
+              jsonEncode(body['data']?['permissions'] ??
+                  member?['permissions'] ??
+                  {}));
+          await SharedPreference.addStringToSF("is_active", "true");
+        } else {
+          await SharedPreference.addStringToSF("user_type", "partner");
+          await SharedPreference.addStringToSF("permissions", "{}");
+          await _restorePartnerDraft(body['data']?['partner']);
+        }
 
         if (!mounted) return;
-        if (!isProfileComplete) {
+        if (isTeamMember) {
+          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+              context, ManagerHomeScreen(client: widget.client));
+        } else if (!isProfileComplete) {
           CommonUtilities.NavigateWithPush(context, TellUsAboutScreen());
         } else if (!isUserActive) {
           await _checkVenueAndNavigate(token);

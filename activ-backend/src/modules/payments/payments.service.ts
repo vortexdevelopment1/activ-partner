@@ -13,6 +13,8 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { CreatePaymentOrderDto, VerifyPaymentDto } from './dto/create-payment.dto';
 import { PaymentStatus, BookingStatus } from '../../common/enums/booking-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
 export class PaymentsService {
@@ -24,6 +26,7 @@ export class PaymentsService {
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
     private configService: ConfigService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createOrder(createPaymentDto: CreatePaymentOrderDto, userId: string) {
@@ -110,6 +113,20 @@ export class PaymentsService {
 
     // Confirm the booking
     await this.bookingRepository.update(bookingId, { status: BookingStatus.CONFIRMED });
+
+    const confirmedBooking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['venue', 'service'],
+    });
+    if (confirmedBooking?.venue?.partnerId) {
+      await this.notificationsService.notify(
+        confirmedBooking.venue.partnerId,
+        NotificationType.PAYMENT_RECEIVED,
+        'Payment received',
+        `${confirmedBooking.totalAmount} received for ${confirmedBooking.service?.name ?? 'your booking'}`,
+        { bookingId, paymentId: payment.id },
+      );
+    }
 
     return payment;
   }
