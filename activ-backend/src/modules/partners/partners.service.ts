@@ -27,6 +27,7 @@ import { AdminNotificationsService } from '../admin-notifications/admin-notifica
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 import { PrismaService } from '../../prisma/prisma.service';
 import { deletePartnerAccount } from './delete-partner-account';
+import { MailService } from '../mail/mail.service';
 import { PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
 
 @Injectable()
@@ -51,6 +52,7 @@ export class PartnersService {
     private readonly dataSource: DataSource,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
   ) {}
 
   async create(createPartnerDto: CreatePartnerDto): Promise<any> {
@@ -287,6 +289,9 @@ export class PartnersService {
 
   async update(id: string, updatePartnerDto: UpdatePartnerDto): Promise<any> {
     if (updatePartnerDto.isActive !== undefined) {
+      const previous = updatePartnerDto.isActive === false
+        ? await this.prisma.partners.findUnique({ where: { id }, select: { status: true } })
+        : null;
       const partner = await this.prisma.partners.update({
         where: { id },
         data: {
@@ -301,7 +306,15 @@ export class PartnersService {
           _count: { select: { venues: true } },
         },
       });
-      return this.mapPrismaPartner(partner);
+      const mapped = this.mapPrismaPartner(partner);
+      if (updatePartnerDto.isActive === false && previous?.status !== PartnerStatus.SUSPENDED) {
+        const owner = partner.partner_users?.find((link) => link.role === 'PARTNER_ADMIN')?.users;
+        await this.mailService.sendSuspensionEmail({
+          toEmail: owner?.email || mapped.email,
+          partnerName: owner?.name || [mapped.firstName, mapped.lastName].filter(Boolean).join(' ') || mapped.businessName,
+        });
+      }
+      return mapped;
     }
 
     const partner = await this.findOne(id);

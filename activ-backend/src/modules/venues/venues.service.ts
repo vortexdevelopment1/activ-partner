@@ -1764,6 +1764,14 @@ export class VenuesService {
       await this.handlePartnerApproval(updatedVenue);
     } else if (rejected) {
       await this.handlePartnerRejection(updatedVenue, approvalDto.reason);
+    } else if (approvalDto.status === VenueStatus.SUSPENDED &&
+        !(venue.status === 'ARCHIVED' && venue.review_status === VenueStatus.SUSPENDED)) {
+      await this.mailService.sendSuspensionEmail({
+        toEmail: updatedVenue.partner?.email,
+        partnerName: [updatedVenue.partner?.firstName, updatedVenue.partner?.lastName].filter(Boolean).join(' '),
+        venueName: updatedVenue.name,
+        reason: approvalDto.reason,
+      });
     }
 
     return this.findOne(id);

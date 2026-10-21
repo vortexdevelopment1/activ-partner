@@ -73,6 +73,49 @@ export class MailService {
     }
   }
 
+  async sendSuspensionEmail(params: {
+    toEmail?: string | null;
+    partnerName: string;
+    venueName?: string;
+    reason?: string;
+  }): Promise<boolean> {
+    if (!params.toEmail?.trim()) {
+      this.logger.warn('Suspension email not sent: partner has no registered email');
+      return false;
+    }
+    const subject = params.venueName ? 'Your ACTIV venue has been suspended' : 'Your ACTIV partner account has been suspended';
+    const notice = params.venueName
+      ? `Your venue "${params.venueName}" has been suspended and is no longer available for new bookings on ACTIV.`
+      : 'Your ACTIV partner account has been suspended. Access to your partner account has been disabled.';
+    const text = `Hello ${params.partnerName || 'Partner'},\n\n${notice}\n\n${params.reason ? `Reason: ${params.reason}\n\n` : ''}Please contact support@activ.live for clarification and assistance with reactivation.\n\nTeam ACTIV`;
+    try {
+      const user = this.configService.get<string>('MAIL_USER')?.trim();
+      const pass = this.configService.get<string>('MAIL_PASS');
+      if (user && pass) {
+        const port = Number(this.configService.get<string>('MAIL_PORT', '587'));
+        const transport = nodemailer.createTransport({
+          host: this.configService.get<string>('MAIL_HOST', 'smtp.gmail.com'),
+          port, secure: port === 465, auth: { user, pass },
+          connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 15000,
+        });
+        try {
+          await transport.sendMail({
+            from: { name: 'ACTIV Partner Support', address: this.configService.get<string>('MAIL_FROM_EMAIL', user) },
+            to: params.toEmail.trim(), replyTo: 'support@activ.live', subject, text,
+          });
+        } finally {
+          transport.close();
+        }
+      } else {
+        await this.googleOAuthService.sendEmail({ recipientEmail: params.toEmail.trim(), subject, text });
+      }
+      return true;
+    } catch {
+      this.logger.warn('Suspension email delivery failed; check SMTP/Gmail configuration and email delivery logs');
+      return false;
+    }
+  }
+
   async sendVenueChangesRequestedEmail(params: {
     toEmail: string; venueName: string; reason: string;
   }): Promise<boolean> {
