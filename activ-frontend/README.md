@@ -40,6 +40,23 @@ leave `LOCAL_API_URL` blank.
 Environment values are public in the compiled app. Keep passwords and private
 keys in the backend environment only. Local `.env` files are ignored by Git.
 
+## Venue address search
+
+Set `GOOGLE_MAPS_API_KEY` in `activ-frontend/.env`. Address autocomplete and
+place details use this value; a key in the Android manifest or iOS configuration
+does not populate the Dart configuration. An empty value produces
+"Location search is unavailable. Please contact support."
+
+The key's Google Cloud project must have billing and
+[Places API (New)](https://developers.google.com/maps/documentation/places/web-service/get-api-key)
+enabled. The PIN fallback also uses the Geocoding API when a selected place
+has no postal code. Ensure the key's restrictions permit the required APIs.
+
+Fully stop and rerun the app after editing `.env`, or rebuild and reinstall
+the APK for an installed release. Hot reload does not reload the environment.
+`--dart-define=GOOGLE_MAPS_API_KEY=...` overrides the `.env` value, including
+when the build-time value is empty.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
