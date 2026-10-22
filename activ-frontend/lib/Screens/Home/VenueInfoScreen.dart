@@ -682,7 +682,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
       );
 
   Widget _notice(IconData icon, Widget content,
-          {Color borderColor = _accent, Color? iconColor}) =>
+          {Color borderColor = _accent, Color? iconColor, bool centerIcon = false}) =>
       Container(
         margin: const EdgeInsets.only(top: 24),
         padding: const EdgeInsets.all(18),
@@ -690,7 +690,11 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             color: Colors.white,
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(8)),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Row(
+            crossAxisAlignment: centerIcon
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
+            children: [
           Icon(icon, size: 34, color: iconColor ?? borderColor),
           const SizedBox(width: 18),
           Expanded(child: content),
@@ -766,21 +770,21 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             style: TextStyle(
                 color: _accent,
                 fontFamily: 'Satoshi',
-                fontSize: 18,
+                fontSize: 16,
                 height: 1.4)),
-        const SizedBox(height: 12),
-        Text(_submittedOn, style: const TextStyle(fontSize: 16, height: 1.4)),
+        const SizedBox(height: 8),
+        Text(_submittedOn, style: const TextStyle(fontSize: 15, height: 1.3)),
       ]),
       const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Review ETA',
             style: TextStyle(
                 color: _accent,
                 fontFamily: 'Satoshi',
-                fontSize: 18,
+                fontSize: 16,
                 height: 1.4)),
-        SizedBox(height: 12),
+        SizedBox(height: 8),
         Text('Usually within\n24 hours',
-            style: TextStyle(fontSize: 16, height: 1.4)),
+            style: TextStyle(fontSize: 15, height: 1.3)),
       ]),
     ];
     return _notice(
@@ -796,10 +800,16 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                         content.last
                       ])
                 : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(child: content.first),
-                    const SizedBox(width: 18),
-                    Expanded(child: content.last)
-                  ])));
+                    Expanded(flex: 8, child: content.first),
+                    Container(
+                      width: 1,
+                      height: 66,
+                      margin: const EdgeInsets.symmetric(horizontal: 14),
+                      color: _accent.withValues(alpha: 0.45),
+                    ),
+                    Expanded(flex: 10, child: content.last)
+                  ])),
+        centerIcon: true);
   }
 
   @override

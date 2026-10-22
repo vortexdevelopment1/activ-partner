@@ -4,6 +4,7 @@ import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -37,6 +38,9 @@ class _State extends State<AddVenuePhotoUploadScreen> {
  //   CommonUtilities.createSnackBar(context, "Image Size : " +sizeInMB.toString());
     return sizeInBytes <= maxSizeInBytes;
   }
+
+  Future<bool> _isValidImage(XFile image) async =>
+      (await image.readAsBytes()).length <= 5 * 1024 * 1024;
 
   Future<XFile?> _cropImage(String path) async {
     final cropped = await ImageCropper().cropImage(
@@ -106,7 +110,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     if (images != null && images.isNotEmpty) {
       var duplicateFound = false;
       for (var img in images) {
-        final isValid = await _isValidFileSize(img.path);
+        final isValid = await _isValidImage(img);
 
         if (!isValid) {
           CommonUtilities.createSnackBar(
@@ -145,7 +149,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
 
     final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 40);
     if (image != null) {
-      final isValid = await _isValidFileSize(image.path);
+      final isValid = await _isValidImage(image);
 
       if (!isValid) {
         CommonUtilities.createSnackBar(
@@ -380,12 +384,19 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                               children: [
                                                 ClipRRect(
                                                   borderRadius: BorderRadius.circular(10),
-                                                  child: Image.file(
-                                                    File(_selectedImages[index].path),
-                                                    fit: BoxFit.cover,
-                                                    width: 120,
-                                                    height: 120,
-                                                  ),
+                                                  child: kIsWeb
+                                                      ? Image.network(
+                                                          _selectedImages[index].path,
+                                                          fit: BoxFit.cover,
+                                                          width: 120,
+                                                          height: 120,
+                                                        )
+                                                      : Image.file(
+                                                          File(_selectedImages[index].path),
+                                                          fit: BoxFit.cover,
+                                                          width: 120,
+                                                          height: 120,
+                                                        ),
                                                 ),
                                                 Positioned(
                                                   top: 5,

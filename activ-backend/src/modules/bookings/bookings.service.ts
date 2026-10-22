@@ -212,6 +212,11 @@ export class BookingsService {
       throw new NotFoundException("Service not found or not available");
     }
 
+    const venue = await this.venueRepository.findOne({ where: { id: venueId } });
+    if (!venue?.bookingAccept) {
+      throw new ForbiddenException("Bookings are currently paused for this venue");
+    }
+
     const durationMinutes = this.calculateDuration(startTime, endTime);
 
     if (durationMinutes <= 0) {
@@ -250,9 +255,6 @@ export class BookingsService {
     }
 
     // Resolve price from JSONB availability slot; fallback to service.pricePerHour
-    const venue = await this.venueRepository.findOne({
-      where: { id: venueId },
-    });
     const fallbackPrice = Number(service.pricePerHour);
     const normalizedAvailability = categoryId
       ? await this.prisma.partner_venue_availability.findMany({

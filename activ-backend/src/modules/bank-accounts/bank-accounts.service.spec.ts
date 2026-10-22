@@ -9,6 +9,11 @@ describe('bank account persistence', () => {
     account_type: dto.accountType, branch_name: dto.branchName, cancelled_cheque_url: '/uploads/cheque.pdf', status: 'UNDER_REVIEW' };
   let prisma: any, service: BankAccountsService;
   beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: jest.fn().mockResolvedValue({ BANK: 'HDFC Bank', BRANCH: 'Test Branch' }),
+    }) as any;
     prisma = { users: { findUnique: jest.fn().mockResolvedValue({ name: ' Super Admin ' }) }, partner_bank_accounts: {
       findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue(record),
       findMany: jest.fn().mockResolvedValue([record]), updateMany: jest.fn().mockResolvedValue({ count: 1 }),

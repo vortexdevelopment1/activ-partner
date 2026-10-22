@@ -8,12 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_request.dart';
+import '../api_calling/api_constant.dart';
 import 'CommonCode.dart';
 import 'CustomerPlacesOffer.dart';
 import 'MobileNumberFormatter.dart';
@@ -36,6 +38,7 @@ class _State extends State<ContactSupportFormScreen> {
 
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
+  bool _submitting = false;
 
   _State()
   {
@@ -74,6 +77,51 @@ class _State extends State<ContactSupportFormScreen> {
     mobileNumberController.dispose();
     descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitSupportRequest() async {
+    if (_submitting || !validation(context)) return;
+    setState(() => _submitting = true);
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final request = http.MultipartRequest('POST', Uri.parse(SUPPORT_EMAIL_URL));
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['subject'] = 'Contact support request';
+      request.fields['message'] = [
+        'Name: ${nameController.text.trim()}',
+        'Phone: +$phoneCode ${mobileNumberController.text.trim()}',
+        '',
+        descriptionController.text.trim(),
+      ].join('\n');
+      final image = _selectedImage;
+      if (image != null) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'attachment',
+          await image.readAsBytes(),
+          filename: image.name,
+        ));
+      }
+      final response = await http.Response.fromStream(
+        await request.send().timeout(const Duration(seconds: 30)),
+      );
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Unable to submit your request');
+      }
+      if (!mounted) return;
+      await customAlertDialog(
+        context,
+        'Your request has been sent successfully. Our support team will contact you soon. Thank you for reaching out to us.',
+      );
+    } catch (_) {
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+          context,
+          'Unable to send your request. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -353,14 +401,7 @@ class _State extends State<ContactSupportFormScreen> {
                                       Expanded(
                                         flex: 7,
                                         child: InkWell(
-                                            onTap: ()
-                                            {
-                                              if(validation(context))
-                                              {
-                                                customAlertDialog(context, 'Your message has been submitted. Our team will reach out to you soon. Thank you for contacting us.');
-                                              }else{}
-
-                                            },
+                                            onTap: _submitting ? null : _submitSupportRequest,
                                             child: Container(
                                               margin: const EdgeInsets.only(left: 5),
                                                 child: getButtonBlack(context, "Submit", "contactSupportForm"))
@@ -801,91 +842,82 @@ class _State extends State<ContactSupportFormScreen> {
       context: buildContext,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return Material(
-          type: MaterialType.transparency,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
           child: Container(
-            alignment: Alignment.center,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(top: 20),
-              margin: const EdgeInsets.only(top: 45,left: 40,right: 40),
-              decoration: BoxDecoration(
-                shape: BoxShape.rectangle,
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-
-                  const Text(
-                    '⚠ Alert!',
-                    style: TextStyle(
-                        fontSize:  AppSize.size_18,
+            padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
+            decoration: BoxDecoration(
+              color: AppColors.yellowTop,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppColors.purple, width: 1.2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: const BoxDecoration(
+                    color: AppColors.green,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 38),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Support Request Sent',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.darkBlack,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 16,
+                    height: 1.35,
+                    color: AppColors.black1,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: AppColors.yellow,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Okay',
+                      style: TextStyle(
                         fontFamily: 'Satoshi',
-                        color: AppColors.darkBlack,
-                        textBaseline: null),
-                  ),
-
-                  const SizedBox(height: 15,),
-
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                          fontSize:  AppSize.size_16,
-                          fontFamily: 'Satoshi',
-                          color: AppColors.darkBlack,
-                          height: 1.5),
-                      textAlign: TextAlign.center,),
-                  ),
-
-                  const SizedBox(height: 15,),
-
-                  // Divider Line
-                  Container(
-                      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                      child: Divider(
-                        color: AppColors.gray1,
-                        height: 1,
-                      )
-                  ),
-
-                  const SizedBox(height: 0,),
-
-                  IntrinsicHeight(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: ()
-                            {
-                              Navigator.pop(context, true);
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.fromLTRB(30, 13, 30, 13),
-                              alignment: Alignment.center,
-                              child: const Text(
-                               'OK',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize:  AppSize.size_16,
-                                    fontFamily: 'Satoshi',
-                                    color: AppColors.darkBlack
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      ],
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );

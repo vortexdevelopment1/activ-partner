@@ -143,10 +143,12 @@ export class SupportService {
     const partnerUser = userId
       ? await this.prisma.partner_users.findFirst({
           where: { partner_id: partnerId, user_id: userId },
+          include: { users: true },
         })
       : await this.prisma.partner_users.findFirst({
           where: { partner_id: partnerId },
           orderBy: { id: 'asc' },
+          include: { users: true },
         });
 
     const uploaded = file
@@ -182,6 +184,19 @@ export class SupportService {
       'A partner submitted a support message.',
       { partnerId, supportRequestId: saved.id },
     );
+    try {
+      await this.mailService.sendSupportRequestEmail({
+        partnerName: partnerUser?.users?.name ?? 'Partner',
+        partnerEmail: partnerUser?.users?.email,
+        subject: dto.subject,
+        message: dto.message,
+      });
+    } catch (error) {
+      // Keep the support request successful even when mail credentials/provider
+      // configuration is temporarily unavailable. The request is already saved
+      // and remains visible to the admin support queue.
+      console.error('Support request saved but email delivery failed', error);
+    }
     return saved;
   }
 

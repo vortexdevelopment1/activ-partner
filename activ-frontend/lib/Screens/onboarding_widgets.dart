@@ -516,11 +516,8 @@ class _OnboardingSupportMenuState extends State<OnboardingSupportMenu> {
                   onPressed: widget.enabled ? _toggle : null,
                   icon: _open
                       ? const Icon(Icons.close, size: 24, color: Colors.white)
-                      : SvgPicture.asset('assets/ic_faq.svg',
-                          width: 24,
-                          height: 24,
-                          colorFilter: const ColorFilter.mode(
-                              Colors.white, BlendMode.srcIn)),
+                      : const Icon(Icons.help_outline,
+                          size: 24, color: Colors.white),
                 ),
               ),
             ),

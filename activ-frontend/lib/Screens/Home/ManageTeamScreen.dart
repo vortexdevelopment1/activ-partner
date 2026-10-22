@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -534,9 +535,10 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
               const SizedBox(height: 18),
               const _RequiredLabel('Mobile Number'),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    height: 58,
+                    height: 48,
                     width: 92,
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -757,14 +759,10 @@ class _EmptyMembersCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.help_outline_rounded,
-            color: _ManageTeamScreenState._muted,
-            size: 46,
-          ),
-          const SizedBox(height: 54),
+          const _SearchTeamIcon(),
+          const SizedBox(height: 20),
           const Text(
-            'No team members yet',
+            'No team members found',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _ManageTeamScreenState._ink,
@@ -775,18 +773,50 @@ class _EmptyMembersCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Add your on-ground staff - receptionists, managers, floor staff and more.',
+            'Invite your team members to smoothly operate and manage your venue',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _ManageTeamScreenState._muted,
               fontFamily: 'Satoshi',
-              fontSize: 15,
+              fontSize: 13,
               height: 1.35,
             ),
           ),
           const SizedBox(height: 30),
-          _PurpleButton(label: '+ New Member', onTap: onAdd),
+          _PurpleButton(label: '＋  New Member', onTap: onAdd),
         ],
+      ),
+    );
+  }
+}
+
+class _SearchTeamIcon extends StatefulWidget {
+  const _SearchTeamIcon();
+
+  @override
+  State<_SearchTeamIcon> createState() => _SearchTeamIconState();
+}
+
+class _SearchTeamIconState extends State<_SearchTeamIcon> {
+  Future<Uint8List?> _loadEmbeddedImage() async {
+    final svg = await rootBundle.loadString('assets/search_team.svg');
+    final match = RegExp(r'xlink:href="data:image/[^;]+;base64,([^"]+)"')
+        .firstMatch(svg);
+    if (match == null) return null;
+    return Uint8List.fromList(base64Decode(match.group(1)!));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 128,
+      height: 128,
+      child: FutureBuilder<Uint8List?>(
+        future: _loadEmbeddedImage(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const SizedBox.shrink();
+          return Image.memory(snapshot.data!, fit: BoxFit.contain);
+        },
       ),
     );
   }
@@ -1127,7 +1157,7 @@ class _PurpleButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        height: 58,
+        height: 48,
         width: double.infinity,
         decoration: BoxDecoration(
           color: AppColors.purple,

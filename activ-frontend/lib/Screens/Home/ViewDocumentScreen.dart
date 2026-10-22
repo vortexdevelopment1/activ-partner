@@ -1,11 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:pdfx/pdfx.dart';
 
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
@@ -181,10 +182,34 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
   Future<void> _viewDocument(String url) async {
     try {
       final uri = _documentUri(url);
-      if (!['http', 'https'].contains(uri.scheme) ||
-          !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!['http', 'https'].contains(uri.scheme)) {
         throw Exception('Cannot open document');
       }
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final response = await http.get(uri, headers: {
+        'Accept': 'application/pdf,image/*',
+        if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 30));
+      if (response.statusCode < 200 || response.statusCode >= 300 ||
+          response.bodyBytes.isEmpty) {
+        throw Exception('Document download failed');
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black54,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 70),
+          backgroundColor: const Color(0xFFF0F7D2),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          clipBehavior: Clip.antiAlias,
+          child: _InAppDocumentViewer(
+            bytes: Uint8List.fromList(response.bodyBytes),
+            title: uri.pathSegments.isEmpty ? 'Document' : uri.pathSegments.last,
+          ),
+        ),
+      );
     } catch (_) {
       if (mounted) {
         CommonUtilities.createSnackBar(
@@ -623,4 +648,96 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
               ])),
         ]),
       );
+}
+
+class _InAppDocumentViewer extends StatefulWidget {
+  const _InAppDocumentViewer({required this.bytes, required this.title});
+
+  final Uint8List bytes;
+  final String title;
+
+  @override
+  State<_InAppDocumentViewer> createState() => _InAppDocumentViewerState();
+}
+
+class _InAppDocumentViewerState extends State<_InAppDocumentViewer> {
+  PdfControllerPinch? _pdfController;
+  bool? _isPdf;
+
+  @override
+  void initState() {
+    super.initState();
+    _detectDocument();
+  }
+
+  Future<void> _detectDocument() async {
+    final isPdf = widget.bytes.length >= 5 &&
+        String.fromCharCodes(widget.bytes.sublist(0, 5)) == '%PDF-';
+    if (!isPdf) {
+      if (mounted) setState(() => _isPdf = false);
+      return;
+    }
+    final controller = PdfControllerPinch(
+      document: PdfDocument.openData(widget.bytes),
+    );
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+    setState(() {
+      _pdfController = controller;
+      _isPdf = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pdfController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F7D2),
+      appBar: AppBar(
+        title: Text(
+          widget.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        toolbarHeight: 56,
+        backgroundColor: const Color(0xFF4CAF50),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: _isPdf == null
+          ? const Center(child: CircularProgressIndicator())
+          : _isPdf == true
+              ? Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: PdfViewPinch(controller: _pdfController!),
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Center(
+                    child: InteractiveViewer(
+                      minScale: 1,
+                      maxScale: 4,
+                      child: SizedBox.expand(
+                        child: Image.memory(
+                          widget.bytes,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+    );
+  }
 }

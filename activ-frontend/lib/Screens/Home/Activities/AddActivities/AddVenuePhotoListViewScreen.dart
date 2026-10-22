@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
@@ -13,10 +15,16 @@ import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import '../../../../Utills/common_utilities.dart';
 import '../../../../api_calling/api_request.dart';
+import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/progress_bar/progress_bar.dart';
 import '../../../CommonCode.dart';
 import 'AddVenueTimingScreen.dart';
 import '../../../onboarding_widgets.dart';
+
+class _ActivityUploadException implements Exception {
+  final String message;
+  const _ActivityUploadException(this.message);
+}
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
   final List<XFile> images;
@@ -32,6 +40,26 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   int? _coverIndex = 0; // by default first image is cover
   final GlobalKey _imgKey = GlobalKey();
   String userMobileNumber = '', phoneCode="", activityName = "Activity";
+  bool _isUploading = false;
+  bool _loaderVisible = false;
+
+  void _showUploadLoader() {
+    if (!mounted || _loaderVisible) return;
+    _loaderVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Center(child: CircularProgressIndicator()),
+      ),
+    ).whenComplete(() => _loaderVisible = false);
+  }
+
+  void _hideUploadLoader() {
+    if (!mounted || !_loaderVisible) return;
+    _loaderVisible = false;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
 
 
   @override
@@ -236,12 +264,19 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                               AspectRatio(
                                                 aspectRatio: 16/9,
-                                                child: Image.file(
-                                                  File(_images[index].path),
-                                                  fit: BoxFit.cover,
-                                                  width: double.infinity,
-                                                  height: 200,
-                                                ),
+                                                child: kIsWeb
+                                                    ? Image.network(
+                                                        _images[index].path,
+                                                        fit: BoxFit.cover,
+                                                        width: double.infinity,
+                                                        height: 200,
+                                                      )
+                                                    : Image.file(
+                                                        File(_images[index].path),
+                                                        fit: BoxFit.cover,
+                                                        width: double.infinity,
+                                                        height: 200,
+                                                      ),
                                               ),
 
                                               // "Set as Cover Photo" button
@@ -354,29 +389,19 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                         flex: 7,
                                         child: InkWell(
                                           onTap: () async {
-                                            if (_images.isEmpty) return; // No images, do nothing
+                                            if (_images.isEmpty || _isUploading) return;
+
+                                            setState(() => _isUploading = true);
 
                                             // Show loader
-                                            ProgressBar().showLoader(context);
+                                            _showUploadLoader();
+                                            await Future<void>.delayed(Duration.zero);
 
                                             try {
-                                              // Get user mobile number
-                                              userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-
-                                              // Upload images and save to Firestore
-                                              /*await saveVenueImagesToFirestore(
-                                                userMobileNumber,
-                                                _images,
-                                              );*/
-
-                                              final user = FirebaseAuth.instance.currentUser;
-                                              print("UID: ${user?.uid}");
-                                              print("isAnonymous: ${user?.isAnonymous}");
-
-                                              final activityId = await saveActivityWithImages(_images, 'IND (+91)$userMobileNumber');
+                                              final activityId = await _uploadActivityImagesToBackend(_images);
 
                                               // Upload complete, close loader
-                                              Navigator.of(context).pop();
+                                              _hideUploadLoader();
 
                                               print("activityId : $activityId");
 
@@ -384,16 +409,21 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                               CommonUtilities.NavigateWithPush(context, AddVenueTimingScreen(activityId: activityId));
                                             } catch (e) {
                                               // Close loader if error occurs
-                                              Navigator.of(context).pop();
+                                              _hideUploadLoader();
 
                                               // Show error message
                                               CommonUtilities.showLog("❌ Image upload failed111: $e");
+                                              final message = e is _ActivityUploadException
+                                                  ? e.message
+                                                  : 'Image upload failed. Please try again.';
                                               ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(content: Text("Image upload failed. Please try again.")),
+                                                SnackBar(content: Text(message)),
                                               );
+                                            } finally {
+                                              if (mounted) setState(() => _isUploading = false);
                                             }
                                           },
-                                          child: _images.isNotEmpty
+                                          child: _images.isNotEmpty && !_isUploading
                                               ? getButtonBlack(context, "Next", "venuePhoto")
                                               : getButtonGray(context, "Next", "venuePhoto"),
                                         )
@@ -416,6 +446,86 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         ],
       ),
     );
+  }
+
+  Future<String> _uploadActivityImagesToBackend(List<XFile> images) async {
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final categoryName = activityName.trim();
+    if (venueId.isEmpty || token.isEmpty || categoryName.isEmpty) {
+      throw _ActivityUploadException('Your session or activity selection is unavailable. Please sign in again.');
+    }
+
+    final categoriesResponse = await http.get(
+      Uri.parse(CATEGORIES_URL),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 30));
+    if (categoriesResponse.statusCode == 401) {
+      throw _ActivityUploadException('Your session has expired. Please sign in again.');
+    }
+    if (categoriesResponse.statusCode != 200) {
+      throw _ActivityUploadException(
+        'Activity setup failed (${categoriesResponse.statusCode}). Please sign in again and retry.',
+      );
+    }
+    final decodedCategories = jsonDecode(categoriesResponse.body);
+    final rawCategories = decodedCategories is Map ? decodedCategories['data'] : null;
+    final categories = rawCategories is List ? rawCategories : const [];
+    final category = categories.cast<Map>().firstWhere(
+      (value) => value['name']?.toString().trim().toLowerCase() == categoryName.toLowerCase(),
+      orElse: () => <String, dynamic>{},
+    );
+    final categoryId = category['id']?.toString() ?? '';
+    if (categoryId.isEmpty) {
+      throw _ActivityUploadException('This activity is not available for your venue.');
+    }
+
+    final createResponse = await http.post(
+      Uri.parse('$BASE_URL/venues/$venueId/activities'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: jsonEncode({'categoryId': categoryId}),
+    ).timeout(const Duration(seconds: 30));
+    if (createResponse.statusCode == 401) {
+      throw _ActivityUploadException('Your session has expired. Please sign in again.');
+    }
+    if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+      throw _ActivityUploadException(
+        'Activity setup failed (${createResponse.statusCode}). Please try again.',
+      );
+    }
+    final created = jsonDecode(createResponse.body);
+    final data = created is Map ? created['data'] : null;
+    final serviceId = data is Map ? data['id']?.toString() : null;
+    if (serviceId == null || serviceId.isEmpty) {
+      throw _ActivityUploadException('Activity was created without an upload reference.');
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$BASE_URL/venues/activities/$serviceId/images'),
+    )..headers['Authorization'] = 'Bearer $token';
+    for (final image in images) {
+      final bytes = await image.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'images',
+        bytes,
+        filename: image.name.isEmpty ? 'activity_image.jpg' : image.name,
+      ));
+    }
+    final uploadResponse = await request.send().timeout(const Duration(minutes: 2));
+    final uploadBody = await uploadResponse.stream.bytesToString();
+    if (uploadResponse.statusCode == 401) {
+      throw _ActivityUploadException('Your session has expired. Please sign in again.');
+    }
+    if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
+      throw _ActivityUploadException(
+        'Cloudinary upload failed (${uploadResponse.statusCode}). Please try again.',
+      );
+    }
+    if (uploadBody.isEmpty) {
+      throw _ActivityUploadException('Images could not be uploaded. Please try again.');
+    }
+    return serviceId;
   }
 
   //----------------------------------------------Start DataBase Image Upload Code----------------------------------------------------
@@ -545,7 +655,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         required String realUid, // 👈 ADD THIS
       }) async {
     try {
-      File file = File(imagePath);
+      final file = File(imagePath);
 
       String fileName =
           "${folderName}_${DateTime.now().millisecondsSinceEpoch}.jpg";
@@ -556,13 +666,23 @@ class _State extends State<AddVenuePhotoListViewScreen> {
           .child(realUid) // ✅ REAL UID
           .child(fileName);
 
-      UploadTask uploadTask = ref.putFile(file);
+      if (!await file.exists()) {
+        throw StateError('Selected image file is no longer accessible');
+      }
+      final uploadTask = ref.putFile(file,
+          SettableMetadata(contentType: 'image/jpeg'));
       TaskSnapshot snapshot = await uploadTask;
 
       return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      CommonUtilities.showLog("❌ Image upload failed: $e");
-      return null;
+    } on FirebaseException catch (e, stack) {
+      CommonUtilities.showLog(
+          'Firebase upload failed: code=${e.code}, plugin=${e.plugin}, message=${e.message}');
+      CommonUtilities.showLog(stack.toString());
+      rethrow;
+    } catch (e, stack) {
+      CommonUtilities.showLog('Image upload failed: ${e.runtimeType}: $e');
+      CommonUtilities.showLog(stack.toString());
+      rethrow;
     }
   }
 
@@ -576,11 +696,49 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     for (int i = 0; i < images.length; i++) {
       final img = images[i];
 
-      String? url = await uploadImageToFirebase(
-        img.path,
-        folderName: "activity_images",
-        realUid: realUid,
-      );
+      String? url;
+      if (kIsWeb) {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('activity_images')
+            .child(realUid)
+            .child('activity_images_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        try {
+          final task = ref.putData(
+            await img.readAsBytes(),
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          url = await (await task).ref.getDownloadURL();
+        } on FirebaseException catch (e, stack) {
+          CommonUtilities.showLog(
+              'Firebase web upload failed: code=${e.code}, plugin=${e.plugin}, message=${e.message}');
+          CommonUtilities.showLog(stack.toString());
+          rethrow;
+        } catch (e, stack) {
+          CommonUtilities.showLog('Web image upload failed: ${e.runtimeType}: $e');
+          CommonUtilities.showLog(stack.toString());
+          rethrow;
+        }
+      } else {
+        try {
+          url = await uploadImageToFirebase(
+            img.path,
+            folderName: 'activity_images',
+            realUid: realUid,
+          );
+        } on StateError {
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('activity_images')
+              .child(realUid)
+              .child('activity_images_${DateTime.now().millisecondsSinceEpoch}.jpg');
+          final task = ref.putData(
+            await img.readAsBytes(),
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          url = await (await task).ref.getDownloadURL();
+        }
+      }
 
       if (url != null) {
         uploadedImages.add({
@@ -636,20 +794,37 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       String phoneKey, // "+91XXXXXXXXXX"
       ) async {
 
-    print("phoneKey : $phoneCode$userMobileNumber");
-    print("phoneKey1 : $phoneKey");
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+    final rawDigits = phoneKey.replaceAll(RegExp(r'\D'), '');
+    final nationalNumber = rawDigits.length >= 10
+        ? rawDigits.substring(rawDigits.length - 10)
+        : rawDigits;
+    final canonicalKey = 'IND (+91)$nationalNumber';
+    final legacyKey = 'IND (+91)${userMobileNumber.trim()}';
+    final mappings = FirebaseFirestore.instance.collection('users_by_phone');
 
-    // 1️⃣ Resolve REAL UID
-    final phoneDoc = await FirebaseFirestore.instance
-        .collection("users_by_phone")
-        .doc(phoneKey)
-        .get();
-
-    if (!phoneDoc.exists) {
-      throw Exception("❌ Phone mapping not found");
+    // Resolve the canonical mapping first. The legacy formatted key is only
+    // supported for records created by the older onboarding flow.
+    DocumentSnapshot<Map<String, dynamic>> phoneDoc;
+    try {
+      phoneDoc = await mappings.doc(canonicalKey).get();
+      if (!phoneDoc.exists && legacyKey != canonicalKey) {
+        phoneDoc = await mappings.doc(legacyKey).get();
+      }
+    } on FirebaseException catch (e, stack) {
+      CommonUtilities.showLog(
+          'Phone mapping lookup failed: code=${e.code}, plugin=${e.plugin}, message=${e.message}');
+      CommonUtilities.showLog(stack.toString());
+      rethrow;
     }
 
-    final String realUid = phoneDoc["uid"];
+    if (!phoneDoc.exists || phoneDoc.data()?['uid'] == null) {
+      throw StateError('Partner phone mapping is unavailable');
+    }
+
+    final String realUid = phoneDoc.data()!['uid'].toString();
 
     // 2️⃣ Build activity
     final activityData =

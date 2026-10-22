@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_colors.dart';
@@ -148,7 +149,11 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
         throw Exception(_messageFromResponse(response.body) ??
             'Unable to send email. Please try again.');
       }
-      await _showEmailSentDialog(context);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const _EmailSentScreen(),
+        ),
+      );
       if (!mounted) return;
       _subject.clear();
       _message.clear();
@@ -335,6 +340,119 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EmailSentScreen extends StatelessWidget {
+  const _EmailSentScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SupportScaffold(
+      title: 'Email Us',
+      transparentFooter: true,
+      footer: _PrimaryButton(
+        text: 'Back to Help & Support',
+        onPressed: () {
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+        },
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 72, 28, 32),
+              child: Column(
+                children: [
+                  const _SuccessBadge(),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Email Sent!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.darkBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Thank you for reaching out to us.\nWe’ve received your email and our team will\nget back to you soon.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                    fontSize: 16,
+                      height: 1.35,
+                      color: AppColors.darkBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Container(
+                    height: 54,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.purple, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          color: AppColors.purple,
+                          size: 32,
+                        ),
+                        const SizedBox(width: 12),
+                        const Flexible(
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                const TextSpan(text: 'Expected response within '),
+                                TextSpan(
+                                  text: '24-48 hrs',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.purple,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuccessBadge extends StatelessWidget {
+  const _SuccessBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 108,
+      height: 108,
+      child: SvgPicture.asset('assets/Vector.svg'),
     );
   }
 }
@@ -636,11 +754,13 @@ class _SupportScaffold extends StatelessWidget {
     required this.title,
     required this.child,
     this.footer,
+    this.transparentFooter = false,
   });
 
   final String title;
   final Widget child;
   final Widget? footer;
+  final bool transparentFooter;
 
   @override
   Widget build(BuildContext context) {
@@ -693,16 +813,18 @@ class _SupportScaffold extends StatelessWidget {
               if (footer != null)
                 Container(
                   padding: const EdgeInsets.fromLTRB(28, 12, 28, 22),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF0F7D2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x16000000),
-                        blurRadius: 18,
-                        offset: Offset(0, -6),
-                      ),
-                    ],
-                  ),
+                  decoration: transparentFooter
+                      ? null
+                      : const BoxDecoration(
+                          color: Color(0xFFF0F7D2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x16000000),
+                              blurRadius: 18,
+                              offset: Offset(0, -6),
+                            ),
+                          ],
+                        ),
                   child: footer,
                 ),
             ],

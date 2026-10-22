@@ -193,7 +193,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       CommonUtilities.showLog(
           "AuthWrapper auth-profile status: ${response.statusCode}");
       CommonUtilities.showLog(
-          "AuthWrapper auth-profile response: ${response.body}");
+          "AuthWrapper auth-profile completed with status ${response.statusCode}");
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         await SharedPreference.clearSF();

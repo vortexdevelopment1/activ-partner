@@ -15,6 +15,7 @@ import 'ForgotPasswordScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'MobileNumberScreen.dart';
+import '../Database/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.client});
@@ -346,6 +347,32 @@ class _LoginScreenState extends State<LoginScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<bool> _syncFirebasePartnerMapping(Map<String, dynamic> data) async {
+    final rawPhone = data['partner']?['phone']?.toString() ?? '';
+    final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) return false;
+    final nationalNumber = digits.length == 12 && digits.startsWith('91')
+        ? digits.substring(2)
+        : digits.substring(digits.length - 10);
+    final firebaseUser = FirebaseAuth.instance.currentUser ??
+        (await FirebaseAuth.instance.signInAnonymously()).user;
+    if (firebaseUser == null) return false;
+    await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
+    await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
+    final synced = await AuthService().registerWithNumber(
+      'IND (+91)',
+      nationalNumber,
+      'unknown',
+      'unknown',
+      'unknown',
+      'unknown',
+      'unknown',
+      DateTime.now().toIso8601String(),
+      'PartnerLogin',
+    );
+    return synced;
+  }
+
   Future<void> handleLogin() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
@@ -372,7 +399,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       CommonUtilities.showLog("Partner Login status: ${response.statusCode}");
-      CommonUtilities.showLog("Partner Login response: ${response.body}");
+      CommonUtilities.showLog("Partner Login completed: ${response.statusCode}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
@@ -388,7 +415,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (token.isEmpty) {
           CommonUtilities.showLog(
-              "Partner Login missing token. Response: ${response.body}");
+              "Partner Login completed without an access token");
           _showMessage(context,
               'Login succeeded, but token was missing. Please try again.');
           return;
@@ -415,6 +442,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 'Your account is not active yet. Please wait for approval.');
           }
         } else if (isPartnerActive) {
+          if (!await _syncFirebasePartnerMapping(data)) {
+            _showMessage(context,
+                'Login succeeded, but account synchronization failed. Please try again.');
+            return;
+          }
           await SharedPreference.addStringToSF("is_active", "true");
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");

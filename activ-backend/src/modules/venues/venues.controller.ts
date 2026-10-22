@@ -877,7 +877,7 @@ export class VenuesController {
     },
   })
   @UseInterceptors(
-    FilesInterceptor("images", 10, {
+    FilesInterceptor("images", 12, {
       storage: memoryStorage(),
     }),
   )

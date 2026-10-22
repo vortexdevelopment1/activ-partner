@@ -588,11 +588,7 @@ class _MenuScreenState extends State<MenuScreen> {
               fontFamily: 'Satoshi', fontSize: 13, color: Color(0xFF969C82))),
       const SizedBox(height: 36),
       Image.asset('assets/logo.png',
-          width: 130,
-          height: 60,
-          color: const Color(0xFFB1B98D),
-          colorBlendMode: BlendMode.srcIn,
-          semanticLabel: 'ACTIV Partner'),
+          width: 130, height: 60, semanticLabel: 'ACTIV Partner'),
     ]);
   }
 
