@@ -5,6 +5,7 @@ import { ArrowUpRight, Eye, RefreshCw, RotateCcw, Search, ScrollText, X } from '
 import { logsApi, type ActivityLog } from '../../api/logs.api';
 import { Pagination } from '../../components/ui/Pagination';
 import { Modal } from '../../components/ui/Modal';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { actionLabel, localDateBoundary, resourceLabel } from './logPresentation';
 
 const limit = 25;
@@ -93,17 +94,14 @@ export const LogsList: React.FC = () => {
             <input className="input pl-9 w-full" placeholder="Search actions, people or IDs..." value={search}
               onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
           </label>
-          <select aria-label="Resource" className="input w-44" value={resource}
-            onChange={(event) => { setResource(event.target.value); setPage(1); }}>
-            <option value="">All resources</option>
-            {resources.map((item) => <option key={item} value={item}>{resourceLabel(item)}</option>)}
-          </select>
-          <select aria-label="Result" className="input w-36" value={outcome}
-            onChange={(event) => { setOutcome(event.target.value); setPage(1); }}>
-            <option value="">All results</option>
-            <option value="success">Success</option>
-            <option value="failed">Failed</option>
-          </select>
+          <SelectMenu ariaLabel="Resource" className="w-full sm:w-44" value={resource}
+            placeholder="All resources"
+            options={[{ value: '', label: 'All resources' }, ...resources.map(item => ({ value: item, label: resourceLabel(item) }))]}
+            onChange={(value) => { setResource(value); setPage(1); }} />
+          <SelectMenu ariaLabel="Result" className="w-full sm:w-36" value={outcome}
+            placeholder="All results"
+            options={[{ value: '', label: 'All results' }, { value: 'success', label: 'Success' }, { value: 'failed', label: 'Failed' }]}
+            onChange={(value) => { setOutcome(value); setPage(1); }} />
           <label className="flex items-center gap-2 text-xs text-gray-500">
             From
             <input type="date" aria-label="From date" className="input w-36" value={from} max={to || undefined}
@@ -122,7 +120,7 @@ export const LogsList: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[68rem] text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 {['When', 'Action', 'Actor', 'Resource', 'Result', 'Target', ''].map((heading, index) =>
@@ -142,8 +140,8 @@ export const LogsList: React.FC = () => {
                       {new Date(log.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
                     <td className="px-5 py-3.5 font-medium text-gray-900 min-w-48">{actionLabel(log)}</td>
-                    <td className="px-5 py-3.5 text-gray-600">{log.actor || 'System / unknown'}</td>
-                    <td className="px-5 py-3.5 text-gray-600 capitalize">{resourceLabel(log.resource)}</td>
+                    <td className="px-5 py-3.5 text-gray-600 min-w-40">{log.actor || 'System / unknown'}</td>
+                    <td className="px-5 py-3.5 text-gray-600 capitalize min-w-40">{resourceLabel(log.resource)}</td>
                     <td className="px-5 py-3.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${log.details?.outcome === 'failed'
                         ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -152,7 +150,7 @@ export const LogsList: React.FC = () => {
                     </td>
                     <td className="px-5 py-3.5 text-gray-500">
                       {target ? <button type="button" onClick={() => navigate(target.path)}
-                        className="inline-flex items-center gap-1 text-primary-600 hover:underline" title={log.targetId}>
+                        className="inline-flex items-center gap-1 text-primary-600 whitespace-nowrap hover:underline" title={log.targetId}>
                         {target.label} <ArrowUpRight size={13} />
                       </button> : <span title={log.targetId}>{!log.targetId ? '—' : log.targetId.length > 16 ? `${log.targetId.slice(0, 8)}...` : log.targetId}</span>}
                     </td>
@@ -168,6 +166,7 @@ export const LogsList: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <p className="border-t border-gray-100 px-5 py-2 text-xs text-gray-500 sm:hidden">Swipe sideways to view all columns and actions.</p>
         {total > limit && <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />}
       </div>
 
@@ -189,18 +188,23 @@ export const LogsList: React.FC = () => {
             <dt className="text-gray-500">Actor</dt><dd className="text-gray-900 break-words">{selectedLog.actor || 'System / unknown'}</dd>
             <dt className="text-gray-500">Resource</dt><dd className="text-gray-900 capitalize">{resourceLabel(selectedLog.resource)}</dd>
             {selectedLog.details.decision && <><dt className="text-gray-500">Decision</dt><dd className="text-gray-900 capitalize">{selectedLog.details.decision}</dd></>}
-            <dt className="text-gray-500">Target</dt>
-            <dd className="text-gray-900 break-all">
+            <dt className="col-span-2 text-gray-500 sm:col-span-1">Target</dt>
+            <dd className="col-span-2 min-w-0 text-gray-900 sm:col-span-1">
               {targetLink(selectedLog) ? (
                 <button
                   type="button"
                   onClick={() => navigate(targetLink(selectedLog)!.path)}
-                  className="inline-flex items-center gap-1 text-primary-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-primary-600 whitespace-nowrap hover:underline"
                   title={selectedLog.targetId}
                 >
                   {targetLink(selectedLog)!.label} <ArrowUpRight size={13} />
                 </button>
-              ) : selectedLog.targetId || 'General operation'}
+              ) : selectedLog.targetId ? (
+                <code tabIndex={0} aria-label="Target ID" title={selectedLog.targetId}
+                  className="block max-w-full overflow-x-auto whitespace-nowrap py-1 text-xs select-all">
+                  {selectedLog.targetId}
+                </code>
+              ) : 'General operation'}
             </dd>
           </dl>
         </div>

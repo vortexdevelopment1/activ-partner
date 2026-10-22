@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { supportApi } from '../../api/support.api';
 import { Badge } from '../../components/ui/Badge';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import type { CallbackRequest, CallbackStatus } from '../../types';
@@ -208,17 +209,11 @@ export const CallbackDetail: React.FC = () => {
         </div>
         <div>
           <label className="label">Status</label>
-          <select
+          <SelectMenu
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as CallbackStatus)}
-            className="input"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setSelectedStatus(value as CallbackStatus)}
+            options={STATUS_OPTIONS} ariaLabel="Callback status" placeholder="Select status"
+          />
         </div>
       </div>
 

@@ -3,11 +3,14 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CategoryForm } from '../src/pages/categories/CategoryForm';
 import { QuestionForm } from '../src/pages/questions/QuestionForm';
 import { QuestionsList } from '../src/pages/questions/QuestionsList';
 import { UsersList } from '../src/pages/users/UsersList';
+import { CallbackDetail } from '../src/pages/support/CallbackDetail';
+import { supportApi } from '../src/api/support.api';
+import { LogsList } from '../src/pages/logs/LogsList';
 
 vi.mock('../src/api/axios', () => ({ default: {} }));
 vi.mock('../src/api/categories.api', () => ({ categoriesApi: {
@@ -25,6 +28,23 @@ vi.mock('../src/api/users.api', () => ({ usersApi: {
     { id: 'partner', firstName: 'Bob', role: 'partner', createdAt: '2026-10-20', isActive: true },
   ], total: 2 } } })),
 } }));
+vi.mock('../src/api/support.api', () => ({ supportApi: {
+  getCallbackById: vi.fn(async () => ({ data: { data: {
+    id: 'callback', partnerName: 'Test Partner', phone: '9876543210', email: 'partner@example.test',
+    status: 'pending', adminNotes: '', venueName: 'Arena', callbackDate: '2026-10-21', callbackTime: '10:00',
+    createdAt: '2026-10-20T10:00:00Z',
+  } } })),
+  updateCallback: vi.fn(async () => ({ data: {} })),
+} }));
+const targetId = '80a358d3-2910-4ee0-854c-13a7f5d0aaaa';
+vi.mock('../src/api/logs.api', () => ({ logsApi: {
+  getResources: vi.fn(async () => ({ data: { data: ['content_documents'] } })),
+  getAll: vi.fn(async () => ({ data: { data: { items: [{
+    id: 'log', action: 'publish', resource: 'content_documents',
+    targetId: '80a358d3-2910-4ee0-854c-13a7f5d0aaaa', actor: 'Super Admin',
+    details: { outcome: 'success', statusCode: 200, decision: null }, createdAt: '2026-10-22T10:00:00Z',
+  }], total: 1 } } })),
+} }));
 
 let client: QueryClient;
 beforeEach(() => {
@@ -34,8 +54,8 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function show(element: React.ReactElement) {
-  render(<MemoryRouter><QueryClientProvider client={client}>{element}</QueryClientProvider></MemoryRouter>);
+function show(element: React.ReactElement, path = '/') {
+  render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={client}>{element}</QueryClientProvider></MemoryRouter>);
 }
 
 function openSelect(name: string) {
@@ -98,4 +118,23 @@ it('users role filter uses the bounded menu and preserves role filtering', async
   fireEvent.click(screen.getByRole('option', { name: 'Partner' }));
   expect(screen.getByText('Bob')).toBeTruthy();
   expect(screen.queryByText('Alice')).toBeNull();
+});
+
+it('callback status menu stays bounded and saves the selected status', async () => {
+  show(<Routes><Route path="/support/callback/:id" element={<CallbackDetail />} /></Routes>, '/support/callback/callback');
+  await screen.findByText('Update Status');
+  openSelect('Callback status');
+  fireEvent.click(screen.getByRole('option', { name: 'In Progress' }));
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save Changes' })[0]);
+  await waitFor(() => expect(supportApi.updateCallback).toHaveBeenCalledWith('callback', {
+    status: 'in_progress', adminNotes: '',
+  }));
+});
+
+it('event details preserve the complete target ID for selecting and copying', async () => {
+  show(<LogsList />);
+  fireEvent.click(await screen.findByTitle('View event details'));
+  const target = screen.getByLabelText('Target ID');
+  expect(target.textContent).toBe(targetId);
+  expect(target.getAttribute('title')).toBe(targetId);
 });

@@ -52,7 +52,7 @@ export const CallbackList: React.FC = () => {
           <h2 className="text-xl font-bold text-gray-900">Callback Requests</h2>
           <p className="text-sm text-gray-500 mt-0.5">Manage support callback submissions from partners</p>
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -72,7 +72,7 @@ export const CallbackList: React.FC = () => {
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setPage(1); }}
-              className={`px-3 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+              className={`shrink-0 px-3 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === tab
                   ? 'border-primary-600 text-primary-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -85,7 +85,7 @@ export const CallbackList: React.FC = () => {
 
         {/* Table */}
         <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[76rem] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 {['Partner', 'Phone', 'Venue', 'Callback Date', 'Query', 'Status', 'Submitted', ''].map((h) => (
@@ -119,16 +119,16 @@ export const CallbackList: React.FC = () => {
                     className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer"
                     onClick={() => navigate(`/support/callback/${req.id}`)}
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 min-w-56">
                       <p className="font-medium text-gray-900">{req.partnerName}</p>
                       <p className="text-xs text-gray-400">{req.email}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-gray-600">{req.phone}</td>
-                    <td className="px-5 py-3.5 text-gray-600">
+                    <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">{req.phone}</td>
+                    <td className="px-5 py-3.5 text-gray-600 min-w-48">
                       <p>{req.venueName ?? '—'}</p>
                       {req.city && <p className="text-xs text-gray-400">{req.city}</p>}
                     </td>
-                    <td className="px-5 py-3.5 text-gray-600 text-xs">
+                    <td className="px-5 py-3.5 text-gray-600 text-xs whitespace-nowrap">
                       {req.callbackDate ? (
                         <>
                           <p>{req.callbackDate}</p>
@@ -136,13 +136,13 @@ export const CallbackList: React.FC = () => {
                         </>
                       ) : '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-gray-500 max-w-[200px]">
+                    <td className="px-5 py-3.5 text-gray-500 min-w-48 max-w-[200px]">
                       <p className="truncate">{req.query ?? '—'}</p>
                     </td>
                     <td className="px-5 py-3.5">
                       <Badge status={req.status} />
                     </td>
-                    <td className="px-5 py-3.5 text-gray-400 text-xs">
+                    <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
                       {new Date(req.createdAt).toLocaleDateString('en-IN', {
                         day: '2-digit',
                         month: 'short',
@@ -158,6 +158,7 @@ export const CallbackList: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <p className="border-t border-gray-100 px-5 py-2 text-xs text-gray-500 sm:hidden">Swipe sideways to view all columns and actions.</p>
 
         {/* Pagination */}
         {total > limit && (
