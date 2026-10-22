@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../../components/ui/Modal';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { ImageUpload } from '../../components/common/ImageUpload';
 import type { Category, CategoryType } from '../../types';
 
@@ -34,6 +35,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
   onSubmit,
   initial,
 }) => {
+  const formId = useId();
   const [imageFile, setImageFile] = React.useState<File | null>(null);
   const [imagePreview, setImagePreview] = React.useState<string | null>(null);
 
@@ -41,6 +43,8 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CategoryFormData>();
 
@@ -69,8 +73,14 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
       onClose={onClose}
       title={initial ? 'Edit Category' : 'Add Category'}
       size="md"
+      footer={<div className="flex flex-wrap justify-end gap-3">
+        <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+        <button type="submit" form={formId} disabled={isSubmitting} className="btn-primary">
+          {isSubmitting ? 'Saving...' : initial ? 'Save Changes' : 'Add Category'}
+        </button>
+      </div>}
     >
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
         {/* Name */}
         <div>
           <label className="label">Name *</label>
@@ -98,17 +108,10 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
         {/* Type */}
         <div>
           <label className="label">Type *</label>
-          <select
-            className={`input ${errors.type ? 'border-red-400' : ''}`}
-            {...register('type', { required: 'Type is required' })}
-          >
-            <option value="">Select a type</option>
-            {CATEGORY_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register('type', { required: 'Type is required' })} />
+          <SelectMenu value={watch('type') ?? ''} options={CATEGORY_TYPES}
+            ariaLabel="Category type" placeholder="Select a type"
+            onChange={value => setValue('type', value as CategoryType, { shouldDirty: true, shouldValidate: true })} />
           {errors.type && (
             <p className="mt-1 text-xs text-red-500">{errors.type.message}</p>
           )}
@@ -159,15 +162,6 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
           </label>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">
-            Cancel
-          </button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">
-            {isSubmitting ? 'Saving...' : initial ? 'Save Changes' : 'Add Category'}
-          </button>
-        </div>
       </form>
     </Modal>
   );

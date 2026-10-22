@@ -14,5 +14,6 @@ export interface AdminSearchGroup {
 }
 
 export const adminSearchApi = {
-  search: (q: string) => api.get<{ data: AdminSearchGroup[] }>('/admin/search', { params: { q } }),
+  search: (q: string, signal?: AbortSignal) =>
+    api.get<{ data: AdminSearchGroup[] }>('/admin/search', { params: { q }, signal }),
 };

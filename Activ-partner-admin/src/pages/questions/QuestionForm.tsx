@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Plus, Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -48,6 +48,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
   onSubmit,
   initial,
 }) => {
+  const formId = useId();
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.getAll({ limit: 100 }),
@@ -100,8 +101,14 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
       onClose={onClose}
       title={initial ? 'Edit Question' : 'Add Question'}
       size="lg"
+      footer={<div className="flex flex-wrap justify-end gap-3">
+        <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+        <button type="submit" form={formId} disabled={isSubmitting} className="btn-primary">
+          {isSubmitting ? 'Saving...' : initial ? 'Save Changes' : 'Add Question'}
+        </button>
+      </div>}
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* Question text */}
         <div>
           <label className="label">Question Text *</label>
@@ -126,14 +133,12 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
           </div>
           <div>
             <label className="label">Category</label>
-            <select className="input" {...register('categoryId')}>
-              <option value="">Global (all categories)</option>
-              {categories.map((cat: any) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            <input type="hidden" {...register('categoryId')} />
+            <SelectMenu value={watch('categoryId') ?? ''}
+              options={[{ value: '', label: 'Global (all categories)' },
+                ...categories.map((cat: any) => ({ value: cat.id, label: cat.name }))]}
+              ariaLabel="Question category" placeholder="Global (all categories)"
+              onChange={value => setValue('categoryId', value, { shouldDirty: true })} />
           </div>
         </div>
 
@@ -269,15 +274,6 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">
-            Cancel
-          </button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">
-            {isSubmitting ? 'Saving...' : initial ? 'Save Changes' : 'Add Question'}
-          </button>
-        </div>
       </form>
     </Modal>
   );

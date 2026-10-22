@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -237,12 +237,13 @@ export const VenueDetail: React.FC = () => {
       {/* Back + title */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+          <Link
+            to="/venues"
+            aria-label="Back to venues"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
           >
             <ArrowLeft size={18} />
-          </button>
+          </Link>
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold text-gray-900">{venue.name}</h2>

@@ -91,7 +91,7 @@ export const ActivityApprovalList: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}><table className="w-full text-sm">
+            <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}><table className="w-full min-w-[64rem] text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/60">
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -117,11 +117,11 @@ export const ActivityApprovalList: React.FC = () => {
               <tbody className="divide-y divide-gray-50">
                 {items.map((activity) => (
                   <tr key={activity.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 min-w-40">
                       <p className="font-medium text-gray-900">{activity.name}</p>
                       <Badge status="pending" size="sm" />
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 min-w-48">
                       <div className="flex items-center gap-2">
                         <Building2 size={14} className="text-gray-400 shrink-0" />
                         <div>
@@ -130,20 +130,20 @@ export const ActivityApprovalList: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 min-w-40">
                       <div className="flex items-center gap-1.5">
                         <Tag size={13} className="text-gray-400" />
                         <span className="text-gray-700">{activityCategoryName(activity)}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       {activity.amenities?.length ? (
                         <span className="text-gray-700">{activity.amenities.length} items</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-gray-500">
+                    <td className="px-5 py-4 text-gray-500 whitespace-nowrap">
                       {activitySubmittedAt(activity)
                         ? new Date(activitySubmittedAt(activity)).toLocaleDateString('en-IN', {
                             day: 'numeric',
@@ -153,7 +153,7 @@ export const ActivityApprovalList: React.FC = () => {
                         : '—'}
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                         <button
                           onClick={() => setDetailTarget(activity)}
                           title="View details"
@@ -183,6 +183,7 @@ export const ActivityApprovalList: React.FC = () => {
                 ))}
               </tbody>
             </table></div>
+            <p className="border-t border-gray-100 px-5 py-2 text-xs text-gray-500 sm:hidden">Swipe sideways to view all columns and actions.</p>
 
             {total > LIMIT && (
               <Pagination

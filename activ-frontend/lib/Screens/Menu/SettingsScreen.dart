@@ -124,7 +124,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ),
       child: Form(
         key: _formKey,
-        child: Padding(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -769,7 +770,7 @@ Future<void> _showSavedDialog(BuildContext context) {
             ),
             const SizedBox(height: 16),
             const Text(
-              'You will now receive notifications as per\nyour preferences.',
+              'You will now receive notifications as per your preferences.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Satoshi',

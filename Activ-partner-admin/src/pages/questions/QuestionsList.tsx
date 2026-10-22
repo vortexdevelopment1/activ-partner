@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown, Search } from 'lucide-react';
 import { questionsApi } from '../../api/questions.api';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { categoriesApi } from '../../api/categories.api';
 import { QuestionForm } from './QuestionForm';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -189,22 +190,16 @@ export const QuestionsList: React.FC = () => {
             <input className="input pl-9" value={search} placeholder="Search questions..."
               onChange={(event) => setSearchParams({ ...(event.target.value ? { search: event.target.value } : {}), ...(filterCat ? { categoryId: filterCat } : {}) }, { replace: true })} />
           </label>
-          <select
+          <SelectMenu
             value={filterCat}
-            onChange={(e) => {
-              setFilterCat(e.target.value);
-              setSearchParams({ ...(search ? { search } : {}), ...(e.target.value ? { categoryId: e.target.value } : {}) }, { replace: true });
+            onChange={(value) => {
+              setFilterCat(value);
+              setSearchParams({ ...(search ? { search } : {}), ...(value ? { categoryId: value } : {}) }, { replace: true });
             }}
-            className="input w-full sm:w-48"
-          >
-            <option value="">All categories</option>
-            <option value="global">Global only</option>
-            {categories.map((cat: any) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+            className="w-full sm:w-48" ariaLabel="Filter questions by category" placeholder="All categories"
+            options={[{ value: '', label: 'All categories' }, { value: 'global', label: 'Global only' },
+              ...categories.map((cat: any) => ({ value: cat.id, label: cat.name }))]}
+          />
           <button
             onClick={() => { setEditItem(null); setFormOpen(true); }}
             className="btn-primary flex items-center gap-2"

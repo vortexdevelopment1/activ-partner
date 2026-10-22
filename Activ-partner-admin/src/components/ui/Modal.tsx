@@ -10,18 +10,25 @@ export interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   subtitle?: React.ReactNode;
   footer?: React.ReactNode;
+  scrollResetKey?: React.Key;
 }
 
 const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' };
 let openDialogs = 0;
 let previousOverflow = '';
 
-export const Modal: React.FC<ModalProps> = ({ open, onClose, title, children, size = 'md', subtitle, footer }) => {
+export const Modal: React.FC<ModalProps> = ({ open, onClose, title, children, size = 'md', subtitle, footer, scrollResetKey }) => {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [viewport, setViewport] = useState({ height: window.innerHeight, top: 0 });
+  useEffect(() => {
+    if (open && scrollResetKey !== undefined && bodyRef.current) {
+      bodyRef.current.scrollTop = 0;
+    }
+  }, [open, scrollResetKey]);
   useEffect(() => {
     if (!open) return;
     if (openDialogs++ === 0) {
@@ -72,7 +79,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, title, children, si
             <X size={18} className="text-gray-500" />
           </button>
         </div>
-        <div className="modal-scroll-body min-h-0 min-w-0 overflow-y-auto overscroll-contain p-4 sm:p-5">{children}</div>
+        <div ref={bodyRef} className="modal-scroll-body min-h-0 min-w-0 overflow-y-auto overscroll-contain p-4 sm:p-5">{children}</div>
         {footer && <div className="min-w-0 shrink-0 border-t border-gray-100 p-4 sm:p-5 [overflow-wrap:anywhere]">{footer}</div>}
       </div>
     </div>, document.body,

@@ -873,19 +873,25 @@ export class VenuesController {
       type: "object",
       properties: {
         images: { type: "array", items: { type: "string", format: "binary" } },
+        replaceImages: { type: "string", example: "true" },
       },
     },
   })
   @UseInterceptors(
     FilesInterceptor("images", 12, {
       storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
   async uploadActivityImages(
     @Param("serviceId", ParseUUIDPipe) serviceId: string,
     @CurrentUser() user: any,
     @UploadedFiles() files: Express.Multer.File[],
+    @Body("replaceImages") replaceImages?: string,
   ) {
+    if (!files?.length) {
+      throw new BadRequestException("Please select at least one image");
+    }
     const urls = await this.cloudinaryService.uploadFiles(
       files,
       "activ/services",
@@ -895,6 +901,7 @@ export class VenuesController {
       serviceId,
       urls,
       user.id,
+      replaceImages === "true",
     );
     return { message: "Activity images uploaded successfully", data };
   }

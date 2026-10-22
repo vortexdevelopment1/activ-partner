@@ -27,7 +27,7 @@ const config: Record<string, string> = {
 export const Badge: React.FC<BadgeProps> = ({ status, size = 'sm' }) => {
   const cls = config[status?.toLowerCase()] ?? 'bg-gray-100 text-gray-600';
   return (
-    <span className={`inline-flex items-center rounded-full font-medium capitalize ${size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'} ${cls}`}>
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full font-medium capitalize ${size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'} ${cls}`}>
       {status?.replace('_', ' ')}
     </span>
   );

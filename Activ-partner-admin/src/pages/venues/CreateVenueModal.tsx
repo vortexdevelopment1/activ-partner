@@ -1,6 +1,6 @@
 import { Modal } from '../../components/ui/Modal';
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   X, ChevronRight, ChevronLeft, Plus, Search, User, Check, UserPlus,
   Upload, MapPin, Loader2,
@@ -341,12 +341,22 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     enabled: open,
   });
 
-  const categoryQuestionsResults = useQueries({
-    queries: form.categoryIds.map(categoryId => ({
-      queryKey: ['questions', 'category', categoryId],
-      queryFn: () => questionsApi.getByCategory(categoryId),
-      enabled: open && form.categoryIds.length > 0,
-    })),
+  const selectedCategoryId = form.categoryIds[0] ?? '';
+  const categoryQuestionsQuery = useQuery({
+    queryKey: ['create-venue', 'category-questions', selectedCategoryId],
+    queryFn: async ({ signal }): Promise<Question[]> => {
+      const response = await questionsApi.getByCategory(selectedCategoryId, signal);
+      const questions = response.data?.data;
+      if (!Array.isArray(questions)) throw new Error('Invalid category questions response');
+      return questions.map(question => ({
+        ...question,
+        questionType: String(question.questionType ?? 'TEXT').toUpperCase() as QuestionType,
+        options: Array.isArray(question.options)
+          ? question.options.filter((option: unknown) => typeof option === 'string')
+          : [],
+      }));
+    },
+    enabled: open && !!selectedCategoryId,
   });
 
   const partners: Partner[] = partnersData?.data?.data?.items ?? [];
@@ -359,11 +369,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     const globalQuestions: Question[] = [];
     const byCategory: Array<{ categoryId: string; categoryName: string; questions: Question[] }> = [];
 
-    categoryQuestionsResults.forEach((res, idx) => {
-      const categoryId = form.categoryIds[idx];
-      if (!categoryId) return;
+    if (selectedCategoryId) {
+      const categoryId = selectedCategoryId;
       const categoryName = categories.find(c => c.id === categoryId)?.name ?? '';
-      const questions: Question[] = (res.data?.data?.data ?? res.data?.data ?? []) as Question[];
+      const questions = categoryQuestionsQuery.data ?? [];
       const catQ: Question[] = [];
 
       questions.forEach(q => {
@@ -377,10 +386,10 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
       });
 
       if (catQ.length > 0) byCategory.push({ categoryId, categoryName, questions: catQ });
-    });
+    }
 
     return { globalQuestions, byCategory };
-  }, [categoryQuestionsResults, form.categoryIds, categories]);
+  }, [categoryQuestionsQuery.data, selectedCategoryId, categories]);
 
   const flatRequiredQuestions = useMemo(() =>
     [
@@ -390,7 +399,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     [questionGroups],
   );
 
-  const isQuestionsLoading = categoryQuestionsResults.some(r => r.isLoading);
+  const isQuestionsLoading = categoryQuestionsQuery.isPending;
   const hasQuestions = questionGroups.globalQuestions.length > 0 || questionGroups.byCategory.length > 0;
 
   // ── Google Maps – initialize ──────────────────────────────────────────────────
@@ -625,6 +634,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
     if (step === 2) return true; // Amenities are optional
     if (step === 3) return form.categoryIds.length === 1;
     if (step === 4) {
+      if (!categoryQuestionsQuery.isSuccess) return false;
       return flatRequiredQuestions.every(q => {
         const val = form.answers[q.id];
         if (val === undefined || val === null || val === '') return false;
@@ -770,7 +780,7 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <Modal open={open} onClose={handleClose} title="Create Venue" size="xl"
+    <Modal open={open} onClose={handleClose} title="Create Venue" size="xl" scrollResetKey={step}
       subtitle={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
       footer={<div className="flex flex-wrap items-center justify-between gap-3">
           <button
@@ -1197,6 +1207,12 @@ export const CreateVenueModal: React.FC<Props> = ({ open, onClose }) => {
                 <div className="py-16 text-center text-gray-400 text-sm flex flex-col items-center gap-2">
                   <Loader2 size={24} className="animate-spin text-gray-300" />
                   Loading questions…
+                </div>
+              ) : categoryQuestionsQuery.isError ? (
+                <div role="alert" className="py-12 text-center">
+                  <p className="text-sm text-red-600">Unable to load questions. Please try again.</p>
+                  <button type="button" className="btn-secondary mt-3 text-sm"
+                    onClick={() => void categoryQuestionsQuery.refetch()}>Retry</button>
                 </div>
               ) : !hasQuestions ? (
                 <div className="py-16 text-center">

@@ -115,7 +115,7 @@ export const FAQsList: React.FC = () => {
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[48rem] text-sm">
           <thead>
             <tr className="border-b border-gray-100">
               {['Question', 'Answer', 'Status', 'Created', ''].map((h) => (
@@ -146,12 +146,12 @@ export const FAQsList: React.FC = () => {
               faqs.map((item) => (
                 <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   {/* Question */}
-                  <td className="px-5 py-3.5 max-w-xs">
+                  <td className="px-5 py-3.5 min-w-56 max-w-xs">
                     <p className="font-medium text-gray-900 line-clamp-2">{item.question}</p>
                   </td>
 
                   {/* Answer */}
-                  <td className="px-5 py-3.5 max-w-sm">
+                  <td className="px-5 py-3.5 min-w-64 max-w-sm">
                     <p className="text-gray-500 line-clamp-2">{item.answer}</p>
                   </td>
 
@@ -202,6 +202,7 @@ export const FAQsList: React.FC = () => {
           </tbody>
         </table>
         </div>
+        <p className="border-t border-gray-100 px-5 py-2 text-xs text-gray-500 sm:hidden">Swipe sideways to view all columns and actions.</p>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

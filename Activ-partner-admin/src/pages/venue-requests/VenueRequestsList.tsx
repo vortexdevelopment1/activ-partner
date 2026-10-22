@@ -75,7 +75,7 @@ export const VenueRequestsList: React.FC = () => {
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setPage(1); }}
-              className={`px-3 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+              className={`shrink-0 px-3 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === tab
                   ? 'border-primary-600 text-primary-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -88,7 +88,7 @@ export const VenueRequestsList: React.FC = () => {
 
         {/* Table */}
         <div className="overflow-x-auto" role="region" aria-label="Scrollable table" tabIndex={0}>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[44rem] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 {['Venue', 'Location', 'Status', 'Submitted', ''].map((h) => (
@@ -122,7 +122,7 @@ export const VenueRequestsList: React.FC = () => {
                     className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer"
                     onClick={() => navigate(`/venue-requests/${req.id}`)}
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 min-w-48">
                       <p className="font-medium text-gray-900">
                         {req.name ?? '—'}
                       </p>
@@ -150,6 +150,7 @@ export const VenueRequestsList: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <p className="border-t border-gray-100 px-5 py-2 text-xs text-gray-500 sm:hidden">Swipe sideways to view all columns and actions.</p>
 
         {total > limit && (
           <div className="px-5 py-4 border-t border-gray-50">

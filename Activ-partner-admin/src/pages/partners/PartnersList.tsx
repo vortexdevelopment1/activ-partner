@@ -136,7 +136,7 @@ export const PartnersList: React.FC = () => {
                     <td className="px-5 py-3.5 text-gray-600 text-sm">
                       {email || <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-5 py-3.5 text-gray-600 text-sm">
+                    <td className="px-5 py-3.5 text-gray-600 text-sm whitespace-nowrap">
                       {phone || <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-5 py-3.5">
@@ -164,7 +164,7 @@ export const PartnersList: React.FC = () => {
                     <td className="px-5 py-3.5">
                       <button
                         onClick={() => navigate(`/venues?partnerId=${partner.id}`)}
-                        className="text-xs text-primary-600 font-medium flex items-center gap-1 hover:underline"
+                        className="text-xs text-primary-600 font-medium inline-flex items-center gap-1 whitespace-nowrap hover:underline"
                       >
                         <ExternalLink size={11} /> View venues
                       </button>

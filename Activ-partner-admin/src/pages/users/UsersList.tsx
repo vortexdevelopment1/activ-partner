@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { usersApi } from '../../api/users.api';
+import { SelectMenu } from '../../components/ui/SelectMenu';
 import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
 import type { User } from '../../types';
@@ -64,17 +65,13 @@ export const UsersList: React.FC = () => {
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
-          <select
+          <SelectMenu
             value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value as RoleFilter); setPage(1); }}
-            className="input w-full sm:w-36"
-          >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r === 'All' ? 'All roles' : r.charAt(0).toUpperCase() + r.slice(1)}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => { setRoleFilter(value as RoleFilter); setPage(1); }}
+            className="w-full sm:w-36" ariaLabel="Filter users by role" placeholder="All roles"
+            options={ROLES.map(role => ({ value: role,
+              label: role === 'All' ? 'All roles' : role.charAt(0).toUpperCase() + role.slice(1) }))}
+          />
           <div className="relative w-full sm:w-auto">
             <Search
               size={15}
@@ -135,15 +132,15 @@ export const UsersList: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-gray-600">{user.email?.trim() || 'Not provided'}</td>
-                  <td className="px-5 py-3.5 text-gray-500">{user.phone ?? '—'}</td>
+                  <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{user.phone ?? '—'}</td>
                   <td className="px-5 py-3.5">
                     <span
-                      className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'}`}
+                      className={`inline-flex shrink-0 whitespace-nowrap text-xs font-medium px-2.5 py-0.5 rounded-full capitalize ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'}`}
                     >
                       {user.role}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-400 text-xs">
+                  <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
                     {new Date(user.createdAt).toLocaleDateString('en-IN', {
                       day: '2-digit',
                       month: 'short',
@@ -152,7 +149,7 @@ export const UsersList: React.FC = () => {
                   </td>
                   <td className="px-5 py-3.5">
                     <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      className={`inline-flex shrink-0 whitespace-nowrap text-xs font-medium px-2 py-0.5 rounded-full ${
                         user.isActive
                           ? 'bg-emerald-50 text-emerald-600'
                           : 'bg-red-50 text-red-600'
