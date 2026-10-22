@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ServiceUnavailableException,
   ConflictException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
@@ -19,6 +20,30 @@ export class BankAccountsService {
     private readonly prisma: PrismaService,
     private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
+
+  async lookupIfsc(value: string) {
+    const code = value.trim().toUpperCase();
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+      throw new BadRequestException('Invalid IFSC code');
+    }
+    try {
+      const response = await fetch(`https://ifsc.razorpay.com/${code}`);
+      if (response.status === 404) throw new BadRequestException('Invalid IFSC code');
+      if (!response.ok) throw new Error(`Razorpay IFSC lookup failed: ${response.status}`);
+      const data = await response.json() as Record<string, unknown>;
+      return {
+        ifsc: code,
+        bank: String(data.BANK ?? ''),
+        branch: String(data.BRANCH ?? ''),
+        address: String(data.ADDRESS ?? ''),
+        city: String(data.CITY ?? ''),
+        state: String(data.STATE ?? ''),
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new ServiceUnavailableException('IFSC verification service is temporarily unavailable');
+    }
+  }
 
   private map(record: any, reviewedByName: string | null = null) {
     const owner = record.partners?.partner_users?.[0]?.users;
@@ -45,6 +70,7 @@ export class BankAccountsService {
   }
 
   async submit(partnerId: string, dto: SubmitBankAccountDto, cancelledChequeUrl?: string) {
+    await this.lookupIfsc(dto.ifscCode);
     const existing = await this.prisma.partner_bank_accounts.findFirst({
       where: { partner_id: partnerId, status: 'UNDER_REVIEW' },
     });
@@ -84,6 +110,7 @@ export class BankAccountsService {
     dto: SubmitBankAccountDto,
     cancelledChequeUrl: string,
   ) {
+    await this.lookupIfsc(dto.ifscCode);
     const existing = await this.prisma.partner_bank_accounts.findFirst({
       where: { id, partner_id: partnerId },
     });

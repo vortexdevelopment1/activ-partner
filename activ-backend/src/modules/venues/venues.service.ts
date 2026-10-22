@@ -2746,6 +2746,7 @@ export class VenuesService {
       ),
       status: service.status.toLowerCase(),
       isActive: service.is_active,
+      bookingAccept: service.venues.booking_accept,
       imageUrls: service.partner_venue_images.map((image) => image.url),
       coverImageUrl:
         service.partner_venue_images.find((image) => image.is_cover)?.url ??
@@ -3502,6 +3503,8 @@ export class VenuesService {
     if (!service) throw new NotFoundException("Activity not found");
     if (service.venues.partner_id !== partnerId)
       throw new ForbiddenException("Access denied");
+    if (!service.venues.booking_accept)
+      throw new BadRequestException("Bookings are paused for this venue");
     if (service.status !== "APPROVED")
       throw new BadRequestException(
         "Activity must be approved to manage walk-in slots",
@@ -3651,6 +3654,8 @@ export class VenuesService {
     if (!service) throw new NotFoundException("Activity not found");
     if (service.venues.partner_id !== partnerId)
       throw new ForbiddenException("Access denied");
+    if (!service.venues.booking_accept)
+      throw new BadRequestException("Bookings are paused for this venue");
     if (service.status !== "APPROVED")
       throw new BadRequestException("Activity must be approved");
 

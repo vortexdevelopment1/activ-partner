@@ -74,7 +74,10 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   String get _status {
     if (_data.isEmpty) return widget.initialStatus;
     return switch (_data['status']) {
-      'approved' => _data['isActive'] == false ? 'Inactive' : 'Active',
+      'approved' => _data['isActive'] == false ||
+              _data['bookingAccept'] == false
+          ? 'Inactive'
+          : 'Active',
       'draft' => 'Draft',
       'pending' || 'submitted' => 'In Review',
       _ => 'Inactive',
@@ -191,6 +194,32 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     }
     if (await _save({'isActive': false, 'reason': reason}) && mounted) {
       _message('Bookings paused. Existing bookings are preserved.');
+    }
+  }
+
+  Future<void> _resumeBooking() async {
+    if (_saving) return;
+    if (_data['bookingAccept'] == false && widget.venueId.isNotEmpty) {
+      setState(() => _saving = true);
+      try {
+        final response = await _client.patch(
+          Uri.parse('$BASE_URL/venues/${widget.venueId}/pause-bookings'),
+          headers: await _headers(),
+          body: jsonEncode({'bookingAccept': true}),
+        );
+        _response(response);
+      } catch (e) {
+        if (mounted) _message(e.toString().replaceFirst('Exception: ', ''));
+        return;
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      if (mounted) await _load();
+    }
+    if (_data['isActive'] == false) {
+      await _save({'isActive': true});
+    } else if (mounted) {
+      await _load();
     }
   }
 
@@ -822,7 +851,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   ]))),
         ] else if (_canControl)
           _button(_saving ? 'Resuming...' : 'Resume Booking',
-              _saving ? null : () => _save({'isActive': true})),
+              _saving ? null : _resumeBooking),
         const SizedBox(height: 26),
         _text('What happens next?', bold: true),
         const SizedBox(height: 20),

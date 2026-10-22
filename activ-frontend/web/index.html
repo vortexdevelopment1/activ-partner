@@ -32,6 +32,12 @@
   <title>activ_app</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB8CL4cLELFreHWPY_NnmjwCo_mWS7T6Ng&libraries=geometry"></script>
+  <!-- Required by pdfx for PDF rendering in Flutter Web. -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.7.570/build/pdf.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.7.570/build/pdf.worker.js';
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

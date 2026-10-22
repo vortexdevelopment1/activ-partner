@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../Utills/common_utilities.dart';
@@ -101,6 +103,107 @@ String _message(http.Response response) {
     if (message != null) return message.toString();
   } catch (_) {}
   return 'Unable to save your bank account. Please try again.';
+}
+
+class _PdfThumbnail extends StatefulWidget {
+  const _PdfThumbnail({required this.bytes});
+  final Uint8List? bytes;
+
+  @override
+  State<_PdfThumbnail> createState() => _PdfThumbnailState();
+}
+
+class _PdfThumbnailState extends State<_PdfThumbnail> {
+  PdfDocument? _document;
+  Uint8List? _image;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _render();
+  }
+
+  Future<void> _render() async {
+    try {
+      final bytes = widget.bytes;
+      if (bytes == null) throw StateError('PDF bytes unavailable');
+      final document = await PdfDocument.openData(bytes);
+      final page = await document.getPage(1);
+      final image = await page.render(
+        width: 720,
+        height: 960,
+        format: PdfPageImageFormat.png,
+      );
+      await page.close();
+      if (!mounted) {
+        await document.close();
+        return;
+      }
+      _document = document;
+      setState(() {
+        _image = image?.bytes;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _document?.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 130,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4F4),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: _loading
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : _image != null
+              ? Image.memory(_image!, fit: BoxFit.cover, width: double.infinity)
+              : const Icon(Icons.picture_as_pdf_outlined, size: 48),
+    );
+  }
+}
+
+class _LocalPdfViewer extends StatefulWidget {
+  const _LocalPdfViewer({required this.bytes, required this.title});
+  final Uint8List bytes;
+  final String title;
+
+  @override
+  State<_LocalPdfViewer> createState() => _LocalPdfViewerState();
+}
+
+class _LocalPdfViewerState extends State<_LocalPdfViewer> {
+  late final PdfControllerPinch _controller = PdfControllerPinch(
+    document: PdfDocument.openData(widget.bytes),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: PdfViewPinch(controller: _controller),
+      );
 }
 
 class BankAccountScreen extends StatefulWidget {
@@ -374,8 +477,6 @@ class _BankAccountScreenState extends State<BankAccountScreen> {
                           ? 'Rejected'
                           : 'Under Review',
                   style: _text(13, bold: true, color: Colors.white)))),
-          const SizedBox(width: 6),
-          const Icon(Icons.chevron_right, size: 24)
         ]),
         const SizedBox(height: 16),
         Text(account['accountHolderName'] ?? '-', style: _text(16)),
@@ -418,6 +519,7 @@ class BankAccountVerifiedScreen extends StatelessWidget {
         title: 'Bank Account Verified',
         icon: Icons.verified,
         iconColor: Colors.green,
+        resultIcon: SvgPicture.asset('assets/Vector.svg', width: 88, height: 88),
         heading: 'Bank Account Verified',
         message: 'Your account has been verified and\nlinked successfully.',
         account: account,
@@ -465,6 +567,7 @@ Widget _accountResultScreen(
   required String message,
   required Map<String, dynamic> account,
   required String bottomLabel,
+  Widget? resultIcon,
   String? rejectionReason,
   bool showUpdateButton = false,
   http.Client? client,
@@ -479,7 +582,7 @@ Widget _accountResultScreen(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: Column(children: [
         const SizedBox(height: 18),
-          Icon(icon, size: 88, color: iconColor),
+          resultIcon ?? Icon(icon, size: 88, color: iconColor),
         const SizedBox(height: 18),
         Text(heading, style: _text(24, bold: true), textAlign: TextAlign.center),
         const SizedBox(height: 10),
@@ -569,7 +672,13 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _branch = TextEditingController();
   String? _type;
   PlatformFile? _cheque;
-  bool _saving = false, _lookingUp = false, _showValidation = false;
+  bool _saving = false,
+      _lookingUp = false,
+      _ifscValid = false,
+      _showValidation = false;
+  String? _ifscError;
+  bool _ifscUnavailable = false;
+  int _ifscLookupVersion = 0;
   Timer? _debounce;
 
   @override
@@ -586,6 +695,9 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       final type = (account['accountType'] ?? '').toString();
       _type = ['Saving Account', 'Current Account'].contains(type) ? type : null;
       _branch.text = (account['branchName'] ?? '').toString();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _ifsc.text.isNotEmpty) _ifscChanged(_ifsc.text);
+      });
     }
   }
 
@@ -638,12 +750,28 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   }
 
   void _ifscChanged(String code) {
+    final normalized = code.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (normalized != code) {
+      _ifsc.value = TextEditingValue(
+        text: normalized,
+        selection: TextSelection.collapsed(offset: normalized.length),
+      );
+    }
+    final version = ++_ifscLookupVersion;
     _validateLive();
     _debounce?.cancel();
-    setState(() => _lookingUp = false);
-    if (RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(code.toUpperCase())) {
-      _debounce = Timer(
-          const Duration(milliseconds: 400), () => _lookup(code.toUpperCase()));
+    setState(() {
+      _lookingUp = false;
+      _ifscValid = false;
+      _ifscError = null;
+      _ifscUnavailable = false;
+      _bank.clear();
+      _branch.clear();
+    });
+    if (normalized.length == 11 &&
+        RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(normalized)) {
+      _debounce = Timer(const Duration(milliseconds: 450),
+          () => _lookup(normalized, version));
     }
   }
 
@@ -654,24 +782,55 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
     });
   }
 
-  Future<void> _lookup(String code) async {
-    if (!mounted || _saving) return;
+  Widget _accountMatchIcon() => AnimatedBuilder(
+        animation: Listenable.merge([_number, _confirm]),
+        builder: (_, __) {
+          final matches = _number.text.trim().isNotEmpty &&
+              _number.text.trim() == _confirm.text.trim();
+          return matches
+              ? Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: SvgPicture.asset(
+                    'assets/verification_badge.svg',
+                    width: 22,
+                    height: 22,
+                  ),
+                )
+              : const SizedBox.shrink();
+        },
+      );
+
+  Future<void> _lookup(String code, int version) async {
+    if (!mounted || _saving || version != _ifscLookupVersion) return;
     setState(() => _lookingUp = true);
     try {
-      final response = await (widget.client?.get ??
-              http.get)(Uri.parse('https://ifsc.razorpay.com/$code'))
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final response = await (widget.client?.get ?? http.get)(
+              Uri.parse('$BASE_URL/bank-accounts/ifsc/$code'),
+              headers: {'Authorization': 'Bearer $token'})
           .timeout(const Duration(seconds: 10));
-      if (!mounted || _saving || _ifsc.text.toUpperCase() != code) return;
+      if (!mounted || _saving || version != _ifscLookupVersion ||
+          _ifsc.text != code) return;
+      final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _bank.text = (data['BANK'] ?? '').toString();
-        _branch.text = (data['BRANCH'] ?? '').toString();
+        final data = Map<String, dynamic>.from(body['data'] as Map);
+        setState(() {
+          _bank.text = data['bank']?.toString() ?? '';
+          _branch.text = data['branch']?.toString() ?? '';
+          _ifscValid = true;
+        });
         _validateLive();
+      } else if (response.statusCode == 400 || response.statusCode == 404) {
+        setState(() => _ifscError = 'Invalid IFSC code. Please check and try again.');
+      } else {
+        setState(() => _ifscUnavailable = true);
       }
     } catch (_) {
-      /* Bank and branch remain editable if lookup is unavailable. */
+      if (mounted && version == _ifscLookupVersion) {
+        setState(() => _ifscUnavailable = true);
+      }
     } finally {
-      if (mounted && _ifsc.text.toUpperCase() == code) {
+      if (mounted && version == _ifscLookupVersion) {
         setState(() => _lookingUp = false);
       }
     }
@@ -709,6 +868,11 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   Future<void> _submit() async {
     setState(() => _showValidation = true);
     if (!_form.currentState!.validate()) return;
+    if (!_ifscValid) {
+      CommonUtilities.createSnackBar(context,
+          _ifscUnavailable ? 'IFSC verification is temporarily unavailable.' : 'Please validate the IFSC code.');
+      return;
+    }
     if (_cheque == null) {
       CommonUtilities.createSnackBar(
           context, 'Please upload a cancelled cheque.');
@@ -806,7 +970,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   Widget _chequeUploadBox() {
     final content = _cheque == null
         ? Column(children: [
-            const Icon(Icons.photo_library_outlined, size: 64),
+            SvgPicture.asset('assets/three_cards.svg',
+                width: 64, height: 64),
             const SizedBox(height: 16),
             Text('Upload Cancelled Cheque',
                 style: _text(18, bold: true), textAlign: TextAlign.center),
@@ -855,14 +1020,10 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
             child: Image.memory(file.bytes!,
                 width: double.infinity, height: 130, fit: BoxFit.cover))
       else
-        Container(
-            height: 90,
-            width: double.infinity,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F4),
-                borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.picture_as_pdf_outlined, size: 48)),
+        GestureDetector(
+          onTap: () => _openPdf(file),
+          child: _PdfThumbnail(bytes: file.bytes),
+        ),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(
@@ -884,11 +1045,21 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
     ]);
   }
 
+  Future<void> _openPdf(PlatformFile file) async {
+    if (file.bytes == null || !mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _LocalPdfViewer(bytes: file.bytes!, title: file.name),
+    ));
+  }
+
   Widget _field(String label, String hint, TextEditingController controller,
           {bool required = true,
           bool numeric = false,
           String? Function(String?)? validator,
-          bool ifsc = false}) =>
+          bool ifsc = false,
+          Widget? suffixIcon,
+          String? helperText,
+          Color? helperColor}) =>
       Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child:
@@ -899,19 +1070,31 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                 controller: controller,
                 enabled: !_saving,
                 style: _text(14),
-                decoration: _input(hint),
+                decoration: _input(hint).copyWith(
+                  suffixIcon: suffixIcon,
+                  errorText: ifsc && _ifscError != null ? _ifscError : null,
+                ),
                 keyboardType:
                     numeric ? TextInputType.number : TextInputType.text,
                 textCapitalization: ifsc
                     ? TextCapitalization.characters
                     : TextCapitalization.words,
-                inputFormatters:
-                    numeric ? [FilteringTextInputFormatter.digitsOnly] : null,
+                inputFormatters: numeric
+                    ? [FilteringTextInputFormatter.digitsOnly]
+                    : ifsc
+                        ? [LengthLimitingTextInputFormatter(11)]
+                        : null,
                 onChanged: ifsc ? _ifscChanged : (_) => _validateLive(),
                 validator: validator ??
                     (value) => required && (value ?? '').trim().isEmpty
                         ? 'Enter $label.'
                         : null),
+            if (helperText != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(helperText,
+                    style: _text(11, color: helperColor ?? Colors.grey)),
+              ),
           ]));
 
   @override
@@ -943,6 +1126,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 : 'Enter a valid account number.'),
                     _field('Confirm Account Number', '1234567890', _confirm,
                         numeric: true,
+                        suffixIcon: _accountMatchIcon(),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ||
                                     value?.trim() != _number.text.trim()
@@ -950,31 +1134,126 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 : null),
                     _field('IFSC Code', 'HDFC0001234', _ifsc,
                         ifsc: true,
+                        suffixIcon: _lookingUp
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : _ifscValid
+                                ? const Padding(
+                                    padding: EdgeInsets.only(right: 12),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('IFSC Validated',
+                                            style: TextStyle(
+                                                color: Colors.green,
+                                                fontSize: 11)),
+                                      ],
+                                    ),
+                                  )
+                                : _ifscError != null
+                                    ? const Icon(Icons.error,
+                                        color: Colors.red, size: 20)
+                                    : null,
+                        helperText: _ifscValid
+                            ? null
+                            : _ifscUnavailable
+                                ? 'IFSC verification is temporarily unavailable.'
+                                : null,
+                        helperColor: _ifscValid ? Colors.green : Colors.red,
                         validator: (value) => RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$')
                                 .hasMatch((value ?? '').trim().toUpperCase())
+                            && _ifscValid
                             ? null
                             : 'Enter a valid IFSC code.'),
                     _label('Account Type'),
-                    DropdownButtonFormField<String>(
+                    FormField<String>(
                         key: const ValueKey('Account Type'),
                         initialValue: _type,
-                        isExpanded: true,
-                        style: _text(14),
-                        decoration: _input('Select account type'),
-                        hint: Text('Select account type',
-                            style: _text(14, color: Colors.grey)),
-                        items: ['Saving Account', 'Current Account']
-                            .map((type) => DropdownMenuItem(
-                                value: type, child: Text(type)))
-                            .toList(),
-                        onChanged: _saving
-                            ? null
-                            : (value) {
-                                setState(() => _type = value);
-                                _validateLive();
-                              },
                         validator: (value) =>
-                            value == null ? 'Select an account type.' : null),
+                            value == null ? 'Select an account type.' : null,
+                        builder: (field) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Builder(
+                                  builder: (fieldContext) => GestureDetector(
+                                    onTap: _saving
+                                        ? null
+                                        : () async {
+                                            final box = fieldContext
+                                                .findRenderObject() as RenderBox;
+                                            final overlay = Overlay.of(context)
+                                                .context
+                                                .findRenderObject() as RenderBox;
+                                            final topLeft = box.localToGlobal(
+                                                Offset(0, box.size.height),
+                                                ancestor: overlay);
+                                            final bottomRight = box.localToGlobal(
+                                                Offset(box.size.width,
+                                                    box.size.height),
+                                                ancestor: overlay);
+                                            final selected = await showMenu<String>(
+                                              context: context,
+                                              position: RelativeRect.fromRect(
+                                                Rect.fromPoints(topLeft, bottomRight),
+                                                Offset.zero & overlay.size,
+                                              ),
+                                              color: Colors.white,
+                                              elevation: 3,
+                                              constraints: BoxConstraints(
+                                                minWidth: box.size.width,
+                                                maxWidth: box.size.width,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8)),
+                                              items: ['Saving Account',
+                                                      'Current Account']
+                                                  .map((type) => PopupMenuItem<String>(
+                                                        value: type,
+                                                        height: 48,
+                                                        child: SizedBox(
+                                                            width: box.size.width - 32,
+                                                            child: Text(type,
+                                                                style: _text(14))),
+                                                      ))
+                                                  .toList(),
+                                            );
+                                            if (selected != null && mounted) {
+                                              setState(() => _type = selected);
+                                              field.didChange(selected);
+                                              _validateLive();
+                                            }
+                                          },
+                                    child: InputDecorator(
+                                      decoration: _input('Select account type')
+                                          .copyWith(
+                                              errorText: field.errorText),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            _type ?? 'Select account type',
+                                            style: _type == null
+                                                ? _text(14,
+                                                    color: Colors.grey.shade500)
+                                                : _text(14),
+                                          ),
+                                          const Icon(Icons.keyboard_arrow_down,
+                                              size: 22, color: Colors.grey),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )),
                     const SizedBox(height: 14),
                     _field('Branch Name', 'Kormangala, Bengaluru', _branch,
                         required: false),

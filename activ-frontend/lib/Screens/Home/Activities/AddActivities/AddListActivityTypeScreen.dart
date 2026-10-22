@@ -14,7 +14,7 @@ import '../../../../Style/app_size.dart';
 import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
-import 'AddSelectedVenueFormScreen.dart';
+import 'AddVenuePhotoUploadScreen.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddListActivityTypeScreen extends StatefulWidget {
@@ -148,7 +148,9 @@ class _State extends State<AddListActivityTypeScreen> {
                                       {
                                         if(isActivitySelected)
                                         {
-                                          CommonUtilities.NavigateWithPush(context, AddSelectedVenueFormScreen());
+                                          CommonUtilities.NavigateWithPush(
+                                              context,
+                                              const AddVenuePhotoUploadScreen());
                                         }else{
                                           CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
                                         }

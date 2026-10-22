@@ -506,6 +506,29 @@ export class MailService {
     }
   }
 
+  async sendSupportRequestEmail(params: {
+    partnerName: string;
+    partnerEmail?: string;
+    subject: string;
+    message: string;
+  }) {
+    const supportEmail = this.configService.get<string>(
+      'SUPPORT_EMAIL',
+      'support@activ.live',
+    );
+    return this.googleOAuthService.sendEmail({
+      recipientEmail: supportEmail,
+      recipientName: 'ACTIV Support',
+      subject: `[Partner Support] ${params.subject}`,
+      text: [
+        `Partner: ${params.partnerName}`,
+        `Email: ${params.partnerEmail || 'Not provided'}`,
+        '',
+        params.message,
+      ].join('\n'),
+    });
+  }
+
   async sendPartnerRejectionEmail(params: {
     toEmail: string;
     firstName: string;

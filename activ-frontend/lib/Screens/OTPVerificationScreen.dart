@@ -16,6 +16,7 @@ import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
 import 'MobileNumberScreen.dart';
 import '../Utills/venue_onboarding_draft.dart';
+import '../Database/auth_service.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   const OTPVerificationScreen({
@@ -197,6 +198,30 @@ class _State extends State<OTPVerificationScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<bool> _syncFirebasePartnerMapping(Map<String, dynamic>? partner) async {
+    final rawPhone = partner?['phone']?.toString() ?? userMobileNumber;
+    final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) return false;
+    final nationalNumber = digits.length == 12 && digits.startsWith('91')
+        ? digits.substring(2)
+        : digits.substring(digits.length - 10);
+    final authService = AuthService();
+    await authService.ensureAnonymousLogin();
+    await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
+    await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
+    return authService.registerWithNumber(
+      'IND (+91)',
+      nationalNumber,
+      'unknown',
+      'unknown',
+      'unknown',
+      'unknown',
+      'unknown',
+      DateTime.now().toIso8601String(),
+      'OTPVerification',
+    );
+  }
+
   Future<void> handleOTP() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
@@ -217,7 +242,7 @@ class _State extends State<OTPVerificationScreen> {
       if (!mounted) return;
 
       CommonUtilities.showLog("Verify OTP status: ${response.statusCode}");
-      CommonUtilities.showLog("Verify OTP response: ${response.body}");
+      CommonUtilities.showLog("Verify OTP completed with status ${response.statusCode}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
@@ -230,7 +255,7 @@ class _State extends State<OTPVerificationScreen> {
 
         if (token.isEmpty) {
           CommonUtilities.showLog(
-              "Verify OTP missing token. Response: ${response.body}");
+              "Verify OTP completed without an access token");
           _showMessage(context,
               'OTP verified, but login token was missing. Please try again.');
           return;
@@ -253,6 +278,11 @@ class _State extends State<OTPVerificationScreen> {
         } else {
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");
+          if (!await _syncFirebasePartnerMapping(body['data']?['partner'])) {
+            _showMessage(context,
+                'OTP verified, but account synchronization failed. Please try again.');
+            return;
+          }
           await _restorePartnerDraft(body['data']?['partner']);
         }
 
@@ -294,7 +324,6 @@ class _State extends State<OTPVerificationScreen> {
       );
 
       CommonUtilities.showLog("My venues status: ${response.statusCode}");
-      CommonUtilities.showLog("My venues body: ${response.body}");
 
       if (!mounted) return;
 

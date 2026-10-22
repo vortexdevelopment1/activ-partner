@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -167,6 +168,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _removePhoto() async {
+    if (_uploading) return;
+    setState(() => _uploading = true);
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      final path = _teamMember ? '/team/profile/avatar' : '/partners/avatar';
+      final client = widget.client ?? http.Client();
+      try {
+        final response = await client.delete(Uri.parse('$BASE_URL$path'),
+            headers: {'Authorization': 'Bearer $token', 'accept': '*/*'});
+        if (response.statusCode != 200 && response.statusCode != 201) {
+          throw Exception('Remove failed');
+        }
+      } finally {
+        if (widget.client == null) client.close();
+      }
+      await _loadProfile();
+    } catch (_) {
+      if (mounted) {
+        CommonUtilities.createSnackBar(
+            context, 'Unable to remove photo. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _showPhotoOptions() async {
+    if (_uploading) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Change Profile Photo'),
+            onTap: () => Navigator.pop(sheetContext, 'change'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: Colors.red),
+            title: const Text('Remove Profile Photo',
+                style: TextStyle(color: Colors.red)),
+            onTap: () => Navigator.pop(sheetContext, 'remove'),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'change') await _changePhoto();
+    if (action == 'remove') await _removePhoto();
+  }
+
   TextStyle _text(double size,
           {bool bold = false, Color color = const Color(0xFF202020)}) =>
       TextStyle(
@@ -247,22 +304,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text('Your Information',
                 style: _text(mini ? 18 : (compact ? 19 : 20), bold: true)),
             SizedBox(height: mini ? 12 : (compact ? 14 : 18)),
-            _field('Full Name', _name, Icons.person_outline_rounded,
+            _field('Full Name', _name, 'assets/iconamoon_profile.svg',
                 compact: compact, mini: false),
-            _field('Email Address', _email, Icons.mail_outline_rounded,
+            _field('Email Address', _email, 'assets/mail_outline_rounded.svg',
                 compact: compact, mini: false),
             _field('Primary Phone Number', _phoneLabel(_phone),
-                Icons.phone_outlined,
+                'assets/phone_outlined.svg',
                 compact: compact,
                 mini: false),
             if (_teamMember)
-              _field('Role', _role, Icons.badge_outlined,
+              _field('Role', _role, 'assets/iconamoon_profile.svg',
                   compact: compact, mini: false)
             else
               _field(
                   'Venue Primary Number',
                   _venueError ?? _phoneLabel(_venuePhone),
-                  Icons.fax_outlined,
+                  'assets/fax_outlined.svg',
                   compact: compact,
                   mini: false),
             _supportNotice(compact: compact, mini: mini),
@@ -352,7 +409,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             side: BorderSide(color: _purple, width: .7)),
                         child: IconButton(
                             tooltip: 'Edit profile photo',
-                            onPressed: _uploading ? null : _changePhoto,
+                            onPressed: _uploading ? null : _showPhotoOptions,
                             style: IconButton.styleFrom(
                                 minimumSize: const Size.square(24),
                                 maximumSize: const Size.square(24),
@@ -376,29 +433,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textAlign: TextAlign.center),
       ]);
 
-  Widget _defaultAvatar() => const Icon(Icons.person_outline_rounded,
-      size: 64, color: Color(0xFF505050), semanticLabel: 'Partner profile');
+  Widget _defaultAvatar() => SvgPicture.asset(
+        'assets/iconamoon_profile.svg',
+        width: 64,
+        height: 64,
+        semanticsLabel: 'Partner profile',
+      );
 
-  Widget _field(String label, String value, IconData icon,
+  Widget _field(String label, String value, String iconAsset,
           {required bool compact, required bool mini}) =>
       Container(
         margin: EdgeInsets.only(bottom: mini ? 7 : (compact ? 10 : 14)),
         padding: EdgeInsets.symmetric(
-            horizontal: compact ? 18 : 20,
+            horizontal: compact ? 14 : 16,
             vertical: mini ? 7 : (compact ? 10 : 14)),
         constraints: BoxConstraints(minHeight: mini ? 61 : (compact ? 74 : 86)),
         decoration: BoxDecoration(
             color: Colors.white, borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
           Container(
-              width: mini ? 44 : (compact ? 50 : 56),
-              height: mini ? 44 : (compact ? 50 : 56),
+              width: mini ? 48 : (compact ? 56 : 60),
+              height: mini ? 48 : (compact ? 56 : 60),
               decoration: BoxDecoration(
                   color: const Color(0xFFD9D9D9),
                   borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon,
-                  size: mini ? 24 : (compact ? 27 : 30),
-                  color: Colors.black)),
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: mini ? 24 : (compact ? 28 : 32),
+                height: mini ? 24 : (compact ? 28 : 32),
+                child: SvgPicture.asset(
+                  iconAsset,
+                  fit: BoxFit.contain,
+                ),
+              )),
           SizedBox(width: mini ? 12 : (compact ? 14 : 16)),
           Expanded(
               child: Column(
@@ -414,8 +481,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     overflow: TextOverflow.ellipsis),
               ])),
           const SizedBox(width: 8),
-          const Icon(Icons.lock_outline_rounded,
-              size: 25, color: Colors.black, semanticLabel: 'Read only'),
+          SvgPicture.asset(
+            'assets/lock_outline_rounded.svg',
+            width: 25,
+            height: 25,
+            semanticsLabel: 'Read only',
+          ),
         ]),
       );
 
@@ -430,9 +501,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFA857C8))),
-        child: Row(children: [
-          Icon(Icons.headset_mic_outlined,
-              color: _purple, size: mini ? 28 : 36),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          Padding(
+            padding: EdgeInsets.only(top: mini ? 2 : 5),
+            child: SvgPicture.asset(
+              'assets/contact_support_h.svg',
+              width: mini ? 28 : 36,
+              height: mini ? 28 : 36,
+            ),
+          ),
           SizedBox(width: mini ? 10 : (compact ? 14 : 16)),
           Expanded(
               child: Column(

@@ -24,6 +24,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   handleRequest(err, user, info) {
     if (err || !user) {
+      const reason = info?.name === 'TokenExpiredError'
+        ? 'expired'
+        : info?.name === 'JsonWebTokenError'
+          ? 'invalid'
+          : 'missing or invalid';
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`JWT authentication rejected: ${reason}`);
+      }
       throw err || new UnauthorizedException('Invalid or expired token');
     }
     return user;

@@ -68,6 +68,7 @@ dependencies:
   dotted_border: ^2.1.0
   file_picker: ^10.3.2
   flutter_pdfview: ^1.4.0
+  pdfx: ^2.11.0
   firebase_core: ^3.12.1
   firebase_auth: ^5.5.1 #For Firebase Authentication, used in Firebase FireStore Database
   cloud_firestore: ^5.6.5 #For Firebase FireStore Database
@@ -137,6 +138,16 @@ flutter:
     - assets/ic_pan.png
     - assets/ic_calendar.png
     - assets/ic_clock.png
+    - assets/iconamoon_profile.svg
+    - assets/mail_outline_rounded.svg
+    - assets/phone_outlined.svg
+    - assets/fax_outlined.svg
+    - assets/lock_outline_rounded.svg
+    - assets/contact_support_h.svg
+    - assets/verification_badge.svg
+    - assets/three_cards.svg
+    - assets/Vector.svg
+    - assets/search_team.svg
     - assets/ic_fencing.png
     - assets/ic_question.png
     - assets/ic_no_bookings.png
