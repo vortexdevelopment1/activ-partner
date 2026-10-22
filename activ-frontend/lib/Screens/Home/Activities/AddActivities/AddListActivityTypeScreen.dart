@@ -4,7 +4,8 @@ import 'package:activ_app/Style/activity_logos.dart';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import '../../../../api_calling/activity_setup_api.dart';
 import 'package:flutter/material.dart';
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 
@@ -18,7 +19,8 @@ import 'AddVenuePhotoUploadScreen.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddListActivityTypeScreen extends StatefulWidget {
-  const AddListActivityTypeScreen({super.key});
+  const AddListActivityTypeScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   _State createState() => _State();
@@ -26,6 +28,25 @@ class AddListActivityTypeScreen extends StatefulWidget {
 
 class _State extends State<AddListActivityTypeScreen> {
   List<VenueTypeModel> resultList = [];
+  late final ActivitySetupApi _api;
+  List<Map<String, dynamic>> _venues = [];
+  String? _venueId, _loadError;
+  @override
+  void dispose() {
+    _api.dispose();
+    scrollController.dispose();
+    super.dispose();
+  }
+
+  Set<String> get _existingCategories =>
+      (_venues.where((v) => v['id'] == _venueId).firstOrNull?['services']
+                  as List? ??
+              [])
+          .whereType<Map>()
+          .where((s) => ['approved', 'pending']
+              .contains(s['status']?.toString().toLowerCase()))
+          .map((s) => s['categoryId'].toString())
+          .toSet();
   int page = 1;
   String noDataFound = NO_DATA_FOUND;
   ScrollController scrollController = ScrollController();
@@ -35,48 +56,56 @@ class _State extends State<AddListActivityTypeScreen> {
 
   _State() {
     noDataFound = LOADING;
-    page=1;
+    page = 1;
   }
 
   @override
   void initState() {
+    super.initState();
+    _api = ActivitySetupApi(client: widget.client);
     isShimmerLoading = true;
     fetchData();
-    super.initState();
   }
 
   // Fetch Data Name
   Future<void> fetchData() async {
+    if (mounted)
+      setState(() {
+        isShimmerLoading = true;
+        _loadError = null;
+      });
     try {
-      var snapshot = await FirebaseFirestore.instance
-          .collection("venue_operate_type")
-          .doc("main_document")
-          .get();
-
-      if (snapshot.exists) {
-        var data = snapshot.data();
-        var list = data?["venue_type"] as List<dynamic>;
-
-        setState(() {
-          resultList = list.map((e) => VenueTypeModel.fromJson(e)).toList();
-        });
-      }
-      isShimmerLoading = false;
+      final categories = await _api.categories();
+      final venues = await _api.approvedVenues();
+      final selected = await SharedPreference.readStr('venue_id');
+      if (!mounted) return;
+      _venues = venues;
+      _venueId = venues.any((v) => v['id'] == selected)
+          ? selected
+          : venues.length == 1
+              ? venues.first['id'].toString()
+              : null;
+      resultList = categories
+          .map((c) => VenueTypeModel(
+              id: c['id'].toString(),
+              title: c['name'].toString(),
+              type: c['type']?.toString() ?? ''))
+          .toList();
+      if (venues.isEmpty)
+        _loadError = 'Your venue must be approved before adding an activity.';
     } catch (e) {
-      CommonUtilities.showLog("Error fetching Data: $e");
-
+      if (mounted) _loadError = e.toString();
+    } finally {
+      if (mounted) setState(() => isShimmerLoading = false);
     }
   }
 
-
-  void goToBackScreen(BuildContext context)
-  {
+  void goToBackScreen(BuildContext context) {
     Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-
     return PopScope(
       // Setting canPop to false means pop action can't happen directly
       canPop: false,
@@ -101,63 +130,90 @@ class _State extends State<AddListActivityTypeScreen> {
               body: Container(
                 decoration: context.getYellowGradient,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0,0,0,0),
+                  padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
                   child: Column(
                     children: [
                       const OnboardingHeader(),
-
                       Container(
                         margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                         child: getStepBarCount(1 / 6, 1, 6),
                       ),
-
+                      if (_venues.length > 1)
+                        Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 15),
+                            child: DropdownButtonFormField<String>(
+                                value: _venueId,
+                                hint: const Text('Select an approved venue'),
+                                isExpanded: true,
+                                items: _venues
+                                    .map((v) => DropdownMenuItem(
+                                        value: v['id'].toString(),
+                                        child: Text(v['name'].toString())))
+                                    .toList(),
+                                onChanged: (value) => setState(() {
+                                      _venueId = value;
+                                      isActivitySelected = false;
+                                      for (final item in resultList) {
+                                        item.isSelected = false;
+                                      }
+                                    }))),
                       getOperateText(),
-
                       getOperateSubText(),
-
-                      isShimmerLoading == true ? buildShimmer(context) :
-                      Expanded(
-                        flex: 9,
-                        child: getList(context),
-                      ),
-
+                      isShimmerLoading == true
+                          ? buildShimmer(context)
+                          : Expanded(
+                              flex: 9,
+                              child: getList(context),
+                            ),
                       Container(
                         margin: const EdgeInsets.only(top: 10),
                         child: Column(
                           children: [
                             bottomBarShadow(),
-
                             Row(
                               children: [
-
                                 Expanded(
                                     flex: 3,
                                     child: InkWell(
-                                      onTap: ()
-                                        {
+                                        onTap: () {
                                           Navigator.pop(context);
                                         },
-                                        child: getBackButton(context, "Back", "selectActivity"))
-                                ),
-
-
+                                        child: getBackButton(context, "Back",
+                                            "selectActivity"))),
                                 Expanded(
                                   flex: 7,
                                   child: InkWell(
-                                      onTap: ()
-                                      {
-                                        if(isActivitySelected)
-                                        {
+                                      onTap: () async {
+                                        if (isActivitySelected &&
+                                            _venueId != null) {
+                                          await SharedPreference.addStringToSF(
+                                              'venue_id', _venueId!);
+                                          final chosen = resultList
+                                              .firstWhere((v) => v.isSelected);
+                                          await SharedPreference.addStringToSF(
+                                              'operate_value',
+                                              jsonEncode({
+                                                'id': chosen.id,
+                                                'title': chosen.title
+                                              }));
+                                          if (!context.mounted) return;
                                           CommonUtilities.NavigateWithPush(
                                               context,
-                                              const AddVenuePhotoUploadScreen());
-                                        }else{
-                                          CommonUtilities.createSnackBar(context, ConstantsMessages.selectVenueType);
+                                              AddVenuePhotoUploadScreen(
+                                                  client: widget.client));
+                                        } else {
+                                          CommonUtilities.createSnackBar(
+                                              context,
+                                              ConstantsMessages
+                                                  .selectVenueType);
                                         }
                                       },
-                                      child: isActivitySelected ? getButtonBlack(context, "Next", "selectActivity") :
-                                      getButtonGray(context, "Next", "selectActivity")
-                                  ),
+                                      child: isActivitySelected &&
+                                              _venueId != null
+                                          ? getButtonBlack(
+                                              context, "Next", "selectActivity")
+                                          : getButtonGray(context, "Next",
+                                              "selectActivity")),
                                 )
                               ],
                             )
@@ -167,16 +223,13 @@ class _State extends State<AddListActivityTypeScreen> {
                     ],
                   ),
                 ),
-              )
-          ),
+              )),
         ),
       ),
     );
   }
 
-
-  Widget getOperateText()
-  {
+  Widget getOperateText() {
     return Container(
       margin: const EdgeInsets.only(top: 5, left: 15, right: 15, bottom: 10),
       alignment: Alignment.centerLeft,
@@ -186,15 +239,13 @@ class _State extends State<AddListActivityTypeScreen> {
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
-            height: 1.2
-        ),
+            height: 1.2),
         textAlign: TextAlign.left,
       ),
     );
   }
 
-  Widget getOperateSubText()
-  {
+  Widget getOperateSubText() {
     return Container(
       margin: const EdgeInsets.only(left: 15, right: 15, bottom: 8),
       alignment: Alignment.centerLeft,
@@ -211,8 +262,20 @@ class _State extends State<AddListActivityTypeScreen> {
 
   /// To get the List
   Widget getList(BuildContext context) {
-    // Filter only active items
-    final activeList = resultList.where((model) => model.active).toList();
+    if (_loadError != null)
+      return Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(_loadError!),
+        TextButton(onPressed: fetchData, child: const Text('Retry'))
+      ]));
+    final activeList = resultList
+        .where(
+            (model) => model.active && !_existingCategories.contains(model.id))
+        .toList();
+    if (activeList.isEmpty)
+      return const Center(
+          child: Text(
+              'All available sports are already active or under review at this venue.'));
 
     return Container(
       margin: EdgeInsets.fromLTRB(10, 0, 10, 0),
@@ -222,16 +285,17 @@ class _State extends State<AddListActivityTypeScreen> {
         onEndOfPage: () {},
         child: RefreshIndicator(
           onRefresh: _pullRefresh,
-          color: AppColors.lineGradientStart,             // loader color
+          color: AppColors.lineGradientStart, // loader color
           backgroundColor: AppColors.yellowTop, // background circle color
-          strokeWidth: 3.0,              // thickness
+          strokeWidth: 3.0, // thickness
           displacement: 30,
           child: GridView.builder(
             shrinkWrap: true,
             primary: false,
             physics: ClampingScrollPhysics(),
             scrollDirection: Axis.vertical,
-            padding: const EdgeInsets.only(top: 10, bottom: 0, left: 0, right: 0),
+            padding:
+                const EdgeInsets.only(top: 10, bottom: 0, left: 0, right: 0),
             itemCount: activeList.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -250,22 +314,24 @@ class _State extends State<AddListActivityTypeScreen> {
   }
 
   /// Row item View
-  Widget rowListItem({required VenueTypeModel model, required BuildContext context,})
-  {
+  Widget rowListItem({
+    required VenueTypeModel model,
+    required BuildContext context,
+  }) {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 5, 5, 10),
       decoration: model.isSelected
           ? BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.borderGradient1, AppColors.borderGradient2],
-        ),
-        borderRadius: BorderRadius.circular(12),
-      )
+              gradient: const LinearGradient(
+                colors: [AppColors.borderGradient1, AppColors.borderGradient2],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            )
           : BoxDecoration(
-        color: AppColors.gray,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray, width: 1),
-      ),
+              color: AppColors.gray,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.gray, width: 1),
+            ),
       child: InkWell(
         onTap: () async {
           // Single selection
@@ -284,8 +350,10 @@ class _State extends State<AddListActivityTypeScreen> {
           // Convert to String
           String jsonString = jsonEncode(operateValue);
           // Save in SharedPreferences
-          SharedPreference.addStringToSF("operate_value", checkString(jsonString));
-          String operateCValue = checkString(await SharedPreference.readStr("operate_value"));
+          SharedPreference.addStringToSF(
+              "operate_value", checkString(jsonString));
+          String operateCValue =
+              checkString(await SharedPreference.readStr("operate_value"));
           CommonUtilities.showLog("Saved operate_value => $operateCValue");
           setState(() {});
         },
@@ -313,36 +381,30 @@ class _State extends State<AddListActivityTypeScreen> {
     );
   }
 
-
-
   String setTypeImages(VenueTypeModel model) {
     return activityLogoAsset(model.title);
   }
 
-
-
   /// Image Layout.
-  Widget getImage(VenueTypeModel model, BuildContext context)
-  {
+  Widget getImage(VenueTypeModel model, BuildContext context) {
     return Container(
-        margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
-        child: SizedBox(
-          width: 46,
-          height: 59,
-          child: Image.asset(
-            setTypeImages(model),
-            fit: BoxFit.contain,
-          ),
+      margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
+      child: SizedBox(
+        width: 46,
+        height: 59,
+        child: Image.asset(
+          setTypeImages(model),
+          fit: BoxFit.contain,
         ),
+      ),
     );
   }
 
-  Widget getTitle(VenueTypeModel model, BuildContext context)
-  {
+  Widget getTitle(VenueTypeModel model, BuildContext context) {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.title!="") ? model.title : "",
+        (model.title != "") ? model.title : "",
         textAlign: TextAlign.center,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -355,12 +417,11 @@ class _State extends State<AddListActivityTypeScreen> {
     );
   }
 
-  Widget getDescription(VenueTypeModel model, BuildContext context)
-  {
+  Widget getDescription(VenueTypeModel model, BuildContext context) {
     return Container(
       margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
-        (model.description!="") ? model.description : "",
+        (model.description != "") ? model.description : "",
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -380,8 +441,7 @@ class _State extends State<AddListActivityTypeScreen> {
     fetchData();
   }
 
-  Widget buildShimmer(BuildContext context) =>
-      Expanded(
+  Widget buildShimmer(BuildContext context) => Expanded(
         flex: 9,
         child: Container(
           decoration: context.getYellowGradient,
@@ -391,9 +451,7 @@ class _State extends State<AddListActivityTypeScreen> {
             shrinkWrap: true,
             children: List.generate(
                 10, // or any desired number of items
-                    (index) => getShimmerLayoutWithoutImage(context)
-            ),
-
+                (index) => getShimmerLayoutWithoutImage(context)),
           ),
         ),
       );

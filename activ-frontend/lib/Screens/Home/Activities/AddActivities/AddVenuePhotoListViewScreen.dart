@@ -14,7 +14,7 @@ import '../../../../api_calling/api_request.dart';
 import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/activity_photo_upload.dart';
 import '../../../CommonCode.dart';
-import 'AddVenueTimingScreen.dart';
+import 'AddSelectedVenueFormScreen.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
@@ -394,7 +394,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                               if (!context.mounted) return;
 
                                               // Navigate to next screen
-                                              CommonUtilities.NavigateWithPush(context, AddVenueTimingScreen(activityId: activityId));
+                                              CommonUtilities.NavigateWithPush(context, AddSelectedVenueFormScreen(activityId: activityId, client: widget.client));
                                             } catch (e) {
                                               // Close loader if error occurs
                                               _hideUploadLoader();

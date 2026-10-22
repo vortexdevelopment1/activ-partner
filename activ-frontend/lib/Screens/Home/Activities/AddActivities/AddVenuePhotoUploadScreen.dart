@@ -1,3 +1,4 @@
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -18,7 +19,8 @@ import 'AddVenuePhotoListViewScreen.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
-  const AddVenuePhotoUploadScreen({super.key});
+  const AddVenuePhotoUploadScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<AddVenuePhotoUploadScreen> createState() => _State();
@@ -463,6 +465,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                 MaterialPageRoute(
                                                   builder: (context) =>
                                                       AddVenuePhotoListViewScreen(
+                                                    client: widget.client,
                                                         images: _selectedImages,
                                                         onPhotosChanged: (images) {
                                                           if (!mounted) return;

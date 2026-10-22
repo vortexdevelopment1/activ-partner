@@ -1,411 +1,323 @@
-import 'dart:convert';
-
-import 'package:activ_app/Screens/StringExtensions.dart';
-import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../../../../Style/app_size.dart';
-import '../../../../Style/constants_messages.dart';
-import '../../../../Utills/common_utilities.dart';
-import '../../../../api_calling/api_request.dart';
-import '../../../CommonCode.dart';
-import 'AddActivityAmenitiesScreen.dart';
-import '../../../onboarding_widgets.dart';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
 
+import '../../../../api_calling/activity_setup_api.dart';
+import '../../../CommonCode.dart';
+import '../../../onboarding_widgets.dart';
+import 'AddActivityAmenitiesScreen.dart';
 
 class AddSelectedVenueFormScreen extends StatefulWidget {
-  const AddSelectedVenueFormScreen({super.key});
-
+  const AddSelectedVenueFormScreen(
+      {super.key, required this.activityId, this.client});
+  final String activityId;
+  final http.Client? client;
   @override
-  State<AddSelectedVenueFormScreen> createState() => _State();
+  State<AddSelectedVenueFormScreen> createState() => _DetailsState();
 }
 
-class _State extends State<AddSelectedVenueFormScreen> {
-
-  TextEditingController numberOfController = TextEditingController();
-  TextEditingController flooringTypeController = TextEditingController();
-  TextEditingController maxCapacityController = TextEditingController();
-  TextEditingController descriptionController = TextEditingController();
-
-  bool isButtonEnabled = false;
-  bool isChecked = false;
-  String phoneCode = "", userMobileNumber = "", activityName = "Activity";
-
-  _State()
-  {
-    getData();
-  }
+class _DetailsState extends State<AddSelectedVenueFormScreen> {
+  final _form = GlobalKey<FormState>();
+  final _answers = <String, dynamic>{};
+  final _controllers = <String, TextEditingController>{};
+  late final ActivitySetupApi _api;
+  List<Map<String, dynamic>> _questions = [];
+  bool _loading = true, _saving = false;
+  String? _error;
+  String? _uploadingQuestion;
 
   @override
   void initState() {
     super.initState();
-  }
-
-  getData() async
-  {
-    phoneCode = checkString(await SharedPreference.readStr("phoneCode"));
-    userMobileNumber = checkString(await SharedPreference.readStr("userMobileNumber"));
-    final raw = checkString(await SharedPreference.readStr("operate_value"));
-    if (raw.isNotEmpty) {
-      try {
-        activityName = checkString(jsonDecode(raw)["title"]);
-      } catch (_) {}
-    }
-    setState(() {});
+    _api = ActivitySetupApi(client: widget.client);
+    _load();
   }
 
   @override
   void dispose() {
-    numberOfController.dispose();
-    flooringTypeController.dispose();
-    maxCapacityController.dispose();
-    descriptionController.dispose();
+    _api.dispose();
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      child: Stack(
-        children: [
-          /*To Set Top Header Color*/
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.yellowTop,
-            ),
-          ),
-          /*To Set Bottom Header Color*/
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 100,
-              color: AppColors.white,
-            ),
-          ),
-          SafeArea(
-            top: true,
-            bottom: true,
-            left: false,
-            right: false,
-            child: Scaffold(
-              body: Container(
-                decoration: context.getYellowGradient,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double width = constraints.maxWidth;
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final questions = await _api.questions(widget.activityId);
+      if (!mounted) return;
+      for (final question in questions) {
+        final id = question['id'].toString();
+        final value = question['answer'];
+        if (value != null) _answers[id] = value;
+        _controllers.putIfAbsent(
+            id, () => TextEditingController(text: value?.toString() ?? ''));
+      }
+      setState(() => _questions = questions);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
-                    bool isMobile = width < 600;
-                    bool isTablet = width >= 600 && width < 1100;
+  Future<void> _next() async {
+    if (_saving ||
+        _uploadingQuestion != null ||
+        !_form.currentState!.validate()) {
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _api.saveAnswers(
+          widget.activityId,
+          Map.fromEntries(_answers.entries.where((entry) =>
+              entry.value != null &&
+              entry.value.toString().trim().isNotEmpty &&
+              (entry.value is! List || (entry.value as List).isNotEmpty))));
+      if (!mounted) return;
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => AddActivityAmenitiesScreen(
+                  activityId: widget.activityId, client: widget.client)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
-                    double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
+  List<String> _options(Map<String, dynamic> question) {
+    final raw = question['options'];
+    return raw is List
+        ? raw
+            .map((v) => v is Map
+                ? (v['label'] ?? v['value'] ?? '').toString()
+                : v.toString())
+            .where((v) => v.isNotEmpty)
+            .toList()
+        : raw is String
+            ? raw
+                .split(RegExp(r'[,|]'))
+                .map((v) => v.trim())
+                .where((v) => v.isNotEmpty)
+                .toList()
+            : [];
+  }
 
-                    return Container(
-                      //width: containerWidth,
-                      //margin: const EdgeInsets.only(right: 20),
-                      //padding: EdgeInsets.all(isMobile ? 20 : 30),
-                      child: Container(
-                        margin: EdgeInsets.fromLTRB(0, 0, 0, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const OnboardingHeader(),
-
-                            Expanded(
-                              child: Container(
-                                margin: EdgeInsets.fromLTRB(15, 0, 15, 0),
-                                child: ListView(
-                                  shrinkWrap: true,
-                                  children: [
-
-                                    getStepBarCount(4 / 6, 4, 6),
-
-                                    getText(),
-
-                                    getSubText(),
-
-
-                                    getLabel('Number of Courts', 'number_of_court'),
-                                    getEnterField(context, numberOfController, "Enter number of courts", "numberOfCourts"),
-
-                                    getLabel('Flooring Type', ''),
-                                    getEnterField(context, flooringTypeController, "Enter flooring type", "flooringType"),
-
-                                    getLabel('Maximum Capacity', ''),
-                                    getEnterField(context, maxCapacityController, "Enter maximum capacity", "maxCapacity"),
-                                    getLocationUrlCopyText(),
-
-                                    getLabel('Description', ''),
-                                    getEnterField(context, descriptionController, "Enter description", "description"),
-
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            Container(
-                              margin: const EdgeInsets.only(top: 10),
-                              child: Column(
-                                children: [
-                                  bottomBarShadow(),
-
-                                  Row(
-                                    children: [
-
-
-                                      Expanded(
-                                          flex: 3,
-                                          child: InkWell(
-                                              onTap: ()
-                                              {
-                                                Navigator.pop(context);
-                                              },
-                                              child: getBackButton(context, "Back", "tellUsAbout"))
-                                      ),
-
-
-                                      Expanded(
-                                        flex: 7,
-                                        child: InkWell(
-                                            onTap: ()
-                                            {
-                                              if(validation(context))
-                                              {
-                                                SharedPreference.addStringToSF("number_of_court", checkString(numberOfController.text.trim().toString()));
-                                                SharedPreference.addStringToSF("flooring_type", checkString(flooringTypeController.text.trim().toString()));
-                                                SharedPreference.addStringToSF("maximum_capacity", checkString(maxCapacityController.text.trim().toString()));
-                                                SharedPreference.addStringToSF("description", checkString(descriptionController.text.trim().toString()));
-
-                                                CommonUtilities.NavigateWithPush(context, const AddActivityAmenitiesScreen());
-                                                //CommonUtilities.NavigateWithPush(context, AddCustomerPlacesOffer());
-
-                                              } else{}
-                                            },
-                                            child: getButtonBlack(context, "Next", "tellUsAbout")
-                                        ),
-                                      )
+  Widget _field(Map<String, dynamic> question) {
+    final id = question['id'].toString();
+    final type = question['questionType']?.toString().toLowerCase() ?? 'text';
+    final required = question['isRequired'] == true;
+    final options = _options(question);
+    String? validate(dynamic value) => required &&
+            (value == null ||
+                value.toString().trim().isEmpty ||
+                (value is List && value.isEmpty))
+        ? 'Please answer this question'
+        : null;
+    Widget input;
+    if (type == 'file') {
+      input = FormField<String>(
+          initialValue: _answers[id]?.toString(),
+          validator: validate,
+          builder: (field) =>
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                OutlinedButton(
+                    onPressed: _uploadingQuestion != null
+                        ? null
+                        : () async {
+                            final selected = await FilePicker.platform
+                                .pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: [
+                                      'pdf',
+                                      'jpg',
+                                      'jpeg',
+                                      'png'
                                     ],
-
-                                  )
-                                ],
-                              ),
-                            )
-
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-
-  Widget getText()
-  {
-    return Container(
-      margin: EdgeInsets.only(top: 5),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        activityName,
-        style: const TextStyle(
-            fontSize: AppSize.size_25,
-            fontFamily: 'Satoshi',
-            color: AppColors.darkBlack,
-            height: 1.2
-        ),
-        textAlign: TextAlign.left,
-      ),
-    );
-  }
-
-  Widget getSubText()
-  {
-    return Container(
-      margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      child: const Text(
-        "Provide Activity Specific Details",
-        style: TextStyle(
-            fontSize: AppSize.size_16,
-            fontFamily: 'Satoshi',
-            color: AppColors.black1,
-            height: 1.4
-        ),
-        textAlign: TextAlign.left,
-      ),
-    );
-  }
-
-  Widget getLabel(String label, String type) {
-    return Row(
-      children: [
-        Container(
-          margin: type == "number_of_court" ? EdgeInsets.fromLTRB(0, 15, 0, 0) : EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: Text(
-            label,
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.black1,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        ),
-        Container(
-          margin: type == "number_of_court" ? EdgeInsets.fromLTRB(0, 15, 0, 0) : EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.red,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget getEnterField(BuildContext context, TextEditingController controller, String hint, String fieldNumber) {
-    return Container(
-      margin: fieldNumber == "description" ? const EdgeInsets.fromLTRB(0, 8, 0, 10) : const EdgeInsets.fromLTRB(0, 8, 0, 0),
-      decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(8),
-            topRight: Radius.circular(8),
-            bottomLeft: Radius.circular(8),
-            bottomRight: Radius.circular(8),
-          ),
-          border: Border.all(color: AppColors.gray, width: 1)),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        child: Container(
-          child: TextFormField(
-            controller: controller,
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.sentences,
-            keyboardType: (fieldNumber == "numberOfCourts" || fieldNumber == "maxCapacity") ? TextInputType.number : TextInputType.text,
-            cursorColor: AppColors.cursorBlack,
-            maxLines: fieldNumber == "description" ? 3 : 1,
-            inputFormatters: (fieldNumber == "numberOfCourts" || fieldNumber == "maxCapacity")
-                ? [FilteringTextInputFormatter.digitsOnly]
-                : [],
-            style: TextStyle(
-              fontSize:  AppSize.size_14,
-              fontFamily: 'Satoshi',
-              color: AppColors.darkBlack,
-            ),
-            decoration: InputDecoration(
-              hintText: hint, // Set the hint label text
-              hintStyle: TextStyle(
-                fontSize:  AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.hintColor, // Text color of the hint label
-              ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget getLocationUrlCopyText() {
-    return Container(
-      margin: EdgeInsets.only(top: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-              width: 20,
-              height: 20,
-              child: Image.asset('assets/ic_question.png')
-          ),
-          Container(
-            alignment: Alignment.center,
-            margin: EdgeInsets.fromLTRB(0, 3, 0, 0),
-            child: const Text(
-              "Maximum people that can use this activity at once",
-              style: TextStyle(
-                  fontSize: AppSize.size_12,
-                  fontFamily: 'Satoshi',
-                  color: AppColors.hintColor,
-                  height: 1
-              ),
-              textAlign: TextAlign.left,
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget getEmailLabel() {
-    return Row(
-      children: [
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: const Text(
-            "Email Address",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.black1,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        ),
-
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 15, 0, 0),
-          child: const Text(
-            "*",
-            style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.red,
-                height: 1
-            ),
-            textAlign: TextAlign.left,
-          ),
-        )
-      ],
-    );
-  }
-
-  bool validation(BuildContext context)
-  {
-    if (numberOfController.text.toString().toString().isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.pleaseEnterNumberOfCourt);
-      return false;
+                                    withData: true);
+                            if (selected == null || !mounted) return;
+                            final file = selected.files.single;
+                            if (file.bytes == null) return;
+                            setState(() => _uploadingQuestion = id);
+                            try {
+                              final url = await _api.uploadAnswerFile(
+                                  widget.activityId,
+                                  id,
+                                  file.bytes!,
+                                  file.name);
+                              if (!mounted) return;
+                              _answers[id] = url;
+                              field.didChange(url);
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(e.toString())));
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => _uploadingQuestion = null);
+                              }
+                            }
+                          },
+                    child: Text(_uploadingQuestion == id
+                        ? 'Uploading...'
+                        : field.value == null
+                            ? 'Upload PDF or image'
+                            : 'Document attached — replace')),
+                if (field.hasError)
+                  Text(field.errorText!,
+                      style: const TextStyle(color: Colors.red)),
+              ]));
+    } else if (['select', 'radio'].contains(type) && options.isNotEmpty) {
+      input = DropdownButtonFormField<String>(
+        initialValue: options.contains(_answers[id]) ? _answers[id] as String : null,
+        isExpanded: true,
+        decoration:
+            OnboardingStyles.inputDecoration(hintText: 'Select an option'),
+        items: options
+            .map((option) => DropdownMenuItem(
+                value: option,
+                child: Text(option, overflow: TextOverflow.ellipsis)))
+            .toList(),
+        validator: validate,
+        onChanged: (value) => setState(() => _answers[id] = value),
+      );
+    } else if (['multiselect', 'checkbox'].contains(type) &&
+        options.isNotEmpty) {
+      input = FormField<List<String>>(
+          initialValue: _answers[id] is List
+              ? (_answers[id] as List).map((v) => v.toString()).toList()
+              : [],
+          validator: validate,
+          builder: (field) =>
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                for (final option in options)
+                  CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(option),
+                      value: (field.value ?? []).contains(option),
+                      onChanged: (selected) {
+                        final value = List<String>.from(field.value ?? []);
+                        selected == true
+                            ? value.add(option)
+                            : value.remove(option);
+                        field.didChange(value);
+                        _answers[id] = value;
+                      }),
+                if (field.hasError)
+                  Text(field.errorText!,
+                      style: const TextStyle(color: Colors.red)),
+              ]));
+    } else {
+      input = TextFormField(
+        key: ValueKey('activity-question-$id'),
+        controller: _controllers[id],
+        maxLines: type == 'textarea' ? 3 : 1,
+        readOnly: type == 'date',
+        decoration: OnboardingStyles.inputDecoration(
+            hintText: question['placeholder']?.toString() ?? 'Enter answer'),
+        keyboardType:
+            type == 'number' ? TextInputType.number : TextInputType.text,
+        validator: (value) {
+          final missing = validate(value);
+          if (missing != null) return missing;
+          if (type == 'number' &&
+              (value ?? '').isNotEmpty &&
+              num.tryParse(value!) == null) {
+            return 'Enter a valid number';
+          }
+          return null;
+        },
+        onTap: type == 'date'
+            ? () async {
+                final date = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(1900),
+                    lastDate: DateTime(2100));
+                if (date != null && mounted) {
+                  _controllers[id]!.text =
+                      date.toIso8601String().split('T').first;
+                  _answers[id] = _controllers[id]!.text;
+                }
+              }
+            : null,
+        onChanged: (value) =>
+            _answers[id] = type == 'number' ? num.tryParse(value) : value,
+      );
     }
-    else if (flooringTypeController.text.toString().toString().isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.pleaseEnterFlooringType);
-      return false;
-    }
-    else if (maxCapacityController.text.toString().toString().isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.pleaseEnterMaxCapacity);
-      return false;
-    }
-    else if (descriptionController.text.toString().toString().isEmpty) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.pleaseEnterDescription);
-      return false;
-    }
-    return true;
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 22),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              '${question['questionText'] ?? 'Activity details'}${required ? ' *' : ''}',
+              style: OnboardingStyles.body),
+          const SizedBox(height: 8),
+          input,
+          if ((question['helperText'] ?? '').toString().isNotEmpty)
+            Text(question['helperText'].toString()),
+        ]));
   }
+
+  @override
+  Widget build(BuildContext context) => OnboardingScaffold(
+          child: Column(children: [
+        Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: getStepBarCount(4 / 6, 4, 6)),
+        const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('Activity details', style: OnboardingStyles.heading)),
+        Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_error!),
+                        TextButton(onPressed: _load, child: const Text('Retry'))
+                      ]))
+                    : Form(
+                        key: _form,
+                        child: ListView(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            children: [
+                              if (_questions.isEmpty)
+                                const Text(
+                                    'No additional questions for this activity. Tap Next to continue.'),
+                              ..._questions.map(_field),
+                            ]))),
+        Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(children: [
+              Expanded(
+                  child: OnboardingButton(
+                      label: 'Back',
+                      outlined: true,
+                      onPressed:
+                          _saving ? null : () => Navigator.pop(context))),
+              const SizedBox(width: 12),
+              Expanded(
+                  flex: 2,
+                  child: OnboardingButton(
+                      label: 'Next',
+                      loading: _saving,
+                      onPressed: _loading ||
+                              _error != null ||
+                              _uploadingQuestion != null
+                          ? null
+                          : _next)),
+            ])),
+      ]));
 }

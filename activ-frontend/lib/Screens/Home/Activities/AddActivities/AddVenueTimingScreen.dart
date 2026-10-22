@@ -1,24 +1,18 @@
-import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../../../api_calling/activity_setup_api.dart';
 
-import 'package:activ_app/Database/auth_service.dart';
 import 'package:activ_app/Screens/CommonCode.dart';
-import 'package:activ_app/Screens/Home/Activities/VenueActivityListScreen.dart';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/Utills/timing_copy_confirmation.dart';
-import 'package:activ_app/api_calling/progress_bar/progress_bar.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
-import '../../../../api_calling/api_request.dart';
 import 'AddActivitySubmissionResultScreen.dart';
 import '../../../onboarding_widgets.dart';
-
 
 class DayTiming {
   List<Map<String, String>> timeSlots;
@@ -26,19 +20,50 @@ class DayTiming {
 }
 
 class AddVenueTimingScreen extends StatefulWidget {
-
   final String activityId;
-  const AddVenueTimingScreen({super.key, required this.activityId});
+  const AddVenueTimingScreen(
+      {super.key, required this.activityId, this.client});
+  final http.Client? client;
 
   @override
   State<AddVenueTimingScreen> createState() => _State();
 
- /* @override
+  /* @override
   _VenueTimingScreenState createState() => _VenueTimingScreenState();*/
 }
 
 class _State extends State<AddVenueTimingScreen> {
-  String? userMobileNumber = "";
+  bool _submitting = false;
+  late final ActivitySetupApi _api;
+  @override
+  void initState() {
+    super.initState();
+    _api = ActivitySetupApi(client: widget.client);
+  }
+
+  @override
+  void dispose() {
+    _api.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (!hasAnyTimingSelected() || !_validateTimings()) return;
+    setState(() => _submitting = true);
+    try {
+      await _api.submit(widget.activityId, buildVenueTiming());
+      if (!mounted) return;
+      CommonUtilities.addActivitySuccessfully = 'yes';
+      CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+          context, const AddActivitySubmissionResultScreen());
+    } catch (error) {
+      if (mounted) CommonUtilities.createSnackBar(context, error.toString());
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   List<String> days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   // Map short day to full day
@@ -62,7 +87,6 @@ class _State extends State<AddVenueTimingScreen> {
     "Sat": "Saturday",
     "Sun": "Sunday",
   };
-
 
   List<String> selectedDays = [];
   Map<String, DayTiming> timings = {};
@@ -100,7 +124,8 @@ class _State extends State<AddVenueTimingScreen> {
 
     if (picked != null) {
       final now = DateTime.now();
-      final dt = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+      final dt =
+          DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
       return DateFormat("hh:mm a").format(dt);
     }
     return initial;
@@ -110,7 +135,7 @@ class _State extends State<AddVenueTimingScreen> {
     if (isSelected) {
       if (!selectedDays.contains(day)) {
         selectedDays.add(day);
-       /* timings.putIfAbsent(
+        /* timings.putIfAbsent(
           day,
               () => DayTiming(timeSlots: [
             {"open": "09:00 AM", "close": "07:00 PM"}
@@ -119,7 +144,7 @@ class _State extends State<AddVenueTimingScreen> {
 
         timings.putIfAbsent(
           day,
-              () => DayTiming(timeSlots: []),
+          () => DayTiming(timeSlots: []),
         );
       }
     } else {
@@ -149,8 +174,10 @@ class _State extends State<AddVenueTimingScreen> {
         DateTime openTime = DateFormat("hh:mm a").parse(open);
         DateTime closeTime = DateFormat("hh:mm a").parse(close);
 
-        if (openTime.isAfter(closeTime) || openTime.isAtSameMomentAs(closeTime)) {
-          _showError("In $day, Opening time must be earlier than closing time.");
+        if (openTime.isAfter(closeTime) ||
+            openTime.isAtSameMomentAs(closeTime)) {
+          _showError(
+              "In $day, Opening time must be earlier than closing time.");
           return false;
         }
       }
@@ -166,8 +193,7 @@ class _State extends State<AddVenueTimingScreen> {
     CommonUtilities.createSnackBar(context, msg);
   }
 
-  void goToBackScreen(BuildContext context)
-  {
+  void goToBackScreen(BuildContext context) {
     Navigator.pop(context);
   }
 
@@ -198,6 +224,9 @@ class _State extends State<AddVenueTimingScreen> {
               child: Column(
                 children: [
                   const OnboardingHeader(),
+                  Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      child: getStepBarCount(6 / 6, 6, 6)),
 
                   Expanded(
                     child: Container(
@@ -205,13 +234,13 @@ class _State extends State<AddVenueTimingScreen> {
                       child: ListView(
                         shrinkWrap: true,
                         children: [
-
                           getText(),
 
                           getSubText(),
 
                           Container(
-                            margin: const EdgeInsets.only(top: 10, left: 15, right: 15, bottom: 10),
+                            margin: const EdgeInsets.only(
+                                top: 10, left: 15, right: 15, bottom: 10),
                             alignment: Alignment.centerLeft,
                             child: const Text(
                               "Mark Operating Days",
@@ -219,8 +248,7 @@ class _State extends State<AddVenueTimingScreen> {
                                   fontSize: AppSize.size_16,
                                   fontFamily: 'Satoshi',
                                   color: AppColors.black1,
-                                  height: 1.2
-                              ),
+                                  height: 1.2),
                               textAlign: TextAlign.left,
                             ),
                           ),
@@ -236,29 +264,38 @@ class _State extends State<AddVenueTimingScreen> {
                                   toggleDay(day, !isSelected);
                                 },
                                 child: Container(
-                                  margin: const EdgeInsets.fromLTRB(10, 0, 5, 0),
+                                  margin:
+                                      const EdgeInsets.fromLTRB(10, 0, 5, 0),
                                   width: 70,
                                   decoration: BoxDecoration(
                                     gradient: isSelected
                                         ? const LinearGradient(
-                                      colors: [AppColors.borderGradient1, AppColors.borderGradient2],
-                                    )
+                                            colors: [
+                                              AppColors.borderGradient1,
+                                              AppColors.borderGradient2
+                                            ],
+                                          )
                                         : null,
                                     color: isSelected ? null : AppColors.gray,
                                     borderRadius: BorderRadius.circular(12),
                                     border: isSelected
                                         ? null
                                         : Border.all(
-                                      color: AppColors.gray,
-                                      width: 1,
-                                    ),
+                                            color: AppColors.gray,
+                                            width: 1,
+                                          ),
                                   ),
                                   child: Container(
-                                    margin: isSelected ? const EdgeInsets.all(2) : EdgeInsets.zero,
-                                    padding: const EdgeInsets.symmetric(vertical: 8), //
+                                    margin: isSelected
+                                        ? const EdgeInsets.all(2)
+                                        : EdgeInsets.zero,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8), //
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: isSelected ? AppColors.gray3 : AppColors.white,
+                                      color: isSelected
+                                          ? AppColors.gray3
+                                          : AppColors.white,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -325,9 +362,9 @@ class _State extends State<AddVenueTimingScreen> {
                             ),
                           ),
 
-                           Visibility(
-                             visible: selectedDays.isNotEmpty ? false : true,
-                             child: Container(
+                          Visibility(
+                            visible: selectedDays.isNotEmpty ? false : true,
+                            child: Container(
                               margin: const EdgeInsets.fromLTRB(15, 5, 15, 0),
                               alignment: Alignment.centerLeft,
                               child: Text(
@@ -338,8 +375,8 @@ class _State extends State<AddVenueTimingScreen> {
                                   color: AppColors.black1,
                                 ),
                               ),
-                             ),
-                           ),
+                            ),
+                          ),
 
                           Column(
                             children: selectedDays.asMap().entries.map((entry) {
@@ -352,23 +389,27 @@ class _State extends State<AddVenueTimingScreen> {
                                 color: AppColors.transparent,
                                 margin: const EdgeInsets.symmetric(vertical: 0),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(0)
-                                ),
+                                    borderRadius: BorderRadius.circular(0)),
                                 elevation: 0,
                                 child: Padding(
                                   padding: const EdgeInsets.all(0),
                                   child: Container(
-                                    margin: selectedDays.length > 1 ? EdgeInsets.fromLTRB(15, 10, 15, 0) : EdgeInsets.fromLTRB(15, 10, 15, 10),
+                                    margin: selectedDays.length > 1
+                                        ? EdgeInsets.fromLTRB(15, 10, 15, 0)
+                                        : EdgeInsets.fromLTRB(15, 10, 15, 10),
                                     child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           // Day Name
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               // Show Day Name Text
                                               Container(
-                                                child: Text("${dayMap[day]}",
+                                                child: Text(
+                                                  "${dayMap[day]}",
                                                   style: TextStyle(
                                                     fontSize: AppSize.size_14,
                                                     fontFamily: 'Satoshi',
@@ -383,9 +424,12 @@ class _State extends State<AddVenueTimingScreen> {
                                                     ? _copyTimingsToAllDays
                                                     : null,
                                                 child: Visibility(
-                                                  visible: (day == selectedDays.first), // 👈 pehle wale day par hi dikhana
+                                                  visible: (day ==
+                                                      selectedDays
+                                                          .first), // 👈 pehle wale day par hi dikhana
                                                   child: Container(
-                                                    padding: const EdgeInsets.fromLTRB(2, 2, 2, 4),
+                                                    padding: const EdgeInsets
+                                                        .fromLTRB(2, 2, 2, 4),
                                                     child: Row(
                                                       children: [
                                                         SizedBox(
@@ -394,20 +438,29 @@ class _State extends State<AddVenueTimingScreen> {
                                                           child: Image.asset(
                                                             'assets/ic_copy.png',
                                                             color: hasAnyTimingSelected()
-                                                                ? AppColors.purple
-                                                                : AppColors.lightGray,
+                                                                ? AppColors
+                                                                    .purple
+                                                                : AppColors
+                                                                    .lightGray,
                                                           ),
                                                         ),
                                                         Container(
-                                                          margin: const EdgeInsets.fromLTRB(5, 0, 0, 0),
+                                                          margin:
+                                                              const EdgeInsets
+                                                                  .fromLTRB(
+                                                                  5, 0, 0, 0),
                                                           child: Text(
                                                             "Copy to all",
                                                             style: TextStyle(
-                                                              fontSize: AppSize.size_14,
-                                                              fontFamily: 'Satoshi',
+                                                              fontSize: AppSize
+                                                                  .size_14,
+                                                              fontFamily:
+                                                                  'Satoshi',
                                                               color: hasAnyTimingSelected()
-                                                                  ? AppColors.purple
-                                                                  : AppColors.lightGray,
+                                                                  ? AppColors
+                                                                      .purple
+                                                                  : AppColors
+                                                                      .lightGray,
                                                             ),
                                                           ),
                                                         ),
@@ -416,7 +469,6 @@ class _State extends State<AddVenueTimingScreen> {
                                                   ),
                                                 ),
                                               ),
-
                                             ],
                                           ),
 
@@ -425,77 +477,126 @@ class _State extends State<AddVenueTimingScreen> {
                                           Column(
                                             children: List.generate(
                                               timings[day]!.timeSlots.length,
-                                                  (index) {
-                                                var slot = timings[day]!.timeSlots[index];
+                                              (index) {
+                                                var slot = timings[day]!
+                                                    .timeSlots[index];
                                                 return Row(
                                                   //crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     // -------- Open Time ----------
                                                     Expanded(
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           RichText(
                                                             text: TextSpan(
                                                               children: [
                                                                 TextSpan(
-                                                                  text: "Open Time",
-                                                                  style: const TextStyle(
-                                                                    fontSize: AppSize.size_14,
-                                                                    fontFamily: 'Satoshi',
-                                                                    color: AppColors.darkBlack,
+                                                                  text:
+                                                                      "Open Time",
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        AppSize
+                                                                            .size_14,
+                                                                    fontFamily:
+                                                                        'Satoshi',
+                                                                    color: AppColors
+                                                                        .darkBlack,
                                                                   ),
                                                                 ),
                                                                 TextSpan(
                                                                   text: "*",
-                                                                  style: const TextStyle(
-                                                                    fontSize: AppSize.size_14,
-                                                                    fontFamily: 'Satoshi',
-                                                                    color: AppColors.red,
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        AppSize
+                                                                            .size_14,
+                                                                    fontFamily:
+                                                                        'Satoshi',
+                                                                    color:
+                                                                        AppColors
+                                                                            .red,
                                                                   ),
                                                                 ),
                                                               ],
                                                             ),
                                                           ),
-                                                          const SizedBox(height: 6),
+                                                          const SizedBox(
+                                                              height: 6),
                                                           GestureDetector(
                                                             onTap: () async {
                                                               String? picked =
-                                                              await _pickTime(context, slot["open"]);
-                                                              if (picked != null) {
+                                                                  await _pickTime(
+                                                                      context,
+                                                                      slot[
+                                                                          "open"]);
+                                                              if (picked !=
+                                                                  null) {
                                                                 setState(() {
-                                                                  timings[day]!.timeSlots[index]["open"] =
-                                                                      picked;
+                                                                  timings[day]!
+                                                                              .timeSlots[
+                                                                          index]
+                                                                      [
+                                                                      "open"] = picked;
                                                                 });
                                                               }
                                                             },
                                                             child: Container(
-                                                              margin: const EdgeInsets.only(bottom: 8),
-                                                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                                                              decoration: BoxDecoration(
-                                                                color: AppColors.white,
-                                                                borderRadius: BorderRadius.circular(8),
-                                                                border: Border.all(
-                                                                  color: AppColors.gray,
+                                                              margin:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      bottom:
+                                                                          8),
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      vertical:
+                                                                          12,
+                                                                      horizontal:
+                                                                          12),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: AppColors
+                                                                    .white,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            8),
+                                                                border:
+                                                                    Border.all(
+                                                                  color:
+                                                                      AppColors
+                                                                          .gray,
                                                                   width: 1,
                                                                 ),
                                                               ),
                                                               child: Row(
                                                                 mainAxisAlignment:
-                                                                MainAxisAlignment.spaceBetween,
+                                                                    MainAxisAlignment
+                                                                        .spaceBetween,
                                                                 children: [
                                                                   Text(
-                                                                    slot["open"]!,
-                                                                    style: const TextStyle(
-                                                                      fontSize: AppSize.size_14,
-                                                                      fontFamily: 'Satoshi',
-                                                                      color: AppColors.darkBlack,
+                                                                    slot[
+                                                                        "open"]!,
+                                                                    style:
+                                                                        const TextStyle(
+                                                                      fontSize:
+                                                                          AppSize
+                                                                              .size_14,
+                                                                      fontFamily:
+                                                                          'Satoshi',
+                                                                      color: AppColors
+                                                                          .darkBlack,
                                                                     ),
                                                                   ),
                                                                   SizedBox(
                                                                     width: 16,
                                                                     height: 16,
-                                                                    child: Image.asset(
+                                                                    child: Image
+                                                                        .asset(
                                                                       'assets/ic_drop_down.png',
                                                                     ),
                                                                   )
@@ -512,70 +613,117 @@ class _State extends State<AddVenueTimingScreen> {
                                                     // -------- Close Time ----------
                                                     Expanded(
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           RichText(
                                                             text: TextSpan(
                                                               children: [
                                                                 TextSpan(
-                                                                  text: "Close Time",
-                                                                  style: const TextStyle(
-                                                                    fontSize: AppSize.size_14,
-                                                                    fontFamily: 'Satoshi',
-                                                                    color: AppColors.darkBlack,
+                                                                  text:
+                                                                      "Close Time",
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        AppSize
+                                                                            .size_14,
+                                                                    fontFamily:
+                                                                        'Satoshi',
+                                                                    color: AppColors
+                                                                        .darkBlack,
                                                                   ),
                                                                 ),
                                                                 TextSpan(
                                                                   text: "*",
-                                                                  style: const TextStyle(
-                                                                    fontSize: AppSize.size_14,
-                                                                    fontFamily: 'Satoshi',
-                                                                    color: AppColors.red,
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        AppSize
+                                                                            .size_14,
+                                                                    fontFamily:
+                                                                        'Satoshi',
+                                                                    color:
+                                                                        AppColors
+                                                                            .red,
                                                                   ),
                                                                 ),
                                                               ],
                                                             ),
                                                           ),
-
-                                                          const SizedBox(height: 6),
+                                                          const SizedBox(
+                                                              height: 6),
                                                           GestureDetector(
                                                             onTap: () async {
                                                               String? picked =
-                                                              await _pickTime(context, slot["close"]);
-                                                              if (picked != null) {
+                                                                  await _pickTime(
+                                                                      context,
+                                                                      slot[
+                                                                          "close"]);
+                                                              if (picked !=
+                                                                  null) {
                                                                 setState(() {
-                                                                  timings[day]!.timeSlots[index]["close"] =
-                                                                      picked;
+                                                                  timings[day]!
+                                                                              .timeSlots[
+                                                                          index]
+                                                                      [
+                                                                      "close"] = picked;
                                                                 });
                                                               }
                                                             },
                                                             child: Container(
-                                                              margin: const EdgeInsets.only(bottom: 8),
-                                                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                                                              decoration: BoxDecoration(
-                                                                color: AppColors.white,
-                                                                borderRadius: BorderRadius.circular(8),
-                                                                border: Border.all(
-                                                                  color: AppColors.gray,
+                                                              margin:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      bottom:
+                                                                          8),
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      vertical:
+                                                                          12,
+                                                                      horizontal:
+                                                                          12),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: AppColors
+                                                                    .white,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            8),
+                                                                border:
+                                                                    Border.all(
+                                                                  color:
+                                                                      AppColors
+                                                                          .gray,
                                                                   width: 1,
                                                                 ),
                                                               ),
                                                               child: Row(
                                                                 mainAxisAlignment:
-                                                                MainAxisAlignment.spaceBetween,
+                                                                    MainAxisAlignment
+                                                                        .spaceBetween,
                                                                 children: [
                                                                   Text(
-                                                                    slot["close"]!,
-                                                                    style: const TextStyle(
-                                                                      fontSize: AppSize.size_14,
-                                                                      fontFamily: 'Satoshi',
-                                                                      color: AppColors.darkBlack,
+                                                                    slot[
+                                                                        "close"]!,
+                                                                    style:
+                                                                        const TextStyle(
+                                                                      fontSize:
+                                                                          AppSize
+                                                                              .size_14,
+                                                                      fontFamily:
+                                                                          'Satoshi',
+                                                                      color: AppColors
+                                                                          .darkBlack,
                                                                     ),
                                                                   ),
                                                                   SizedBox(
                                                                     width: 16,
                                                                     height: 16,
-                                                                    child: Image.asset(
+                                                                    child: Image
+                                                                        .asset(
                                                                       'assets/ic_drop_down.png',
                                                                     ),
                                                                   )
@@ -592,21 +740,28 @@ class _State extends State<AddVenueTimingScreen> {
                                                     // -------- Delete Icon ----------
                                                     InkWell(
                                                         onTap: () {
-
-                                                          customAlertDialog(context, day, index, "Are you sure you want to delete this time slot?");
-
+                                                          customAlertDialog(
+                                                              context,
+                                                              day,
+                                                              index,
+                                                              "Are you sure you want to delete this time slot?");
                                                         },
                                                         child: Align(
-                                                          alignment: Alignment.centerRight,
+                                                          alignment: Alignment
+                                                              .centerRight,
                                                           child: Container(
-                                                            margin: const EdgeInsets.only(top: 10),
-                                                            alignment: Alignment.centerRight,
+                                                            margin:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    top: 10),
+                                                            alignment: Alignment
+                                                                .centerRight,
                                                             width: 24,
                                                             height: 24,
-                                                            child: Image.asset('assets/ic_delete.png'),
+                                                            child: Image.asset(
+                                                                'assets/ic_delete.png'),
                                                           ),
-                                                        )
-                                                    ),
+                                                        )),
                                                   ],
                                                 );
                                               },
@@ -615,8 +770,7 @@ class _State extends State<AddVenueTimingScreen> {
 
                                           // Add Slot Time Click Event.
                                           InkWell(
-                                            onTap: ()
-                                            {
+                                            onTap: () {
                                               setState(() {
                                                 timings[day]!.timeSlots.add({
                                                   "open": "09:00 AM",
@@ -625,16 +779,21 @@ class _State extends State<AddVenueTimingScreen> {
                                               });
                                             },
                                             child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.start,
-                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
                                               children: [
                                                 SizedBox(
                                                   width: 20,
                                                   height: 20,
-                                                  child: Image.asset('assets/ic_plus.png'),
+                                                  child: Image.asset(
+                                                      'assets/ic_plus.png'),
                                                 ),
                                                 Container(
-                                                  margin: const EdgeInsets.fromLTRB(10, 2, 0, 0),
+                                                  margin:
+                                                      const EdgeInsets.fromLTRB(
+                                                          10, 2, 0, 0),
                                                   child: Text(
                                                     "Add time slot",
                                                     style: TextStyle(
@@ -650,7 +809,8 @@ class _State extends State<AddVenueTimingScreen> {
 
                                           // Divider line only if NOT last item
                                           if (index != selectedDays.length - 1)
-                                            getDividerLine(selectedDays.length.toString()),
+                                            getDividerLine(
+                                                selectedDays.length.toString()),
                                         ]),
                                   ),
                                 ),
@@ -659,7 +819,6 @@ class _State extends State<AddVenueTimingScreen> {
                           ),
 
                           const SizedBox(height: 20),
-
                         ],
                       ),
                     ),
@@ -670,73 +829,44 @@ class _State extends State<AddVenueTimingScreen> {
                     margin: const EdgeInsets.only(top: 10),
                     child: Column(
                       children: [
-
                         bottomBarShadow(),
-
                         Row(
                           children: [
-
                             Expanded(
                                 flex: 3,
                                 child: InkWell(
-                                    onTap: ()
-                                    {
+                                    onTap: () {
                                       Navigator.pop(context);
                                     },
-                                    child: getBackButton(context, "Back", "venueAvailability"))
-                            ),
-
-
+                                    child: getBackButton(
+                                        context, "Back", "venueAvailability"))),
                             Expanded(
                               flex: 7,
                               child: InkWell(
-                                  onTap: ()
-                                  async {
-                                    if(hasAnyTimingSelected())
-                                    {
+                                  onTap: () async {
+                                    if (hasAnyTimingSelected()) {
                                       if (_validateTimings()) {
-                                       /* Map<String, dynamic> finalData = {
+                                        /* Map<String, dynamic> finalData = {
                                           "venue_timing": buildVenueTiming(),
                                         };
                                         print("FINAL VENUE TIMING => ${jsonEncode(finalData)}");*/
 
-                                        Map<String, dynamic> venueTimingMap = buildVenueTiming();
-
-                                        CommonUtilities.showLog("FINAL VENUE TIMING => ${jsonEncode({
-                                          "venue_timing": venueTimingMap
-                                        })}");
-
-                                        ProgressBar().showLoader(context);
-
-                                        try {
-                                          userMobileNumber = await SharedPreference.readStr("userMobileNumber");
-                                          await saveVenueTimingToFirestore(
-                                            widget.activityId,
-                                            venueTimingMap,
-                                            'IND (+91)${userMobileNumber!}',
-                                          );
-                                          CommonUtilities.createSnackBar(context, "Activity submitted successfully.");
-                                          CommonUtilities.addActivitySuccessfully = "yes";
-                                          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-                                            context,
-                                            const AddActivitySubmissionResultScreen(),
-                                          );
-
-                                        } catch (e) {
-                                          Navigator.pop(context);
-                                          CommonUtilities.showLog("❌ Venue timing error: $e");
-                                        }
+                                        await _submit();
                                       }
+                                    } else {
+                                      CommonUtilities.createSnackBar(context,
+                                          ConstantsMessages.selectDayTimeslot);
                                     }
-                                    else
-                                    {
-                                      CommonUtilities.createSnackBar(context, ConstantsMessages.selectDayTimeslot);
-                                    }
-
                                   },
-                                  child: hasAnyTimingSelected() ? getButtonBlack(context, "Submit", "venueAvailability") :
-                                  getButtonGray(context, "Submit", "venueAvailability")
-                              ),
+                                  child: hasAnyTimingSelected() && !_submitting
+                                      ? getButtonBlack(context, "Submit",
+                                          "venueAvailability")
+                                      : getButtonGray(
+                                          context,
+                                          _submitting
+                                              ? "Submitting..."
+                                              : "Submit",
+                                          "venueAvailability")),
                             )
                           ],
                         )
@@ -752,93 +882,6 @@ class _State extends State<AddVenueTimingScreen> {
     );
   }
 
-  //--------------------------------------------Start Venue Timing Upload----------------------------------------------------------------
-
-  /*Future<void> ensureAnonymousLogin() async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-    print("✅ Firebase UID: ${FirebaseAuth.instance.currentUser!.uid}");
-  }*/
-
-  /*Future<void> saveVenueTimingToFirestore(
-      Map<String, dynamic> venueTiming,
-      ) async {
-
-   // await AuthService().ensureAnonymousLogin();
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-    await FirebaseFirestore.instance
-        .collection("activ_user")
-        .doc(uid)
-        .set({
-      "venue_timing": venueTiming, // ALAG FIELD
-    }, SetOptions(merge: true));
-
-    CommonUtilities.showLog("✅ venue_timing saved");
-  }*/
-
-  Future<void> saveVenueTimingToFirestore(
-      String activityId,
-      Map<String, dynamic> venueTiming,
-      String phoneKey, // 📞 phone number key
-      ) async {
-    try {
-      // 1️⃣ Resolve REAL UID from phone
-      final phoneDoc = await FirebaseFirestore.instance
-          .collection("users_by_phone")
-          .doc(phoneKey)
-          .get();
-
-      if (!phoneDoc.exists) {
-        throw Exception("❌ Phone mapping not found for $phoneKey");
-      }
-
-      final String realUid = phoneDoc["uid"];
-
-      // 2️⃣ Reference the actual user document by UID
-      final docRef =
-      FirebaseFirestore.instance.collection("activ_user").doc(realUid);
-
-      final snapshot = await docRef.get();
-
-      if (!snapshot.exists) {
-        throw Exception("❌ User document not found for UID: $realUid");
-      }
-
-      // 3️⃣ Get activities list
-      List activities = List.from(snapshot.data()?["activity_list"] ?? []);
-
-      // 🔎 Find activity by ID
-      final index = activities.indexWhere((a) => a["activity_id"] == activityId);
-
-      if (index == -1) {
-        CommonUtilities.showLog("❌ Activity not found for ID: $activityId");
-        return;
-      }
-
-      // ✅ Merge venue timing inside that activity
-      activities[index]["venue_timing"] = venueTiming;
-      activities[index]["updated_at"] = Timestamp.now();
-
-      // 🔄 Save back full array
-      await docRef.set(
-        {
-          "activity_list": activities,
-        },
-        SetOptions(merge: true),
-      );
-
-      CommonUtilities.showLog(
-          "✅ venue_timing added inside activity for phone: $phoneKey");
-    } catch (e) {
-      CommonUtilities.showLog("❌ Error saving venue timing: $e");
-    }
-  }
-
-
-  //--------------------------------------------End Venue Timing Upload----------------------------------------------------------------
-
   Map<String, List<Map<String, String>>> buildVenueTiming() {
     Map<String, List<Map<String, String>>> venueTiming = {};
 
@@ -848,14 +891,9 @@ class _State extends State<AddVenueTimingScreen> {
       if (selectedDays.contains(day) &&
           timings.containsKey(day) &&
           timings[day]!.timeSlots.isNotEmpty) {
-
         venueTiming[apiKey] = timings[day]!.timeSlots.map((slot) {
-          return {
-            "open": slot["open"] ?? "-",
-            "close": slot["close"] ?? "-"
-          };
+          return {"open": slot["open"] ?? "-", "close": slot["close"] ?? "-"};
         }).toList();
-
       } else {
         // ❌ day not select
         venueTiming[apiKey] = [
@@ -867,10 +905,7 @@ class _State extends State<AddVenueTimingScreen> {
     return venueTiming;
   }
 
-
-
-  Widget getText()
-  {
+  Widget getText() {
     return Container(
       margin: const EdgeInsets.only(top: 5, left: 15, right: 15, bottom: 0),
       alignment: Alignment.centerLeft,
@@ -880,15 +915,13 @@ class _State extends State<AddVenueTimingScreen> {
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
-            height: 1.2
-        ),
+            height: 1.2),
         textAlign: TextAlign.left,
       ),
     );
   }
 
-  Widget getSubText()
-  {
+  Widget getSubText() {
     return Container(
       margin: EdgeInsets.fromLTRB(15, 10, 15, 10),
       child: const Text(
@@ -897,8 +930,7 @@ class _State extends State<AddVenueTimingScreen> {
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',
             color: AppColors.black1,
-            height: 1.4
-        ),
+            height: 1.4),
         textAlign: TextAlign.left,
       ),
     );
@@ -929,17 +961,18 @@ class _State extends State<AddVenueTimingScreen> {
     return false;
   }
 
-  Widget getDividerLine(String length)
-  {
+  Widget getDividerLine(String length) {
     return Container(
-      margin: int.parse(length) > 1 ? const EdgeInsets.fromLTRB(0, 15, 0, 0) : const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      margin: int.parse(length) > 1
+          ? const EdgeInsets.fromLTRB(0, 15, 0, 0)
+          : const EdgeInsets.fromLTRB(0, 0, 0, 0),
       color: AppColors.gray,
       height: 1,
     );
   }
 
-  customAlertDialog(BuildContext context,String day, int index, String description)
-  {
+  customAlertDialog(
+      BuildContext context, String day, int index, String description) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -950,40 +983,44 @@ class _State extends State<AddVenueTimingScreen> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.only(top: 20),
-              margin: const EdgeInsets.only(
-                  top: 45,left: 40,right: 40
-              ),
+              margin: const EdgeInsets.only(top: 45, left: 40, right: 40),
               decoration: BoxDecoration(
                 shape: BoxShape.rectangle,
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-
                   Text(
-                      '⚠ Alert!',
+                    '⚠ Alert!',
                     style: TextStyle(
                         fontSize: AppSize.size_16,
                         fontFamily: 'Satoshi',
                         color: AppColors.darkBlack,
-                        textBaseline: null),),
+                        textBaseline: null),
+                  ),
 
-                  const SizedBox(height: 15,),
+                  const SizedBox(
+                    height: 15,
+                  ),
 
                   Container(
                     margin: EdgeInsets.fromLTRB(8, 0, 8, 0),
-                    child: Text(description,
+                    child: Text(
+                      description,
                       style: TextStyle(
                           fontSize: AppSize.size_14,
                           fontFamily: 'Satoshi',
                           color: AppColors.darkBlack,
-                          height: 1.5), textAlign: TextAlign.center,),
+                          height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
 
-                  const SizedBox(height: 15,),
+                  const SizedBox(
+                    height: 15,
+                  ),
 
                   // Divider Line
                   Container(
@@ -991,10 +1028,11 @@ class _State extends State<AddVenueTimingScreen> {
                       child: Divider(
                         color: AppColors.gray1,
                         height: 1,
-                      )
-                  ),
+                      )),
 
-                  const SizedBox(height: 0,),
+                  const SizedBox(
+                    height: 0,
+                  ),
 
                   IntrinsicHeight(
                     child: Row(
@@ -1002,12 +1040,12 @@ class _State extends State<AddVenueTimingScreen> {
                       children: [
                         Expanded(
                           child: InkWell(
-                            onTap: ()
-                            {
+                            onTap: () {
                               Navigator.pop(context);
                             },
                             child: Container(
-                              padding: const EdgeInsets.fromLTRB(30, 13, 30, 13),
+                              padding:
+                                  const EdgeInsets.fromLTRB(30, 13, 30, 13),
                               alignment: Alignment.center,
                               child: Text(
                                 'No',
@@ -1015,21 +1053,19 @@ class _State extends State<AddVenueTimingScreen> {
                                 style: TextStyle(
                                   fontSize: AppSize.size_14,
                                   fontFamily: 'Satoshi',
-                                  color: AppColors.darkBlack,),
+                                  color: AppColors.darkBlack,
+                                ),
                               ),
                             ),
                           ),
                         ),
-
                         VerticalDivider(
                           color: AppColors.gray1,
                           thickness: .5,
                         ),
-
                         Expanded(
                           child: InkWell(
-                            onTap: ()
-                            {
+                            onTap: () {
                               Navigator.pop(context);
 
                               setState(() {
@@ -1040,7 +1076,8 @@ class _State extends State<AddVenueTimingScreen> {
                               });
                             },
                             child: Container(
-                              padding: const EdgeInsets.fromLTRB(30, 13, 30, 13),
+                              padding:
+                                  const EdgeInsets.fromLTRB(30, 13, 30, 13),
                               alignment: Alignment.center,
                               child: Text(
                                 'Yes',
@@ -1048,7 +1085,8 @@ class _State extends State<AddVenueTimingScreen> {
                                 style: TextStyle(
                                   fontSize: AppSize.size_14,
                                   fontFamily: 'Satoshi',
-                                  color: AppColors.darkBlack,),
+                                  color: AppColors.darkBlack,
+                                ),
                               ),
                             ),
                           ),
@@ -1057,7 +1095,9 @@ class _State extends State<AddVenueTimingScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 0,),
+                  const SizedBox(
+                    height: 0,
+                  ),
                 ],
               ),
             ),

@@ -100,6 +100,12 @@ class ActivityPhotoUploader {
               body: jsonEncode({'categoryId': match['id']}))
           .timeout(const Duration(seconds: 30)));
       final serviceId = created is Map ? created['id']?.toString() ?? '' : '';
+      if (created is Map &&
+          ['approved', 'pending']
+              .contains(created['status']?.toString().toLowerCase())) {
+        throw const ActivityUploadException(
+            'This sport is already active or under review at your venue.');
+      }
       if (serviceId.isEmpty) {
         throw const ActivityUploadException(
             'Activity setup failed. Please try again.');

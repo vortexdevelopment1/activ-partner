@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   UploadedFiles,
+  UploadedFile,
   UseInterceptors,
   BadRequestException,
   ForbiddenException,
@@ -26,6 +27,7 @@ import {
 } from "@nestjs/swagger";
 import {
   FilesInterceptor,
+  FileInterceptor,
   FileFieldsInterceptor,
 } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
@@ -940,6 +942,28 @@ export class VenuesController {
       user.id,
     );
     return { message: "Activity questions fetched successfully", data };
+  }
+
+  @Post("activities/:serviceId/questions/:questionId/file")
+  @ApiBearerAuth()
+  @Roles(UserRole.PARTNER)
+  @ApiConsumes("multipart/form-data")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  async uploadActivityAnswerFile(
+    @Param("serviceId", ParseUUIDPipe) serviceId: string,
+    @Param("questionId", ParseUUIDPipe) questionId: string,
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const questions = await this.venuesService.getActivityQuestions(serviceId, user.id);
+    if (!questions.some(question => question.id === questionId && question.questionType?.toLowerCase() === "file")) {
+      throw new BadRequestException("File question does not belong to this activity");
+    }
+    if (!file || !["application/pdf", "image/jpeg", "image/png"].includes(file.mimetype)) {
+      throw new BadRequestException("Please select a PDF, JPG or PNG file under 5 MB");
+    }
+    const url = await this.cloudinaryService.uploadFile(file, "activ/activity-answers", "auto");
+    return { message: "Activity document uploaded successfully", data: { url } };
   }
 
   @Post("activities/:serviceId/answers")
