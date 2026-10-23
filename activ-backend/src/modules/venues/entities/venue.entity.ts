@@ -23,6 +23,9 @@ export class Venue {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'public_reference', unique: true })
+  publicReference: string;
+
   @Column({ name: 'partner_id' })
   partnerId: string;
 

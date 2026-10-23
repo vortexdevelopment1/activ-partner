@@ -1,5 +1,7 @@
 class ActivityModel {
   final String activityId;
+  final String activityReference;
+  final String venueReference;
   final String title;
   final Map<String, dynamic> operateValue;
   final List<dynamic> images;
@@ -20,6 +22,8 @@ class ActivityModel {
 
   ActivityModel({
     required this.activityId,
+    required this.activityReference,
+    required this.venueReference,
     required this.title,
     required this.operateValue,
     required this.images,
@@ -41,7 +45,12 @@ class ActivityModel {
 
   factory ActivityModel.fromJson(Map<String, dynamic> json) {
     return ActivityModel(
-      activityId: json['activity_id'],
+      activityId: (json['activity_id'] ?? json['id'] ?? '').toString(),
+      activityReference:
+          (json['activity_reference'] ?? json['activityReference'] ?? '')
+              .toString(),
+      venueReference:
+          (json['venue_reference'] ?? json['venueReference'] ?? '').toString(),
       operateValue: json['operate_value'] ?? {},
       title: json['operate_value']?['title'] ?? "Untitled",
       images: json['images'] ?? [],

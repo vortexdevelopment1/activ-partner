@@ -1026,6 +1026,7 @@ export class VenuesService {
     // The user app needs activity content, not partner identity or legal documents.
     return {
       id: venue.id,
+      venueReference: venue.publicReference ?? null,
       name: venue.name,
       description: venue.description,
       address: venue.address,
@@ -1171,6 +1172,7 @@ export class VenuesService {
         .filter((service) => service.status !== "ARCHIVED")
         .map((service) => ({
           id: service.id,
+          activityReference: service.public_reference ?? null,
           venueId: service.venue_id,
           categoryId: service.service_category_id,
           category: service.partner_service_categories
@@ -2734,7 +2736,9 @@ export class VenuesService {
     }));
     return {
       id: service.id,
+      activityReference: service.public_reference ?? null,
       venueId: service.venue_id,
+      venueReference: service.venues.public_reference ?? null,
       venueName: service.venues.name,
       categoryId: service.service_category_id,
       name: service.title,
@@ -3513,8 +3517,8 @@ export class VenuesService {
     const slotDurationMinutes = service.min_duration_minutes || 60;
 
     // Get operational windows for the date's day of week
-    const dayName = new Date(date + "T00:00:00")
-      .toLocaleDateString("en-US", { weekday: "long" })
+    const dayName = new Date(`${date}T00:00:00.000Z`)
+      .toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" })
       .toLowerCase();
     const availability = await this.prisma.partner_venue_availability.findMany({
       where: {
@@ -3561,8 +3565,6 @@ export class VenuesService {
       },
     });
 
-    // Generate full-day slot grid
-    const totalSlots = Math.floor(1440 / slotDurationMinutes);
     const slots: Array<{
       startTime: string;
       endTime: string;
@@ -3570,48 +3572,33 @@ export class VenuesService {
       reservationId?: string;
     }> = [];
 
-    for (let i = 0; i < totalSlots; i++) {
-      const startMin = i * slotDurationMinutes;
-      const endMin = startMin + slotDurationMinutes;
-      const startTime = this.minutesToTime(startMin);
-      const endTime = this.minutesToTime(
-        endMin >= 1440 ? endMin - 1440 : endMin,
-      );
+    for (const window of operationalWindows) {
+      for (let startMin = window.open; startMin + slotDurationMinutes <= window.close; startMin += slotDurationMinutes) {
+        const endMin = startMin + slotDurationMinutes;
+        const startTime = this.minutesToTime(startMin);
+        const endTime = this.minutesToTime(endMin);
 
-      const isOperational =
-        operationalWindows.length > 0 &&
-        operationalWindows.some((w) => startMin >= w.open && endMin <= w.close);
-
-      if (!isOperational) {
-        slots.push({ startTime, endTime, status: "not_operational" });
-        continue;
-      }
-
-      const hasActivBooking = activBookings.some((b) => {
-        const bStart = this.dateTimeToMinutes(b.slots.starts_at);
-        const bEnd = this.dateTimeToMinutes(b.slots.ends_at);
-        return startMin < bEnd && endMin > bStart;
-      });
-      if (hasActivBooking) {
-        slots.push({ startTime, endTime, status: "activ_booking" });
-        continue;
-      }
-
-      const matchedWalkIn = walkIns.find((w) =>
-        startMin < this.dateTimeToMinutes(w.ends_at) &&
-        endMin > this.dateTimeToMinutes(w.starts_at),
-      );
-      if (matchedWalkIn) {
-        slots.push({
-          startTime,
-          endTime,
-          status: "walk_in_reserved",
-          reservationId: matchedWalkIn.id,
+        const hasActivBooking = activBookings.some((b) => {
+          const bStart = this.dateTimeToMinutes(b.slots.starts_at);
+          const bEnd = this.dateTimeToMinutes(b.slots.ends_at);
+          return startMin < bEnd && endMin > bStart;
         });
-        continue;
-      }
+        if (hasActivBooking) {
+          slots.push({ startTime, endTime, status: "activ_booking" });
+          continue;
+        }
 
-      slots.push({ startTime, endTime, status: "available" });
+        const matchedWalkIn = walkIns.find((w) =>
+          startMin < this.dateTimeToMinutes(w.ends_at) &&
+          endMin > this.dateTimeToMinutes(w.starts_at),
+        );
+        if (matchedWalkIn) {
+          slots.push({ startTime, endTime, status: "walk_in_reserved", reservationId: matchedWalkIn.id });
+          continue;
+        }
+
+        slots.push({ startTime, endTime, status: "available" });
+      }
     }
 
     return {

@@ -113,6 +113,7 @@ export type ActivityStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
 export interface VenueService {
   id: string;
+  activityReference?: string;
   venueId: string;
   name: string;
   description?: string;
@@ -134,6 +135,7 @@ export interface VenueService {
 
 export interface PendingActivity {
   id: string;
+  activityReference?: string;
   venueId: string;
   venue: { id: string; name: string; city: string; state: string };
   name: string;
@@ -166,6 +168,7 @@ export interface VenueAvailabilityEntry {
 export interface Venue {
   changesRequested?: boolean;
   id: string;
+  venueReference?: string;
   partnerId: string;
   partner: User;
   categoryId: string;

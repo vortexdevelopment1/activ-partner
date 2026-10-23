@@ -381,8 +381,20 @@ class _BankAccountScreenState extends State<BankAccountScreen> {
                                       Text('registered bank account.',
                                           style: _text(18,
                                               bold: true, color: _purple)),
-                                    ] else
+                                    ] else ...[
                                       ..._accounts.map(_accountCard),
+                                      const SizedBox(height: 2),
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            2, 8, 2, 16),
+                                        child: Text(
+                                          'Note: Payouts are automatically (T+2) and will\nbe transferred to your registered bank account.',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: _text(14),
+                                        ),
+                                      ),
+                                    ],
                                   ]),
                             ),
                           ))),
@@ -578,8 +590,8 @@ Widget _accountResultScreen(
   return _shell(
     context,
     title,
-    Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+    SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(children: [
         const SizedBox(height: 18),
           resultIcon ?? Icon(icon, size: 88, color: iconColor),

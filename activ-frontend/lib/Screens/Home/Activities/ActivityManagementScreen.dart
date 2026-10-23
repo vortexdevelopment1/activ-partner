@@ -71,6 +71,10 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   String get _name => _data['name']?.toString() ?? widget.activity.title;
   String get _description =>
       _data['description']?.toString() ?? widget.activity.description;
+  String get _activityReference =>
+      (_data['activityReference'] ?? _data['publicReference'] ??
+              widget.activity.activityReference)
+          .toString();
   String get _status {
     if (_data.isEmpty) return widget.initialStatus;
     return switch (_data['status']) {
@@ -471,16 +475,19 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                   elevation: 2,
                                   child: IconButton(
                                       tooltip: 'Back',
+                                      constraints: const BoxConstraints.tightFor(
+                                          width: 36, height: 36),
+                                      padding: EdgeInsets.zero,
                                       onPressed: _saving
                                           ? null
                                           : () =>
                                               Navigator.pop(context, _changed),
                                       icon: const Icon(Icons.arrow_back,
-                                          size: 21))),
+                                          size: 20))),
                               const SizedBox(width: 20),
                               Expanded(
                                   child: _text('Activity Management',
-                                      bold: true, size: 23)),
+                                      bold: true, size: 22)),
                             ]),
                             const SizedBox(height: 24),
                             _identity(),
@@ -491,7 +498,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                       'Total Booking',
                                       _data['bookingCount']?.toString() ?? '0',
                                       Icons.calendar_month_outlined)),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 8),
                               Expanded(
                                   child: _stat(
                                       'Total Earning',
@@ -502,6 +509,12 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                                       .toString()) ??
                                               0),
                                       Icons.home_outlined)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: _stat(
+                                      'Occupancy',
+                                      '${_data['occupancy']?.toString() ?? '0'}%',
+                                      Icons.sync_alt_outlined)),
                             ]),
                             if (_loading)
                               const Padding(
@@ -617,7 +630,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   : _status == 'Inactive'
                       ? 'InACTIV'
                       : _status,
-              _active ? Colors.green : _purple)
+              _active ? Colors.green : Colors.red,
+              filled: true)
         ]),
         const SizedBox(height: 5),
         _text(_description, color: Colors.grey, size: 13),
@@ -625,7 +639,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         Text.rich(
             TextSpan(text: 'ACTIV ID: ', children: [
               TextSpan(
-                  text: widget.activity.activityId,
+                  text: _activityReference.isNotEmpty
+                      ? _activityReference
+                      : 'Unavailable',
                   style: const TextStyle(color: Colors.grey))
             ]),
             style: const TextStyle(fontFamily: 'Satoshi', fontSize: 12)),
@@ -634,7 +650,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Widget _stat(String title, String value, IconData icon) => Container(
-      height: 70,
+      height: 78,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
           color: Colors.white,
@@ -642,7 +658,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           borderRadius: BorderRadius.circular(12)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: _text(title, size: 9)),
+          Expanded(child: _text(title, size: 12, bold: true)),
           Icon(icon, size: 13, color: Colors.greenAccent.shade400)
         ]),
         const SizedBox(height: 10),
@@ -650,7 +666,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
             child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: _text(value, size: 18, bold: true))),
+                child: _text(value, size: 20, bold: true))),
       ]));
 
   Widget _action(
@@ -1058,12 +1074,13 @@ Widget _panel({required Widget child}) => Container(
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: _border)),
     child: child);
-Widget _badge(String text, Color color) => Container(
+Widget _badge(String text, Color color, {bool filled = false}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-        color: color.withValues(alpha: .09),
+        color: filled ? color : color.withValues(alpha: .09),
         borderRadius: BorderRadius.circular(20)),
-    child: _text(text, size: 11, color: color, bold: true));
+    child: _text(text,
+        size: 11, color: filled ? Colors.white : color, bold: true));
 Widget _button(String label, VoidCallback? onPressed) => SizedBox(
     height: 48,
     width: double.infinity,

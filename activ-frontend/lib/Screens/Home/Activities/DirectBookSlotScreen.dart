@@ -162,6 +162,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         if (courts.isNotEmpty) _serverCourts = courts;
         _serverSlots = slots
             .whereType<Map>()
+            .where((slot) => slot['status']?.toString() != 'not_operational')
             .map((slot) =>
                 _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
             .toList();
