@@ -25,6 +25,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
   bool _loading = true, _saving = false;
   String? _error;
   String? _uploadingQuestion;
+  String _activityName = 'Activity';
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
       _error = null;
     });
     try {
+      final activity = await _api.activity(widget.activityId);
       final questions = await _api.questions(widget.activityId);
       if (!mounted) return;
       for (final question in questions) {
@@ -57,7 +59,10 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
         _controllers.putIfAbsent(
             id, () => TextEditingController(text: value?.toString() ?? ''));
       }
-      setState(() => _questions = questions);
+      setState(() {
+        _questions = questions;
+        _activityName = (activity['name'] ?? 'Activity').toString();
+      });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -73,12 +78,14 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      await _api.saveAnswers(
-          widget.activityId,
-          Map.fromEntries(_answers.entries.where((entry) =>
-              entry.value != null &&
-              entry.value.toString().trim().isNotEmpty &&
-              (entry.value is! List || (entry.value as List).isNotEmpty))));
+      if (_questions.isNotEmpty) {
+        await _api.saveAnswers(
+            widget.activityId,
+            Map.fromEntries(_answers.entries.where((entry) =>
+                entry.value != null &&
+                entry.value.toString().trim().isNotEmpty &&
+                (entry.value is! List || (entry.value as List).isNotEmpty))));
+      }
       if (!mounted) return;
       await Navigator.push(
           context,
@@ -180,7 +187,8 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
               ]));
     } else if (['select', 'radio'].contains(type) && options.isNotEmpty) {
       input = DropdownButtonFormField<String>(
-        initialValue: options.contains(_answers[id]) ? _answers[id] as String : null,
+        initialValue:
+            options.contains(_answers[id]) ? _answers[id] as String : null,
         isExpanded: true,
         decoration:
             OnboardingStyles.inputDecoration(hintText: 'Select an option'),
@@ -276,8 +284,19 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: getStepBarCount(4 / 6, 4, 6)),
         const Padding(
-            padding: EdgeInsets.all(20),
+            padding: EdgeInsets.only(top: 16),
+            child: Text('Add activity - Step 4 of 6',
+                style: OnboardingStyles.body)),
+        const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: Text('Activity details', style: OnboardingStyles.heading)),
+        if (!_loading && _error == null)
+          Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Text(_activityName,
+                  textAlign: TextAlign.center,
+                  style: OnboardingStyles.body
+                      .copyWith(fontWeight: FontWeight.w700))),
         Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -294,8 +313,29 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20),
                             children: [
                               if (_questions.isEmpty)
-                                const Text(
-                                    'No additional questions for this activity. Tap Next to continue.'),
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: const Color(0xFFCEDCE0)),
+                                  ),
+                                  child: Column(children: [
+                                    const Icon(Icons.task_alt,
+                                        size: 48, color: Color(0xFF9D38EB)),
+                                    const SizedBox(height: 16),
+                                    Text('No extra details needed',
+                                        textAlign: TextAlign.center,
+                                        style: OnboardingStyles.body.copyWith(
+                                            fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                        'You can continue to choose amenities for $_activityName.',
+                                        textAlign: TextAlign.center,
+                                        style: OnboardingStyles.body),
+                                  ]),
+                                ),
                               ..._questions.map(_field),
                             ]))),
         Padding(

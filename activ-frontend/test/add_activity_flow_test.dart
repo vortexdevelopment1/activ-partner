@@ -19,32 +19,100 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUpAll(() async {
-    await (FontLoader('Satoshi')..addFont(rootBundle.load('fonts/Satoshi-Medium.otf'))).load();
+    await (FontLoader('Satoshi')
+          ..addFont(rootBundle.load('fonts/Satoshi-Medium.otf')))
+        .load();
   });
   setUp(() {
-    SharedPreferences.setMockInitialValues({'jwt_token': 'session', 'venue_id': 'venue',
-      'operate_value': jsonEncode({'id': 'swimming', 'title': 'Swimming'})});
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'venue_id': 'venue',
+      'operate_value': jsonEncode({'id': 'swimming', 'title': 'Swimming'})
+    });
     BASE_URL = 'https://backend.test/api/v1';
   });
-  http.Response response(Object? data, [int status = 200]) => http.Response(jsonEncode({'data': data}), status);
+  http.Response response(Object? data, [int status = 200]) =>
+      http.Response(jsonEncode({'data': data}), status);
 
-  testWidgets('uses approved venue and backend category IDs, excluding active sports', (tester) async {
+  testWidgets(
+      'details identifies the current activity and explains an empty question set',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final client = MockClient((request) async {
+      expect(request.method, 'GET');
+      if (request.url.path.endsWith('/questions')) return response([]);
+      if (request.url.path.endsWith('/amenities/active')) return response([]);
+      if (request.url.path.endsWith('/venues/activities/activity'))
+        return response(
+            {'id': 'activity', 'name': 'Pickle Ball', 'amenities': []});
+      throw StateError('Unexpected request ${request.url}');
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: AddSelectedVenueFormScreen(
+            activityId: 'activity', client: client)));
+    await tester.pumpAndSettle();
+    expect(find.text('4/6'), findsOneWidget);
+    expect(find.text('Add activity - Step 4 of 6'), findsOneWidget);
+    expect(find.text('Pickle Ball'), findsOneWidget);
+    expect(find.text('No extra details needed'), findsOneWidget);
+    expect(find.text('You can continue to choose amenities for Pickle Ball.'),
+        findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddActivityAmenitiesScreen), findsOneWidget);
+    expect(find.text('5/6'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'failed question load shows Retry rather than claiming no questions are needed',
+      (tester) async {
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/questions'))
+        return http.Response('{}', 503);
+      return response({'id': 'activity', 'name': 'Pickle Ball'});
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: AddSelectedVenueFormScreen(
+            activityId: 'activity', client: client)));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('No extra details needed'), findsNothing);
+    await tester.tap(find.text('Next'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.byType(AddActivityAmenitiesScreen), findsNothing);
+  });
+
+  testWidgets(
+      'uses approved venue and backend category IDs, excluding active sports',
+      (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 1100);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     final client = MockClient((request) async {
-      if (request.url.path.endsWith('/categories/active')) return response([
-        {'id': 'tennis', 'name': 'Tennis'}, {'id': 'swimming', 'name': 'Swimming'},
-      ]);
-      if (request.url.path.endsWith('/my-approved-venues')) return response([
-        {'id': 'venue', 'name': 'Arena', 'services': [
-          {'categoryId': 'tennis', 'status': 'approved'},
-        ]},
-      ]);
+      if (request.url.path.endsWith('/categories/active'))
+        return response([
+          {'id': 'tennis', 'name': 'Tennis'},
+          {'id': 'swimming', 'name': 'Swimming'},
+        ]);
+      if (request.url.path.endsWith('/my-approved-venues'))
+        return response([
+          {
+            'id': 'venue',
+            'name': 'Arena',
+            'services': [
+              {'categoryId': 'tennis', 'status': 'approved'},
+            ]
+          },
+        ]);
       throw StateError('Unexpected request ${request.url}');
     });
-    await tester.pumpWidget(MaterialApp(home: AddListActivityTypeScreen(client: client)));
+    await tester.pumpWidget(
+        MaterialApp(home: AddListActivityTypeScreen(client: client)));
     await tester.pumpAndSettle();
     expect(find.text('1/6'), findsOneWidget);
     expect(find.text('Tennis'), findsNothing);
@@ -55,12 +123,15 @@ void main() {
     expect(find.byType(AddVenuePhotoUploadScreen), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('venue_id'), 'venue');
-    expect(jsonDecode(preferences.getString('operate_value')!)['id'], 'swimming');
+    expect(
+        jsonDecode(preferences.getString('operate_value')!)['id'], 'swimming');
     expect(tester.takeException(), isNull);
   });
 
   for (final failFirstSubmit in [false, true]) {
-    testWidgets('photos → questions → amenities → timing → review${failFirstSubmit ? " with retry" : ""}', (tester) async {
+    testWidgets(
+        'photos → questions → amenities → timing → review${failFirstSubmit ? " with retry" : ""}',
+        (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(430, 1100);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -71,28 +142,65 @@ void main() {
         expect(request.headers['Authorization'], 'Bearer session');
         final path = request.url.path.replaceFirst('/api/v1', '');
         if (request.method != 'GET') writes.add('${request.method} $path');
-        if (path == '/categories/active') return response([{'id': 'swimming', 'name': 'Swimming'}]);
-        if (path == '/venues/venue/activities') return response({'id': 'activity', 'status': 'draft'}, 201);
-        if (path.endsWith('/images')) return response({'imageUrls': List.filled(4, 'photo')}, 201);
-        if (path.endsWith('/questions')) return response([
-          {'id': 'courts', 'questionText': 'Number of pools', 'questionType': 'number', 'isRequired': true},
-          {'id': 'description', 'questionText': 'Description', 'questionType': 'textarea', 'isRequired': true},
-        ]);
+        if (path == '/categories/active')
+          return response([
+            {'id': 'swimming', 'name': 'Swimming'}
+          ]);
+        if (path == '/venues/venue/activities')
+          return response({'id': 'activity', 'status': 'draft'}, 201);
+        if (path.endsWith('/images'))
+          return response({'imageUrls': List.filled(4, 'photo')}, 201);
+        if (path.endsWith('/questions'))
+          return response([
+            {
+              'id': 'courts',
+              'questionText': 'Number of pools',
+              'questionType': 'number',
+              'isRequired': true
+            },
+            {
+              'id': 'description',
+              'questionText': 'Description',
+              'questionType': 'textarea',
+              'isRequired': true
+            },
+          ]);
         if (path.endsWith('/answers')) {
           expect(jsonDecode(request.body)['answers'], [
-            {'questionId': 'courts', 'answer': 2}, {'questionId': 'description', 'answer': 'Indoor swimming pools'},
+            {'questionId': 'courts', 'answer': 2},
+            {'questionId': 'description', 'answer': 'Indoor swimming pools'},
           ]);
           return response([]);
         }
-        if (path == '/amenities/active') return response([{'id': 'parking', 'title': 'Parking', 'type': 'parking', 'active': true}]);
-        if (path == '/venues/activities/activity') return response({'id': 'activity', 'venueId': 'venue', 'categoryId': 'swimming', 'status': 'draft', 'amenities': []});
+        if (path == '/amenities/active')
+          return response([
+            {
+              'id': 'parking',
+              'title': 'Parking',
+              'type': 'parking',
+              'active': true
+            }
+          ]);
+        if (path == '/venues/activities/activity')
+          return response({
+            'id': 'activity',
+            'venueId': 'venue',
+            'categoryId': 'swimming',
+            'status': 'draft',
+            'amenities': []
+          });
         if (path.endsWith('/amenities')) {
-          expect(jsonDecode(request.body), {'amenities': ['Parking']}); return response({});
+          expect(jsonDecode(request.body), {
+            'amenities': ['Parking']
+          });
+          return response({});
         }
         if (path.endsWith('/availability')) {
           final timing = jsonDecode(request.body)['venue_timing'];
           expect((timing as Map).keys, ['swimming']);
-          expect(timing['swimming']['Monday'], [{'open': '09:00 AM', 'close': '06:00 PM'}]);
+          expect(timing['swimming']['Monday'], [
+            {'open': '09:00 AM', 'close': '06:00 PM'}
+          ]);
           return response({});
         }
         if (path.endsWith('/submit')) {
@@ -101,9 +209,16 @@ void main() {
         }
         throw StateError('Unexpected request ${request.method} $path');
       });
-      final bytes = (await rootBundle.load('assets/activities/swimming.png')).buffer.asUint8List();
-      await tester.pumpWidget(MaterialApp(home: AddVenuePhotoListViewScreen(
-        images: List.generate(4, (_) => XFile.fromData(bytes, path: 'assets/activities/swimming.png')), client: client,
+      final bytes = (await rootBundle.load('assets/activities/swimming.png'))
+          .buffer
+          .asUint8List();
+      await tester.pumpWidget(MaterialApp(
+          home: AddVenuePhotoListViewScreen(
+        images: List.generate(
+            4,
+            (_) =>
+                XFile.fromData(bytes, path: 'assets/activities/swimming.png')),
+        client: client,
       )));
       await tester.pumpAndSettle();
       expect(find.text('3/6'), findsOneWidget);
@@ -114,8 +229,11 @@ void main() {
       await tester.tap(find.text('Next'));
       await tester.pumpAndSettle();
       expect(find.text('Please answer this question'), findsNWidgets(2));
-      await tester.enterText(find.byKey(const ValueKey('activity-question-courts')), '2');
-      await tester.enterText(find.byKey(const ValueKey('activity-question-description')), 'Indoor swimming pools');
+      await tester.enterText(
+          find.byKey(const ValueKey('activity-question-courts')), '2');
+      await tester.enterText(
+          find.byKey(const ValueKey('activity-question-description')),
+          'Indoor swimming pools');
       await tester.tap(find.text('Next'));
       await tester.pumpAndSettle();
       expect(find.byType(AddActivityAmenitiesScreen), findsOneWidget);
@@ -127,14 +245,18 @@ void main() {
       expect(find.text('6/6'), findsOneWidget);
       final dynamic state = tester.state(find.byType(AddVenueTimingScreen));
       state.toggleDay('Mon', true);
-      state.timings['Mon'].timeSlots..clear()..add({'open': '09:00 AM', 'close': '06:00 PM'});
+      state.timings['Mon'].timeSlots
+        ..clear()
+        ..add({'open': '09:00 AM', 'close': '06:00 PM'});
       await tester.pumpAndSettle();
       await tester.tap(find.text('Submit'));
       await tester.pumpAndSettle();
       if (failFirstSubmit) {
         expect(find.byType(AddActivitySubmissionResultScreen), findsNothing);
         expect(find.byType(AddVenueTimingScreen), findsOneWidget);
-        expect(state.timings['Mon'].timeSlots, [{'open': '09:00 AM', 'close': '06:00 PM'}]);
+        expect(state.timings['Mon'].timeSlots, [
+          {'open': '09:00 AM', 'close': '06:00 PM'}
+        ]);
         await tester.pump(const Duration(seconds: 5));
         await tester.pumpAndSettle();
         fail = false;
@@ -142,16 +264,23 @@ void main() {
         await tester.pumpAndSettle();
       }
       expect(find.byType(AddActivitySubmissionResultScreen), findsOneWidget);
-      expect(writes.indexOf('POST /venues/activities/activity/answers'), lessThan(writes.indexOf('PATCH /venues/activities/activity/amenities')));
-      expect(writes.indexOf('PATCH /venues/venue/availability'), lessThan(writes.indexOf('POST /venues/activities/activity/submit')));
+      expect(
+          writes.indexOf('POST /venues/activities/activity/answers'),
+          lessThan(
+              writes.indexOf('PATCH /venues/activities/activity/amenities')));
+      expect(writes.indexOf('PATCH /venues/venue/availability'),
+          lessThan(writes.indexOf('POST /venues/activities/activity/submit')));
       expect(tester.takeException(), isNull);
     });
   }
 
-  test('retry after a lost response accepts an already queued activity without writing again', () async {
+  test(
+      'retry after a lost response accepts an already queued activity without writing again',
+      () async {
     var calls = 0;
     final api = ActivitySetupApi(client: MockClient((request) async {
-      calls++; expect(request.method, 'GET');
+      calls++;
+      expect(request.method, 'GET');
       return response({'id': 'activity', 'status': 'pending'});
     }));
     await api.submit('activity', {});
@@ -162,10 +291,18 @@ void main() {
     final calls = <String>[];
     final api = ActivitySetupApi(client: MockClient((request) async {
       calls.add(request.method);
-      if (request.method == 'GET') return response({'status': 'draft', 'venueId': 'venue', 'categoryId': 'swimming'});
+      if (request.method == 'GET')
+        return response(
+            {'status': 'draft', 'venueId': 'venue', 'categoryId': 'swimming'});
       return http.Response('{}', 503);
     }));
-    await expectLater(api.submit('activity', {'Monday': [{'open': '09:00 AM', 'close': '06:00 PM'}]}), throwsA(isA<ActivitySetupException>()));
+    await expectLater(
+        api.submit('activity', {
+          'Monday': [
+            {'open': '09:00 AM', 'close': '06:00 PM'}
+          ]
+        }),
+        throwsA(isA<ActivitySetupException>()));
     expect(calls, ['GET', 'PATCH']);
   });
 }

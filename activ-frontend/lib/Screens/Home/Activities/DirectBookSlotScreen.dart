@@ -105,15 +105,30 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
   }
 
+  Future<http.Response> _getSlotsResponse(Uri uri, String token) async {
+    final get = widget.client?.get ?? http.get;
+    final headers = {'Authorization': 'Bearer $token'};
+    var response = await get(uri, headers: headers)
+        .timeout(const Duration(seconds: 15));
+    // Availability reads can be retried safely after a temporary server failure.
+    // Reservation POST requests are never retried here.
+    if (response.statusCode >= 500) {
+      response = await get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+    }
+    return response;
+  }
+
   Future<void> _loadSlots() async {
     if (!mounted ||
-        _loadingSlots ||
         _serviceId.isEmpty ||
         widget.venueId.isEmpty) return;
     final generation = ++_slotLoadGeneration;
     setState(() {
       _loadingSlots = true;
       _slotError = null;
+      _serverSlots = [];
+      _selectedSlots.clear();
     });
     try {
       final token = await SharedPreference.readStr('jwt_token');
@@ -126,10 +141,10 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
         'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
         'court': _selectedCourt,
       });
-      final response = await (widget.client?.get ?? http.get)(
-        uri,
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
+      final response = await _getSlotsResponse(uri, token);
+      if (response.statusCode >= 500) {
+        throw Exception('Unable to load slot availability. Please retry.');
+      }
       final body = jsonDecode(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(body['message'] ?? 'Unable to load slots.');
@@ -155,7 +170,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     } catch (error) {
       if (!mounted || generation != _slotLoadGeneration) return;
       setState(() {
-        _serverSlots = null;
+        _serverSlots = [];
         _slotError = error.toString().replaceFirst('Exception: ', '');
         _selectedSlots.clear();
       });
@@ -177,9 +192,10 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       'date': DateFormat('yyyy-MM-dd').format(date),
       'court': _selectedCourt,
     });
-    final response = await (widget.client?.get ?? http.get)(uri,
-            headers: {'Authorization': 'Bearer $token'})
-        .timeout(const Duration(seconds: 15));
+    final response = await _getSlotsResponse(uri, token);
+    if (response.statusCode >= 500) {
+      throw Exception('Unable to load slot availability. Please retry.');
+    }
     final body = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(body['message'] ?? 'Unable to load slots.');
@@ -517,7 +533,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   Future<void> _continueToSlotSelection() async {
-    if (_loadingSlots || _slots.isEmpty) {
+    if (_loadingSlots || _slotError != null || _slots.isEmpty) {
       _message('No slots are available for this date.');
       return;
     }
@@ -691,13 +707,19 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                       if (_slotError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 18),
-                          child: Text(_slotError!,
-                              style: const TextStyle(
-                                  fontFamily: 'Satoshi',
-                                  fontSize: 13,
-                                  color: Color(0xFFFF6B6B))),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_slotError!,
+                                  style: const TextStyle(
+                                      fontFamily: 'Satoshi',
+                                      fontSize: 13,
+                                      color: Color(0xFFFF6B6B))),
+                              TextButton(onPressed: _loadSlots, child: const Text('Retry')),
+                            ],
+                          ),
                         ),
-                      if (!_loadingSlots && slots.isEmpty)
+                      if (!_loadingSlots && _slotError == null && slots.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(top: 18),
                           child: Text('No slots available for this date.',
