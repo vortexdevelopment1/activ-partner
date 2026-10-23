@@ -137,6 +137,7 @@ flutter:
     - assets/ic_yoga.png
     - assets/ic_right_green.png
     - assets/ic_pan.png
+    - assets/callback_calendar.png
     - assets/ic_calendar.png
     - assets/ic_clock.png
     - assets/iconamoon_profile.svg

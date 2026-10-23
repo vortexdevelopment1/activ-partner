@@ -404,7 +404,30 @@ class _State extends State<ContactSupportFormScreen> {
                                             onTap: _submitting ? null : _submitSupportRequest,
                                             child: Container(
                                               margin: const EdgeInsets.only(left: 5),
-                                                child: getButtonBlack(context, "Submit", "contactSupportForm"))
+                                              child: _submitting
+                                                  ? Container(
+                                                      height: 50,
+                                                      margin: const EdgeInsets.fromLTRB(12, 15, 15, 15),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.black,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      ),
+                                                      child: Center(
+                                                        child: Semantics(
+                                                          label: 'Submitting request',
+                                                          liveRegion: true,
+                                                          child: const SizedBox(
+                                                            width: 24,
+                                                            height: 24,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2.5,
+                                                              color: AppColors.yellow,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : getButtonBlack(context, "Submit", "contactSupportForm"))
                                         ),
                                       )
                                     ],

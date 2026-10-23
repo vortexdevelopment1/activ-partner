@@ -113,23 +113,92 @@ Typing the Partner's full legal name and accepting this Agreement constitutes a 
     super.dispose();
   }
 
+  Future<http.Response> _getAgreementResource(String url, String token) =>
+      (widget.client?.get ?? http.get)(Uri.parse(url), headers: {
+        'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 30));
+
+  void _checkDownloadResponse(http.Response response) {
+    if (response.statusCode == 200 || response.statusCode == 201) return;
+    if (response.statusCode == 401) {
+      throw Exception('Your session has expired. Please sign in again.');
+    }
+    String message =
+        'Unable to download the partnership agreement. Please retry.';
+    try {
+      final value = jsonDecode(response.body)['message'];
+      if (value is String && value.trim().isNotEmpty) message = value;
+    } catch (_) {
+      // Keep the download error for non-JSON responses.
+    }
+    throw Exception(message);
+  }
+
+  Future<String?> _resolveAgreementVenue(String token) async {
+    final selected = (await SharedPreference.readStr('venue_id'))?.trim();
+    if (selected != null && selected.isNotEmpty) return selected;
+
+    final venues = <Map<String, dynamic>>[];
+    var page = 1;
+    var totalPages = 1;
+    do {
+      final response = await _getAgreementResource(
+          '$BASE_URL/venues/my-venues?page=$page&limit=100', token);
+      _checkDownloadResponse(response);
+      final data = jsonDecode(response.body)['data'];
+      final items = data is Map ? data['items'] : data;
+      if (items is! List) {
+        throw Exception('Unable to load your venues. Please retry.');
+      }
+      venues.addAll(items.whereType<Map>().map(Map<String, dynamic>.from));
+      totalPages = data is Map ? (data['totalPages'] as num?)?.toInt() ?? 1 : 1;
+      page++;
+    } while (page <= totalPages);
+
+    final signed = venues
+        .where((venue) =>
+            venue['termsAccepted'] == true || venue['termsAcceptedAt'] != null)
+        .toList();
+    if (signed.isEmpty) {
+      throw Exception(
+          'No signed partnership agreement is available for your venues.');
+    }
+    if (!mounted) return null;
+    final venueId = signed.length == 1
+        ? signed.single['id']?.toString()
+        : await showDialog<String>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: const Text('Choose venue'),
+              children: signed
+                  .map((venue) => SimpleDialogOption(
+                        onPressed: () =>
+                            Navigator.pop(context, venue['id']?.toString()),
+                        child: Text((venue['name'] ?? 'Venue').toString()),
+                      ))
+                  .toList(),
+            ),
+          );
+    if (venueId != null && venueId.isNotEmpty) {
+      await SharedPreference.addStringToSF('venue_id', venueId);
+      return venueId;
+    }
+    return null;
+  }
+
   Future<void> _downloadAgreement() async {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      final venueId = await SharedPreference.readStr('venue_id');
       final token = await SharedPreference.readStr('jwt_token');
-      if (venueId == null || venueId.isEmpty || token == null || token.isEmpty) {
+      if (token == null || token.trim().isEmpty) {
         throw Exception('Your session is missing. Please sign in again.');
       }
-      final uri = Uri.parse('$BASE_URL/venues/$venueId/partner-agreement/download');
-      final headers = {'Authorization': 'Bearer $token'};
-      final response = await (widget.client?.get(uri, headers: headers) ??
-              http.get(uri, headers: headers))
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception('Unable to download the partnership agreement.');
-      }
+      final venueId = await _resolveAgreementVenue(token);
+      if (venueId == null || !mounted) return;
+      final response = await _getAgreementResource(
+          '$BASE_URL/venues/$venueId/partner-agreement/download', token);
+      _checkDownloadResponse(response);
       final data = jsonDecode(response.body)['data'];
       await FilePicker.platform.saveFile(
         dialogTitle: 'Save partnership agreement',
@@ -409,7 +478,8 @@ class _PrimaryButton extends StatelessWidget {
           backgroundColor: Colors.black,
           foregroundColor: const Color(0xFFD8F34A),
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         child: Text(
           text,

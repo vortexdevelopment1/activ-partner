@@ -1298,43 +1298,89 @@ Future<void> _showCallbackDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
     builder: (context) => Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 44),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(34, 42, 34, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.event_available_rounded,
-                color: AppColors.purple, size: 92),
-            const SizedBox(height: 26),
-            const Text(
-              "We'll call you soon!",
-              style: TextStyle(
-                fontFamily: 'Satoshi',
-                fontWeight: FontWeight.w700,
-                fontSize: 25,
-                color: AppColors.darkBlack,
+      backgroundColor: const Color(0xFFF6FBE3),
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      constraints: const BoxConstraints(maxWidth: 552),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: 552,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 42, 28, 46),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/callback_calendar.png',
+                width: 112,
+                height: 112,
+                fit: BoxFit.contain,
+                excludeFromSemantics: true,
               ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Thank you for your request.\nOur team member will call you during\nyour chosen time slot.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Satoshi',
-                fontSize: 17,
-                height: 1.45,
-                color: AppColors.hintColor,
+              const SizedBox(height: 32),
+              const Text(
+                'We\u2019ll call you soon!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 28,
+                  height: 1.2,
+                  color: AppColors.black1,
+                ),
               ),
-            ),
-            const SizedBox(height: 30),
-            _PrimaryButton(
-              text: 'Okay',
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+              const SizedBox(height: 24),
+              const Text(
+                'Thank you for your request.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 19,
+                  height: 1.4,
+                  color: Color(0xFF626262),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: const Text(
+                  'Our team member will call you during your chosen time slot.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 19,
+                    height: 1.4,
+                    color: Color(0xFF626262),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 210,
+                height: 72,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: AppColors.yellow,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'Okay',
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),
