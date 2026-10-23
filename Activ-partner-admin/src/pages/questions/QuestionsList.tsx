@@ -160,10 +160,14 @@ export const QuestionsList: React.FC = () => {
         : null,
     };
 
-    if (editItem) {
-      updateMutation.mutate({ id: editItem.id, data: payload });
-    } else {
-      createMutation.mutate(payload);
+    try {
+      if (editItem) {
+        await updateMutation.mutateAsync({ id: editItem.id, data: payload });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
+    } catch {
+      // The mutation's onError displays feedback; keep the form open for retry.
     }
   };
 
@@ -335,6 +339,7 @@ export const QuestionsList: React.FC = () => {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => { setEditItem(q); setFormOpen(true); }}
+                        aria-label={`Edit ${q.questionText}`}
                         className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
                       >
                         <Pencil size={13} />

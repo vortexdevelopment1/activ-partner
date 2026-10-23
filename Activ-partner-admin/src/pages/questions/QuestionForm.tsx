@@ -1,6 +1,6 @@
-import React, { useEffect, useId } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { SelectMenu } from '../../components/ui/SelectMenu';
 import { Modal } from '../../components/ui/Modal';
@@ -49,6 +49,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
   initial,
 }) => {
   const formId = useId();
+  const submitLock = useRef(false);
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.getAll({ limit: 100 }),
@@ -98,17 +99,23 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => { if (!submitLock.current) onClose(); }}
       title={initial ? 'Edit Question' : 'Add Question'}
       size="lg"
       footer={<div className="flex flex-wrap justify-end gap-3">
-        <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-        <button type="submit" form={formId} disabled={isSubmitting} className="btn-primary">
+        <button type="button" onClick={onClose} disabled={isSubmitting} className="btn-secondary">Cancel</button>
+        <button type="submit" form={formId} disabled={isSubmitting} aria-busy={isSubmitting} className="btn-primary">
+          {isSubmitting && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
           {isSubmitting ? 'Saving...' : initial ? 'Save Changes' : 'Add Question'}
         </button>
       </div>}
     >
-      <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form id={formId} onSubmit={(event) => {
+        event.preventDefault();
+        if (submitLock.current) return;
+        submitLock.current = true;
+        void handleSubmit(onSubmit)(event).finally(() => { submitLock.current = false; });
+      }} className="space-y-4">
         {/* Question text */}
         <div>
           <label className="label">Question Text *</label>
