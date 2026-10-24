@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
@@ -9,8 +10,18 @@ import 'AddActivityAmenitiesScreen.dart';
 
 class AddSelectedVenueFormScreen extends StatefulWidget {
   const AddSelectedVenueFormScreen(
-      {super.key, required this.activityId, this.client});
+      {super.key,
+      this.activityId = '',
+      this.activityIdFuture,
+      this.onActivityReady,
+      this.initialActivity,
+      this.initialQuestions,
+      this.client});
   final String activityId;
+  final Future<String>? activityIdFuture;
+  final Future<void> Function(String activityId)? onActivityReady;
+  final Map<String, dynamic>? initialActivity;
+  final List<Map<String, dynamic>>? initialQuestions;
   final http.Client? client;
   @override
   State<AddSelectedVenueFormScreen> createState() => _DetailsState();
@@ -26,11 +37,13 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
   String? _error;
   String? _uploadingQuestion;
   String _activityName = 'Activity';
+  String _resolvedActivityId = '';
 
   @override
   void initState() {
     super.initState();
     _api = ActivitySetupApi(client: widget.client);
+    _resolvedActivityId = widget.activityId;
     _load();
   }
 
@@ -49,24 +62,47 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
       _error = null;
     });
     try {
-      final activity = await _api.activity(widget.activityId);
-      final questions = await _api.questions(widget.activityId);
-      if (!mounted) return;
-      for (final question in questions) {
-        final id = question['id'].toString();
-        final value = question['answer'];
-        if (value != null) _answers[id] = value;
-        _controllers.putIfAbsent(
-            id, () => TextEditingController(text: value?.toString() ?? ''));
+      if (widget.initialActivity != null && widget.initialQuestions != null) {
+        _applyLoadedData(widget.initialActivity!, widget.initialQuestions!);
+        return;
       }
-      setState(() {
-        _questions = questions;
-        _activityName = (activity['name'] ?? 'Activity').toString();
-      });
+      if (_resolvedActivityId.isEmpty && widget.activityIdFuture != null) {
+        _resolvedActivityId = await widget.activityIdFuture!;
+      }
+      if (_resolvedActivityId.isEmpty) {
+        throw Exception('Activity upload did not return an activity ID.');
+      }
+      final results = await Future.wait<dynamic>([
+        _api.activity(_resolvedActivityId),
+        _api.questions(_resolvedActivityId),
+      ]);
+      final activity = results[0] as Map<String, dynamic>;
+      final questions = results[1] as List<Map<String, dynamic>>;
+      _applyLoadedData(activity, questions);
+      if (widget.onActivityReady != null) {
+        unawaited(widget.onActivityReady!(_resolvedActivityId));
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _applyLoadedData(
+      Map<String, dynamic> activity, List<Map<String, dynamic>> questions) {
+    for (final question in questions) {
+      final id = question['id'].toString();
+      final value = question['answer'];
+      if (value != null) _answers[id] = value;
+      _controllers.putIfAbsent(
+          id, () => TextEditingController(text: value?.toString() ?? ''));
+    }
+    if (mounted) {
+      setState(() {
+        _questions = questions;
+        _activityName = (activity['name'] ?? 'Activity').toString();
+      });
     }
   }
 
@@ -80,7 +116,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
     try {
       if (_questions.isNotEmpty) {
         await _api.saveAnswers(
-            widget.activityId,
+            _resolvedActivityId,
             Map.fromEntries(_answers.entries.where((entry) =>
                 entry.value != null &&
                 entry.value.toString().trim().isNotEmpty &&
@@ -91,7 +127,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
           context,
           MaterialPageRoute<void>(
               builder: (_) => AddActivityAmenitiesScreen(
-                  activityId: widget.activityId, client: widget.client)));
+                  activityId: _resolvedActivityId, client: widget.client)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -158,7 +194,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
                             setState(() => _uploadingQuestion = id);
                             try {
                               final url = await _api.uploadAnswerFile(
-                                  widget.activityId,
+                                  _resolvedActivityId,
                                   id,
                                   file.bytes!,
                                   file.name);
@@ -212,7 +248,8 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
                 for (final option in options)
                   CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(option),
+                      title: Text(option,
+                          style: OnboardingStyles.body.copyWith(fontSize: 20)),
                       value: (field.value ?? []).contains(option),
                       onChanged: (selected) {
                         final value = List<String>.from(field.value ?? []);
@@ -269,7 +306,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
               '${question['questionText'] ?? 'Activity details'}${required ? ' *' : ''}',
-              style: OnboardingStyles.body),
+              style: OnboardingStyles.body.copyWith(fontSize: 16)),
           const SizedBox(height: 8),
           input,
           if ((question['helperText'] ?? '').toString().isNotEmpty)
@@ -279,27 +316,28 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
 
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
-          child: Column(children: [
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
         Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: getStepBarCount(4 / 6, 4, 6)),
-        const Padding(
-            padding: EdgeInsets.only(top: 16),
-            child: Text('Add activity - Step 4 of 6',
-                style: OnboardingStyles.body)),
-        const Padding(
-            padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: Text('Activity details', style: OnboardingStyles.heading)),
         if (!_loading && _error == null)
           Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Text(_activityName,
-                  textAlign: TextAlign.center,
-                  style: OnboardingStyles.body
-                      .copyWith(fontWeight: FontWeight.w700))),
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_activityName,
+                        style: OnboardingStyles.heading.copyWith(
+                            fontSize: 34, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text('Provide Activity Specific Details',
+                        style: OnboardingStyles.body.copyWith(fontSize: 16)),
+                  ])),
         Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SizedBox.shrink()
                 : _error != null
                     ? Center(
                         child:
@@ -360,4 +398,22 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
                           : _next)),
             ])),
       ]));
+
+  Widget _detailsSkeleton() => ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        children: [
+          for (final height in [150.0, 64.0, 64.0, 56.0, 56.0, 56.0])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: Container(
+                height: height,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFD5E0D0)),
+                ),
+              ),
+            ),
+        ],
+      );
 }

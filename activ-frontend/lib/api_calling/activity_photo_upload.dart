@@ -20,6 +20,137 @@ class ActivityPhotoUploader {
   final http.Client client;
   final String baseUrl;
 
+  Future<String> createAndUpload({
+    required String token,
+    required String venueId,
+    required Map<String, dynamic> category,
+    required List<XFile> images,
+  }) async {
+    final serviceId = await createActivity(
+      token: token,
+      venueId: venueId,
+      category: category,
+    );
+    await uploadImages(token: token, serviceId: serviceId, images: images);
+    return serviceId;
+  }
+
+  Future<String> createActivity({
+    required String token,
+    required String venueId,
+    required Map<String, dynamic> category,
+  }) async {
+    if (token.isEmpty) {
+      throw const ActivityUploadException(
+          'Your session has expired. Please sign in again.');
+    }
+    final headers = {'Authorization': 'Bearer $token'};
+    try {
+      final categories = _data(await client
+          .get(Uri.parse('$baseUrl/categories/active'), headers: headers)
+          .timeout(const Duration(seconds: 30)));
+      final selectedId = category['id']?.toString() ?? '';
+      final name = (category['name'] ?? category['title'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      final available =
+          categories is List ? categories.whereType<Map>().toList() : <Map>[];
+      final match = available
+              .where((item) => item['id']?.toString() == selectedId)
+              .firstOrNull ??
+          available
+              .where((item) =>
+                  item['name']?.toString().trim().toLowerCase() == name)
+              .firstOrNull;
+      if (match == null) {
+        throw const ActivityUploadException(
+            'This activity is unavailable. Please select it again.');
+      }
+      var resolvedVenueId = venueId;
+      if (resolvedVenueId.isEmpty) {
+        final venues = _data(await client
+            .get(Uri.parse('$baseUrl/venues/my-approved-venues'),
+                headers: headers)
+            .timeout(const Duration(seconds: 30)));
+        if (venues is List && venues.length == 1 && venues.first is Map) {
+          resolvedVenueId = venues.first['id']?.toString() ?? '';
+        }
+      }
+      if (resolvedVenueId.isEmpty) {
+        throw const ActivityUploadException(
+            'Please select an approved venue before adding an activity.');
+      }
+      final created = _data(await client
+          .post(Uri.parse('$baseUrl/venues/$resolvedVenueId/activities'),
+              headers: {...headers, 'Content-Type': 'application/json'},
+              body: jsonEncode({'categoryId': match['id']}))
+          .timeout(const Duration(seconds: 30)));
+      final serviceId = created is Map ? created['id']?.toString() ?? '' : '';
+      if (created is Map &&
+          ['approved', 'pending']
+              .contains(created['status']?.toString().toLowerCase())) {
+        throw const ActivityUploadException(
+            'This sport is already active or under review at your venue.');
+      }
+      if (serviceId.isEmpty) {
+        throw const ActivityUploadException(
+            'Activity setup failed. Please try again.');
+      }
+      return serviceId;
+    } on TimeoutException {
+      throw const ActivityUploadException(
+          'Unable to prepare activity. Please check your connection and retry.');
+    } on http.ClientException {
+      throw const ActivityUploadException(
+          'Unable to reach the server. Please check your connection and retry.');
+    }
+  }
+
+  Future<void> uploadImages({
+    required String token,
+    required String serviceId,
+    required List<XFile> images,
+  }) async {
+    final files = <http.MultipartFile>[];
+    final uniqueImages = <XFile>[];
+    final seenImages = <String>{};
+    for (final image in images) {
+      final bytes = await image.readAsBytes();
+      final key = base64Encode(bytes);
+      if (seenImages.add(key)) uniqueImages.add(image);
+    }
+
+    for (var index = 0; index < uniqueImages.length; index++) {
+      final image = uniqueImages[index];
+      final bytes = await image.readAsBytes();
+      final name = image.name.isEmpty ? 'activity_$index.jpg' : image.name;
+      final extension = name.split('.').last.toLowerCase();
+      final type = image.mimeType ??
+          {'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}[
+              extension] ??
+          'image/jpeg';
+      files.add(http.MultipartFile.fromBytes('images', bytes,
+          filename: name, contentType: MediaType.parse(type)));
+    }
+    final response = await client
+        .send(http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/venues/activities/$serviceId/images'),
+        )
+          ..headers['Authorization'] = 'Bearer $token'
+          ..fields['replaceImages'] = 'true'
+          ..files.addAll(files))
+        .then(http.Response.fromStream)
+        .timeout(const Duration(minutes: 2));
+    final uploaded = _data(response);
+    if (uploaded is! Map || uploaded['imageUrls'] is! List ||
+        (uploaded['imageUrls'] as List).length < uniqueImages.length) {
+      throw const ActivityUploadException(
+          'The photos were not saved. Please try again.');
+    }
+  }
+
   Future<String> upload({
     required String token,
     required String venueId,

@@ -679,7 +679,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                 style: TextStyle(
                     fontSize: widget.managerLayout ? 11 : 13,
                     fontFamily: 'Satoshi',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF7F7F7F))),
             const SizedBox(height: 12),
             Text(
@@ -916,7 +916,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   static const _statusLabels = {
     _BookingStatus.upcoming: 'Upcoming',
     _BookingStatus.ongoing: 'Ongoing',
-    _BookingStatus.canceled: 'Canceled',
+    _BookingStatus.canceled: 'Cancelled',
     _BookingStatus.noShow: 'No Show',
     _BookingStatus.completed: 'Completed',
     _BookingStatus.pending: 'Pending',

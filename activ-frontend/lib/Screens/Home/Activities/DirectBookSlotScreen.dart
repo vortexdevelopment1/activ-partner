@@ -105,6 +105,18 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
   }
 
+  @override
+  void didUpdateWidget(covariant DirectBookSlotScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.venueId != widget.venueId ||
+        oldWidget.activity.activityId != widget.activity.activityId) {
+      _serverSlots = null;
+      _serverCourts = null;
+      _selectedSlots.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
+    }
+  }
+
   Future<http.Response> _getSlotsResponse(Uri uri, String token) async {
     final get = widget.client?.get ?? http.get;
     final headers = {'Authorization': 'Bearer $token'};
@@ -205,6 +217,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     final slots = data['slots'] is List ? data['slots'] as List : const [];
     return slots
         .whereType<Map>()
+        .where((slot) => slot['status']?.toString() != 'not_operational')
         .map(
             (slot) => _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
         .toList();

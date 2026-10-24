@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -47,6 +48,14 @@ export class BookingsService {
     private readonly notificationsService: NotificationsService,
     private readonly prisma: PrismaService,
   ) {}
+
+  private jsonSafe<T>(value: T): T {
+    return JSON.parse(
+      JSON.stringify(value, (_key, nested) =>
+        typeof nested === "bigint" ? Number(nested) : nested,
+      ),
+    ) as T;
+  }
 
   private businessDateKey(date = new Date()): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -447,39 +456,57 @@ export class BookingsService {
   }
 
   async checkIn(bookingId: string, partnerUserId: string): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({
+    const booking = await this.prisma.bookings.findUnique({
       where: { id: bookingId },
-      relations: ["venue"],
+      include: { slots: { include: { facilities: { include: { venues: true } } } } },
     });
     if (!booking) throw new NotFoundException("Booking not found");
-    if (booking.venue.partnerId !== partnerUserId)
+    if (booking.slots.facilities.venues.partner_id !== partnerUserId)
       throw new ForbiddenException("Not authorized to manage this booking");
-    if (booking.status === BookingStatus.CANCELLED)
+    if (booking.status === "CANCELLED")
       throw new BadRequestException("Cannot check in a cancelled booking");
-    if (booking.status === BookingStatus.NO_SHOW)
+    if (booking.status === "NO_SHOW")
       throw new BadRequestException("Booking is already marked as no-show");
-    booking.status = BookingStatus.CONFIRMED;
-    return this.bookingRepository.save(booking);
+    const updated = await this.prisma.bookings.update({
+      where: { id: bookingId },
+      data: { status: "CONFIRMED", checked_in_at: new Date() },
+    });
+    return this.jsonSafe(updated) as unknown as Booking;
   }
 
   async markNoShow(bookingId: string, partnerUserId: string): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({
+    const booking = await this.prisma.bookings.findUnique({
       where: { id: bookingId },
-      relations: ["venue"],
+      include: { slots: { include: { facilities: { include: { venues: true } } } } },
     });
     if (!booking) throw new NotFoundException("Booking not found");
-    if (booking.venue.partnerId !== partnerUserId)
+    if (booking.slots.facilities.venues.partner_id !== partnerUserId)
       throw new ForbiddenException("Not authorized to manage this booking");
-    if (booking.status === BookingStatus.CANCELLED)
+    if (booking.status === "CANCELLED")
       throw new BadRequestException(
         "Cannot mark a cancelled booking as no-show",
       );
-    if (booking.status === BookingStatus.COMPLETED)
+    if (booking.status === "COMPLETED")
       throw new BadRequestException(
         "Cannot mark a completed booking as no-show",
       );
-    booking.status = BookingStatus.NO_SHOW;
-    return this.bookingRepository.save(booking);
+    try {
+      const updated = await this.prisma.bookings.update({
+        where: { id: bookingId },
+        data: { status: "NO_SHOW" },
+      });
+      return this.jsonSafe(updated) as unknown as Booking;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('invalid input value for enum "BookingStatus"')
+      ) {
+        throw new ServiceUnavailableException(
+          "No-show status is not enabled in the database. Apply the pending BookingStatus migration.",
+        );
+      }
+      throw error;
+    }
   }
 
   async getBookingStats(partnerId?: string) {

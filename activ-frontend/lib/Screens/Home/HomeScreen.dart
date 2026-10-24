@@ -314,7 +314,7 @@ class _State extends State<HomeScreen> {
 
   String _displayStatus(String? value) {
     final normalized = (value ?? '').trim().toLowerCase();
-    if (normalized == 'cancelled' || normalized == 'canceled') return 'Canceled';
+    if (normalized == 'cancelled' || normalized == 'canceled') return 'Cancelled';
     if (normalized == 'no_show' || normalized == 'no show') return 'No Show';
     if (normalized.isEmpty) return 'Upcoming';
     return normalized
@@ -1158,7 +1158,7 @@ class _State extends State<HomeScreen> {
         bg = const Color(0xFFDCFCE7);
         fg = const Color(0xFF16A34A);
         break;
-      case 'Canceled':
+      case 'Cancelled':
         bg = const Color(0xFFF3F4F6);
         fg = const Color(0xFF6B7280);
         break;
@@ -1180,7 +1180,10 @@ class _State extends State<HomeScreen> {
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(status,
           style: TextStyle(
-              fontSize: 11, fontFamily: 'Satoshi', color: fg)),
+              fontSize: 11,
+              fontFamily: 'Satoshi',
+              fontWeight: FontWeight.w700,
+              color: fg)),
     );
   }
 

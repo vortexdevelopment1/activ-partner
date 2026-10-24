@@ -1326,10 +1326,12 @@ export class VenuesService {
       });
       if (!windows.length) continue;
 
-      const horizonStart = new Date();
-      horizonStart.setUTCHours(0, 0, 0, 0);
+      // Availability is configured as venue-local wall time.  ACTIV venues
+      // currently operate in India, so build the calendar in IST and only
+      // then convert each slot to UTC for timestamptz storage.
+      const horizonStart = this.istDateForOffset(new Date(), 0);
       const horizonEnd = new Date(horizonStart);
-      horizonEnd.setUTCDate(horizonEnd.getUTCDate() + 180);
+      horizonEnd.setUTCDate(horizonEnd.getUTCDate() + 14);
       const existing = await prisma.slots.findMany({
         where: {
           facility_id: facility.id,
@@ -1349,10 +1351,7 @@ export class VenuesService {
           const open = this.timeToMinutes(window.open_time);
           const close = this.timeToMinutes(window.close_time);
           for (let start = open; start + duration <= close; start += duration) {
-            const startsAt = new Date(Date.UTC(
-              date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
-              Math.floor(start / 60), start % 60,
-            ));
+            const startsAt = this.istWallTimeToUtc(date, start);
             const endsAt = new Date(startsAt.getTime() + duration * 60_000);
             const key = `${startsAt.toISOString()}|${endsAt.toISOString()}`;
             if (existingKeys.has(key)) continue;
@@ -1371,7 +1370,73 @@ export class VenuesService {
         }
       }
       if (data.length) await prisma.slots.createMany({ data });
+
+      // A schedule update can shorten a window (for example 23:00 → 20:00).
+      // The old implementation only appended missing slots, leaving those
+      // obsolete AVAILABLE slots bookable. Block only unbooked slots that are
+      // no longer part of the desired schedule; booked/protected slots remain
+      // untouched for reconciliation and audit purposes.
+      const desiredKeys = new Set<string>();
+      for (let date = new Date(horizonStart); date < horizonEnd; date.setUTCDate(date.getUTCDate() + 1)) {
+        const day = dayNames[date.getUTCDay()];
+        for (const window of windows.filter((entry: any) => entry.day.toLowerCase() === day)) {
+          const open = this.timeToMinutes(window.open_time);
+          const close = this.timeToMinutes(window.close_time);
+          for (let start = open; start + duration <= close; start += duration) {
+            const startsAt = this.istWallTimeToUtc(date, start);
+            const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+            desiredKeys.add(`${startsAt.toISOString()}|${endsAt.toISOString()}`);
+          }
+        }
+      }
+      const existingFuture = await prisma.slots.findMany({
+        where: { facility_id: facility.id, starts_at: { gte: horizonStart, lt: horizonEnd } },
+        select: {
+          id: true,
+          starts_at: true,
+          ends_at: true,
+          booked_quantity: true,
+          status: true,
+          booking_attempts: {
+            where: { status: { in: ["HELD", "PAYMENT_PROCESSING"] }, expires_at: { gt: new Date() } },
+            select: { id: true },
+          },
+        },
+      });
+      const staleIds = existingFuture
+        .filter((slot: any) =>
+          slot.status === "AVAILABLE" &&
+          slot.booked_quantity === 0 &&
+          slot.booking_attempts.length === 0 &&
+          !desiredKeys.has(`${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`),
+        )
+        .map((slot: any) => slot.id);
+      if (staleIds.length) {
+        await prisma.slots.updateMany({
+          where: { id: { in: staleIds }, status: "AVAILABLE", booked_quantity: 0 },
+          data: { status: "BLOCKED" },
+        });
+      }
     }
+  }
+
+  private istDateForOffset(now: Date, offset: number) {
+    const istNow = new Date(now.getTime() + 330 * 60_000);
+    return new Date(Date.UTC(
+      istNow.getUTCFullYear(),
+      istNow.getUTCMonth(),
+      istNow.getUTCDate() + offset,
+    ));
+  }
+
+  private istWallTimeToUtc(day: Date, minutesFromMidnight: number) {
+    return new Date(Date.UTC(
+      day.getUTCFullYear(),
+      day.getUTCMonth(),
+      day.getUTCDate(),
+      Math.floor(minutesFromMidnight / 60) - 5,
+      minutesFromMidnight % 60 - 30,
+    ));
   }
 
   async setAvailability(
@@ -2657,9 +2722,15 @@ export class VenuesService {
             orderBy: { starts_at: "desc" },
             take: 100,
             include: {
-              users: { select: { name: true } },
+              users: { select: { name: true, phone_e164: true } },
               slots: true,
               booking_attempts: { select: { quantity: true } },
+              payments: {
+                where: { status: "CAPTURED" },
+                orderBy: { created_at: "desc" },
+                take: 1,
+                select: { provider: true },
+              },
             },
           }),
           this.prisma.reviews.findMany({
@@ -2802,16 +2873,20 @@ export class VenuesService {
         id: b.id,
         bookingReference: b.booking_reference,
         customerName: b.users.name ?? "Customer",
+        phone: b.users.phone_e164,
         activity: service.title,
         startsAt: b.starts_at,
         endsAt: b.slots.ends_at,
         status:
           b.status === "CONFIRMED"
-            ? b.starts_at <= new Date() && b.slots.ends_at > new Date()
+            ? b.checked_in_at ||
+              (b.starts_at <= new Date() && b.slots.ends_at > new Date())
               ? "Ongoing"
               : "Upcoming"
             : b.status === "COMPLETED"
               ? "Completed"
+              : b.status === "NO_SHOW"
+                ? "No Show"
               : b.status === "CANCELLED"
                 ? "Canceled"
                 : b.status === "RESCHEDULED"
@@ -2819,6 +2894,8 @@ export class VenuesService {
                   : "Pending Payment",
         amount: Number(b.total_paise) / 100,
         participants: b.booking_attempts?.quantity ?? 1,
+        bookedOn: b.created_at,
+        paymentMode: b.payments?.[0]?.provider ?? "Not available",
         source: "ACTIV",
       })),
         ...walkInBookings,
@@ -3515,6 +3592,8 @@ export class VenuesService {
       );
 
     const slotDurationMinutes = service.min_duration_minutes || 60;
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${date}T23:59:59.999Z`);
 
     // Get operational windows for the date's day of week
     const dayName = new Date(`${date}T00:00:00.000Z`)
@@ -3537,9 +3616,20 @@ export class VenuesService {
       });
     }
 
+    // The facility's slots are the authoritative server-side schedule when
+    // they exist. Do not synthesize a 24-hour grid or substitute another
+    // activity/venue's facility.
+    const facilitySlots = service.facility_id
+      ? await this.prisma.slots.findMany({
+          where: {
+            facility_id: service.facility_id,
+            starts_at: { gte: dayStart, lt: dayEnd },
+          },
+          orderBy: { starts_at: "asc" },
+        })
+      : [];
+
     // ACTIV bookings for this service+date
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
     const activBookings = service.facility_id
       ? await this.prisma.bookings.findMany({
           where: {
@@ -3572,32 +3662,53 @@ export class VenuesService {
       reservationId?: string;
     }> = [];
 
-    for (const window of operationalWindows) {
-      for (let startMin = window.open; startMin + slotDurationMinutes <= window.close; startMin += slotDurationMinutes) {
-        const endMin = startMin + slotDurationMinutes;
-        const startTime = this.minutesToTime(startMin);
-        const endTime = this.minutesToTime(endMin);
-
-        const hasActivBooking = activBookings.some((b) => {
-          const bStart = this.dateTimeToMinutes(b.slots.starts_at);
-          const bEnd = this.dateTimeToMinutes(b.slots.ends_at);
-          return startMin < bEnd && endMin > bStart;
-        });
-        if (hasActivBooking) {
-          slots.push({ startTime, endTime, status: "activ_booking" });
-          continue;
-        }
-
-        const matchedWalkIn = walkIns.find((w) =>
-          startMin < this.dateTimeToMinutes(w.ends_at) &&
-          endMin > this.dateTimeToMinutes(w.starts_at),
+    if (facilitySlots.length) {
+      for (const slot of facilitySlots) {
+        const startMin = this.dateTimeToMinutes(slot.starts_at);
+        const endMin = this.dateTimeToMinutes(slot.ends_at);
+        const hasActivBooking = activBookings.some((booking) =>
+          startMin < this.dateTimeToMinutes(booking.slots.ends_at) &&
+          endMin > this.dateTimeToMinutes(booking.slots.starts_at),
         );
-        if (matchedWalkIn) {
-          slots.push({ startTime, endTime, status: "walk_in_reserved", reservationId: matchedWalkIn.id });
-          continue;
+        const status = slot.status === "BLOCKED"
+          ? "blocked"
+          : hasActivBooking
+            ? "activ_booking"
+            : slot.booked_quantity >= slot.capacity
+              ? "fully_booked"
+              : "available";
+        slots.push({
+          startTime: this.minutesToTime(startMin),
+          endTime: this.minutesToTime(endMin),
+          status,
+        });
+      }
+    } else {
+      // No generated facility schedule exists: use only the configured
+      // availability windows for this exact activity category.
+      for (const window of operationalWindows) {
+        for (let startMin = window.open; startMin + slotDurationMinutes <= window.close; startMin += slotDurationMinutes) {
+          const endMin = startMin + slotDurationMinutes;
+          const hasActivBooking = activBookings.some((b) => {
+            const bStart = this.dateTimeToMinutes(b.slots.starts_at);
+            const bEnd = this.dateTimeToMinutes(b.slots.ends_at);
+            return startMin < bEnd && endMin > bStart;
+          });
+          const matchedWalkIn = walkIns.find((w) =>
+            startMin < this.dateTimeToMinutes(w.ends_at) &&
+            endMin > this.dateTimeToMinutes(w.starts_at),
+          );
+          slots.push({
+            startTime: this.minutesToTime(startMin),
+            endTime: this.minutesToTime(endMin),
+            status: hasActivBooking
+              ? "activ_booking"
+              : matchedWalkIn
+                ? "walk_in_reserved"
+                : "available",
+            ...(matchedWalkIn ? { reservationId: matchedWalkIn.id } : {}),
+          });
         }
-
-        slots.push({ startTime, endTime, status: "available" });
       }
     }
 

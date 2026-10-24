@@ -443,7 +443,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           builder: (_) => _BookingsPage(
               bookings: _items('bookings'),
               activityName: _name,
-              currency: _currency)));
+              currency: _currency,
+              onBookingAction: (booking, action, dialogContext) =>
+                  _patchBooking(booking, action, dialogContext))));
 
   void _reviews() => Navigator.push(
       context,
@@ -732,7 +734,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                 booking['customerName']?.toString() ??
                                     'Customer',
                                 bold: true)),
-                        _badge(status, color)
+                        _badge(status == 'Canceled' ? 'Cancelled' : status, color)
                       ]),
                       const SizedBox(height: 8),
                       _text(
@@ -755,6 +757,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         context: context,
         builder: (context) => AlertDialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               titlePadding: const EdgeInsets.fromLTRB(24, 22, 12, 8),
@@ -767,7 +770,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close))
               ]),
-              content: SizedBox(
+              content: SingleChildScrollView(
+                  child: SizedBox(
                   width: double.maxFinite,
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     _detailSection('Customer information', [
@@ -775,10 +779,11 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                         'Full Name',
                         booking['customerName']?.toString() ?? 'Customer'
                       ),
-                      ('Status', status),
+                      ('Phone Number', booking['phone']?.toString() ?? 'Not available'),
                     ]),
                     const Divider(height: 30),
                     _detailSection('Booking information', [
+                      ('Booking ID', booking['bookingReference']?.toString() ?? booking['id']?.toString() ?? 'Not available'),
                       ('Activity', booking['activity']?.toString() ?? _name),
                       (
                         'Date',
@@ -790,16 +795,102 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                         'Time',
                         date == null ? '0' : DateFormat('hh:mm a').format(date)
                       ),
-                      ('Persons', booking['participants']?.toString() ?? '0'),
-                      (
-                        'Amount',
-                        _currency.format(
-                            num.tryParse(booking['amount']?.toString() ?? '') ??
-                                0)
-                      ),
+                      ('Participants', '${booking['participants']?.toString() ?? '0'} people'),
+                      ('Booked On', _formatBookingDate(booking['bookedOn'] ?? booking['createdAt'])),
                     ]),
+                    const Divider(height: 30),
+                    _detailSection('Payment information', [
+                      ('Payment Mode', _paymentLabel(booking['paymentMode'])),
+                      ('Total Amount', _currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)),
+                    ]),
+                    const Divider(height: 30),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _text('Manage Booking', bold: true, size: 16),
+                    ),
+                    const SizedBox(height: 14),
+                    _bookingManagementActions(booking, status, context),
                   ])),
+                ),
             ));
+  }
+
+  Widget _bookingManagementActions(
+      Map<String, dynamic> booking, String status, BuildContext dialogContext) {
+    final canManage = status == 'Upcoming' || status == 'Pending Payment';
+    return Row(children: [
+      Expanded(
+        child: OutlinedButton(
+          onPressed: canManage && !_saving
+              ? () => _patchBooking(booking, 'no-show', dialogContext)
+              : null,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFFF6262),
+            side: const BorderSide(color: Color(0xFFFF6262)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(vertical: 13),
+          ),
+          child: const Text('Mark No-show'),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: ElevatedButton(
+          onPressed: canManage && !_saving
+              ? () => _patchBooking(booking, 'check-in', dialogContext)
+              : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _purple,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(vertical: 13),
+          ),
+          child: const Text('Check-in'),
+        ),
+      ),
+    ]);
+  }
+
+  Future<void> _patchBooking(
+      Map<String, dynamic> booking, String action, BuildContext dialogContext) async {
+    if (_saving) return;
+    final bookingId = booking['id']?.toString();
+    if (bookingId == null || bookingId.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final response = await _client.patch(
+        Uri.parse('$BASE_URL/bookings/$bookingId/$action'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 15));
+      final body = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(body['message'] ?? 'Unable to update booking.');
+      }
+      if (mounted) Navigator.of(dialogContext).pop();
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String _formatBookingDate(dynamic value) {
+    final parsed = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+    return parsed == null ? 'Not available' : DateFormat('dd MMM yyyy').format(parsed);
+  }
+
+  String _paymentLabel(dynamic value) {
+    final provider = value?.toString().trim() ?? '';
+    if (provider.isEmpty) return 'Not available';
+    if (provider.toLowerCase() == 'razorpay' ||
+        provider.toLowerCase() == 'online') return 'UPI';
+    return provider.toUpperCase();
   }
 
   Widget _detailSection(String title, List<(String, String)> items) => Column(
@@ -1077,7 +1168,7 @@ Widget _panel({required Widget child}) => Container(
 Widget _badge(String text, Color color, {bool filled = false}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-        color: filled ? color : color.withValues(alpha: .09),
+        color: filled ? color : color.withValues(alpha: .16),
         borderRadius: BorderRadius.circular(20)),
     child: _text(text,
         size: 11, color: filled ? Colors.white : color, bold: true));
@@ -1443,11 +1534,14 @@ class _BookingsPage extends StatefulWidget {
     required this.bookings,
     required this.activityName,
     required this.currency,
+    required this.onBookingAction,
   });
 
   final List<Map<String, dynamic>> bookings;
   final String activityName;
   final NumberFormat currency;
+  final Future<void> Function(
+      Map<String, dynamic> booking, String action, BuildContext dialogContext) onBookingAction;
 
   @override
   State<_BookingsPage> createState() => _BookingsPageState();
@@ -1632,6 +1726,7 @@ class _BookingsPageState extends State<_BookingsPage> {
     final date =
         DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
     final color = switch (status) {
+      'Ongoing' => const Color(0xFF2EB944),
       'Canceled' => const Color(0xFF7D9291),
       'No Show' => Colors.redAccent,
       'Completed' => _purple,
@@ -1655,13 +1750,14 @@ class _BookingsPageState extends State<_BookingsPage> {
                         booking['customerName']?.toString() ?? 'Customer',
                         bold: true,
                         size: 16)),
-                _badge(status, color),
+                _badge(status == 'Canceled' ? 'Cancelled' : status, color),
               ]),
               const SizedBox(height: 10),
               _text(
                   '${widget.activityName}  |  ${date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
                   color: Colors.grey,
-                  size: 13),
+                  size: 13,
+                  bold: true),
               const SizedBox(height: 14),
               _text(
                   '${widget.currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)}  |  ${booking['participants']?.toString() ?? '0'} persons',
@@ -1679,8 +1775,9 @@ class _BookingsPageState extends State<_BookingsPage> {
         DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
     showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               title: Row(children: [
@@ -1699,7 +1796,7 @@ class _BookingsPageState extends State<_BookingsPage> {
                         'Full Name',
                         booking['customerName']?.toString() ?? 'Customer'
                       ),
-                      ('Status', booking['status']?.toString() ?? 'Upcoming'),
+                      ('Phone Number', booking['phone']?.toString() ?? 'Not available'),
                     ]),
                     const Divider(height: 30),
                     _bookingDetailSection('Booking information', [
@@ -1722,16 +1819,66 @@ class _BookingsPageState extends State<_BookingsPage> {
                         'Time',
                         date == null ? '0' : DateFormat('hh:mm a').format(date)
                       ),
-                      ('Persons', booking['participants']?.toString() ?? '0'),
+                      ('Participants', '${booking['participants']?.toString() ?? '0'} people'),
+                      ('Booked On', _formatBookingDate(booking['bookedOn'] ?? booking['createdAt'])),
+                    ]),
+                    const Divider(height: 30),
+                    _bookingDetailSection('Payment information', [
+                      ('Payment Mode', booking['paymentMode']?.toString() ?? 'Not available'),
                       (
-                        'Amount',
+                        'Total Amount',
                         widget.currency.format(
                             num.tryParse(booking['amount']?.toString() ?? '') ??
                                 0)
                       ),
                     ]),
+                    const Divider(height: 30),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _text('Manage Booking', bold: true, size: 16),
+                    ),
+                    const SizedBox(height: 14),
+                    (() {
+                      final status = booking['status']?.toString() ?? 'Upcoming';
+                      final canManage = status == 'Upcoming' || status == 'Pending Payment';
+                      return Row(children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: canManage
+                              ? () => widget.onBookingAction(booking, 'no-show', dialogContext)
+                              : null,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFFF6262),
+                            side: const BorderSide(color: Color(0xFFFF6262)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('Mark No-show'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: canManage
+                              ? () => widget.onBookingAction(booking, 'check-in', dialogContext)
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _purple,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('Check-in'),
+                        ),
+                      ),
+                    ]);
+                    })(),
                   ])),
             ));
+  }
+
+  String _formatBookingDate(dynamic value) {
+    final parsed = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+    return parsed == null ? 'Not available' : DateFormat('dd MMM yyyy').format(parsed);
   }
 
   Widget _bookingDetailSection(String title, List<(String, String)> items) =>
