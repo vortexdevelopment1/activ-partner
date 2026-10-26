@@ -1,4 +1,4 @@
-import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { CloudinaryService } from './cloudinary.service';
 
 describe('CloudinaryService PDF delivery', () => {
@@ -39,5 +39,31 @@ describe('CloudinaryService PDF delivery', () => {
     await expect(service.downloadPdf(
       'https://res.cloudinary.com/test-cloud/raw/upload/v1/activ/legal/document.pdf',
     )).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  const url = 'https://res.cloudinary.com/test-cloud/raw/upload/v1/activ/legal/document.pdf';
+
+  it('identifies an explicit PDF delivery restriction', async () => {
+    global.fetch = jest.fn().mockImplementation(async () => new Response('', {
+      status: 401, headers: { 'x-cld-error': 'PDF delivery is blocked' },
+    })) as any;
+    await expect(service.downloadPdf(url)).rejects.toThrow('Allow delivery of PDF and ZIP files');
+  });
+
+  it('reports missing assets separately from account restrictions', async () => {
+    global.fetch = jest.fn().mockImplementation(async () => new Response('', { status: 404 })) as any;
+    await expect(service.downloadPdf(url)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('does not claim a security restriction when Cloudinary is unreachable', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('Network failure')) as any;
+    await expect(service.downloadPdf(url)).rejects.toThrow('The PDF could not be retrieved');
+  });
+
+  it('still opens a legacy image PDF when the raw URL is missing', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+      .mockResolvedValueOnce(new Response(Buffer.from('%PDF-1.7\nbody'), { status: 200 })) as any;
+    expect((await service.downloadPdf(url)).subarray(0, 5).toString()).toBe('%PDF-');
   });
 });

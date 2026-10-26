@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { Blob } from 'buffer';
@@ -93,9 +93,14 @@ export class CloudinaryService {
       candidates.push(sourceUrl.replace('/raw/upload/', '/image/upload/'));
     }
 
+    const failures: Array<{ status: number; detail: string }> = [];
     for (const candidate of [...new Set(candidates)]) {
       const response = await fetch(candidate, { headers: { Accept: 'application/pdf' } }).catch(() => null);
-      if (!response?.ok) continue;
+      if (!response) continue;
+      if (!response.ok) {
+        failures.push({ status: response.status, detail: response.headers.get('x-cld-error') || '' });
+        continue;
+      }
       const length = Number(response.headers.get('content-length') || 0);
       if (length > 10 * 1024 * 1024) throw new BadRequestException('PDF exceeds the 10 MB viewing limit.');
       const bytes = Buffer.from(await response.arrayBuffer());
@@ -104,8 +109,23 @@ export class CloudinaryService {
       }
     }
 
+    if (failures.some(({ detail }) =>
+      /(?:pdf|zip).*(?:block|disallow|not allowed|disabled)|(?:block|disallow|not allowed|disabled).*(?:pdf|zip)/i.test(detail),
+    )) {
+      throw new ServiceUnavailableException(
+        'Cloudinary is blocking PDF delivery. In Cloudinary Console, open Settings > Security, enable "Allow delivery of PDF and ZIP files", save, and retry after the cached error expires.',
+      );
+    }
+    if (failures.some(({ status }) => status === 401 || status === 403)) {
+      throw new ServiceUnavailableException(
+        'Cloudinary denied access to this PDF. Check the asset access permissions and the PDF/ZIP delivery setting in Cloudinary Security settings.',
+      );
+    }
+    if (failures.length === new Set(candidates).size && failures.every(({ status }) => status === 404)) {
+      throw new NotFoundException('This PDF was not found in Cloudinary. Upload the document again.');
+    }
     throw new ServiceUnavailableException(
-      'Cloudinary did not deliver a valid PDF. Enable PDF and ZIP file delivery in Cloudinary Security settings, then try again.',
+      'The PDF could not be retrieved from Cloudinary. Please retry. If the problem continues, check that the uploaded file is a valid PDF.',
     );
   }
 
