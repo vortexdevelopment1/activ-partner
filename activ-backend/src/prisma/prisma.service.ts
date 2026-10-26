@@ -4,6 +4,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 
 import { PrismaClient } from '../generated/prisma/client';
 import { getDatabaseUrl, getPrismaLogLevels } from '../config/database.config';
+import { ResilientPgPool } from './resilient-pg-pool';
 
 @Injectable()
 export class PrismaService
@@ -12,7 +13,7 @@ export class PrismaService
 {
   constructor(configService: ConfigService) {
     const connectionString = getDatabaseUrl(configService);
-    const adapter = new PrismaPg({
+    const pool = new ResilientPgPool({
       connectionString,
       max: 5,
       connectionTimeoutMillis: 15000,
@@ -20,7 +21,9 @@ export class PrismaService
       maxLifetimeSeconds: 300,
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
-    }, {
+    });
+    const adapter = new PrismaPg(pool, {
+      disposeExternalPool: true,
       onPoolError: () => new Logger(PrismaService.name).warn(
         'An idle database connection was lost; the pool will replace it.',
       ),

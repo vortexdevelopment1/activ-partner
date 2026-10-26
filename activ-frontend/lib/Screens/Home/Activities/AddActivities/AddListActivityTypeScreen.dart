@@ -17,6 +17,7 @@ import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddVenuePhotoUploadScreen.dart';
 import '../../../onboarding_widgets.dart';
+import '../VenueActivityListScreen.dart';
 
 class AddListActivityTypeScreen extends StatefulWidget {
   const AddListActivityTypeScreen({super.key, this.client});
@@ -101,7 +102,13 @@ class _State extends State<AddListActivityTypeScreen> {
   }
 
   void goToBackScreen(BuildContext context) {
-    Navigator.pop(context);
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacement(context, MaterialPageRoute<void>(
+        builder: (_) => VenueActivityListScreen(client: widget.client),
+      ));
+    }
   }
 
   @override
@@ -176,7 +183,7 @@ class _State extends State<AddListActivityTypeScreen> {
                                     flex: 3,
                                     child: InkWell(
                                         onTap: () {
-                                          Navigator.pop(context);
+                                          goToBackScreen(context);
                                         },
                                         child: getBackButton(context, "Back",
                                             "selectActivity"))),

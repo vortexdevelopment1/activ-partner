@@ -61,6 +61,22 @@ describe('activity management on the current schema', () => {
     expect(result.bookings.find((booking) => booking.id === 'walk-in').status).toBe('Ongoing');
   });
 
+  it.each(['UPI', 'Cash', 'Card'])('includes %s walk-ins, their payment method, and their revenue', async method => {
+    prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([{
+      id: 'walk-in', participant_name: 'Walk-in Customer', status: 'RESERVED', amount_paise: 50000n,
+      notes: `Payment method: ${method}\nPayment status: PAID\nEmail: test@example.com`,
+      created_at: new Date('2026-10-26T08:00:00Z'),
+      starts_at: new Date('2030-01-01'), ends_at: new Date('2030-01-02'),
+    }]);
+    const result = await service.getActivityManagement('activity', 'partner');
+    expect(result.bookings.find(booking => booking.id === 'walk-in')).toMatchObject({
+      paymentMode: method.toUpperCase(), paymentStatus: 'PAID', amount: 500,
+      email: 'test@example.com', bookedOn: new Date('2026-10-26T08:00:00Z'),
+    });
+    expect(result.bookingCount).toBe(3);
+    expect(result.earnings).toBe(1750);
+  });
+
   it.each([
     ['CONFIRMED', new Date('2026-10-26T08:00:00Z'), 'Ongoing'],
     ['NO_SHOW', null, 'No Show'],
@@ -182,6 +198,14 @@ describe('activity management on the current schema', () => {
     expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
       'venue_auto_deactivated', expect.any(String), expect.any(String), { partnerId: 'partner', venueId: 'venue' },
     );
+  });
+
+  it('allows an owned draft to be removed using the activity management endpoint', async () => {
+    record.status = 'DRAFT';
+    await service.updateActivityManagement('activity', 'partner', {}, true);
+    expect(prisma.partner_venue_services.update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'activity' }, data: { status: 'ARCHIVED', is_active: false },
+    });
   });
 
   it('does not announce automatic deactivation when activities remain', async () => {

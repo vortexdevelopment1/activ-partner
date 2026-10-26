@@ -186,7 +186,7 @@ class _State extends State<VenueActivityListScreen> {
     }
     if (!mounted) return;
     await Navigator.push(context,
-        MaterialPageRoute<void>(builder: (_) => AddListActivityTypeScreen()));
+        MaterialPageRoute<void>(builder: (_) => AddListActivityTypeScreen(client: widget.client)));
     if (mounted) fetchActivities();
   }
 
@@ -445,7 +445,9 @@ class _State extends State<VenueActivityListScreen> {
               MaterialPageRoute<bool>(
                   builder: (_) => status == 'Draft'
                       ? AddActivitySubmissionResultScreen(
-                          activityName: activity.title, savedAsDraft: true)
+                          activityId: activity.activityId,
+                          activityName: activity.title, savedAsDraft: true,
+                          client: widget.client)
                       : ActivityManagementScreen(
                           activity: activity,
                           initialStatus: status,

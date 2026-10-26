@@ -76,7 +76,7 @@ class _Booking {
       participants: int.tryParse(json['participants']?.toString() ?? '') ?? 0,
       totalAmount: total,
       commission: total * .15,
-      paymentMode: json['paymentMode']?.toString() ?? '0',
+      paymentMode: json['paymentMode']?.toString() ?? 'Not available',
       status: _statusFromApi(json['status']?.toString()),
     );
   }
@@ -99,11 +99,12 @@ class _Booking {
       activity: json['activity']?.toString() ?? fallbackActivity,
       date: local == null ? '0' : DateFormat('dd MMM yyyy').format(local),
       time: local == null ? '0' : DateFormat('hh:mm a').format(local),
-      bookedOn: local == null ? '0' : DateFormat('dd MMM yyyy').format(local),
+      bookedOn: _formatDate(
+          json['bookedOn']?.toString() ?? json['startsAt']?.toString()),
       participants: int.tryParse(json['participants']?.toString() ?? '') ?? 0,
       totalAmount: total,
       commission: total * .15,
-      paymentMode: json['paymentMode']?.toString() ?? '0',
+      paymentMode: json['paymentMode']?.toString() ?? 'Not available',
       status: _statusFromApi(json['status']?.toString()),
     );
   }
@@ -689,7 +690,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                     color: Color(0xFF7F7F7F))),
             const SizedBox(height: 12),
             Text(
-                '${_money.format(booking.totalAmount)}  |  ${booking.participants} ${booking.participants == 1 ? 'person' : 'persons'}',
+                '${_money.format(booking.totalAmount)}  |  ${booking.participants} ${booking.participants == 1 ? 'person' : 'persons'}${booking.paymentMode != 'Not available' && booking.paymentMode != '0' && booking.paymentMode.trim().isNotEmpty ? '  |  ${booking.paymentMode}' : ''}',
                 style: TextStyle(
                     fontSize: widget.managerLayout ? 13 : 15,
                     fontFamily: 'Satoshi',

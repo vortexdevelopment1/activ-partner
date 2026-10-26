@@ -95,6 +95,10 @@ class ActivitySetupApi {
     return Map<String, dynamic>.from(data);
   }
 
+  Future<void> discardDraft(String id) async {
+    await _request('DELETE', '/venues/activities/$id/management');
+  }
+
   Future<void> saveAnswers(String id, Map<String, dynamic> answers) async {
     await _request('POST', '/venues/activities/$id/answers', {
       'answers': [

@@ -15,6 +15,60 @@ void main() {
           ..addFont(rootBundle.load('fonts/Satoshi-Medium.otf')))
         .load();
   });
+  testWidgets('UPI booking appears in the list, revenue, and payment details',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'jwt_token': 'session'});
+    BASE_URL = 'https://backend.test/api/v1';
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final client = MockClient((request) async {
+      Object data;
+      if (request.url.path.endsWith('/my-approved-venues')) {
+        data = [
+          {
+            'id': 'venue',
+            'name': 'Arena',
+            'services': [
+              {'id': 'service'}
+            ]
+          }
+        ];
+      } else if (request.url.path.endsWith('/management')) {
+        data = {
+          'name': 'Basketball',
+          'bookings': [
+            {
+              'id': 'upi-booking',
+              'customerName': 'UPI Customer',
+              'startsAt': '2030-01-01T09:00:00Z',
+              'bookedOn': '2026-10-26T08:00:00Z',
+              'amount': 500,
+              'participants': 1,
+              'status': 'Upcoming',
+              'paymentMode': 'UPI',
+            }
+          ]
+        };
+      } else {
+        throw StateError('Unexpected request ${request.url}');
+      }
+      return http.Response(jsonEncode({'data': data}), 200);
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: ManageBookingsScreen(venueId: 'venue', client: client)));
+    await tester.pumpAndSettle();
+    expect(find.text('UPI Customer'), findsOneWidget);
+    expect(find.textContaining('1 person  |  UPI'), findsOneWidget);
+    expect(find.text('₹500.00'), findsOneWidget);
+    await tester.ensureVisible(find.text('UPI Customer'));
+    await tester.tap(find.text('UPI Customer'));
+    await tester.pumpAndSettle();
+    expect(find.text('UPI'), findsOneWidget);
+    expect(find.text('26 Oct 2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   for (final action in ['no-show', 'check-in', 'complete', 'failed-no-show']) {
     testWidgets(
         '$action stays busy, blocks repeated taps, and refreshes the saved status',

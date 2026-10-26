@@ -2791,26 +2791,33 @@ export class VenuesService {
       (sum, reservation) => sum + fallbackWalkInAmount(reservation),
       0,
     );
-    const walkInBookings = walkIns.map((reservation) => ({
-      id: reservation.id,
-      customerName: reservation.participant_name ?? "Walk-in Customer",
-      activity: service.title,
-      startsAt: reservation.starts_at,
-      endsAt: reservation.ends_at,
-      status:
-        reservation.status === "COMPLETED"
-          ? "Completed"
-          : reservation.status === "NO_SHOW"
-            ? "No Show"
-            : /^Checked-in: /m.test(reservation.notes ?? "") ||
-                (reservation.starts_at <= new Date() && reservation.ends_at > new Date())
-              ? "Ongoing"
-              : "Upcoming",
-      amount: fallbackWalkInAmount(reservation) / 100,
-      participants: reservation.participant_count ?? 1,
-      source: "WALK_IN",
-      phone: reservation.participant_phone_e164,
-    }));
+    const walkInBookings = walkIns.map((reservation) => {
+      const details = this.mapWalkInReservation(reservation);
+      return {
+        id: reservation.id,
+        customerName: reservation.participant_name ?? "Walk-in Customer",
+        activity: service.title,
+        startsAt: reservation.starts_at,
+        endsAt: reservation.ends_at,
+        status:
+          reservation.status === "COMPLETED"
+            ? "Completed"
+            : reservation.status === "NO_SHOW"
+              ? "No Show"
+              : /^Checked-in: /m.test(reservation.notes ?? "") ||
+                  (reservation.starts_at <= new Date() && reservation.ends_at > new Date())
+                ? "Ongoing"
+                : "Upcoming",
+        amount: fallbackWalkInAmount(reservation) / 100,
+        participants: reservation.participant_count ?? 1,
+        source: "WALK_IN",
+        phone: reservation.participant_phone_e164,
+        email: details.participantEmail,
+        bookedOn: reservation.created_at,
+        paymentMode: details.paymentMethod?.trim().toUpperCase() || "Not available",
+        paymentStatus: details.paymentStatus,
+      };
+    });
     return {
       id: service.id,
       activityReference: service.public_reference ?? null,

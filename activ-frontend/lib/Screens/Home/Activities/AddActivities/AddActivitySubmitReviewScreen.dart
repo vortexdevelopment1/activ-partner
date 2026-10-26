@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../api_calling/activity_setup_api.dart';
+import '../../../../api_calling/api_request.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivitySubmissionResultScreen.dart';
 
@@ -40,6 +42,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
           builder: (_) => AddActivitySubmissionResultScreen(
             activityId: widget.activityId,
             activityName: widget.activityName,
+            client: widget.client,
           ),
         ),
       );
@@ -54,17 +57,33 @@ class _State extends State<AddActivitySubmitReviewScreen> {
     }
   }
 
-  void _saveDraft() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => AddActivitySubmissionResultScreen(
-          activityId: widget.activityId,
-          activityName: widget.activityName,
-          savedAsDraft: true,
+  Future<void> _saveDraft() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await SharedPreference.addStringToSF(
+          'activity_draft_resume_${widget.activityId}',
+          jsonEncode(widget.timing));
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => AddActivitySubmissionResultScreen(
+            activityId: widget.activityId,
+            activityName: widget.activityName,
+            savedAsDraft: true,
+            returnToEditor: true,
+            client: widget.client,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Unable to save draft progress. Please retry.')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -101,8 +120,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
                               fontSize: 24, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
                       const Text('Pending review',
-                          style:
-                              TextStyle(color: Colors.orange, fontSize: 18)),
+                          style: TextStyle(color: Colors.orange, fontSize: 18)),
                       const SizedBox(height: 20),
                       const Text('What happens next?',
                           style: TextStyle(

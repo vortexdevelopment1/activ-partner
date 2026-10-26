@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/activity_logos.dart';
@@ -11,13 +12,23 @@ import '../../../../api_calling/api_request.dart';
 import '../../../StringExtensions.dart';
 import '../VenueActivityListScreen.dart';
 import 'AddListActivityTypeScreen.dart';
+import 'AddActivitySubmitReviewScreen.dart';
+import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 
 class AddActivitySubmissionResultScreen extends StatefulWidget {
-  const AddActivitySubmissionResultScreen({super.key, this.activityId, this.savedAsDraft = false, this.activityName = 'Activity'});
+  const AddActivitySubmissionResultScreen(
+      {super.key,
+      this.activityId,
+      this.savedAsDraft = false,
+      this.activityName = 'Activity',
+      this.returnToEditor = false,
+      this.client});
   final String? activityId;
   final String activityName;
   final bool savedAsDraft;
+  final bool returnToEditor;
+  final http.Client? client;
 
   @override
   State<AddActivitySubmissionResultScreen> createState() =>
@@ -29,11 +40,14 @@ class _AddActivitySubmissionResultScreenState
   String _title = 'Activity';
   String _description = 'Activity details';
   String? _imageUrl;
+  bool _resuming = false;
+  bool _discarding = false;
 
   @override
   void initState() {
     super.initState();
-    _title = widget.activityName.trim().isEmpty ? 'Activity' : widget.activityName;
+    _title =
+        widget.activityName.trim().isEmpty ? 'Activity' : widget.activityName;
     _loadActivity();
   }
 
@@ -41,11 +55,16 @@ class _AddActivitySubmissionResultScreenState
     try {
       Map<String, dynamic>? value;
       if (widget.activityId != null && widget.activityId!.isNotEmpty) {
-        final api = ActivitySetupApi();
-        try { value = await api.activity(widget.activityId!); } finally { api.dispose(); }
+        final api = ActivitySetupApi(client: widget.client);
+        try {
+          value = await api.activity(widget.activityId!);
+        } finally {
+          api.dispose();
+        }
       }
       if (value == null) {
-        final raw = checkString(await SharedPreference.readStr('operate_value'));
+        final raw =
+            checkString(await SharedPreference.readStr('operate_value'));
         if (raw.isNotEmpty) value = jsonDecode(raw) as Map<String, dynamic>;
       }
       if (value == null) return;
@@ -56,7 +75,8 @@ class _AddActivitySubmissionResultScreenState
         _description = checkString(value['description']);
         if (_description.isEmpty) _description = 'Ready for admin verification';
         final images = value['imageUrls'];
-        if (images is List && images.isNotEmpty && images.first is String) _imageUrl = images.first as String;
+        if (images is List && images.isNotEmpty && images.first is String)
+          _imageUrl = images.first as String;
       });
     } catch (_) {}
   }
@@ -64,113 +84,204 @@ class _AddActivitySubmissionResultScreenState
   void _backToActivities() {
     CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
       context,
-      const VenueActivityListScreen(),
+      VenueActivityListScreen(client: widget.client),
     );
+  }
+
+  void _addAnotherActivity() {
+    final navigator = Navigator.of(context);
+    navigator.pushAndRemoveUntil<void>(
+      MaterialPageRoute(
+          builder: (_) => VenueActivityListScreen(client: widget.client)),
+      (_) => false,
+    );
+    navigator.push<void>(MaterialPageRoute(
+        builder: (_) => AddListActivityTypeScreen(client: widget.client)));
+  }
+
+  Future<void> _continueEditing() async {
+    if (_resuming || _discarding) return;
+    if (widget.returnToEditor && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      return;
+    }
+    final id = widget.activityId;
+    if (id == null || id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'This draft is missing its activity ID. Reopen it from Activities.')));
+      return;
+    }
+    setState(() => _resuming = true);
+    try {
+      final raw = await SharedPreference.readStr('activity_draft_resume_$id');
+      Map<String, List<Map<String, String>>>? timing;
+      if (raw != null && raw.isNotEmpty) {
+        final saved = jsonDecode(raw) as Map<String, dynamic>;
+        timing = saved.map((day, slots) => MapEntry(
+            day,
+            (slots as List)
+                .map((slot) => Map<String, String>.from(slot as Map))
+                .toList()));
+      }
+      if (!mounted) return;
+      await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => timing == null
+                  ? AddSelectedVenueFormScreen(
+                      activityId: id, client: widget.client)
+                  : AddActivitySubmitReviewScreen(
+                      activityId: id,
+                      activityName: _title,
+                      timing: timing!,
+                      client: widget.client)));
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Unable to resume this draft. Please retry.')));
+    } finally {
+      if (mounted) setState(() => _resuming = false);
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    if (_discarding || _resuming) return;
+    final id = widget.activityId;
+    if (id == null || id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'This draft is missing its activity ID. Reopen it from Activities.')));
+      return;
+    }
+    setState(() => _discarding = true);
+    final api = ActivitySetupApi(client: widget.client);
+    try {
+      await api.discardDraft(id);
+      // A local checkpoint must never prevent navigation after server removal.
+      try {
+        await SharedPreference.remove('activity_draft_resume_$id');
+      } catch (_) {}
+      if (mounted) _backToActivities();
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Unable to discard this draft. Please retry.')));
+    } finally {
+      api.dispose();
+      if (mounted) setState(() => _discarding = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final draft = widget.savedAsDraft;
-    return Container(
-      decoration: context.getYellowGradient,
-      child: SafeArea(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-                  children: [
-              draft
-                  ? SvgPicture.asset('assets/save_as_draft.svg', width: 72, height: 72)
-                  : const Icon(Icons.verified, color: AppColors.purple, size: 72),
-              const SizedBox(height: 8),
-              Text(
-                draft ? 'Activity Saved as Draft' : 'Activity Submitted Successfully!',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontFamily: 'Satoshi',
-                  color: AppColors.darkBlack,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                draft
-                    ? 'Your activity has been saved as a draft. You can complete and submit it for review anytime.'
-                    : "Your activity has been submitted for ACTIV's admin verification",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFamily: 'Satoshi',
-                  color: AppColors.black1,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              _activityCard(draft),
-              const SizedBox(height: 22),
-              _noticeCard(draft),
-              if (draft) ...[
-                const SizedBox(height: 18),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'You can now',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.darkBlack,
+    return PopScope(
+        canPop: !_discarding,
+        child: Container(
+          decoration: context.getYellowGradient,
+          child: SafeArea(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                      children: [
+                        draft
+                            ? SvgPicture.asset('assets/save_as_draft.svg',
+                                width: 72, height: 72)
+                            : const Icon(Icons.verified,
+                                color: AppColors.purple, size: 72),
+                        const SizedBox(height: 8),
+                        Text(
+                          draft
+                              ? 'Activity Saved as Draft'
+                              : 'Activity Submitted Successfully!',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontFamily: 'Satoshi',
+                            color: AppColors.darkBlack,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          draft
+                              ? 'Your activity has been saved as a draft. You can complete and submit it for review anytime.'
+                              : "Your activity has been submitted for ACTIV's admin verification",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontFamily: 'Satoshi',
+                            color: AppColors.black1,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _activityCard(draft),
+                        const SizedBox(height: 22),
+                        _noticeCard(draft),
+                        if (draft) ...[
+                          const SizedBox(height: 18),
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'You can now',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontFamily: 'Satoshi',
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkBlack,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _draftAction(
+                                iconAsset: 'assets/confirm_editing.svg',
+                                label: 'Continue Editing',
+                                onTap: _discarding ? null : _continueEditing,
+                              ),
+                              const SizedBox(width: 12),
+                              _draftAction(
+                                iconAsset: 'assets/delete_draft.svg',
+                                label: _discarding
+                                    ? 'Discarding...'
+                                    : 'Discard Draft',
+                                loading: _discarding,
+                                onTap: _discarding ? null : _discardDraft,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _draftAction(
-                      iconAsset: 'assets/confirm_editing.svg',
-                      label: 'Continue Editing',
-                      onTap: () => Navigator.pop(context),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          onTap: _discarding ? null : _backToActivities,
+                          child: _button('Back to Activities', filled: true),
+                        ),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: _discarding ? null : _addAnotherActivity,
+                          child: _button('Add Another Activity', filled: false),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    _draftAction(
-                      iconAsset: 'assets/delete_draft.svg',
-                      label: 'Discard Draft',
-                      onTap: _backToActivities,
-                    ),
-                  ],
-                ),
-              ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: _backToActivities,
-                      child: _button('Back to Activities', filled: true),
-                    ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () => CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-                        context,
-                        const AddListActivityTypeScreen(),
-                      ),
-                      child: _button('Add Another Activity', filled: false),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   Widget _activityCard(bool draft) {
@@ -197,8 +308,11 @@ class _AddActivitySubmissionResultScreenState
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: _imageUrl == null
-                    ? Image.asset(activityLogoAsset(_title), fit: BoxFit.contain)
-                    : ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.network(_imageUrl!, fit: BoxFit.cover)),
+                    ? Image.asset(activityLogoAsset(_title),
+                        fit: BoxFit.contain)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.network(_imageUrl!, fit: BoxFit.cover)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -234,7 +348,9 @@ class _AddActivitySubmissionResultScreenState
           const SizedBox(height: 8),
           _detailRow(
             draft ? "What's Next" : 'Estimated Review Time',
-            draft ? 'Continue editing or submit for review when ready.' : 'Within 24-48 hours',
+            draft
+                ? 'Continue editing or submit for review when ready.'
+                : 'Within 24-48 hours',
           ),
           if (!draft) ...[
             const SizedBox(height: 12),
@@ -251,7 +367,8 @@ class _AddActivitySubmissionResultScreenState
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: draft ? AppColors.red : AppColors.purple, width: 1.4),
+        border: Border.all(
+            color: draft ? AppColors.red : AppColors.purple, width: 1.4),
       ),
       child: Row(
         children: [
@@ -279,7 +396,8 @@ class _AddActivitySubmissionResultScreenState
   Widget _draftAction({
     required String iconAsset,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool loading = false,
   }) {
     return InkWell(
       onTap: onTap,
@@ -298,7 +416,9 @@ class _AddActivitySubmissionResultScreenState
               ),
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: SvgPicture.asset(iconAsset),
+                child: loading
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : SvgPicture.asset(iconAsset),
               ),
             ),
             const SizedBox(height: 6),
@@ -339,7 +459,8 @@ class _AddActivitySubmissionResultScreenState
               ? Align(
                   alignment: Alignment.centerRight,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFF9E2C),
                       borderRadius: BorderRadius.circular(20),
