@@ -91,6 +91,25 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
 
   void _applyLoadedData(
       Map<String, dynamic> activity, List<Map<String, dynamic>> questions) {
+    final originalOrder = <Map<String, dynamic>, int>{
+      for (var i = 0; i < questions.length; i++) questions[i]: i,
+    };
+    final orderedQuestions = List<Map<String, dynamic>>.from(questions)
+      ..sort((a, b) {
+        int priority(Map<String, dynamic> question) {
+          final text = question['questionText']?.toString().toLowerCase() ?? '';
+          if (text.contains('activity description')) return 0;
+          if (text.contains('pool length')) return 1;
+          if (text.contains('pool type')) return 2;
+          if (text.contains('equipment available')) return 3;
+          return 4;
+        }
+
+        final priorityComparison = priority(a).compareTo(priority(b));
+        return priorityComparison != 0
+            ? priorityComparison
+            : originalOrder[a]!.compareTo(originalOrder[b]!);
+      });
     for (final question in questions) {
       final id = question['id'].toString();
       final value = question['answer'];
@@ -100,7 +119,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
     }
     if (mounted) {
       setState(() {
-        _questions = questions;
+        _questions = orderedQuestions;
         _activityName = (activity['name'] ?? 'Activity').toString();
       });
     }
@@ -246,19 +265,35 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
           builder: (field) =>
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 for (final option in options)
-                  CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(option,
-                          style: OnboardingStyles.body.copyWith(fontSize: 20)),
-                      value: (field.value ?? []).contains(option),
-                      onChanged: (selected) {
-                        final value = List<String>.from(field.value ?? []);
-                        selected == true
-                            ? value.add(option)
-                            : value.remove(option);
-                        field.didChange(value);
-                        _answers[id] = value;
-                      }),
+                  Builder(builder: (context) {
+                    final isSelected = (field.value ?? []).contains(option);
+                    void updateSelection(bool? selected) {
+                      final value = List<String>.from(field.value ?? []);
+                      selected == true
+                          ? value.add(option)
+                          : value.remove(option);
+                      field.didChange(value);
+                      _answers[id] = value;
+                    }
+
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => updateSelection(!isSelected),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(option,
+                                style: OnboardingStyles.body.copyWith(
+                                    fontSize: 14)),
+                          ),
+                          Checkbox(
+                            value: isSelected,
+                            onChanged: updateSelection,
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                 if (field.hasError)
                   Text(field.errorText!,
                       style: const TextStyle(color: Colors.red)),
@@ -306,7 +341,8 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
               '${question['questionText'] ?? 'Activity details'}${required ? ' *' : ''}',
-              style: OnboardingStyles.body.copyWith(fontSize: 16)),
+              style: OnboardingStyles.body.copyWith(
+                  fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           input,
           if ((question['helperText'] ?? '').toString().isNotEmpty)

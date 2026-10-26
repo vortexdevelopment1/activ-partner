@@ -193,37 +193,54 @@ class _AddActivityAmenitiesScreenState
                                 () => item.isSelected = !item.isSelected),
                             borderRadius: BorderRadius.circular(20),
                             child: Container(
-                              padding: const EdgeInsets.all(14),
+                              padding: item.isSelected
+                                  ? const EdgeInsets.all(2)
+                                  : EdgeInsets.zero,
                               decoration: BoxDecoration(
-                                color: item.isSelected
-                                    ? const Color(0xFFF6F1FD)
-                                    : AppColors.white,
+                                gradient: item.isSelected
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          AppColors.borderGradient1,
+                                          AppColors.borderGradient2,
+                                        ],
+                                      )
+                                    : null,
+                                color: item.isSelected ? null : AppColors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: item.isSelected
-                                      ? AppColors.borderGradient1
-                                      : AppColors.gray,
-                                  width: item.isSelected ? 2 : 1,
-                                ),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(_iconFor(item),
-                                      width: 28, height: 28),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    item.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: AppSize.size_16,
-                                      fontFamily: 'Satoshi',
-                                      color: AppColors.darkBlack,
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: item.isSelected
+                                      ? const Color(0xFFF6F1FD)
+                                      : AppColors.white,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: item.isSelected
+                                      ? null
+                                      : Border.all(color: AppColors.gray),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(_iconFor(item),
+                                        width: 28, height: 28),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      item.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: AppSize.size_16,
+                                        fontFamily: 'Satoshi',
+                                        color: AppColors.darkBlack,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           );

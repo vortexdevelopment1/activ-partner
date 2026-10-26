@@ -23,6 +23,7 @@ import 'VenuePhotoUploadScreen.dart';
 import 'VenuePhotoListViewScreen.dart';
 import 'VenueScreen.dart';
 import 'VenueTimingScreen.dart';
+import 'Home/Activities/AddActivities/AddActivityConfigureScreen.dart';
 
 /// Page checkpoints live only in this browser tab, just like its login token.
 class SessionNavigation extends NavigatorObserver {
@@ -104,6 +105,13 @@ class SessionNavigation extends NavigatorObserver {
         'timings': page.categoryTimings,
         'index': page.initialActivityIndex,
       };
+    if (page is AddActivityConfigureScreen)
+      return {
+        'page': 'activityConfigure',
+        'activityId': page.activityId,
+        'timingMap': page.timing,
+        'activityName': page.activityName,
+      };
     if (page is LegalInformationScreen) return {'page': 'legal'};
     if (page is ReviewVenueDetailsScreen) return {'page': 'review'};
     if (page is ReviewSignAgreement) return {'page': 'agreement'};
@@ -182,6 +190,10 @@ class SessionNavigation extends NavigatorObserver {
           venueTimingMap: Map<String, dynamic>.from(data['timingMap'] ?? {}),
           categoryTimings: list('timings'),
           initialActivityIndex: data['index'] ?? 0),
+      'activityConfigure' => AddActivityConfigureScreen(
+          activityId: data['activityId'],
+          timing: Map<String, dynamic>.from(data['timingMap'] ?? {}),
+          activityName: data['activityName']?.toString() ?? 'Activity'),
       'legal' => const LegalInformationScreen(),
       'review' => const ReviewVenueDetailsScreen(),
       'agreement' => const ReviewSignAgreement(),
