@@ -43,6 +43,7 @@ import { ReviewVenueUpdateDto } from "./dto/review-venue-update.dto";
 import { CreateVenueActivityDto } from "./dto/create-venue-activity.dto";
 import { SetActivityAmenitiesDto } from "./dto/set-activity-amenities.dto";
 import { ActivityApprovalDto } from "./dto/activity-approval.dto";
+import { ActivityReviewQueryDto } from "./dto/activity-review-query.dto";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
 import { AdminVenuesQueryDto } from "./dto/admin-venues-query.dto";
 import { VenueUpdateRequestStatus } from "./entities/venue-update-request.entity";
@@ -1393,12 +1394,12 @@ export class VenuesController {
   @Get("admin/activities/pending")
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: "Get all activities pending review (Admin only)" })
-  async getPendingActivities(@Query() pagination: PaginationDto) {
+  @ApiOperation({ summary: "List activity submissions by review status (Admin only)" })
+  async getPendingActivities(@Query() pagination: ActivityReviewQueryDto) {
     const [items, total] =
-      await this.venuesService.findPendingActivities(pagination);
+      await this.venuesService.findPendingActivities(pagination, pagination.status);
     return {
-      message: "Pending activities fetched successfully",
+      message: "Activity submissions fetched successfully",
       data: {
         items,
         total,

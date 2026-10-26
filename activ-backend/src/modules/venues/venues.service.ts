@@ -3475,8 +3475,12 @@ export class VenuesService {
 
   async findPendingActivities(
     pagination: PaginationDto,
+    status: 'all' | 'pending' | 'approved' | 'rejected' = 'pending',
   ): Promise<[VenueService[], number]> {
-    const where = { status: "PENDING" as const };
+    const reviewStatus = { pending: 'PENDING', approved: 'APPROVED', rejected: 'REJECTED' } as const;
+    const where = status === 'all'
+      ? { status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as Array<'PENDING' | 'APPROVED' | 'REJECTED'> } }
+      : { status: reviewStatus[status] };
     const [records, total] = await Promise.all([
       this.prisma.partner_venue_services.findMany({
         where,

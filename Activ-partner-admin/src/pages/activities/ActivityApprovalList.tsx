@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, XCircle, Eye, Clock, Building2, Tag } from 'lucide-react';
-import { activitiesApi } from '../../api/activities.api';
+import { activitiesApi, type ActivityReviewFilter } from '../../api/activities.api';
 import { Pagination } from '../../components/ui/Pagination';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
@@ -11,6 +11,12 @@ import { useToast } from '../../hooks/useToast';
 import { PendingActivity } from '../../types';
 
 const LIMIT = 15;
+const FILTERS: { value: ActivityReviewFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'In Review' },
+  { value: 'approved', label: 'Accepted' },
+  { value: 'rejected', label: 'Rejected' },
+];
 
 const activityCategoryName = (activity: PendingActivity) =>
   activity.category?.name ?? activity.name ?? '—';
@@ -23,13 +29,14 @@ export const ActivityApprovalList: React.FC = () => {
   const toast = useToast();
 
   const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<ActivityReviewFilter>('all');
   const [approveTarget, setApproveTarget] = useState<PendingActivity | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PendingActivity | null>(null);
   const [detailTarget, setDetailTarget] = useState<PendingActivity | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['pending-activities', page],
-    queryFn: () => activitiesApi.getPending({ page, limit: LIMIT }),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['pending-activities', status, page],
+    queryFn: () => activitiesApi.getPending({ page, limit: LIMIT, status }),
     select: (res) => res.data.data,
   });
 
@@ -38,6 +45,7 @@ export const ActivityApprovalList: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-activities'] });
       toast.success('Activity approved successfully');
+      setPage(1);
       setApproveTarget(null);
     },
     onError: (err: any) => {
@@ -51,6 +59,7 @@ export const ActivityApprovalList: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-activities'] });
       toast.success('Activity rejected');
+      setPage(1);
       setRejectTarget(null);
     },
     onError: (err: any) => {
@@ -69,7 +78,7 @@ export const ActivityApprovalList: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Activity Approvals</h1>
           <p className="text-sm text-gray-500 mt-0.5">Review and approve partner-submitted activities</p>
         </div>
-        {total > 0 && (
+        {status === 'pending' && total > 0 && (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 text-sm font-semibold rounded-full border border-amber-200">
             <Clock size={14} />
             {total} pending
@@ -79,15 +88,32 @@ export const ActivityApprovalList: React.FC = () => {
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        {isLoading ? (
+        <div role="group" aria-label="Filter activities by review status" className="grid grid-cols-4 border-b border-gray-200 px-2 sm:flex sm:px-5">
+          {FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              aria-pressed={status === filter.value}
+              onClick={() => { setStatus(filter.value); setPage(1); }}
+              className={`min-h-11 whitespace-nowrap border-b-2 px-1 py-3 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${status === filter.value ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        {isError ? (
+          <div className="py-16 text-center text-sm text-gray-500">
+            <p>Unable to load activities.</p>
+            <button type="button" onClick={() => refetch()} className="mt-3 font-medium text-primary-600">Retry</button>
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             Loading...
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
             <CheckCircle size={36} className="text-emerald-300" />
-            <p className="text-sm font-medium">No pending activities</p>
-            <p className="text-xs">All caught up!</p>
+            <p className="text-sm font-medium">{status === 'all' ? 'No activity submissions' : `No ${status === 'pending' ? 'pending' : status === 'approved' ? 'accepted' : 'rejected'} activities`}</p>
           </div>
         ) : (
           <>
@@ -119,7 +145,7 @@ export const ActivityApprovalList: React.FC = () => {
                   <tr key={activity.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-5 py-4 min-w-40">
                       <p className="font-medium text-gray-900">{activity.name}</p>
-                      <Badge status="pending" size="sm" />
+                      <Badge status={activity.status} size="sm" />
                     </td>
                     <td className="px-5 py-4 min-w-48">
                       <div className="flex items-center gap-2">
@@ -161,7 +187,7 @@ export const ActivityApprovalList: React.FC = () => {
                         >
                           <Eye size={16} />
                         </button>
-                        <button
+                        {activity.status === 'pending' && <><button
                           onClick={() => setApproveTarget(activity)}
                           title="Approve"
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-medium transition-colors"
@@ -177,6 +203,7 @@ export const ActivityApprovalList: React.FC = () => {
                           <XCircle size={13} />
                           Reject
                         </button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -254,7 +281,7 @@ export const ActivityApprovalList: React.FC = () => {
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+            {detailTarget.status === 'pending' && <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
               <button
                 onClick={() => { setDetailTarget(null); setRejectTarget(detailTarget); }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
@@ -269,7 +296,7 @@ export const ActivityApprovalList: React.FC = () => {
                 <CheckCircle size={15} />
                 Approve
               </button>
-            </div>
+            </div>}
           </div>
         )}
       </Modal>

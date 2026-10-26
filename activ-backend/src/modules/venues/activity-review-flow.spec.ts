@@ -1,8 +1,28 @@
 import { VenuesService } from './venues.service';
 import { VenuesController } from './venues.controller';
 import { BadRequestException } from '@nestjs/common';
+import { ActivityReviewQueryDto } from './dto/activity-review-query.dto';
+import { validate } from 'class-validator';
 
 describe('post-onboarding activity review', () => {
+  it.each(['all', 'pending', 'approved', 'rejected'] as const)('filters %s before pagination and counts the same set', async status => {
+    const prisma = { partner_venue_services: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) } };
+    const service = Object.assign(Object.create(VenuesService.prototype), { prisma }) as VenuesService;
+    await service.findPendingActivities({ skip: 15, limit: 15 } as any, status);
+    const where = status === 'all'
+      ? { status: { in: ['PENDING', 'APPROVED', 'REJECTED'] } }
+      : { status: status.toUpperCase() };
+    expect(prisma.partner_venue_services.findMany).toHaveBeenCalledWith(expect.objectContaining({ where, skip: 15, take: 15 }));
+    expect(prisma.partner_venue_services.count).toHaveBeenCalledWith({ where });
+  });
+
+  it('rejects unsupported status filters and keeps pending as the legacy default', async () => {
+    const query = new ActivityReviewQueryDto();
+    expect(query.status).toBe('pending');
+    Object.assign(query, { status: 'draft' });
+    expect((await validate(query)).some(error => error.property === 'status')).toBe(true);
+  });
+
   it('queues a draft, notifies admin, lists it for review, and approves it', async () => {
     const record = { id: 'activity', venue_id: 'venue', status: 'DRAFT', venues: { partner_id: 'partner', id: 'venue' } };
     const prisma = { partner_venue_services: {
