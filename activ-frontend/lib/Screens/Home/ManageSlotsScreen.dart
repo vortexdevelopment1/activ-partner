@@ -627,6 +627,46 @@ class _State extends State<ManageSlotsScreen> {
   }
 
   @override
+  Widget _dayButton(String day) {
+    final selected = _current.containsKey(day);
+    final button = OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        padding: EdgeInsets.zero,
+        backgroundColor: selected ? const Color(0xFFF6F0FC) : Colors.white,
+        foregroundColor: Colors.black,
+        side: BorderSide(
+            color: selected ? Colors.transparent : const Color(0xFFD5DDDF)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      onPressed: _saving
+          ? null
+          : () => setState(() {
+                if (selected) {
+                  for (final slot in _current.remove(day)!) {
+                    slot.dispose();
+                  }
+                } else {
+                  _current[day] = [_Slot()];
+                }
+              }),
+      child: Text(day.substring(0, 3),
+          style: OnboardingStyles.body.copyWith(fontSize: 16)),
+    );
+    if (!selected) return button;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFB9D65B), Colors.black],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+      ),
+      child: button,
+    );
+  }
+
   Widget build(BuildContext context) => OnboardingScaffold(
       showLogo: false,
       child: Column(children: [
@@ -692,46 +732,7 @@ class _State extends State<ManageSlotsScreen> {
                                                             36) /
                                                         4,
                                                     height: 54,
-                                                    child: OutlinedButton(
-                                                        style: OutlinedButton.styleFrom(
-                                                            padding:
-                                                                EdgeInsets.zero,
-                                                            backgroundColor: _current
-                                                                    .containsKey(
-                                                                        day)
-                                                                ? const Color(
-                                                                    0xFFF6F0FC)
-                                                                : Colors.white,
-                                                            foregroundColor:
-                                                                Colors.black,
-                                                            side: BorderSide(
-                                                                color: _current.containsKey(day)
-                                                                    ? Colors
-                                                                        .black
-                                                                    : const Color(
-                                                                        0xFFD5DDDF)),
-                                                            shape: RoundedRectangleBorder(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(8))),
-                                                        onPressed: _saving
-                                                            ? null
-                                                            : () => setState(() {
-                                                                  if (_current
-                                                                      .containsKey(
-                                                                          day)) {
-                                                                    for (final slot
-                                                                        in _current
-                                                                            .remove(day)!) {
-                                                                      slot.dispose();
-                                                                    }
-                                                                  } else {
-                                                                    _current[
-                                                                        day] = [
-                                                                      _Slot()
-                                                                    ];
-                                                                  }
-                                                                }),
-                                                        child: Text(day.substring(0, 3), style: OnboardingStyles.body.copyWith(fontSize: 16)))),
+                                                    child: _dayButton(day)),
                                             ])),
                                 const SizedBox(height: 28),
                                 Text('Day Wise Timings', style: _heading),

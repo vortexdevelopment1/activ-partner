@@ -105,6 +105,10 @@ class _State extends State<VenueActivityListScreen> {
           }
           result.add(ActivityModel.fromJson({
             'activity_id': service['id'],
+            'activity_reference':
+                service['activityReference'] ?? service['publicReference'],
+            'venue_reference':
+                venue['venueReference'] ?? venue['publicReference'],
             'operate_value': {'id': categoryId, 'title': title,
               'categoryName': category?['name']},
             'activity_status': 'true',
@@ -226,6 +230,7 @@ class _State extends State<VenueActivityListScreen> {
                       style: TextStyle(
                           fontFamily: 'Satoshi',
                           fontSize: 22,
+                          fontWeight: FontWeight.w700,
                           color: Color(0xFF303030)))),
             ]),
           ),
@@ -272,7 +277,7 @@ class _State extends State<VenueActivityListScreen> {
                               child: InkWell(
                                 onTap: () =>
                                     setState(() => selectedFilter = filter),
-                                borderRadius: BorderRadius.circular(999),
+                                borderRadius: BorderRadius.circular(12),
                                 child: Container(
                                   height: 34,
                                   alignment: Alignment.center,
@@ -285,7 +290,7 @@ class _State extends State<VenueActivityListScreen> {
                                               ? purple
                                               : Colors.black,
                                           width: 1.2),
-                                      borderRadius: BorderRadius.circular(999)),
+                                      borderRadius: BorderRadius.circular(12)),
                                   child: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Padding(
@@ -381,7 +386,9 @@ class _State extends State<VenueActivityListScreen> {
                 child: Text(title,
                     maxLines: 1,
                     style: const TextStyle(
-                        fontFamily: 'Satoshi', fontSize: 9))),
+                        fontFamily: 'Satoshi',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700))),
             const Icon(Icons.receipt_long_outlined,
                 size: 12, color: Color(0xFF80DD92)),
           ]),
@@ -398,8 +405,8 @@ class _State extends State<VenueActivityListScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontSize: 8,
+                          fontFamily: 'Satoshi',
+                          fontSize: 10,
                   color: Color(0xFF858585))),
         ]),
       );

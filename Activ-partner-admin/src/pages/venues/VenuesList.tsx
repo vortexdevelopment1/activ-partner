@@ -125,6 +125,7 @@ export const VenuesList: React.FC = () => {
                     <Badge status={venue.status} />
                   </div>
                   <p className="mt-1 truncate text-xs text-gray-500">{partnerName || 'Partner unavailable'}</p>
+                  <p className="mt-1 text-xs text-gray-400">{venue.venueReference ?? 'Venue ID unavailable'}</p>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                     {categoryName && <span>{categoryName}</span>}
                     {(venue.city || venue.state) && <span>{[venue.city, venue.state].filter(Boolean).join(', ')}</span>}
@@ -179,6 +180,7 @@ export const VenuesList: React.FC = () => {
                   >
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-gray-900">{venue.name}</p>
+                      <p className="text-xs text-gray-400">{venue.venueReference ?? 'Venue ID unavailable'}</p>
                       {venue.phone && (
                         <p className="text-xs text-gray-400">{venue.phone}</p>
                       )}

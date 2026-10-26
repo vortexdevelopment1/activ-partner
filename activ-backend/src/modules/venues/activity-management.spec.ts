@@ -10,13 +10,16 @@ describe('activity management on the current schema', () => {
     record = { id: 'activity', venue_id: 'venue', service_category_id: 'badminton',
       facility_id: 'facility', title: 'Badminton', status: 'APPROVED', description: 'Indoor',
       onboarding_data: {}, is_active: true, partner_venue_images: [], partner_service_amenities: [],
-      venues: { partner_id: 'partner', name: 'Arena' } };
+      public_reference: 'ACTV-000015',
+      venues: { partner_id: 'partner', name: 'Arena', public_reference: 'VEN-000016' } };
     prisma = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       venues: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       partner_venue_services: { findUnique: jest.fn(async () => record),
         findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data), count: jest.fn().mockResolvedValue(0) },
       partner_venue_answers: { findMany: jest.fn(async () => []) },
+      partner_walk_in_reservations: { findMany: jest.fn(async () => []) },
+      partner_venue_availability: { findMany: jest.fn(async () => []) },
       slots: { findMany: jest.fn(async () => [{ id: 'slot' }]), updateMany: jest.fn(),
         aggregate: jest.fn(async () => ({ _sum: { capacity: 10, booked_quantity: 4 } })) },
       bookings: { count: jest.fn(async () => 2),
@@ -60,8 +63,26 @@ describe('activity management on the current schema', () => {
     expect(result.bookings.find((booking) => booking.id === 'walk-in').status).toBe('Ongoing');
   });
 
+  it('returns stored public references without changing UUID identifiers', async () => {
+    record.id = '93a30fe8-9c79-4337-ae10-6fac5a047b94';
+    record.venue_id = '9618f0df-42eb-42f2-82c0-4e9a361c3086';
+    const result = await service.getActivityManagement(record.id, 'partner');
+    expect(result).toMatchObject({
+      id: '93a30fe8-9c79-4337-ae10-6fac5a047b94',
+      activityReference: 'ACTV-000015',
+      venueId: '9618f0df-42eb-42f2-82c0-4e9a361c3086',
+      venueReference: 'VEN-000016',
+    });
+  });
+
   it('scopes bookings to the linked facility and serializes money without BigInt', async () => {
     const result = await service.getActivityManagement('activity', 'partner');
+    expect(result).toMatchObject({
+      activityReference: 'ACTV-000015',
+      venueReference: 'VEN-000016',
+      id: 'activity',
+      venueId: 'venue',
+    });
     expect(prisma.bookings.count).toHaveBeenCalledWith({ where: { slots: { facility_id: 'facility' } } });
     expect(result).toMatchObject({ bookingCount: 2, earnings: 1250, occupancy: 40 });
     expect(result.bookings[0]).toMatchObject({ amount: 1250, customerName: 'Customer', status: 'Upcoming' });

@@ -172,6 +172,7 @@ model users {
 
 model venues {
   id                            String                          @id @db.Uuid
+  public_reference              String                          @unique @default(dbgenerated("generate_venue_reference()")) @db.VarChar(32)
   partner_id                    String                          @db.Uuid
   name                          String
   city_code                     String
@@ -660,6 +661,7 @@ model partner_venue_services {
   partner_service_amenities    partner_service_amenities[]
   partner_service_paused_slots partner_service_paused_slots[]
   id                           String                         @id @db.Uuid
+  public_reference             String                         @unique @default(dbgenerated("generate_activity_reference()")) @db.VarChar(32)
   venue_id                     String                         @db.Uuid
   facility_id                  String?                        @db.Uuid
   service_category_id          String                         @db.Uuid

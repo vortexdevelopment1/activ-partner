@@ -16,6 +16,9 @@ export class VenueService {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'public_reference', unique: true })
+  publicReference: string;
+
   @Column({ name: 'venue_id' })
   venueId: string;
 
