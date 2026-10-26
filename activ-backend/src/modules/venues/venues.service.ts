@@ -2658,6 +2658,11 @@ export class VenuesService {
               users: { select: { name: true } },
               slots: true,
               booking_attempts: { select: { quantity: true } },
+              booking_events: {
+                where: { to_status: { in: ["CHECKED_IN", "NO_SHOW"] } },
+                orderBy: { created_at: "desc" }, take: 1,
+                select: { to_status: true },
+              },
             },
           }),
           this.prisma.reviews.findMany({
@@ -2724,7 +2729,8 @@ export class VenuesService {
           ? "Completed"
           : reservation.status === "NO_SHOW"
             ? "No Show"
-            : reservation.starts_at <= new Date() && reservation.ends_at > new Date()
+            : /^Checked-in: /m.test(reservation.notes ?? "") ||
+                (reservation.starts_at <= new Date() && reservation.ends_at > new Date())
               ? "Ongoing"
               : "Upcoming",
       amount: fallbackWalkInAmount(reservation) / 100,
@@ -2803,7 +2809,11 @@ export class VenuesService {
         endsAt: b.slots.ends_at,
         status:
           b.status === "CONFIRMED"
-            ? b.starts_at <= new Date() && b.slots.ends_at > new Date()
+            ? b.booking_events?.[0]?.to_status === "NO_SHOW"
+              ? "No Show"
+              : b.booking_events?.[0]?.to_status === "CHECKED_IN"
+                ? "Ongoing"
+                : b.starts_at <= new Date() && b.slots.ends_at > new Date()
               ? "Ongoing"
               : "Upcoming"
             : b.status === "COMPLETED"
@@ -3796,7 +3806,9 @@ export class VenuesService {
       participantPhone: dto.participantPhone,
       participantEmail: dto.participantEmail ?? null,
       status: "reserved",
-      reservations,
+      reservations: reservations.map((reservation) =>
+        this.mapWalkInReservation(reservation),
+      ),
     };
   }
 
@@ -3884,6 +3896,7 @@ export class VenuesService {
     const emailMatch = notes.match(/^Email: (.+)$/m);
     const paymentMethodMatch = notes.match(/^Payment method: (.+)$/m);
     const paymentStatusMatch = notes.match(/^Payment status: (.+)$/m);
+    const idempotencyKeyMatch = notes.match(/^Idempotency-Key: (.+)$/m);
     return {
       id: reservation.id,
       venueServiceId: reservation.venue_service_id,
@@ -3900,6 +3913,7 @@ export class VenuesService {
       participantName: reservation.participant_name,
       participantPhone: reservation.participant_phone_e164,
       participantEmail: emailMatch?.[1] ?? null,
+      idempotencyKey: idempotencyKeyMatch?.[1] ?? null,
       paymentMethod: paymentMethodMatch?.[1] ?? null,
       paymentStatus: paymentStatusMatch?.[1] ?? null,
       amountPaise: reservation.amount_paise?.toString() ?? null,

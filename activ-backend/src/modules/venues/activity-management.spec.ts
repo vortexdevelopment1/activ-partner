@@ -25,6 +25,8 @@ describe('activity management on the current schema', () => {
           total_paise: 125000n, status: 'CONFIRMED', users: { name: 'Customer' },
           slots: { ends_at: new Date('2030-01-02') } }]) },
       reviews: { findMany: jest.fn(async () => []) },
+      partner_walk_in_reservations: { findMany: jest.fn(async () => []) },
+      partner_venue_availability: { findMany: jest.fn(async () => []) },
       partner_service_paused_slots: { createMany: jest.fn(), findMany: jest.fn(async () => [{ slot_id: 'owned-slot' }]), deleteMany: jest.fn() },
     };
     prisma.$transaction = jest.fn(async (callback) => callback(prisma));
@@ -38,6 +40,24 @@ describe('activity management on the current schema', () => {
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.bookings.count).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps ACTIV no-show attendance visible after refreshing management', async () => {
+    prisma.bookings.findMany.mockResolvedValueOnce([{ id: 'booking', starts_at: new Date('2030-01-01'),
+      total_paise: 125000n, status: 'CONFIRMED', users: { name: 'Customer' },
+      slots: { ends_at: new Date('2030-01-02') }, booking_events: [{ to_status: 'NO_SHOW' }] }]);
+    const result = await service.getActivityManagement('activity', 'partner');
+    expect(result.bookings[0].status).toBe('No Show');
+  });
+
+  it('keeps a checked-in walk-in ongoing after refreshing management', async () => {
+    prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([{
+      id: 'walk-in', participant_name: 'Customer', status: 'RESERVED', amount_paise: 50000n,
+      notes: 'Checked-in: 2026-10-26T08:00:00Z',
+      starts_at: new Date('2030-01-01'), ends_at: new Date('2030-01-02'),
+    }]);
+    const result = await service.getActivityManagement('activity', 'partner');
+    expect(result.bookings.find((booking) => booking.id === 'walk-in').status).toBe('Ongoing');
   });
 
   it('scopes bookings to the linked facility and serializes money without BigInt', async () => {
@@ -85,7 +105,7 @@ describe('activity management on the current schema', () => {
   it('does not load unrelated bookings for activities without a facility', async () => {
     record.facility_id = null;
     const result = await service.getActivityManagement('activity', 'partner');
-    expect(result).toMatchObject({ bookingCount: null, earnings: null, occupancy: null, bookings: [] });
+    expect(result).toMatchObject({ bookingCount: 0, earnings: 0, occupancy: null, bookings: [] });
     expect(prisma.bookings.findMany).not.toHaveBeenCalled();
   });
 

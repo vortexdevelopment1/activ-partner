@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../../Beans/activity_model.dart';
+import 'WalkInBookingSuccessScreen.dart';
 import '../../../api_calling/api_constant.dart';
 import '../../../api_calling/api_request.dart';
 
@@ -108,21 +109,19 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   Future<http.Response> _getSlotsResponse(Uri uri, String token) async {
     final get = widget.client?.get ?? http.get;
     final headers = {'Authorization': 'Bearer $token'};
-    var response = await get(uri, headers: headers)
-        .timeout(const Duration(seconds: 15));
+    var response =
+        await get(uri, headers: headers).timeout(const Duration(seconds: 15));
     // Availability reads can be retried safely after a temporary server failure.
     // Reservation POST requests are never retried here.
     if (response.statusCode >= 500) {
-      response = await get(uri, headers: headers)
-          .timeout(const Duration(seconds: 15));
+      response =
+          await get(uri, headers: headers).timeout(const Duration(seconds: 15));
     }
     return response;
   }
 
   Future<void> _loadSlots() async {
-    if (!mounted ||
-        _serviceId.isEmpty ||
-        widget.venueId.isEmpty) return;
+    if (!mounted || _serviceId.isEmpty || widget.venueId.isEmpty) return;
     final generation = ++_slotLoadGeneration;
     setState(() {
       _loadingSlots = true;
@@ -445,7 +444,23 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       if (details['notes']?.isNotEmpty == true) 'notes': details['notes']!,
     };
 
-    final confirmed = await Navigator.push<bool>(
+    final idempotencyKey =
+        '${DateTime.now().microsecondsSinceEpoch}-${_selectedSlots.first.startTime}';
+    final booking = <String, dynamic>{
+      'court': _selectedCourt,
+      'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+      'slots': _selectedSlots
+          .map((slot) => {
+                'startTime': slot.startTime,
+                'endTime': slot.endTime,
+              })
+          .toList(),
+      'idempotencyKey': idempotencyKey,
+      ...payment,
+      ...participant,
+    };
+    final payload = jsonEncode(booking);
+    final body = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
         builder: (_) => _WalkInReviewScreen(
@@ -456,72 +471,81 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
           slots: _selectedSlots.map((slot) => slot.label).toList(),
           participant: participant,
           payment: payment,
+          onConfirm: () async {
+            final token = await SharedPreference.readStr('jwt_token');
+            if (token == null || token.isEmpty) {
+              throw Exception('Please sign in again.');
+            }
+            var checkSavedBooking = true;
+            try {
+              final response = await (widget.client?.post ?? http.post)(
+                Uri.parse(
+                    '$BASE_URL/venues/${widget.venueId}/activities/$_serviceId/walk-in'),
+                headers: {
+                  'Authorization': 'Bearer $token',
+                  'Content-Type': 'application/json'
+                },
+                body: payload,
+              ).timeout(const Duration(seconds: 30), onTimeout: () {
+                throw Exception(
+                    'Confirmation timed out. Retry to check this booking safely.');
+              });
+              if (response.statusCode == 409) {
+                throw Exception(
+                    'That slot is already reserved. Go back and choose another slot.');
+              }
+              if (response.statusCode >= 400 && response.statusCode < 500) {
+                checkSavedBooking = false;
+              }
+              if (response.statusCode >= 500) {
+                throw Exception(
+                    'Unable to confirm this booking. Please retry.');
+              }
+              if (response.statusCode < 200 || response.statusCode >= 300) {
+                throw Exception(_errorMessage(response.body));
+              }
+              final decoded = jsonDecode(response.body);
+              if (decoded is! Map ||
+                  decoded['data'] is! Map ||
+                  decoded['data']['id'] == null) {
+                throw Exception(
+                    'Booking confirmation was not received. Please retry.');
+              }
+              return Map<String, dynamic>.from(decoded);
+            } catch (_) {
+              if (checkSavedBooking) {
+                final saved = await _recoverConfirmedWalkIn(booking, token);
+                if (saved != null) return {'data': saved};
+              }
+              rethrow;
+            }
+          },
         ),
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (body == null || !mounted) return;
 
     setState(() => _saving = true);
     try {
-      final token = await SharedPreference.readStr('jwt_token');
-      if (token == null || token.isEmpty) {
-        throw Exception('Please sign in again.');
-      }
-
-      final response = await (widget.client?.post ?? http.post)(
-          Uri.parse(
-              '$BASE_URL/venues/${widget.venueId}/activities/${widget.activity.activityId}/walk-in'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'court': _selectedCourt,
-            'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-            'slots': _selectedSlots
-                .map((slot) => {
-                      'startTime': slot.startTime,
-                      'endTime': slot.endTime,
-                    })
-                .toList(),
-            'idempotencyKey':
-                '${DateTime.now().microsecondsSinceEpoch}-${_selectedSlots.first.startTime}',
-            ...payment,
-            ...participant,
-          })).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (!mounted) return;
-        final body = jsonDecode(response.body);
-        final bookAnother = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(
-                builder: (_) => _WalkInSuccessScreen(
-                      venueName: widget.venueName,
-                      activityName: _activityName,
-                      date: DateFormat('dd MMM yyyy').format(_selectedDate),
-                      slots: _selectedSlots.map((slot) => slot.label).toList(),
-                      court: _selectedCourt,
-                      participantName: participant['participantName']!,
-                      participantPhone: participant['participantPhone']!,
-                      participantEmail: participant['participantEmail'],
-                      paymentMethod: payment['paymentMethod']!,
-                      reservationId: body['data']?['id']?.toString() ??
-                          body['id']?.toString(),
-                    )));
-        if (!mounted) return;
-        if (bookAnother == true) {
-          _selectedSlots.clear();
-          await _loadSlots();
-        } else {
-          Navigator.pop(context, true);
-        }
-      } else if (response.statusCode == 409) {
+      final bookAnother = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => WalkInBookingSuccessScreen(
+                    venueName: widget.venueName,
+                    date:
+                        DateFormat('dd MMMM yyyy, EEEE').format(_selectedDate),
+                    slots: _selectedSlots.map((slot) => slot.label).toList(),
+                    court: _selectedCourt,
+                    participantName: participant['participantName']!,
+                    participantPhone: participant['participantPhone']!,
+                    participantEmail: participant['participantEmail'],
+                  )));
+      if (!mounted) return;
+      if (bookAnother == true) {
+        _selectedSlots.clear();
         await _loadSlots();
-        throw Exception(
-            'That slot is already reserved. Please choose another slot.');
       } else {
-        throw Exception(_errorMessage(response.body));
+        Navigator.pop(context, true);
       }
     } catch (error) {
       if (mounted) {
@@ -529,6 +553,50 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _recoverConfirmedWalkIn(
+      Map<String, dynamic> booking, String token) async {
+    try {
+      final uri = Uri.parse(
+              '$BASE_URL/venues/${widget.venueId}/activities/$_serviceId/walk-in')
+          .replace(queryParameters: {'date': booking['date'].toString()});
+      final response = await (widget.client?.get ?? http.get)(uri,
+              headers: {'Authorization': 'Bearer $token'})
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return null;
+      final records = jsonDecode(response.body)['data'];
+      if (records is! List) return null;
+      final matches = records
+          .whereType<Map>()
+          .where((record) =>
+              record['idempotencyKey'] == booking['idempotencyKey'] &&
+              record['venueId'] == widget.venueId &&
+              record['venueServiceId'] == _serviceId &&
+              record['date'] == booking['date'] &&
+              record['court'] == booking['court'] &&
+              record['participantPhone'] == booking['participantPhone'] &&
+              record['status'] == 'reserved' &&
+              record['id'] != null)
+          .toList();
+      if (matches.isEmpty) return null;
+      final savedSlots = <String>{
+        for (final record in matches)
+          if (record['slots'] is List)
+            for (final slot in (record['slots'] as List).whereType<Map>())
+              '${slot['startTime']}|${slot['endTime']}',
+      };
+      final expected = (booking['slots'] as List)
+          .whereType<Map>()
+          .map((slot) => '${slot['startTime']}|${slot['endTime']}')
+          .toSet();
+      if (expected.length != savedSlots.length ||
+          !savedSlots.containsAll(expected)) return null;
+      return Map<String, dynamic>.from(matches.first);
+    } catch (_) {
+      // An unsuccessful lookup must never be treated as a confirmed booking.
+      return null;
     }
   }
 
@@ -715,7 +783,9 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                                       fontFamily: 'Satoshi',
                                       fontSize: 13,
                                       color: Color(0xFFFF6B6B))),
-                              TextButton(onPressed: _loadSlots, child: const Text('Retry')),
+                              TextButton(
+                                  onPressed: _loadSlots,
+                                  child: const Text('Retry')),
                             ],
                           ),
                         ),
@@ -1147,6 +1217,9 @@ class _WalkInSlotSelectionScreenState
   @override
   Widget build(BuildContext context) {
     const sections = ['Morning', 'Afternoon', 'Evening', 'Night'];
+    final visibleSlots = _slots
+        .where((slot) => slot.status != 'not_operational')
+        .toList();
     return Scaffold(
       backgroundColor: _background,
       body: SafeArea(
@@ -1195,8 +1268,15 @@ class _WalkInSlotSelectionScreenState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 36),
               children: [
+                if (visibleSlots.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Text('No operating slots for this date. Choose another date.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontFamily: 'Satoshi', color: Color(0xFF686868))),
+                  ),
                 for (final section in sections)
-                  if (_slots.any((slot) => _sectionFor(slot) == section)) ...[
+                  if (visibleSlots.any((slot) => _sectionFor(slot) == section)) ...[
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 10),
                       child: Row(children: [
@@ -1219,7 +1299,7 @@ class _WalkInSlotSelectionScreenState
                                 fontWeight: FontWeight.w700)),
                       ]),
                     ),
-                    ..._slots
+                    ...visibleSlots
                         .where((slot) => _sectionFor(slot) == section)
                         .map((slot) => _slotCard(slot)),
                   ],
@@ -1318,7 +1398,7 @@ class _WalkInSlotSelectionScreenState
   }
 }
 
-class _WalkInReviewScreen extends StatelessWidget {
+class _WalkInReviewScreen extends StatefulWidget {
   const _WalkInReviewScreen({
     required this.venueName,
     required this.activityName,
@@ -1327,6 +1407,7 @@ class _WalkInReviewScreen extends StatelessWidget {
     required this.slots,
     required this.participant,
     required this.payment,
+    required this.onConfirm,
   });
 
   final String venueName;
@@ -1336,6 +1417,35 @@ class _WalkInReviewScreen extends StatelessWidget {
   final List<String> slots;
   final Map<String, String> participant;
   final Map<String, String> payment;
+  final Future<Map<String, dynamic>> Function() onConfirm;
+
+  @override
+  State<_WalkInReviewScreen> createState() => _WalkInReviewScreenState();
+}
+
+class _WalkInReviewScreenState extends State<_WalkInReviewScreen> {
+  bool _confirming = false;
+  String? _error;
+
+  Future<void> _confirm() async {
+    if (_confirming) return;
+    setState(() {
+      _confirming = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.onConfirm();
+      if (!mounted) return;
+      setState(() => _confirming = false);
+      Navigator.pop(context, result);
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _confirming = false;
+          _error = error.toString().replaceFirst('Exception: ', '');
+        });
+    }
+  }
 
   Widget _card({required Widget child}) => Container(
         width: double.infinity,
@@ -1357,7 +1467,9 @@ class _WalkInReviewScreen extends StatelessWidget {
       );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope(
+      canPop: !_confirming,
+      child: Scaffold(
         backgroundColor: _background,
         body: SafeArea(
           child: Column(children: [
@@ -1369,7 +1481,8 @@ class _WalkInReviewScreen extends StatelessWidget {
                     shape: const CircleBorder(),
                     elevation: 2,
                     child: IconButton(
-                        onPressed: () => Navigator.pop(context, false),
+                        onPressed:
+                            _confirming ? null : () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back))),
                 const SizedBox(width: 18),
                 const Text('Review Booking',
@@ -1393,41 +1506,48 @@ class _WalkInReviewScreen extends StatelessWidget {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _line('Venue', venueName),
+                          _line('Venue', widget.venueName),
                           const SizedBox(height: 8),
-                          _line('Activity', activityName),
+                          _line('Activity', widget.activityName),
                           const SizedBox(height: 8),
-                          _line('Court', court),
+                          _line('Court', widget.court),
                           const SizedBox(height: 8),
-                          _line('Date',
-                              DateFormat('dd MMMM yyyy, EEEE').format(date)),
+                          _line(
+                              'Date',
+                              DateFormat('dd MMMM yyyy, EEEE')
+                                  .format(widget.date)),
                           const Divider(height: 28),
-                          ...slots.map((slot) => Padding(
+                          ...widget.slots.map((slot) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text(slot,
                                   style: const TextStyle(
                                       fontFamily: 'Satoshi', fontSize: 17)))),
                           const Divider(height: 28),
-                          _line('Customer', participant['participantName']!,
+                          _line('Customer',
+                              widget.participant['participantName']!,
                               bold: true),
                           const SizedBox(height: 14),
-                          _line('Phone', participant['participantPhone']!),
-                          if (participant['participantEmail']?.isNotEmpty ==
+                          _line(
+                              'Phone', widget.participant['participantPhone']!),
+                          if (widget.participant['participantEmail']
+                                  ?.isNotEmpty ==
                               true) ...[
                             const SizedBox(height: 14),
-                            _line('Email', participant['participantEmail']!),
+                            _line('Email',
+                                widget.participant['participantEmail']!),
                           ],
                           const SizedBox(height: 14),
                           _line('Payment method',
-                              payment['paymentMethod']!.toUpperCase()),
-                          if (payment['amountPaise']?.isNotEmpty == true) ...[
+                              widget.payment['paymentMethod']!.toUpperCase()),
+                          if (widget.payment['amountPaise']?.isNotEmpty ==
+                              true) ...[
                             const SizedBox(height: 8),
                             _line('Amount',
-                                '₹ ${(int.parse(payment['amountPaise']!) / 100).toStringAsFixed(0)}'),
+                                '₹ ${(int.parse(widget.payment['amountPaise']!) / 100).toStringAsFixed(0)}'),
                           ],
-                          if (payment['notes']?.isNotEmpty == true) ...[
+                          if (widget.payment['notes']?.isNotEmpty == true) ...[
                             const SizedBox(height: 14),
-                            _line('Notes', payment['notes']!),
+                            _line('Notes', widget.payment['notes']!),
                           ],
                         ]),
                   ),
@@ -1438,165 +1558,66 @@ class _WalkInReviewScreen extends StatelessWidget {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-                child: Row(children: [
-                  Expanded(
-                      child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(54),
-                              foregroundColor: const Color(0xFF5F6064),
-                              side: const BorderSide(color: Color(0xFFD4D8B8)),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28))),
-                          child: const Text('Edit'))),
-                  const SizedBox(width: 14),
-                  Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(54),
-                              backgroundColor: const Color(0xFF1F1F1F),
-                              foregroundColor: _lime,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28))),
-                          child: const Text('Confirm'))),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(_error!,
+                          style: const TextStyle(color: Color(0xFFB3261E)),
+                          textAlign: TextAlign.center),
+                    ),
+                  Row(children: [
+                    Expanded(
+                        child: OutlinedButton(
+                            onPressed: _confirming
+                                ? null
+                                : () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(54),
+                                foregroundColor: const Color(0xFF5F6064),
+                                side:
+                                    const BorderSide(color: Color(0xFFD4D8B8)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28))),
+                            child: const Text('Edit'))),
+                    const SizedBox(width: 14),
+                    Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                            onPressed: _confirming ? null : _confirm,
+                            style: ElevatedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(54),
+                                backgroundColor: const Color(0xFF1F1F1F),
+                                foregroundColor: _lime,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28))),
+                            child: _confirming
+                                ? const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                        SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2, color: _lime)),
+                                        SizedBox(width: 8),
+                                        Flexible(
+                                            child: Text('Confirming...',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                    fontFamily: 'Satoshi'))),
+                                      ])
+                                : Text(_error == null
+                                    ? 'Confirm'
+                                    : 'Retry confirmation'))),
+                  ]),
                 ]),
               ),
             ),
           ]),
         ),
-      );
-}
-
-class _WalkInSuccessScreen extends StatelessWidget {
-  const _WalkInSuccessScreen(
-      {required this.venueName,
-      required this.activityName,
-      required this.date,
-      required this.slots,
-      required this.court,
-      required this.participantName,
-      required this.participantPhone,
-      this.participantEmail,
-      required this.paymentMethod,
-      this.reservationId});
-
-  final String venueName;
-  final String activityName;
-  final String date;
-  final List<String> slots;
-  final String court;
-  final String participantName;
-  final String participantPhone;
-  final String? participantEmail;
-  final String paymentMethod;
-  final String? reservationId;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: _background,
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 30),
-          children: [
-            Center(
-                child: Container(
-                    width: 150,
-                    height: 150,
-                    decoration: const BoxDecoration(
-                        color: Color(0xFF70B43C), shape: BoxShape.circle),
-                    child: const Icon(Icons.check,
-                        color: Colors.white, size: 92))),
-            const SizedBox(height: 26),
-            const Text('Walk-In Slot Reserved!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 27,
-                    fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            const Text(
-                'This time slot is now blocked on the ACTIV app to prevent double bookings.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 17,
-                    color: Color(0xFF666666),
-                    height: 1.35)),
-            const SizedBox(height: 30),
-            const Text('Slot Details',
-                style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 23,
-                    fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            _detailsCard([
-              _detail(Icons.location_on_outlined, venueName),
-              _detail(Icons.calendar_month_outlined, date),
-              _detail(Icons.sports_tennis_outlined, '$court · $activityName'),
-              ...slots.map((slot) => _detail(Icons.access_time, slot)),
-            ]),
-            const SizedBox(height: 26),
-            const Text('Participant Details',
-                style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 23,
-                    fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            _detailsCard([
-              _detail(Icons.account_circle_outlined, participantName),
-              _detail(Icons.phone_outlined, participantPhone),
-              if (participantEmail?.isNotEmpty == true)
-                _detail(Icons.email_outlined, participantEmail!),
-              _detail(Icons.payments_outlined, paymentMethod),
-            ]),
-            if (reservationId != null) ...[
-              const SizedBox(height: 14),
-              Text('Reservation: $reservationId',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey)),
-            ],
-            const SizedBox(height: 32),
-            OutlinedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(58),
-                    foregroundColor: const Color(0xFF202124),
-                    side: const BorderSide(color: Color(0xFF202124)),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16))),
-                child: const Text('Book Another Slot')),
-            const SizedBox(height: 14),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(context, false),
-                style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(58),
-                    backgroundColor: Colors.black,
-                    foregroundColor: _lime,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16))),
-                child: const Text('Back To Activity Management')),
-          ],
-        ),
-      );
-
-  Widget _detailsCard(List<Widget> children) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-        decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(24)),
-        child: Column(children: children),
-      );
-
-  Widget _detail(IconData icon, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(children: [
-          Icon(icon, color: const Color(0xFF777777), size: 28),
-          const SizedBox(width: 16),
-          Expanded(
-              child: Text(value,
-                  style: const TextStyle(fontFamily: 'Satoshi', fontSize: 17))),
-        ]),
-      );
+      ));
 }
 
 class _BookableSlot {

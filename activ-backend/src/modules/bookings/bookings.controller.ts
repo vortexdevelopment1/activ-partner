@@ -241,7 +241,7 @@ export class BookingsController {
   @Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Check in a customer — marks booking as confirmed (Partner only)",
+    summary: "Record customer check-in attendance (Partner only)",
   })
   async checkIn(
     @Param("id", ParseUUIDPipe) id: string,

@@ -1,8 +1,10 @@
+import { randomUUID } from 'crypto';
 import {
   Injectable,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -438,48 +440,83 @@ export class BookingsService {
     return saved;
   }
 
-  async complete(id: string, partnerId?: string): Promise<Booking> {
-    const booking = await this.findOne(id);
-    if (partnerId && booking.venue.partnerId !== partnerId)
-      throw new ForbiddenException("Not authorized to manage this booking");
-    booking.status = BookingStatus.COMPLETED;
-    return this.bookingRepository.save(booking);
+  async complete(id: string, partnerId?: string) {
+    return this.updateAttendance(id, partnerId, 'complete');
   }
 
-  async checkIn(bookingId: string, partnerUserId: string): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({
-      where: { id: bookingId },
-      relations: ["venue"],
-    });
-    if (!booking) throw new NotFoundException("Booking not found");
-    if (booking.venue.partnerId !== partnerUserId)
-      throw new ForbiddenException("Not authorized to manage this booking");
-    if (booking.status === BookingStatus.CANCELLED)
-      throw new BadRequestException("Cannot check in a cancelled booking");
-    if (booking.status === BookingStatus.NO_SHOW)
-      throw new BadRequestException("Booking is already marked as no-show");
-    booking.status = BookingStatus.CONFIRMED;
-    return this.bookingRepository.save(booking);
+  async checkIn(bookingId: string, partnerUserId: string) {
+    if (!partnerUserId) throw new ForbiddenException('Partner identity is required');
+    return this.updateAttendance(bookingId, partnerUserId, 'check-in');
   }
 
-  async markNoShow(bookingId: string, partnerUserId: string): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({
-      where: { id: bookingId },
-      relations: ["venue"],
+  async markNoShow(bookingId: string, partnerUserId: string) {
+    if (!partnerUserId) throw new ForbiddenException('Partner identity is required');
+    return this.updateAttendance(bookingId, partnerUserId, 'no-show');
+  }
+
+  private async updateAttendance(id: string, ownerId: string | undefined,
+    action: 'check-in' | 'no-show' | 'complete') {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'booking-attendance:' + id}))`;
+      const walkIn = await tx.partner_walk_in_reservations.findUnique({
+        where: { id }, include: { venues: { select: { partner_id: true } } },
+      });
+      const status = action === 'check-in' ? 'ongoing' : action === 'no-show' ? 'no_show' : 'completed';
+      if (walkIn) {
+        if (ownerId !== undefined && walkIn.venues.partner_id !== ownerId)
+          throw new ForbiddenException('Not authorized to manage this booking');
+        const result = { id, status, source: 'WALK_IN' };
+        if ((walkIn.status === 'NO_SHOW' && action === 'no-show') ||
+            (walkIn.status === 'COMPLETED' && action === 'complete')) return result;
+        if (walkIn.status !== 'RESERVED')
+          throw new BadRequestException('This booking can no longer be updated');
+        const checkedIn = /^Checked-in: /m.test(walkIn.notes ?? '');
+        if (action === 'check-in' && checkedIn) return result;
+        const updated = await tx.partner_walk_in_reservations.updateMany({
+          where: { id, status: 'RESERVED' },
+          data: {
+            ...(action === 'no-show' ? { status: 'NO_SHOW' as const } :
+                action === 'complete' ? { status: 'COMPLETED' as const } :
+                { notes: [walkIn.notes, 'Checked-in: ' + new Date().toISOString()].filter(Boolean).join('\n') }),
+            updated_at: new Date(),
+          },
+        });
+        if (updated.count !== 1) throw new ConflictException('Booking changed. Please refresh and try again.');
+        return result;
+      }
+
+      const booking = await tx.bookings.findUnique({ where: { id }, include: {
+        slots: { include: { facilities: { include: { venues: { select: { partner_id: true } } } } } },
+      } });
+      if (!booking) throw new NotFoundException('Booking not found');
+      if (ownerId !== undefined && booking.slots.facilities.venues.partner_id !== ownerId)
+        throw new ForbiddenException('Not authorized to manage this booking');
+      const result = { id, status, source: 'ACTIV' };
+      if (booking.status === 'COMPLETED' && action === 'complete') return result;
+      if (booking.status !== 'CONFIRMED')
+        throw new BadRequestException('Only confirmed bookings can be updated');
+      const previous = await tx.booking_events.findFirst({
+        where: { booking_id: id, to_status: { in: ['CHECKED_IN', 'NO_SHOW'] } },
+        orderBy: { created_at: 'desc' },
+      });
+      if (previous?.to_status === 'NO_SHOW') {
+        if (action === 'no-show') return result;
+        throw new BadRequestException('Booking is already marked as no-show');
+      }
+      if (previous?.to_status === 'CHECKED_IN' && action === 'check-in') return result;
+      const updated = await tx.bookings.updateMany({
+        where: { id, status: 'CONFIRMED' },
+        data: { updated_at: new Date(), ...(action === 'complete' ? { status: 'COMPLETED' as const } : {}) },
+      });
+      if (updated.count !== 1) throw new ConflictException('Booking changed. Please refresh and try again.');
+      await tx.booking_events.create({ data: {
+        id: randomUUID(), booking_id: id, actor_id: ownerId ?? null,
+        from_status: previous?.to_status ?? booking.status,
+        to_status: action === 'check-in' ? 'CHECKED_IN' : action === 'no-show' ? 'NO_SHOW' : 'COMPLETED',
+        metadata: { type: 'partner_attendance' },
+      } });
+      return result;
     });
-    if (!booking) throw new NotFoundException("Booking not found");
-    if (booking.venue.partnerId !== partnerUserId)
-      throw new ForbiddenException("Not authorized to manage this booking");
-    if (booking.status === BookingStatus.CANCELLED)
-      throw new BadRequestException(
-        "Cannot mark a cancelled booking as no-show",
-      );
-    if (booking.status === BookingStatus.COMPLETED)
-      throw new BadRequestException(
-        "Cannot mark a completed booking as no-show",
-      );
-    booking.status = BookingStatus.NO_SHOW;
-    return this.bookingRepository.save(booking);
   }
 
   async getBookingStats(partnerId?: string) {

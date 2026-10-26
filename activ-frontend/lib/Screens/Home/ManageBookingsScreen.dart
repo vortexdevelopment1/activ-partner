@@ -124,7 +124,7 @@ class _Booking {
 
   static _BookingStatus _statusFromApi(String? value) {
     return switch ((value ?? '').toLowerCase()) {
-      'confirmed' => _BookingStatus.upcoming,
+      'confirmed' || 'upcoming' => _BookingStatus.upcoming,
       'completed' => _BookingStatus.completed,
       'cancelled' || 'canceled' => _BookingStatus.canceled,
       'no_show' || 'no show' => _BookingStatus.noShow,
@@ -159,7 +159,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   final List<_Booking> _bookings = [];
   int _selectedTab = 0;
   bool _loading = true;
-  bool _saving = false;
+  final _bookingAction = ValueNotifier<String?>(null);
+  bool get _saving => _bookingAction.value != null;
+  String? _actionError;
   String _searchQuery = '';
   String _venueId = '';
   String _venueName = '';
@@ -200,6 +202,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
 
   @override
   void dispose() {
+    _bookingAction.dispose();
     _searchCtrl.dispose();
     if (widget.client == null) _client.close();
     super.dispose();
@@ -351,12 +354,16 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
 
   Future<void> _patchBooking(_Booking booking, String action) async {
     if (_saving) return;
-    setState(() => _saving = true);
+    _actionError = null;
+    _bookingAction.value = action;
     try {
       final response = await _client
           .patch(Uri.parse('$BASE_URL/bookings/${booking.id}/$action'),
               headers: await _headers())
           .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 500) {
+        throw Exception('Unable to update booking. Please retry.');
+      }
       final body = jsonDecode(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(body['message'] ?? 'Unable to update booking.');
@@ -376,11 +383,10 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       await _load();
     } catch (e) {
       if (mounted) {
-        CommonUtilities.createSnackBar(
-            context, e.toString().replaceFirst('Exception: ', ''));
+        _actionError = e.toString().replaceFirst('Exception: ', '');
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) _bookingAction.value = null;
     }
   }
 
@@ -726,69 +732,87 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   }
 
   void _showBookingDetails(_Booking booking) {
+    _actionError = null;
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * .86,
-          ),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 22, 28, 26),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Row(children: [
-                  const Expanded(
-                      child: Text('Booking details',
-                          style: TextStyle(
-                              fontSize: 20,
-                              fontFamily: 'Satoshi',
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1F1F1F)))),
-                  IconButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.close, size: 22)),
-                ]),
-                const SizedBox(height: 18),
-                _detailSection('Customer information', [
-                  ('Full Name', booking.customerName),
-                  ('Phone Number', booking.phone),
-                ]),
-                const Divider(height: 30, color: Color(0xFFE5E7EB)),
-                _detailSection('Booking information', [
-                  ('Booking ID', booking.reference),
-                  ('Activity', booking.activity),
-                  ('Date', booking.date),
-                  ('Time', booking.time),
-                  ('Participants', '${booking.participants} people'),
-                  ('Booked On', booking.bookedOn),
-                ]),
-                const Divider(height: 30, color: Color(0xFFE5E7EB)),
-                _detailSection('Payment information', [
-                  ('Payment Mode', booking.paymentMode),
-                  ('Total Amount', _money.format(booking.totalAmount)),
-                ]),
-                const Divider(height: 30, color: Color(0xFFE5E7EB)),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: const Text('Manage Booking',
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontFamily: 'Satoshi',
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1F1F1F))),
+      builder: (ctx) => ValueListenableBuilder<String?>(
+          valueListenable: _bookingAction,
+          builder: (ctx, action, _) => PopScope(
+              canPop: action == null,
+              child: Dialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                insetPadding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * .86,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 22, 28, 26),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Row(children: [
+                          const Expanded(
+                              child: Text('Booking details',
+                                  style: TextStyle(
+                                      fontSize: 20,
+                                      fontFamily: 'Satoshi',
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1F1F1F)))),
+                          IconButton(
+                              onPressed: action == null
+                                  ? () => Navigator.pop(ctx)
+                                  : null,
+                              icon: const Icon(Icons.close, size: 22)),
+                        ]),
+                        const SizedBox(height: 18),
+                        _detailSection('Customer information', [
+                          ('Full Name', booking.customerName),
+                          ('Phone Number', booking.phone),
+                        ]),
+                        const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                        _detailSection('Booking information', [
+                          ('Booking ID', booking.reference),
+                          ('Activity', booking.activity),
+                          ('Date', booking.date),
+                          ('Time', booking.time),
+                          ('Participants', '${booking.participants} people'),
+                          ('Booked On', booking.bookedOn),
+                        ]),
+                        const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                        _detailSection('Payment information', [
+                          ('Payment Mode', booking.paymentMode),
+                          ('Total Amount', _money.format(booking.totalAmount)),
+                        ]),
+                        const Divider(height: 30, color: Color(0xFFE5E7EB)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: const Text('Manage Booking',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontFamily: 'Satoshi',
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1F1F1F))),
+                        ),
+                        const SizedBox(height: 14),
+                        if (_actionError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(_actionError!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Color(0xFFB3261E),
+                                    fontFamily: 'Satoshi')),
+                          ),
+                        _buildManageActions(booking),
+                      ]),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 14),
-                _buildManageActions(booking),
-              ]),
-            ),
-          ),
-        ),
-      ),
+              ))),
     );
   }
 
@@ -885,12 +909,20 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 13)),
-              child: const Text('Mark No-show',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFFE6B6B))))),
+              child: _bookingAction.value == 'no-show'
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFFFE6B6B),
+                          semanticsLabel: 'Marking no-show'))
+                  : const Text('Mark No-show',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFE6B6B))))),
       const SizedBox(width: 12),
       Expanded(
           child: ElevatedButton(
@@ -904,12 +936,20 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                       borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   elevation: 0),
-              child: Text(isUpcoming ? 'Check-in' : 'Mark Completed',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)))),
+              child: _saving && _bookingAction.value != 'no-show'
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                          semanticsLabel: 'Updating booking'))
+                  : Text(isUpcoming ? 'Check-in' : 'Mark Completed',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)))),
     ]);
   }
 
