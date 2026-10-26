@@ -11,7 +11,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
-import 'AddActivitySubmissionResultScreen.dart';
+import 'AddActivityConfigureScreen.dart';
 import '../../../onboarding_widgets.dart';
 
 class DayTiming {
@@ -50,18 +50,18 @@ class _State extends State<AddVenueTimingScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (!hasAnyTimingSelected() || !_validateTimings()) return;
-    setState(() => _submitting = true);
-    try {
-      await _api.submit(widget.activityId, buildVenueTiming());
-      if (!mounted) return;
-      CommonUtilities.addActivitySuccessfully = 'yes';
-      CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-          context, const AddActivitySubmissionResultScreen());
-    } catch (error) {
-      if (mounted) CommonUtilities.createSnackBar(context, error.toString());
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
+    final activity = await _api.activity(widget.activityId);
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => AddActivityConfigureScreen(
+            activityId: widget.activityId,
+            timing: buildVenueTiming(),
+            activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
+                .toString(),
+            client: widget.client,
+          ),
+        ));
   }
 
   List<String> days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -180,6 +180,16 @@ class _State extends State<AddVenueTimingScreen> {
               "In $day, Opening time must be earlier than closing time.");
           return false;
         }
+        if (int.tryParse(slot['capacity'] ?? '') == null ||
+            int.parse(slot['capacity']!) <= 0) {
+          _showError("Enter the maximum members allowed per slot for $day");
+          return false;
+        }
+        if (double.tryParse(slot['price'] ?? '') == null ||
+            double.parse(slot['price']!) <= 0) {
+          _showError("Enter a valid base slot price for $day");
+          return false;
+        }
       }
     }
     return true;
@@ -235,8 +245,6 @@ class _State extends State<AddVenueTimingScreen> {
                         shrinkWrap: true,
                         children: [
                           getText(),
-
-                          getSubText(),
 
                           Container(
                             margin: const EdgeInsets.only(
@@ -312,7 +320,7 @@ class _State extends State<AddVenueTimingScreen> {
                             }).toList(),
                           ),
 
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 28),
 
                           // Copy To All Text and Click Event
                           /*if (selectedDays.isNotEmpty)
@@ -350,15 +358,26 @@ class _State extends State<AddVenueTimingScreen> {
                     ),*/
 
                           Container(
-                            margin: const EdgeInsets.fromLTRB(15, 10, 15, 0),
+                            margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              "Day Wise Timings",
-                              style: TextStyle(
-                                fontSize: AppSize.size_16,
-                                fontFamily: 'Satoshi',
-                                color: AppColors.black1,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  "Day Wise Timings",
+                                  style: TextStyle(
+                                    fontSize: AppSize.size_16,
+                                    fontFamily: 'Satoshi',
+                                    color: AppColors.black1,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Divider(
+                                    height: 1,
+                                    thickness: 1,
+                                    color: AppColors.gray),
+                                const SizedBox(height: 18),
+                              ],
                             ),
                           ),
 
@@ -768,13 +787,24 @@ class _State extends State<AddVenueTimingScreen> {
                                             ),
                                           ),
 
+                                          if (timings[day]!.timeSlots.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  top: 4, bottom: 12),
+                                              child: _slotDetails(
+                                                  day,
+                                                  timings[day]!.timeSlots.first),
+                                            ),
+
                                           // Add Slot Time Click Event.
                                           InkWell(
                                             onTap: () {
                                               setState(() {
                                                 timings[day]!.timeSlots.add({
                                                   "open": "09:00 AM",
-                                                  "close": "07:00 PM"
+                                                  "close": "07:00 PM",
+                                                  "capacity": "",
+                                                  "price": "",
                                                 });
                                               });
                                             },
@@ -859,13 +889,13 @@ class _State extends State<AddVenueTimingScreen> {
                                     }
                                   },
                                   child: hasAnyTimingSelected() && !_submitting
-                                      ? getButtonBlack(context, "Submit",
+                                      ? getButtonBlack(context, "Next",
                                           "venueAvailability")
                                       : getButtonGray(
                                           context,
                                           _submitting
                                               ? "Submitting..."
-                                              : "Submit",
+                                              : "Next",
                                           "venueAvailability")),
                             )
                           ],
@@ -892,7 +922,12 @@ class _State extends State<AddVenueTimingScreen> {
           timings.containsKey(day) &&
           timings[day]!.timeSlots.isNotEmpty) {
         venueTiming[apiKey] = timings[day]!.timeSlots.map((slot) {
-          return {"open": slot["open"] ?? "-", "close": slot["close"] ?? "-"};
+          return {
+            "open": slot["open"] ?? "-",
+            "close": slot["close"] ?? "-",
+            "capacity": slot["capacity"] ?? "-",
+            "price": slot["price"] ?? "-",
+          };
         }).toList();
       } else {
         // ❌ day not select
@@ -907,13 +942,14 @@ class _State extends State<AddVenueTimingScreen> {
 
   Widget getText() {
     return Container(
-      margin: const EdgeInsets.only(top: 5, left: 15, right: 15, bottom: 0),
+      margin: const EdgeInsets.only(top: 5, left: 15, right: 15, bottom: 16),
       alignment: Alignment.centerLeft,
       child: const Text(
-        "Set the venue’s availability",
+        "Manage Slots & Pricing",
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w600,
             color: AppColors.darkBlack,
             height: 1.2),
         textAlign: TextAlign.left,
@@ -959,6 +995,46 @@ class _State extends State<AddVenueTimingScreen> {
       }
     }
     return false;
+  }
+
+  Widget _slotDetails(String day, Map<String, String> slot) {
+    Widget field({required String label, required String hint, required String key}) {
+      return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: AppSize.size_14,
+                fontFamily: 'Satoshi', color: AppColors.darkBlack)),
+            const SizedBox(height: 6),
+            TextFormField(
+              initialValue: slot[key] ?? '',
+              keyboardType: TextInputType.number,
+              decoration: OnboardingStyles.inputDecoration(hintText: hint),
+              onChanged: (value) => slot[key] = value,
+            ),
+          ],
+        );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field(
+            label: 'Max. Members Allowed Per Slot *',
+            hint: 'e.g. 5',
+            key: 'capacity'),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.gray),
+          ),
+          child: field(
+              label: 'Base Slot Price (₹)', hint: '₹ 500', key: 'price'),
+        ),
+      ],
+    );
   }
 
   Widget getDividerLine(String length) {

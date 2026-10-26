@@ -493,6 +493,7 @@ export class BookingsService {
         throw new ForbiddenException('Not authorized to manage this booking');
       const result = { id, status, source: 'ACTIV' };
       if (booking.status === 'COMPLETED' && action === 'complete') return result;
+      if (booking.status === 'NO_SHOW' && action === 'no-show') return result;
       if (booking.status !== 'CONFIRMED')
         throw new BadRequestException('Only confirmed bookings can be updated');
       const previous = await tx.booking_events.findFirst({
@@ -503,7 +504,7 @@ export class BookingsService {
         if (action === 'no-show') return result;
         throw new BadRequestException('Booking is already marked as no-show');
       }
-      if (previous?.to_status === 'CHECKED_IN' && action === 'check-in') return result;
+      if ((previous?.to_status === 'CHECKED_IN' || booking.checked_in_at) && action === 'check-in') return result;
       const updated = await tx.bookings.updateMany({
         where: { id, status: 'CONFIRMED' },
         data: { updated_at: new Date(), ...(action === 'complete' ? { status: 'COMPLETED' as const } : {}) },

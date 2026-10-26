@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 
 import 'package:activ_app/Screens/StringExtensions.dart';
@@ -15,13 +16,16 @@ import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/activity_photo_upload.dart';
 import '../../../CommonCode.dart';
 import 'AddSelectedVenueFormScreen.dart';
+import '../../../../api_calling/activity_setup_api.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
   final List<XFile> images;
   final http.Client? client;
+  final Future<String>? activityIdFuture;
+  final Future<void>? uploadFuture;
   final ValueChanged<List<XFile>>? onPhotosChanged;
-  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client});
+  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client, this.activityIdFuture, this.uploadFuture});
 
   @override
   State<AddVenuePhotoListViewScreen> createState() => _State();
@@ -32,26 +36,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   int? _coverIndex = 0; // by default first image is cover
   String activityName = "Activity";
   bool _isUploading = false;
-  bool _loaderVisible = false;
-
-  void _showUploadLoader() {
-    if (!mounted || _loaderVisible) return;
-    _loaderVisible = true;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const PopScope(
-        canPop: false,
-        child: AlertDialog(content: Center(child: CircularProgressIndicator())),
-      ),
-    ).whenComplete(() => _loaderVisible = false);
-  }
-
-  void _hideUploadLoader() {
-    if (!mounted || !_loaderVisible) return;
-    _loaderVisible = false;
-    Navigator.of(context, rootNavigator: true).pop();
-  }
+  late final Future<_ActivitySetup> _setup;
 
 
   @override
@@ -59,6 +44,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     super.initState();
     getData();
     _images = List.from(widget.images); // copy images
+    _setup = _setupFuture();
   }
 
   getData() async
@@ -381,32 +367,23 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                             setState(() => _isUploading = true);
 
-                                            // Show loader
-                                            _showUploadLoader();
-                                            await Future<void>.delayed(Duration.zero);
-
                                             try {
-                                              final activityId = await _uploadActivityImagesToBackend(_images);
-
-                                              // Upload complete, close loader
-                                              _hideUploadLoader();
-
+                                              final setup = await _setup;
+                                              await widget.uploadFuture!;
                                               if (!context.mounted) return;
-
-                                              // Navigate to next screen
-                                              CommonUtilities.NavigateWithPush(context, AddSelectedVenueFormScreen(activityId: activityId, client: widget.client));
-                                            } catch (e) {
-                                              // Close loader if error occurs
-                                              _hideUploadLoader();
-
+                                              CommonUtilities.NavigateWithPush(
+                                                context,
+                                                AddSelectedVenueFormScreen(
+                                                  activityId: setup.id,
+                                                  initialActivity: setup.activity,
+                                                  initialQuestions: setup.questions,
+                                                  client: widget.client,
+                                                ),
+                                              );
+                                            } catch (error) {
                                               if (!context.mounted) return;
-                                              // Show error message
-                                              CommonUtilities.showLog("❌ Image upload failed111: $e");
-                                              final message = e is ActivityUploadException
-                                                  ? e.message
-                                                  : 'Image upload failed. Please try again.';
                                               ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(content: Text(message)),
+                                                SnackBar(content: Text(error.toString())),
                                               );
                                             } finally {
                                               if (mounted) setState(() => _isUploading = false);
@@ -437,6 +414,24 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     );
   }
 
+  Future<_ActivitySetup> _setupFuture() async {
+    final activityId = await widget.activityIdFuture!;
+    final api = ActivitySetupApi(client: widget.client);
+    try {
+      final results = await Future.wait<dynamic>([
+        api.activity(activityId),
+        api.questions(activityId),
+      ]);
+      return _ActivitySetup(
+        id: activityId,
+        activity: results[0] as Map<String, dynamic>,
+        questions: results[1] as List<Map<String, dynamic>>,
+      );
+    } finally {
+      api.dispose();
+    }
+  }
+
   Future<String> _uploadActivityImagesToBackend(List<XFile> images) async {
     final venueId = checkString(await SharedPreference.readStr('venue_id'));
     final token = checkString(await SharedPreference.readStr('jwt_token'));
@@ -452,6 +447,44 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       return await ActivityPhotoUploader(client: client, baseUrl: BASE_URL).upload(
         token: token, venueId: venueId, category: category, images: List.of(images),
       );
+    } finally {
+      if (widget.client == null) client.close();
+    }
+  }
+
+  Future<String> _prepareActivity() async {
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final raw = checkString(await SharedPreference.readStr('operate_value'));
+    Map<String, dynamic> category = {};
+    try {
+      category = Map<String, dynamic>.from(jsonDecode(raw));
+    } catch (_) {
+      throw const ActivityUploadException('Please select an activity again.');
+    }
+    final client = widget.client ?? http.Client();
+    final uploader = ActivityPhotoUploader(client: client, baseUrl: BASE_URL);
+    final serviceId = await uploader.createActivity(
+      token: token,
+      venueId: venueId,
+      category: category,
+    );
+    if (widget.client == null) client.close();
+    return serviceId;
+  }
+
+  Future<void> _uploadImagesInBackground(
+      String serviceId, List<XFile> images) async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final client = widget.client ?? http.Client();
+    try {
+      await ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
+        token: token,
+        serviceId: serviceId,
+        images: List.of(images),
+      );
+    } catch (error) {
+      CommonUtilities.showLog('Background image upload failed: $error');
     } finally {
       if (widget.client == null) client.close();
     }
@@ -491,6 +524,13 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       ),
     );
   }
+}
+
+class _ActivitySetup {
+  const _ActivitySetup({required this.id, required this.activity, required this.questions});
+  final String id;
+  final Map<String, dynamic> activity;
+  final List<Map<String, dynamic>> questions;
 }
 
 

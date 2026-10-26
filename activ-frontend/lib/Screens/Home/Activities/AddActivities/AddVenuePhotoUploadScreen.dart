@@ -14,9 +14,11 @@ import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import '../../../../Utills/venue_photo_duplicates.dart';
 import '../../../../api_calling/api_request.dart';
+import '../../../../api_calling/api_constant.dart';
 import '../../../CommonCode.dart';
 import 'AddVenuePhotoListViewScreen.dart';
 import '../../../onboarding_widgets.dart';
+import '../../../../api_calling/activity_photo_upload.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
   const AddVenuePhotoUploadScreen({super.key, this.client});
@@ -77,7 +79,47 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   }
 
   bool _isButtonEnabled = false; // by default false
+  bool _isStartingUpload = false;
   String activityName = "Activity";
+
+  Future<String> _startImageUpload(List<XFile> images) async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final raw = checkString(await SharedPreference.readStr('operate_value'));
+    Map<String, dynamic> category;
+    try {
+      category = Map<String, dynamic>.from(jsonDecode(raw));
+    } catch (_) {
+      throw const ActivityUploadException('Please select an activity again.');
+    }
+    final client = widget.client ?? http.Client();
+    try {
+      return await ActivityPhotoUploader(client: client, baseUrl: BASE_URL)
+          .createActivity(
+        token: token,
+        venueId: venueId,
+        category: category,
+      );
+    } finally {
+      if (widget.client == null) client.close();
+    }
+  }
+
+  Future<void> _uploadCreatedActivity(
+      Future<String> activityIdFuture, List<XFile> images) async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final activityId = await activityIdFuture;
+    final client = widget.client ?? http.Client();
+    try {
+      await ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
+        token: token,
+        serviceId: activityId,
+        images: List.of(images),
+      );
+    } finally {
+      if (widget.client == null) client.close();
+    }
+  }
 
   @override
   void initState() {
@@ -458,7 +500,13 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                         flex: 7,
                                         child: InkWell(
                                           onTap: () {
-                                            if (_selectedImages.length >= 4 && _selectedImages.length <= 12) {
+                                              if (_isStartingUpload) return;
+                                              if (_selectedImages.length >= 4 && _selectedImages.length <= 12) {
+                                                _isStartingUpload = true;
+                                                final selectedImages = List<XFile>.of(_selectedImages);
+                                                final activityIdFuture = _startImageUpload(selectedImages);
+                                                final uploadFuture = _uploadCreatedActivity(
+                                                    activityIdFuture, selectedImages);
                                               // ✅ Valid case: navigate
                                               Navigator.push(
                                                 context,
@@ -466,7 +514,9 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   builder: (context) =>
                                                       AddVenuePhotoListViewScreen(
                                                     client: widget.client,
-                                                        images: _selectedImages,
+                                                        activityIdFuture: activityIdFuture,
+                                                        uploadFuture: uploadFuture,
+                                                        images: selectedImages,
                                                         onPhotosChanged: (images) {
                                                           if (!mounted) return;
                                                           setState(() {
@@ -478,6 +528,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                       ),
                                                 ),
                                               ).then((value) {
+                                                if (mounted) _isStartingUpload = false;
                                                 refresh();
                                               });
                                             } else {

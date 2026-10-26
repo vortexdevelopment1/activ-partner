@@ -13,6 +13,7 @@ import '../../../api_calling/api_constant.dart';
 import '../../StringExtensions.dart';
 import 'ActivityManagementScreen.dart';
 import 'AddActivities/AddListActivityTypeScreen.dart';
+import 'AddActivities/AddActivitySubmissionResultScreen.dart';
 
 class VenueActivityListScreen extends StatefulWidget {
   const VenueActivityListScreen({super.key, this.client});
@@ -442,11 +443,14 @@ class _State extends State<VenueActivityListScreen> {
           await Navigator.push(
               context,
               MaterialPageRoute<bool>(
-                  builder: (_) => ActivityManagementScreen(
-                      activity: activity,
-                      initialStatus: status,
-                      venueId: info['venueId'] as String,
-                      client: widget.client)));
+                  builder: (_) => status == 'Draft'
+                      ? AddActivitySubmissionResultScreen(
+                          activityName: activity.title, savedAsDraft: true)
+                      : ActivityManagementScreen(
+                          activity: activity,
+                          initialStatus: status,
+                          venueId: info['venueId'] as String,
+                          client: widget.client)));
           if (mounted) fetchActivities();
         },
         child: Padding(

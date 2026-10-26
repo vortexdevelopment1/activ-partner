@@ -28,8 +28,6 @@ describe('activity management on the current schema', () => {
           total_paise: 125000n, status: 'CONFIRMED', users: { name: 'Customer' },
           slots: { ends_at: new Date('2030-01-02') } }]) },
       reviews: { findMany: jest.fn(async () => []) },
-      partner_walk_in_reservations: { findMany: jest.fn(async () => []) },
-      partner_venue_availability: { findMany: jest.fn(async () => []) },
       partner_service_paused_slots: { createMany: jest.fn(), findMany: jest.fn(async () => [{ slot_id: 'owned-slot' }]), deleteMany: jest.fn() },
     };
     prisma.$transaction = jest.fn(async (callback) => callback(prisma));
@@ -61,6 +59,21 @@ describe('activity management on the current schema', () => {
     }]);
     const result = await service.getActivityManagement('activity', 'partner');
     expect(result.bookings.find((booking) => booking.id === 'walk-in').status).toBe('Ongoing');
+  });
+
+  it.each([
+    ['CONFIRMED', new Date('2026-10-26T08:00:00Z'), 'Ongoing'],
+    ['NO_SHOW', null, 'No Show'],
+    ['COMPLETED', new Date('2026-10-26T08:00:00Z'), 'Completed'],
+  ])('preserves incoming %s attendance fields on refresh', async (status, checkedInAt, expected) => {
+    prisma.bookings.findMany.mockResolvedValueOnce([{
+      id: 'booking', starts_at: new Date('2030-01-01'), total_paise: 50000n,
+      status, checked_in_at: checkedInAt, users: { name: 'Customer' },
+      slots: { ends_at: new Date('2030-01-02') }, booking_events: [],
+    }]);
+    const result = await service.getActivityManagement('activity', 'partner');
+    expect(result.bookings[0].status).toBe(expected);
+    expect(prisma.bookings.aggregate.mock.calls[0][0].where.status.in).toContain('NO_SHOW');
   });
 
   it('returns stored public references without changing UUID identifiers', async () => {

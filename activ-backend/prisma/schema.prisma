@@ -28,6 +28,7 @@ model bookings {
   discount_paise               BigInt                        @default(0)
   total_paise                  BigInt
   starts_at                    DateTime
+  checked_in_at                DateTime?
   created_at                   DateTime                      @default(now())
   updated_at                   DateTime
   reschedule_count             Int                           @default(0)
@@ -921,6 +922,7 @@ enum BookingStatus {
   COMPLETED
   CANCELLED
   RESCHEDULED
+  NO_SHOW
 }
 
 enum CatalogueStatus {

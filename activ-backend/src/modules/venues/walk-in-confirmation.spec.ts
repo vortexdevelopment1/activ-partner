@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { VenuesService } from './venues.service';
 
 describe('walk-in booking confirmation', () => {
@@ -39,4 +40,20 @@ describe('walk-in booking confirmation', () => {
       expect(prisma.partner_walk_in_reservations.create).toHaveBeenCalledTimes(existing ? 0 : 1);
     });
   }
+
+  it('rejects an ACTIV booking at the same IST time before saving a walk-in', async () => {
+    const { service, prisma } = setup();
+    prisma.partner_venue_services.findFirst.mockResolvedValue({
+      status: 'APPROVED', facility_id: 'facility', service_category_id: 'basketball',
+      venues: { partner_id: 'partner', booking_accept: true },
+    });
+    prisma.bookings = { findMany: jest.fn().mockResolvedValue([{
+      slots: { starts_at: new Date('2026-10-26T03:30:00Z'), ends_at: new Date('2026-10-26T04:30:00Z') },
+    }]) };
+    await expect(service.createWalkIn('venue', 'activity', 'partner', {
+      date: '2026-10-26', court: 'Court 01', slots: [{ startTime: '09:00', endTime: '10:00' }],
+      participantName: 'Test Participant', participantPhone: '+919876543210',
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.partner_walk_in_reservations.create).not.toHaveBeenCalled();
+  });
 });

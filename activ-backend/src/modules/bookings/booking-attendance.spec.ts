@@ -76,4 +76,19 @@ describe('current-schema booking attendance actions', () => {
     prisma.bookings.findUnique.mockResolvedValue(null);
     await expect(service.markNoShow('missing', 'owner')).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('handles a repeated no-show saved by the incoming implementation', async () => {
+    const { service, prisma } = setup('ACTIV', 'NO_SHOW');
+    await expect(service.markNoShow('booking', 'owner')).resolves.toMatchObject({ status: 'no_show' });
+    await expect(service.checkIn('booking', 'owner')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.bookings.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('handles a repeated check-in saved by the incoming implementation', async () => {
+    const { service, prisma, booking } = setup('ACTIV');
+    Object.assign(booking, { checked_in_at: new Date() });
+    await expect(service.checkIn('booking', 'owner')).resolves.toMatchObject({ status: 'ongoing' });
+    expect(prisma.bookings.updateMany).not.toHaveBeenCalled();
+    expect(prisma.booking_events.create).not.toHaveBeenCalled();
+  });
 });
