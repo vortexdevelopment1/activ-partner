@@ -17,8 +17,8 @@ describe('Pickle Ball question catalogue', () => {
       await seedQuestions(prisma as any, ['Pickle Ball']);
       await seedQuestions(prisma as any, ['Pickle Ball']);
       expect(prisma.partner_service_categories.findUnique).toHaveBeenCalledWith({ where: { slug: 'pickle-ball' } });
-      expect(questions).toHaveLength(7);
-      expect(questions.map(q => q.question)).toEqual(['Activity Description', 'Total Courts', 'Court Surface', 'Playing Environment', 'Equipment Available', 'Coaching Available', 'Recommended For']);
+      expect(questions).toHaveLength(6);
+      expect(questions.map(q => q.question)).toEqual(['Activity Description', 'Total Courts', 'Court Surface', 'Playing Environment', 'Coaching Available', 'Recommended For']);
       expect(questions[0]).toMatchObject({ type: 'TEXTAREA', is_required: true });
       expect(questions.every(q => q.service_category_id === 'pickle-ball')).toBe(true);
       expect(prisma.partner_service_questions.createMany).toHaveBeenCalledTimes(1);

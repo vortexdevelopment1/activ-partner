@@ -16,6 +16,8 @@ import '../../../../api_calling/api_constant.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../CommonCode.dart';
 import 'AddVenuePhotoUploadScreen.dart';
+import '../../../../Utills/activity_draft_identity.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../onboarding_widgets.dart';
 import '../VenueActivityListScreen.dart';
 
@@ -203,6 +205,14 @@ class _State extends State<AddListActivityTypeScreen> {
                                                 'id': chosen.id,
                                                 'title': chosen.title
                                               }));
+                                          final draftId = await ActivityDraftIdentity.createNew(
+                                            venueId: _venueId!, categoryId: chosen.id);
+                                          await SharedPreference.addStringToSF(
+                                              'activity_current_draft_id', draftId);
+                                          await ActivityFlowCheckpoint.save(
+                                            activityId: draftId, step: 'activityType',
+                                            data: {'venueId': _venueId, 'categoryId': chosen.id},
+                                          );
                                           if (!context.mounted) return;
                                           CommonUtilities.NavigateWithPush(
                                               context,

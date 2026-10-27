@@ -14,6 +14,10 @@ import '../../StringExtensions.dart';
 import 'ActivityManagementScreen.dart';
 import 'AddActivities/AddListActivityTypeScreen.dart';
 import 'AddActivities/AddActivitySubmissionResultScreen.dart';
+import 'AddActivities/AddActivityConfigureScreen.dart';
+import 'AddActivities/AddSelectedVenueFormScreen.dart';
+import '../../../Utills/activity_resume_navigator.dart';
+import '../../../Utills/activity_flow_checkpoint.dart';
 
 class VenueActivityListScreen extends StatefulWidget {
   const VenueActivityListScreen({super.key, this.client});
@@ -440,6 +444,16 @@ class _State extends State<VenueActivityListScreen> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
+          if (status == 'Draft') {
+            final checkpoint = await ActivityFlowCheckpoint.read(activity.activityId);
+            if (checkpoint != null) {
+              try {
+                await ActivityResumeNavigator.open(context, checkpoint, widget.client);
+                if (mounted) fetchActivities();
+                return;
+              } catch (_) {}
+            }
+          }
           await Navigator.push(
               context,
               MaterialPageRoute<bool>(

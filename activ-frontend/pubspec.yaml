@@ -75,6 +75,8 @@ dependencies:
   cloud_firestore: ^5.6.5 #For Firebase FireStore Database
   firebase_storage: ^12.4.10
   carousel_slider: ^5.1.1
+  path: ^1.9.1
+  web: ^1.1.2
 
 
 dev_dependencies:

@@ -12,6 +12,9 @@ import 'package:intl/intl.dart';
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import 'AddActivityConfigureScreen.dart';
+import '../../../../api_calling/api_request.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
+import 'dart:convert';
 import '../../../onboarding_widgets.dart';
 
 class DayTiming {
@@ -38,6 +41,7 @@ class _State extends State<AddVenueTimingScreen> {
   @override
   void initState() {
     super.initState();
+    ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing');
     _api = ActivitySetupApi(client: widget.client);
   }
 

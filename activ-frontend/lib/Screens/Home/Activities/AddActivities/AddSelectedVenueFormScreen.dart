@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
 import '../../../../api_calling/activity_setup_api.dart';
+import '../../../../api_calling/api_request.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../CommonCode.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivityAmenitiesScreen.dart';
@@ -44,6 +47,9 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
     super.initState();
     _api = ActivitySetupApi(client: widget.client);
     _resolvedActivityId = widget.activityId;
+    if (_resolvedActivityId.isNotEmpty) {
+      ActivityFlowCheckpoint.save(activityId: _resolvedActivityId, step: 'details');
+    }
     _load();
   }
 
@@ -101,7 +107,6 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
           if (text.contains('activity description')) return 0;
           if (text.contains('pool length')) return 1;
           if (text.contains('pool type')) return 2;
-          if (text.contains('equipment available')) return 3;
           return 4;
         }
 

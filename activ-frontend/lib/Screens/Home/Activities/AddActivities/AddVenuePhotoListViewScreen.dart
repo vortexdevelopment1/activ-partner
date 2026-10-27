@@ -17,15 +17,18 @@ import '../../../../api_calling/activity_photo_upload.dart';
 import '../../../CommonCode.dart';
 import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
+import '../../../../Utills/activity_image_draft_store.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
   final List<XFile> images;
   final http.Client? client;
   final Future<String>? activityIdFuture;
+  final String? activityId;
   final Future<void>? uploadFuture;
   final ValueChanged<List<XFile>>? onPhotosChanged;
-  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client, this.activityIdFuture, this.uploadFuture});
+  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client, this.activityIdFuture, this.activityId, this.uploadFuture});
 
   @override
   State<AddVenuePhotoListViewScreen> createState() => _State();
@@ -45,6 +48,29 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     getData();
     _images = List.from(widget.images); // copy images
     _setup = _setupFuture();
+    _restorePersistedImages();
+    _recordCheckpoint();
+  }
+
+  Future<void> _recordCheckpoint() async {
+    final id = widget.activityId;
+    if (id != null && id.isNotEmpty) {
+      await ActivityFlowCheckpoint.save(activityId: id, step: 'photoReview');
+    }
+  }
+
+  Future<void> _restorePersistedImages() async {
+    final id = widget.activityId;
+    if (id == null || id.isEmpty) return;
+    final saved = await ActivityImageDraftStore.read(id);
+    if (saved.isNotEmpty && mounted) setState(() => _images = saved);
+  }
+
+  Future<void> _persistImages() async {
+    final id = widget.activityId;
+    if (id != null && id.isNotEmpty) {
+      await ActivityImageDraftStore.save(id, _images);
+    }
   }
 
   getData() async
@@ -73,6 +99,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       _coverIndex = 0;
     });
     widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
+    _persistImages();
   }
 
   void deletePhoto(int index) {
@@ -86,6 +113,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       }
     });
     widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
+    _persistImages();
 
     if (_images.isEmpty)
     {
@@ -369,7 +397,9 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                             try {
                                               final setup = await _setup;
-                                              await widget.uploadFuture!;
+                                              if (widget.uploadFuture != null) {
+                                                await widget.uploadFuture!;
+                                              }
                                               if (!context.mounted) return;
                                               CommonUtilities.NavigateWithPush(
                                                 context,
@@ -415,7 +445,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   Future<_ActivitySetup> _setupFuture() async {
-    final activityId = await widget.activityIdFuture!;
+    final activityId = widget.activityId ?? await widget.activityIdFuture!;
     final api = ActivitySetupApi(client: widget.client);
     try {
       final results = await Future.wait<dynamic>([

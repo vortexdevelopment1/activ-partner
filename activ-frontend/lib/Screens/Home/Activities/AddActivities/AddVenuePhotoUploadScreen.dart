@@ -19,6 +19,9 @@ import '../../../CommonCode.dart';
 import 'AddVenuePhotoListViewScreen.dart';
 import '../../../onboarding_widgets.dart';
 import '../../../../api_calling/activity_photo_upload.dart';
+import '../../../../Utills/activity_image_draft_store.dart';
+import '../../../../Utills/activity_draft_identity.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
   const AddVenuePhotoUploadScreen({super.key, this.client});
@@ -31,6 +34,39 @@ class AddVenuePhotoUploadScreen extends StatefulWidget {
 class _State extends State<AddVenuePhotoUploadScreen> {
   final List<XFile> _selectedImages = [];
   final ImagePicker _picker = ImagePicker();
+  String _imageDraftKey = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreImageDraft();
+    _loadActivityName();
+  }
+
+  Future<void> _restoreImageDraft() async {
+    final venue = checkString(await SharedPreference.readStr('venue_id'));
+    final category = checkString(await SharedPreference.readStr('operate_value'));
+    Map<String, dynamic> categoryMap = {};
+    try { categoryMap = Map<String, dynamic>.from(jsonDecode(category)); } catch (_) {}
+    final categoryId = categoryMap['id']?.toString() ?? '';
+    _imageDraftKey = await SharedPreference.readStr('activity_current_draft_id') ?? '';
+    if (_imageDraftKey.isEmpty) {
+      _imageDraftKey = categoryId.isEmpty
+          ? '$venue:$category'
+          : await ActivityDraftIdentity.forActivity(venueId: venue, categoryId: categoryId);
+    }
+    if (_imageDraftKey.isNotEmpty) {
+      await ActivityFlowCheckpoint.save(activityId: _imageDraftKey, step: 'photoUpload');
+    }
+    final saved = await ActivityImageDraftStore.read(_imageDraftKey);
+    if (saved.isNotEmpty && mounted) setState(() => _selectedImages.addAll(saved));
+  }
+
+  Future<void> _persistImageDraft() async {
+    if (_imageDraftKey.isNotEmpty) {
+      await ActivityImageDraftStore.save(_imageDraftKey, _selectedImages);
+    }
+  }
 
   // File Size Validation (5 MB se jyada na ho)
   Future<bool> _isValidFileSize(String path) async {
@@ -109,6 +145,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
       Future<String> activityIdFuture, List<XFile> images) async {
     final token = checkString(await SharedPreference.readStr('jwt_token'));
     final activityId = await activityIdFuture;
+    await ActivityImageDraftStore.migrate(_imageDraftKey, activityId);
+    await ActivityFlowCheckpoint.migrate(_imageDraftKey, activityId);
     final client = widget.client ?? http.Client();
     try {
       await ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
@@ -119,12 +157,6 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     } finally {
       if (widget.client == null) client.close();
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadActivityName();
   }
 
   Future<void> _loadActivityName() async {
@@ -177,6 +209,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         setState(() {
           _selectedImages.add(img);
         });
+        await _persistImageDraft();
       }
       _updateButtonStatus();
       if (duplicateFound && mounted) await showDuplicateVenuePhotoDialog(context);
@@ -211,6 +244,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
       setState(() {
         _selectedImages.add(image);
       });
+      await _persistImageDraft();
     }
 
     _updateButtonStatus(); // ✅ update button state

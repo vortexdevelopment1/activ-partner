@@ -1202,7 +1202,6 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
   late final TextEditingController _totalCourts;
   late final TextEditingController _courtType;
   late Set<String> _playingEnvironment;
-  late Set<String> _equipmentAvailable;
   late Set<String> _coachingAvailable;
   late Set<String> _recommendedFor;
 
@@ -1213,12 +1212,6 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
     'Covered',
     'Floodlights',
     'Spectator Seating',
-  ];
-  static const _equipmentOptions = [
-    'Equipment Provided',
-    'Rental Equipment',
-    'Protective Gear',
-    'Training Gear',
   ];
   static const _coachingOptions = [
     'Beginner',
@@ -1269,8 +1262,6 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
         text: _readString('courtType', fallback: widget.activity.flooringType));
     _playingEnvironment = _readList('playingEnvironment',
         fallback: widget.activity.physicalSetup);
-    _equipmentAvailable = _readList('equipmentAvailable',
-        fallback: widget.activity.equipmentProvided);
     _coachingAvailable = _readList('coachingAvailable');
     _recommendedFor =
         _readList('recommendedFor', fallback: widget.activity.activitySuited);
@@ -1312,7 +1303,6 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
       'numberOfCourt': _totalCourts.text.trim(),
       'courtType': _courtType.text.trim(),
       'playingEnvironment': _playingEnvironment.toList(),
-      'equipmentAvailable': _equipmentAvailable.toList(),
       'coachingAvailable': _coachingAvailable.toList(),
       'recommendedFor': _recommendedFor.toList(),
     });
@@ -1379,12 +1369,6 @@ class _ActivityInfoPageState extends State<_ActivityInfoPage> {
                                         onChanged: (next) => setState(
                                             () => _playingEnvironment = next)),
                                     const SizedBox(height: 22),
-                                    _fieldLabel('Equipment Available'),
-                                    _checkPanel(
-                                        options: _equipmentOptions,
-                                        values: _equipmentAvailable,
-                                        onChanged: (next) => setState(
-                                            () => _equipmentAvailable = next)),
                                     const SizedBox(height: 22),
                                     _fieldLabel('Coaching Available'),
                                     _checkPanel(
