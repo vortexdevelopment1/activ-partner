@@ -18,6 +18,8 @@ import 'AddActivities/AddActivityConfigureScreen.dart';
 import 'AddActivities/AddSelectedVenueFormScreen.dart';
 import '../../../Utills/activity_resume_navigator.dart';
 import '../../../Utills/activity_flow_checkpoint.dart';
+import '../../../Utills/activity_image_draft_store.dart';
+import '../../../api_calling/activity_setup_api.dart';
 
 class VenueActivityListScreen extends StatefulWidget {
   const VenueActivityListScreen({super.key, this.client});
@@ -416,6 +418,100 @@ class _State extends State<VenueActivityListScreen> {
         ]),
       );
 
+  Future<void> _deleteActivity(ActivityModel activity) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F6D2),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: const Color(0xFFDCE7B2)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Delete activity permanently?',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Color(0xFF262626),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'This will permanently delete ${activity.title} and all related venue data, including images, details, amenities, timing, pricing, and configuration. This action cannot be undone.',
+                style: const TextStyle(
+                  color: Color(0xFF363636),
+                  fontSize: 15,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Color(0xFFA536F5),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: const Color(0xFFE8FF28),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final api = ActivitySetupApi(client: widget.client);
+      try {
+        await api.discardDraft(activity.activityId);
+      } finally {
+        api.dispose();
+      }
+      await ActivityFlowCheckpoint.clear(activity.activityId);
+      await ActivityImageDraftStore.clear(activity.activityId);
+      if (mounted) fetchActivities();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to delete activity: $error')),
+        );
+      }
+    }
+  }
+
   Widget activityCard(ActivityModel activity) {
     final info = activityInfo[activity.activityId]!;
     final status = info['status'] as String;
@@ -443,10 +539,15 @@ class _State extends State<VenueActivityListScreen> {
           side: const BorderSide(color: Color(0xFFDDE0D5))),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        onLongPress: () => _deleteActivity(activity),
         onTap: () async {
           if (status == 'Draft') {
             final checkpoint = await ActivityFlowCheckpoint.read(activity.activityId);
-            if (checkpoint != null) {
+            final explicitDraft = await SharedPreference.readStr(
+                'activity_draft_resume_${activity.activityId}');
+            if (checkpoint != null &&
+                checkpoint.interrupted &&
+                (explicitDraft == null || explicitDraft.isEmpty)) {
               try {
                 await ActivityResumeNavigator.open(context, checkpoint, widget.client);
                 if (mounted) fetchActivities();

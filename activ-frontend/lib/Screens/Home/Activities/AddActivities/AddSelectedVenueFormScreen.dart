@@ -47,7 +47,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
     super.initState();
     _api = ActivitySetupApi(client: widget.client);
     _resolvedActivityId = widget.activityId;
-    if (_resolvedActivityId.isNotEmpty) {
+    if (_resolvedActivityId.isNotEmpty && !ActivityFlowCheckpoint.restoring) {
       ActivityFlowCheckpoint.save(activityId: _resolvedActivityId, step: 'details');
     }
     _load();

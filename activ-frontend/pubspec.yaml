@@ -131,6 +131,7 @@ flutter:
     - assets/bank_verification_icon.svg
     - assets/ic_arts.png
     - assets/save_as_draft.svg
+    - assets/success_purple.svg
     - assets/confirm_editing.svg
     - assets/delete_draft.svg
     - assets/ic_cock.png

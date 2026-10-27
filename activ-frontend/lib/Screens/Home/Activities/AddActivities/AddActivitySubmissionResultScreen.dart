@@ -13,6 +13,7 @@ import '../../../StringExtensions.dart';
 import '../VenueActivityListScreen.dart';
 import 'AddListActivityTypeScreen.dart';
 import 'AddActivitySubmitReviewScreen.dart';
+import 'AddActivityConfigureScreen.dart';
 import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 
@@ -101,10 +102,6 @@ class _AddActivitySubmissionResultScreenState
 
   Future<void> _continueEditing() async {
     if (_resuming || _discarding) return;
-    if (widget.returnToEditor && Navigator.canPop(context)) {
-      Navigator.pop(context);
-      return;
-    }
     final id = widget.activityId;
     if (id == null || id.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -131,7 +128,7 @@ class _AddActivitySubmissionResultScreenState
               builder: (_) => timing == null
                   ? AddSelectedVenueFormScreen(
                       activityId: id, client: widget.client)
-                  : AddActivitySubmitReviewScreen(
+                  : AddActivityConfigureScreen(
                       activityId: id,
                       activityName: _title,
                       timing: timing!,
@@ -192,8 +189,8 @@ class _AddActivitySubmissionResultScreenState
                         draft
                             ? SvgPicture.asset('assets/save_as_draft.svg',
                                 width: 72, height: 72)
-                            : const Icon(Icons.verified,
-                                color: AppColors.purple, size: 72),
+                            : SvgPicture.asset('success_purple.svg',
+                                width: 72, height: 72),
                         const SizedBox(height: 8),
                         Text(
                           draft

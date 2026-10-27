@@ -5,6 +5,7 @@ import '../api_calling/api_request.dart';
 /// Persistent, activity-scoped resume state for the add-activity wizard.
 /// Image entries are references (paths or remote URLs), never image bytes.
 class ActivityFlowCheckpoint {
+  static bool restoring = false;
   static const _prefix = 'activity_flow_checkpoint_';
 
   final String activityId;
@@ -86,5 +87,18 @@ class ActivityFlowCheckpoint {
     await SharedPreference.addStringToSF(key(toId), jsonEncode(destination.toJson()));
     final verified = await read(toId);
     if (verified != null && verified.step == source.step) await clear(fromId);
+  }
+
+  static Future<void> markCompletedDraft(String activityId) async {
+    final current = await read(activityId);
+    if (current == null) return;
+    final completed = ActivityFlowCheckpoint(
+      activityId: current.activityId,
+      step: current.step,
+      data: current.data,
+      interrupted: false,
+      updatedAt: DateTime.now(),
+    );
+    await SharedPreference.addStringToSF(key(activityId), jsonEncode(completed.toJson()));
   }
 }

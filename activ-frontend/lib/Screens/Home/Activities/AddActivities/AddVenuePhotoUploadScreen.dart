@@ -22,6 +22,7 @@ import '../../../../api_calling/activity_photo_upload.dart';
 import '../../../../Utills/activity_image_draft_store.dart';
 import '../../../../Utills/activity_draft_identity.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
+import '../../../../api_calling/activity_setup_api.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
   const AddVenuePhotoUploadScreen({super.key, this.client});
@@ -35,6 +36,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   final List<XFile> _selectedImages = [];
   final ImagePicker _picker = ImagePicker();
   String _imageDraftKey = '';
+  Future<String>? _createdActivityFuture;
+  bool _discardingActivity = false;
 
   @override
   void initState() {
@@ -55,7 +58,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
           ? '$venue:$category'
           : await ActivityDraftIdentity.forActivity(venueId: venue, categoryId: categoryId);
     }
-    if (_imageDraftKey.isNotEmpty) {
+    if (_imageDraftKey.isNotEmpty && !ActivityFlowCheckpoint.restoring) {
       await ActivityFlowCheckpoint.save(activityId: _imageDraftKey, step: 'photoUpload');
     }
     final saved = await ActivityImageDraftStore.read(_imageDraftKey);
@@ -65,6 +68,38 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   Future<void> _persistImageDraft() async {
     if (_imageDraftKey.isNotEmpty) {
       await ActivityImageDraftStore.save(_imageDraftKey, _selectedImages);
+    }
+  }
+
+  Future<void> _backFromUploadStep() async {
+    if (_discardingActivity) return;
+    setState(() => _discardingActivity = true);
+    try {
+      final future = _createdActivityFuture;
+      if (future != null) {
+        final activityId = await future;
+        final api = ActivitySetupApi(client: widget.client);
+        try {
+          await api.discardDraft(activityId);
+        } finally {
+          api.dispose();
+        }
+        await ActivityFlowCheckpoint.clear(activityId);
+        await ActivityImageDraftStore.clear(activityId);
+      }
+      if (_imageDraftKey.isNotEmpty) {
+        await ActivityFlowCheckpoint.clear(_imageDraftKey);
+        await ActivityImageDraftStore.clear(_imageDraftKey);
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to discard this unfinished activity: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _discardingActivity = false);
     }
   }
 
@@ -522,10 +557,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                       Expanded(
                                           flex: 3,
                                           child: InkWell(
-                                              onTap: ()
-                                              {
-                                                Navigator.pop(context);
-                                              },
+                                              onTap: _backFromUploadStep,
                                               child: getBackButton(context, "Back", "venuePhoto"))
                                       ),
 
@@ -539,6 +571,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                 _isStartingUpload = true;
                                                 final selectedImages = List<XFile>.of(_selectedImages);
                                                 final activityIdFuture = _startImageUpload(selectedImages);
+                                                _createdActivityFuture = activityIdFuture;
                                                 final uploadFuture = _uploadCreatedActivity(
                                                     activityIdFuture, selectedImages);
                                               // ✅ Valid case: navigate

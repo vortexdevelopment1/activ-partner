@@ -41,7 +41,9 @@ class _State extends State<AddVenueTimingScreen> {
   @override
   void initState() {
     super.initState();
-    ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing');
+    if (!ActivityFlowCheckpoint.restoring) {
+      ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing');
+    }
     _api = ActivitySetupApi(client: widget.client);
   }
 
