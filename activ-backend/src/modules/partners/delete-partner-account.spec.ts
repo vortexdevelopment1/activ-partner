@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { deletePartnerAccount } from './delete-partner-account';
 import { PartnersService } from './partners.service';
+import { ACTIVE_BOOKING_PREDICATE } from '../bookings/active-booking-predicate';
 
 describe('partner account deletion', () => {
   it.each(['deleteAccount', 'remove'] as const)('%s uses the current database schema inside an atomic transaction', async (method) => {
@@ -24,6 +25,16 @@ describe('partner account deletion', () => {
     const tx = { $queryRawUnsafe: jest.fn().mockResolvedValue([]), $executeRawUnsafe: jest.fn() };
     await expect(deletePartnerAccount(tx as any, 'missing')).rejects.toThrow(NotFoundException);
     expect(tx.$executeRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it('checks latest attendance along with lifecycle status before deleting a scoped account', async () => {
+    const tx = { $queryRawUnsafe: jest.fn(async (sql: string) =>
+      sql.startsWith('SELECT id FROM partners') ? [{ id: 'partner' }] : []),
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1) };
+    await deletePartnerAccount(tx as any, 'partner');
+    expect(tx.$queryRawUnsafe).toHaveBeenCalledWith(
+      `SELECT booking.id FROM account_delete_bookings booking WHERE ${ACTIVE_BOOKING_PREDICATE} LIMIT 1`,
+    );
   });
 
   it.each(['shared login', 'active booking'])('blocks %s before any delete is performed', async (reason) => {

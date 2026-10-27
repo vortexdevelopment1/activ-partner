@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { VenuesService } from './venues.service';
+import { ACTIVE_BOOKING_PREDICATE } from '../bookings/active-booking-predicate';
 
 describe('single-request admin venue deletion', () => {
   const setup = (venue: any, activeBooking = false) => {
@@ -24,6 +25,9 @@ describe('single-request admin venue deletion', () => {
     await expect(service.remove('venue', admin)).resolves.toEqual({ permanentlyDeleted: true });
     expect(tx.venues.update).not.toHaveBeenCalled();
     expect(tx.venues.delete).toHaveBeenCalledWith({ where: { id: 'venue' } });
+    expect(tx.$queryRawUnsafe).toHaveBeenCalledWith(
+      `SELECT booking.id FROM venue_delete_bookings booking WHERE ${ACTIVE_BOOKING_PREDICATE} LIMIT 1`,
+    );
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function),
       { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' });
     const sql = tx.$executeRawUnsafe.mock.calls.map(([query]) => query).join('\n');

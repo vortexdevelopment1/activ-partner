@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { ACTIVE_BOOKING_PREDICATE } from '../bookings/active-booking-predicate';
 
 export async function deletePartnerAccount(tx: Prisma.TransactionClient, partnerId: string): Promise<void> {
   const partners = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -22,7 +23,7 @@ export async function deletePartnerAccount(tx: Prisma.TransactionClient, partner
   await tx.$queryRawUnsafe('SELECT id FROM slots WHERE id IN (SELECT id FROM account_delete_slots) FOR UPDATE');
   await tx.$executeRawUnsafe(`CREATE TEMP TABLE account_delete_bookings ON COMMIT DROP AS SELECT id, status FROM bookings
     WHERE slot_id IN (SELECT id FROM account_delete_slots) OR user_id IN (SELECT id FROM account_delete_users)`);
-  const active = await tx.$queryRawUnsafe<Array<{ id: string }>>("SELECT id FROM account_delete_bookings WHERE status IN ('PENDING_PAYMENT', 'CONFIRMED') LIMIT 1");
+  const active = await tx.$queryRawUnsafe<Array<{ id: string }>>(`SELECT booking.id FROM account_delete_bookings booking WHERE ${ACTIVE_BOOKING_PREDICATE} LIMIT 1`);
   if (active.length) throw new BadRequestException('Cannot delete account: please cancel or complete all pending and confirmed bookings first.');
   await tx.$executeRawUnsafe(`CREATE TEMP TABLE account_delete_attempts ON COMMIT DROP AS SELECT id FROM booking_attempts
     WHERE slot_id IN (SELECT id FROM account_delete_slots) OR user_id IN (SELECT id FROM account_delete_users)`);

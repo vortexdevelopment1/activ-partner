@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { ACTIVE_BOOKING_PREDICATE } from '../bookings/active-booking-predicate';
 
 // The caller locks the venue and authorizes permanent deletion first.
 export async function deleteVenue(tx: Prisma.TransactionClient, venueId: string): Promise<void> {
@@ -7,7 +8,7 @@ export async function deleteVenue(tx: Prisma.TransactionClient, venueId: string)
   await tx.$executeRawUnsafe('CREATE TEMP TABLE venue_delete_slots ON COMMIT DROP AS SELECT id FROM slots WHERE facility_id IN (SELECT id FROM venue_delete_facilities)');
   await tx.$queryRawUnsafe('SELECT id FROM slots WHERE id IN (SELECT id FROM venue_delete_slots) FOR UPDATE');
   await tx.$executeRawUnsafe('CREATE TEMP TABLE venue_delete_bookings ON COMMIT DROP AS SELECT id, status FROM bookings WHERE slot_id IN (SELECT id FROM venue_delete_slots)');
-  const active = await tx.$queryRawUnsafe<Array<{ id: string }>>("SELECT id FROM venue_delete_bookings WHERE status IN ('PENDING_PAYMENT', 'CONFIRMED') LIMIT 1");
+  const active = await tx.$queryRawUnsafe<Array<{ id: string }>>(`SELECT booking.id FROM venue_delete_bookings booking WHERE ${ACTIVE_BOOKING_PREDICATE} LIMIT 1`);
   if (active.length) throw new BadRequestException('Cannot permanently delete venue: please cancel or complete all pending and confirmed bookings first.');
 
   const bookings = 'IN (SELECT id FROM venue_delete_bookings)';
