@@ -21,7 +21,8 @@ import 'CustomerPlacesOffer.dart';
 import 'MobileNumberFormatter.dart';
 
 class ContactSupportFormScreen extends StatefulWidget {
-  const ContactSupportFormScreen({super.key});
+  const ContactSupportFormScreen({super.key, this.client});
+  final http.Client? client;
 
   @override
   State<ContactSupportFormScreen> createState() => _State();
@@ -39,6 +40,7 @@ class _State extends State<ContactSupportFormScreen> {
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
   bool _submitting = false;
+  bool _submitted = false;
 
   _State()
   {
@@ -80,7 +82,7 @@ class _State extends State<ContactSupportFormScreen> {
   }
 
   Future<void> _submitSupportRequest() async {
-    if (_submitting || !validation(context)) return;
+    if (_submitting || _submitted || !validation(context)) return;
     setState(() => _submitting = true);
     try {
       final token = await SharedPreference.readStr('jwt_token') ?? '';
@@ -102,12 +104,17 @@ class _State extends State<ContactSupportFormScreen> {
         ));
       }
       final response = await http.Response.fromStream(
-        await request.send().timeout(const Duration(seconds: 30)),
+        await (widget.client?.send(request) ?? request.send())
+            .timeout(const Duration(seconds: 30)),
       );
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw Exception('Unable to submit your request');
       }
       if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submitted = true;
+      });
       await customAlertDialog(
         context,
         'Your request has been sent successfully. Our support team will contact you soon. Thank you for reaching out to us.',
@@ -401,7 +408,7 @@ class _State extends State<ContactSupportFormScreen> {
                                       Expanded(
                                         flex: 7,
                                         child: InkWell(
-                                            onTap: _submitting ? null : _submitSupportRequest,
+                                            onTap: _submitting || _submitted ? null : _submitSupportRequest,
                                             child: Container(
                                               margin: const EdgeInsets.only(left: 5),
                                               child: _submitting

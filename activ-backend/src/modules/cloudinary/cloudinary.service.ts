@@ -80,8 +80,9 @@ export class CloudinaryService {
     if (
       parsed.protocol !== 'https:' ||
       parsed.hostname !== 'res.cloudinary.com' ||
+      (parsed.port !== '' && parsed.port !== '443') || parsed.username || parsed.password ||
       !parsed.pathname.startsWith(`/${this.cloudName}/`) ||
-      !/\/(?:raw|image)\/upload\//.test(parsed.pathname)
+      !/\/(?:raw|image)\/(?:upload|private|authenticated)\//.test(parsed.pathname)
     ) {
       throw new BadRequestException('Only documents from the configured Cloudinary account can be opened.');
     }
@@ -94,18 +95,38 @@ export class CloudinaryService {
     }
 
     const failures: Array<{ status: number; detail: string }> = [];
-    for (const candidate of [...new Set(candidates)]) {
-      const response = await fetch(candidate, { headers: { Accept: 'application/pdf' } }).catch(() => null);
-      if (!response) continue;
+    const readPdf = async (candidate: string): Promise<Buffer | null> => {
+      const response = await fetch(candidate, {
+        headers: { Accept: 'application/pdf' },
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error',
+      }).catch(() => null);
+      if (!response) return null;
       if (!response.ok) {
         failures.push({ status: response.status, detail: response.headers.get('x-cld-error') || '' });
-        continue;
+        return null;
       }
       const length = Number(response.headers.get('content-length') || 0);
       if (length > 10 * 1024 * 1024) throw new BadRequestException('PDF exceeds the 10 MB viewing limit.');
       const bytes = Buffer.from(await response.arrayBuffer());
       if (bytes.length <= 10 * 1024 * 1024 && bytes.subarray(0, 5).toString() === '%PDF-') {
         return bytes;
+      }
+      return null;
+    };
+    for (const candidate of [...new Set(candidates)]) {
+      const bytes = await readPdf(candidate);
+      if (bytes) return bytes;
+    }
+
+    // The admin endpoint may retrieve an original using account credentials
+    // even when anonymous CDN delivery requires authentication.
+    if (this.isConfigured && failures.some(({ status }) => status === 401 || status === 403)) {
+      for (const candidate of [...new Set(candidates)]) {
+        const signedUrl = this.authenticatedDownloadUrl(new URL(candidate));
+        if (!signedUrl) continue;
+        const bytes = await readPdf(signedUrl);
+        if (bytes) return bytes;
       }
     }
 
@@ -127,6 +148,29 @@ export class CloudinaryService {
     throw new ServiceUnavailableException(
       'The PDF could not be retrieved from Cloudinary. Please retry. If the problem continues, check that the uploaded file is a valid PDF.',
     );
+  }
+
+  private authenticatedDownloadUrl(source: URL): string | null {
+    const segments = source.pathname.split('/').slice(2);
+    const resourceType = segments.shift();
+    const deliveryType = segments.shift();
+    if (!['image', 'raw'].includes(resourceType ?? '') ||
+        !['upload', 'private', 'authenticated'].includes(deliveryType ?? '')) return null;
+    if (/^s--[\w-]+--$/.test(segments[0] ?? '')) segments.shift();
+    if (/^v\d+$/.test(segments[0] ?? '')) segments.shift();
+    let publicId: string;
+    try { publicId = decodeURIComponent(segments.join('/')); } catch { return null; }
+    if (!publicId || !/\.pdf$/i.test(publicId)) return null;
+    // Raw public IDs include their extension; image IDs exclude the format.
+    if (resourceType === 'image') publicId = publicId.replace(/\.pdf$/i, '');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const params: Record<string, string> = {
+      public_id: publicId, type: deliveryType!,
+      timestamp: String(timestamp), expires_at: String(timestamp + 120),
+      ...(resourceType === 'image' ? { format: 'pdf' } : {}),
+    };
+    const query = new URLSearchParams({ ...params, api_key: this.apiKey, signature: this.sign(params) });
+    return `https://api.cloudinary.com/v1_1/${encodeURIComponent(this.cloudName)}/${resourceType}/download?${query}`;
   }
 
   private resourceTypeForFile(

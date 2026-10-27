@@ -16,6 +16,14 @@ const _background = Color(0xFFF0F6D2);
 const _purple = Color(0xFFA536F5);
 const _border = Color(0xFFDCE2E5);
 
+String? _terminalBookingLabel(String status) =>
+    switch (status.trim().toLowerCase().replaceAll(RegExp(r'[_-]+'), ' ')) {
+      'completed' => 'Completed',
+      'cancelled' || 'canceled' => 'Cancelled',
+      'no show' || 'noshow' => 'No Show',
+      _ => null,
+    };
+
 class ActivityManagementScreen extends StatefulWidget {
   const ActivityManagementScreen(
       {super.key,
@@ -817,6 +825,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   Widget _bookingManagementActions(
       Map<String, dynamic> booking, String status, BuildContext dialogContext) {
+    final terminal = _terminalBookingLabel(status);
+    if (terminal != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: _badge(terminal, terminal == 'Completed'
+            ? _purple
+            : terminal == 'No Show' ? Colors.redAccent : const Color(0xFF7D9291)),
+      );
+    }
     final canManage = status == 'Upcoming' || status == 'Pending Payment';
     return Row(children: [
       Expanded(
@@ -1824,6 +1841,15 @@ class _BookingsPageState extends State<_BookingsPage> {
                     const SizedBox(height: 14),
                     (() {
                       final status = booking['status']?.toString() ?? 'Upcoming';
+                      final terminal = _terminalBookingLabel(status);
+                      if (terminal != null) {
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: _badge(terminal, terminal == 'Completed'
+                              ? _purple
+                              : terminal == 'No Show' ? Colors.redAccent : const Color(0xFF7D9291)),
+                        );
+                      }
                       final canManage = status == 'Upcoming' || status == 'Pending Payment';
                       return Row(children: [
                       Expanded(
