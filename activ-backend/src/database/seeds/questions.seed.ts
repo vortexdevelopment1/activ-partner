@@ -88,7 +88,6 @@ const buildQuestions = (
     ['Pitch Surface', QuestionType.SELECT, false, ['Wooden', 'Synthetic', 'Concrete', 'Rubber']],
     ['Court Type', QuestionType.SELECT, false, ['Full Court', 'Half Court']],
     ['Playing Environment', QuestionType.MULTISELECT, false, PLAYING_ENV_OPTIONS],
-    ['Equipment Available', QuestionType.MULTISELECT, false, []],
     ['Coaching Available', QuestionType.MULTISELECT, false, COACHING_OPTIONS],
     ['Recommended For', QuestionType.MULTISELECT, false, RECOMMENDED_FOR_OPTIONS],
   ] as const : [
@@ -96,7 +95,6 @@ const buildQuestions = (
     [capacityLabel, QuestionType.NUMBER, false, []],
     [typeLabel, QuestionType.SELECT, false, typeOptions],
     ['Playing Environment', QuestionType.MULTISELECT, false, PLAYING_ENV_OPTIONS],
-    ['Equipment Available', QuestionType.MULTISELECT, false, []],
     ['Coaching Available', QuestionType.MULTISELECT, false, COACHING_OPTIONS],
     ['Recommended For', QuestionType.MULTISELECT, false, RECOMMENDED_FOR_OPTIONS],
   ] as const;

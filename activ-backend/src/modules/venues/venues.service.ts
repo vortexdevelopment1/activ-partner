@@ -2705,7 +2705,6 @@ export class VenuesService {
       "Playing Environment",
       "Environment",
     ]);
-    const equipmentAvailable = answerFor(["Equipment Available", "Equipment"]);
     const coachingAvailable = answerFor(["Coaching Available", "Coaching"]);
     const recommendedFor = answerFor(["Recommended For"]);
     const facilityId = service.facility_id;
@@ -2855,12 +2854,6 @@ export class VenuesService {
           playingEnvironment,
         ),
       ),
-      equipmentAvailable: this.answerAsList(
-        this.valueOrFallback(
-          activityDetails.equipmentAvailable,
-          equipmentAvailable,
-        ),
-      ),
       coachingAvailable: this.answerAsList(
         this.valueOrFallback(
           activityDetails.coachingAvailable,
@@ -3006,10 +2999,6 @@ export class VenuesService {
         onboardingUpdates.courtType = dto.courtType.trim();
       if (dto.playingEnvironment !== undefined)
         onboardingUpdates.playingEnvironment = dto.playingEnvironment
-          .map((item) => item.trim())
-          .filter(Boolean);
-      if (dto.equipmentAvailable !== undefined)
-        onboardingUpdates.equipmentAvailable = dto.equipmentAvailable
           .map((item) => item.trim())
           .filter(Boolean);
       if (dto.coachingAvailable !== undefined)

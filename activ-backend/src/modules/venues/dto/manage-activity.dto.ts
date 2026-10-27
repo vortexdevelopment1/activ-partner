@@ -40,11 +40,6 @@ export class ManageActivityDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  equipmentAvailable?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   coachingAvailable?: string[];
 
   @IsOptional()

@@ -7,6 +7,7 @@ import '../../../../api_calling/activity_setup_api.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivitySubmissionResultScreen.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 
 class AddActivitySubmitReviewScreen extends StatefulWidget {
   const AddActivitySubmitReviewScreen({
@@ -35,6 +36,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
     final api = ActivitySetupApi(client: widget.client);
     try {
       await api.submit(widget.activityId, widget.timing);
+      await ActivityFlowCheckpoint.clear(widget.activityId);
       if (!mounted) return;
       await Navigator.pushReplacement(
         context,

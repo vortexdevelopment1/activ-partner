@@ -11,6 +11,9 @@ import '../../../../Utills/common_utilities.dart';
 import '../../../CommonCode.dart';
 import '../../../StringExtensions.dart';
 import 'AddVenueTimingScreen.dart';
+import '../../../../api_calling/api_request.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
+import 'dart:convert';
 import '../../../onboarding_widgets.dart';
 
 class AddActivityAmenitiesScreen extends StatefulWidget {
@@ -37,6 +40,7 @@ class _AddActivityAmenitiesScreenState
   @override
   void initState() {
     super.initState();
+    ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'amenities');
     _api = ActivitySetupApi(client: widget.client);
     _fetchAmenities();
   }

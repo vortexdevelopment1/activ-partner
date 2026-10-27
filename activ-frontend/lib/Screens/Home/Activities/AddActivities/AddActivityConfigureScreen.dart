@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../../../Style/app_colors.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivitySubmitReviewScreen.dart';
+import 'AddVenueTimingScreen.dart';
+import '../../../../api_calling/api_request.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
 
 class AddActivityConfigureScreen extends StatefulWidget {
   const AddActivityConfigureScreen({super.key, required this.activityId,
@@ -18,7 +22,7 @@ class _State extends State<AddActivityConfigureScreen> {
   late final ActivitySetupApi _api;
   List<Map<String, dynamic>> _questions = [];
   Map<String, dynamic> _activity = {};
-  @override void initState() { super.initState(); _api = ActivitySetupApi(client: widget.client); _load(); }
+  @override void initState() { super.initState(); _api = ActivitySetupApi(client: widget.client); _saveInterruptedCheckpoint(); _load(); }
   @override void dispose() { _api.dispose(); super.dispose(); }
   Future<void> _load() async {
     try {
@@ -26,6 +30,26 @@ class _State extends State<AddActivityConfigureScreen> {
       final questions = await _api.questions(widget.activityId);
       if (mounted) setState(() { _activity = activity; _questions = questions; });
     } catch (_) {}
+  }
+  Future<void> _saveInterruptedCheckpoint() async {
+    await ActivityFlowCheckpoint.save(
+      activityId: widget.activityId,
+      step: 'configure',
+      data: {'activityName': widget.activityName, 'timing': widget.timing},
+    );
+  }
+  void _backToPreviousAddStep() {
+    // Always return to the timing step. This also handles restored sessions,
+    // where Activity Management may still be underneath the recreated route.
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AddVenueTimingScreen(
+          activityId: widget.activityId,
+          client: widget.client,
+        ),
+      ),
+    );
   }
   Widget _card(String title, Widget child) => Container(
     margin: const EdgeInsets.only(top: 16), padding: const EdgeInsets.all(16),
@@ -70,7 +94,7 @@ class _State extends State<AddActivityConfigureScreen> {
       ])),
     ])),
     Padding(padding: const EdgeInsets.all(20), child: Row(children: [
-      Expanded(child: OnboardingButton(label: 'Back', outlined: true, onPressed: () => Navigator.pop(context))),
+      Expanded(child: OnboardingButton(label: 'Back', outlined: true, onPressed: _backToPreviousAddStep)),
       const SizedBox(width: 12), Expanded(flex: 2, child: OnboardingButton(label: 'Next', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddActivitySubmitReviewScreen(activityId: widget.activityId, activityName: widget.activityName, timing: {for (final e in widget.timing.entries) e.key: (e.value as List).map((s) => Map<String, String>.from(s as Map)).toList()}, client: widget.client))))),
     ])),
   ]));
