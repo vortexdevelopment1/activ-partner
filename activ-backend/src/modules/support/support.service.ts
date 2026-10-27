@@ -7,6 +7,8 @@ import { UpdateSupportEmailDto } from './dto/update-support-email.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { MailService } from '../mail/mail.service';
+import { PartnerEmailService } from '../mail/partner-email.service';
+import { EmailTemplateId } from '../mail/templates/partner-email';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
@@ -19,6 +21,7 @@ export class SupportService {
     private readonly cloudinaryService: CloudinaryService,
     private readonly prisma: PrismaService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly partnerEmailService?: PartnerEmailService,
   ) {}
 
   async createCallback(dto: CreateCallbackRequestDto, partnerId?: string) {
@@ -61,6 +64,10 @@ export class SupportService {
       callbackDate: dto.callbackDate,
       callbackTime: dto.callbackTime,
       query: dto.query,
+    });
+    await this.mailService.sendTemplateEmail?.(dto.email, 'callback_received', {
+      partnerName: dto.partnerName, venueName: dto.venueName, reference: saved.id,
+      callbackDate: dto.callbackDate, callbackTime: dto.callbackTime,
     });
 
     return saved;
@@ -124,7 +131,15 @@ export class SupportService {
         updated_at: new Date(),
       },
     });
-    return this.mapCallbackRequest(updated);
+    const mapped = this.mapCallbackRequest(updated);
+    const template = this.statusTemplate('callback', updated.status);
+    if (current.status !== updated.status && template) {
+      await this.mailService.sendTemplateEmail?.(mapped.email, template, {
+        partnerName: mapped.partnerName, venueName: mapped.venueName, reference: id,
+        callbackDate: mapped.callbackDate, callbackTime: mapped.callbackTime,
+      });
+    }
+    return mapped;
   }
 
   async remove(id: string): Promise<void> {
@@ -197,6 +212,7 @@ export class SupportService {
       // and remains visible to the admin support queue.
       console.error('Support request saved but email delivery failed', error);
     }
+    await this.partnerEmailService?.send(partnerId, 'support_received', { reference: saved.id, subject: dto.subject });
     return saved;
   }
 
@@ -236,8 +252,8 @@ export class SupportService {
   }
 
   async updateEmail(id: string, dto: UpdateSupportEmailDto) {
-    await this.findOneEmail(id);
-    return this.prisma.partner_support_requests.update({
+    const current = await this.findOneEmail(id);
+    const updated = await this.prisma.partner_support_requests.update({
       where: { id },
       data: {
         ...(dto.status ? { status: this.toPartnerRequestStatus(dto.status) } : {}),
@@ -248,6 +264,16 @@ export class SupportService {
         updated_at: new Date(),
       },
     });
+    const template = this.statusTemplate('support', updated.status);
+    if (current.status !== updated.status && template) {
+      await this.partnerEmailService?.send(current.partner_id, template, { reference: id, subject: current.subject });
+    }
+    return updated;
+  }
+
+  private statusTemplate(kind: 'support' | 'callback', status: string): EmailTemplateId | undefined {
+    const suffix = { IN_PROGRESS: 'in_progress', CONTACTED: 'in_progress', RESOLVED: 'resolved', CLOSED: 'cancelled', CANCELLED: 'cancelled' }[status];
+    return suffix ? `${kind}_${suffix}` as EmailTemplateId : undefined;
   }
 
   async removeEmail(id: string): Promise<void> {

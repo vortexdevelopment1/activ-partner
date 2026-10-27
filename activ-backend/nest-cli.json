@@ -4,7 +4,7 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "assets": ["modules/legal/templates/**/*"],
+    "assets": ["modules/legal/templates/**/*", "modules/mail/templates/assets/**/*"],
     "watchAssets": true
   }
 }

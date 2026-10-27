@@ -13,12 +13,14 @@ import { ReviewBankAccountDto } from './dto/review-bank-account.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { PartnerEmailService } from '../mail/partner-email.service';
 
 @Injectable()
 export class BankAccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly partnerEmailService?: PartnerEmailService,
   ) {}
 
   async lookupIfsc(value: string) {
@@ -90,6 +92,7 @@ export class BankAccountsService {
         'A partner submitted bank account details for review.',
         { partnerId, bankAccountId: record.id },
       );
+      await this.partnerEmailService?.send(partnerId, 'bank_submitted', { bankName: record.bank_name, accountLast4: record.account_number.slice(-4), reference: record.id });
       return this.map(record);
     } catch (error) {
       if (error.code === 'P2002') throw new BadRequestException('A bank account submission is already under review.');
@@ -159,6 +162,7 @@ export class BankAccountsService {
       throw new BadRequestException(
           'This rejected bank account has already been updated. Refresh and try again.');
     }
+    await this.partnerEmailService?.send(partnerId, 'bank_submitted', { bankName: dto.bankName, accountLast4: dto.accountNumber.slice(-4), reference: id });
     return this.findOne(id, partnerId);
   }
 
@@ -205,6 +209,9 @@ export class BankAccountsService {
       },
     });
     if (!updated.count) throw new BadRequestException('This account has already been reviewed.');
+    await this.partnerEmailService?.send(record.partnerId, dto.status === BankAccountStatus.APPROVED ? 'bank_approved' : 'bank_rejected', {
+      bankName: record.bankName, accountLast4: record.accountNumber.slice(-4), reference: id, reason: dto.rejectionReason,
+    });
     return this.findOne(id);
   }
 

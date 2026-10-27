@@ -2,6 +2,9 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as nodemailer from "nodemailer";
 import { GoogleOAuthService } from "./google-oauth.service";
+import * as path from 'path';
+import * as fs from 'fs';
+import { EmailData, EmailTemplateId, renderPartnerEmail } from './templates/partner-email';
 
 @Injectable()
 export class MailService {
@@ -10,6 +13,55 @@ export class MailService {
     private configService: ConfigService,
     private readonly googleOAuthService: GoogleOAuthService,
   ) {}
+
+  private brandedEmail(id: EmailTemplateId, data: EmailData) {
+    const get = (key: string) => this.configService.get<string>(key);
+    return renderPartnerEmail(id, data, {
+      projectUrl: get('PARTNER_APP_URL'), websiteUrl: get('EMAIL_WEBSITE_URL'),
+      supportEmail: get('SUPPORT_EMAIL'), appStoreUrl: get('EMAIL_APP_STORE_URL'),
+      playStoreUrl: get('EMAIL_PLAY_STORE_URL'), instagramUrl: get('EMAIL_INSTAGRAM_URL'),
+      linkedinUrl: get('EMAIL_LINKEDIN_URL'), youtubeUrl: get('EMAIL_YOUTUBE_URL'), xUrl: get('EMAIL_X_URL'),
+    });
+  }
+
+  private logoAttachment() {
+    return { filename: 'activ-partner-logo.png', content: fs.readFileSync(path.join(__dirname, 'templates/assets/activ-partner-logo.png')), contentType: 'image/png', cid: 'activ-partner-logo' };
+  }
+
+  private hasBrandedTransport(): boolean {
+    return Boolean((this.configService.get('MAIL_USER') && this.configService.get('MAIL_PASS')) || this.googleOAuthService.hasRefreshToken?.());
+  }
+
+  /** Transactional notices are best effort; a mail outage must not undo a saved request. */
+  async sendTemplateEmail(toEmail: string | null | undefined, id: EmailTemplateId, data: EmailData = {}): Promise<boolean> {
+    if (!toEmail?.trim()) return false;
+    try {
+      const email = this.brandedEmail(id, data);
+      const logo = this.logoAttachment();
+      const user = this.configService.get<string>('MAIL_USER');
+      const pass = this.configService.get<string>('MAIL_PASS');
+      if (user && pass) {
+        const port = Number(this.configService.get('MAIL_PORT') || 587);
+        const transport = nodemailer.createTransport({
+          host: this.configService.get('MAIL_HOST') || 'smtp.gmail.com', port,
+          secure: port === 465, auth: { user, pass },
+          connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 15000,
+        });
+        try {
+          await transport.sendMail({ from: { name: 'ACTIV Partner', address: this.configService.get('MAIL_FROM_EMAIL') || user },
+            to: toEmail.trim(), replyTo: this.configService.get('SUPPORT_EMAIL') || 'support@activ.live',
+            ...email, attachments: [logo] });
+        } finally { transport.close(); }
+      } else {
+        await this.googleOAuthService.sendEmail({ recipientEmail: toEmail.trim(), recipientName: data.partnerName,
+          ...email, inlineImages: [logo] });
+      }
+      return true;
+    } catch {
+      this.logger?.warn(`Partner email delivery failed (${id}); the saved application/request is unchanged`);
+      return false;
+    }
+  }
 
   async sendSignedAgreementEmailViaGmail(params: {
     toEmail: string;
@@ -25,12 +77,15 @@ export class MailService {
       timeStyle: "short",
     });
     return this.googleOAuthService.sendEmail({
+      ...this.brandedEmail('agreement_signed', { partnerName: params.partnerName, venueName: params.venueName, signedAt }),
       recipientEmail: params.toEmail,
       recipientName: params.partnerName,
       subject: "Your Signed Partnership Agreement – ACTIV Partner",
       text: `Dear ${params.partnerName},\n\nThank you for completing your registration with ACTIV Partner.\n\nYour Partnership Agreement has been successfully signed.\n\nPlease find a copy of your signed Partnership Agreement attached for your records.\n\nOur team will review your venue registration and notify you of the next steps.\n\nBest regards,\nACTIV Partner Support Team`,
       pdfBuffer: params.pdfBuffer,
       filename: params.filename,
+      html: this.brandedEmail('agreement_signed', { partnerName: params.partnerName, venueName: params.venueName, signedAt }).html,
+      inlineImages: [this.logoAttachment()],
     });
   }
 
@@ -76,12 +131,14 @@ export class MailService {
         subject: "Your Signed Partnership Agreement – ACTIV Partner",
         text: `Hello ${params.partnerName},\n\nPlease find your signed partnership agreement attached.\n\nVenue: ${params.venueName}\nAccepted: ${signedAt} (IST)\n\nACTIV Partner Support`,
         attachments: [
+          this.logoAttachment(),
           {
             filename: params.agreement.filename,
             content: Buffer.from(params.agreement.base64, "base64"),
             contentType: params.agreement.mimeType,
           },
         ],
+        html: this.brandedEmail('agreement_signed', { partnerName: params.partnerName, venueName: params.venueName, signedAt }).html,
       });
     } finally {
       transport.close();
@@ -99,6 +156,7 @@ export class MailService {
       return false;
     }
     const subject = params.venueName ? 'Your ACTIV venue has been suspended' : 'Your ACTIV partner account has been suspended';
+    const branded = this.brandedEmail(params.venueName ? 'venue_suspended' : 'partner_suspended', params);
     const notice = params.venueName
       ? `Your venue "${params.venueName}" has been suspended and is no longer available for new bookings on ACTIV.`
       : 'Your ACTIV partner account has been suspended. Access to your partner account has been disabled.';
@@ -117,12 +175,13 @@ export class MailService {
           await transport.sendMail({
             from: { name: 'ACTIV Partner Support', address: this.configService.get<string>('MAIL_FROM_EMAIL', user) },
             to: params.toEmail.trim(), replyTo: 'support@activ.live', subject, text,
+            html: branded.html, attachments: [this.logoAttachment()],
           });
         } finally {
           transport.close();
         }
       } else {
-        await this.googleOAuthService.sendEmail({ recipientEmail: params.toEmail.trim(), subject, text });
+        await this.googleOAuthService.sendEmail({ recipientEmail: params.toEmail.trim(), subject, text, html: branded.html, inlineImages: [this.logoAttachment()] });
       }
       return true;
     } catch {
@@ -134,6 +193,7 @@ export class MailService {
   async sendVenueChangesRequestedEmail(params: {
     toEmail: string; venueName: string; reason: string;
   }): Promise<boolean> {
+    if (this.hasBrandedTransport()) return this.sendTemplateEmail(params.toEmail, 'venue_changes_requested', params);
     const authkey = this.configService.get<string>('MSG91_AUTHKEY');
     const templateId = this.configService.get<string>('MSG91_VENUE_CHANGES_TEMPLATE_ID');
     if (!authkey || !templateId?.trim()) {
@@ -174,6 +234,7 @@ export class MailService {
     password: string;
   }): Promise<boolean> {
     const { toEmail, partnerName, venueName, password } = params;
+    if (this.hasBrandedTransport()) return this.sendTemplateEmail(toEmail, 'venue_approved', { partnerName, venueName, password, email: toEmail });
     const authkey = this.configService.get<string>("MSG91_AUTHKEY");
     const fromEmail = this.configService.get<string>("MSG91_FROM_EMAIL");
     const domain = this.configService.get<string>("MSG91_DOMAIN");
@@ -242,6 +303,7 @@ export class MailService {
     role: string;
   }) {
     const { toEmail, fullName, password, role } = params;
+    if (this.hasBrandedTransport()) return this.sendTemplateEmail(toEmail, 'team_invitation', { partnerName: fullName, password, role, email: toEmail });
     const authkey = this.configService.get<string>("MSG91_AUTHKEY");
     const fromEmail = this.configService.get<string>("MSG91_FROM_EMAIL");
     const domain = this.configService.get<string>("MSG91_DOMAIN");
@@ -376,6 +438,7 @@ export class MailService {
     code: string;
   }) {
     const { toEmail, firstName, code } = params;
+    if (this.hasBrandedTransport()) return this.sendTemplateEmail(toEmail, 'password_reset', { partnerName: firstName, code });
     const authkey = this.configService.get<string>("MSG91_AUTHKEY");
     const fromEmail = this.configService.get<string>("MSG91_FROM_EMAIL");
     const domain = this.configService.get<string>("MSG91_DOMAIN");
@@ -536,6 +599,7 @@ export class MailService {
     rejectionReason: string;
   }) {
     const { toEmail, firstName, venueId, rejectionReason } = params;
+    if (this.hasBrandedTransport()) return this.sendTemplateEmail(toEmail, 'venue_rejected', { partnerName: firstName, reference: venueId, reason: rejectionReason });
     const authkey = this.configService.get<string>("MSG91_AUTHKEY");
     const fromEmail = this.configService.get<string>("MSG91_FROM_EMAIL");
     const domain = this.configService.get<string>("MSG91_DOMAIN");

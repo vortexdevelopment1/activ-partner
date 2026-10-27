@@ -137,6 +137,8 @@ export class GoogleOAuthService {
     recipientName?: string;
     subject: string;
     text: string;
+    html?: string;
+    inlineImages?: { filename: string; content: Buffer; contentType: string; cid: string }[];
     pdfBuffer?: Buffer;
     filename?: string;
   }): Promise<string> {
@@ -152,6 +154,7 @@ export class GoogleOAuthService {
     client.setCredentials({ refresh_token: refreshToken });
     const gmail = google.gmail({ version: 'v1', auth: client });
     const boundary = `activ-${randomBytes(12).toString('hex')}`;
+    const alternative = `${boundary}-alternative`;
     const lines = [
       `From: ACTIV Partner Support <${sender}>`,
       `To: ${params.recipientName ? `${params.recipientName} <${params.recipientEmail}>` : params.recipientEmail}`,
@@ -160,11 +163,24 @@ export class GoogleOAuthService {
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
       '',
       `--${boundary}`,
+      ...(params.html ? [`Content-Type: multipart/alternative; boundary="${alternative}"`, '', `--${alternative}`] : []),
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: 8bit',
       '',
       params.text,
     ];
+    if (params.html) {
+      lines.push(`--${alternative}`, 'Content-Type: text/html; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64', '',
+        Buffer.from(params.html).toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '',
+        `--${alternative}--`);
+    }
+    for (const image of params.inlineImages ?? []) {
+      lines.push(`--${boundary}`, `Content-Type: ${image.contentType}`,
+        'Content-Transfer-Encoding: base64', `Content-ID: <${image.cid}>`,
+        `Content-Disposition: inline; filename="${image.filename}"`, '',
+        image.content.toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '');
+    }
     if (params.pdfBuffer && params.filename) {
       lines.push(
         `--${boundary}`,

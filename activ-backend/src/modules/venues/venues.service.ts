@@ -31,6 +31,7 @@ import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import type { Partner } from "../partners/entities/partner.entity";
 import { MailService } from "../mail/mail.service";
+import { PartnerEmailService } from '../mail/partner-email.service';
 import { QuestionsService } from "../questions/questions.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/entities/notification.entity";
@@ -61,6 +62,7 @@ export class VenuesService {
     private readonly pushNotificationsService: PushNotificationsService,
     private readonly prisma: PrismaService,
     private readonly commissionService: CommissionService,
+    private readonly partnerEmailService?: PartnerEmailService,
   ) {}
 
   async create(
@@ -326,6 +328,7 @@ export class VenuesService {
     ]);
 
     if (submission.count > 0) {
+      await this.partnerEmailService?.send(partnerId, 'venue_under_review', { venueName: venue.name, reference: venueId });
       await this.adminNotificationsService.notify(
         AdminNotificationType.VENUE_SUBMITTED,
         'Venue submitted for review',
@@ -1984,10 +1987,11 @@ export class VenuesService {
     id: string,
     currentUser: { id: string; role: string },
   ): Promise<{ permanentlyDeleted: boolean }> {
-    return this.prisma.$transaction(async (tx) => {
+    let notice: { partnerId: string; venueName: string } | undefined;
+    const result = await this.prisma.$transaction(async (tx) => {
       const [venue] = await tx.$queryRawUnsafe<Array<{
-        id: string; partner_id: string; status: string; booking_accept: boolean;
-      }>>('SELECT id, partner_id, status, booking_accept FROM venues WHERE id = $1::uuid FOR UPDATE', id);
+        id: string; name: string; partner_id: string; status: string; booking_accept: boolean;
+      }>>('SELECT id, name, partner_id, status, booking_accept FROM venues WHERE id = $1::uuid FOR UPDATE', id);
       if (!venue) throw new NotFoundException(`Venue with id ${id} not found`);
       if (currentUser.role !== UserRole.ADMIN &&
           (currentUser.role !== UserRole.PARTNER || venue.partner_id !== currentUser.id)) {
@@ -1995,11 +1999,15 @@ export class VenuesService {
       }
       if (currentUser.role === UserRole.ADMIN) {
         await deleteVenue(tx, id);
+        notice = { partnerId: venue.partner_id, venueName: venue.name };
         return { permanentlyDeleted: true };
       }
       await tx.venues.update({ where: { id }, data: { status: "ARCHIVED", booking_accept: false } });
+      if (venue.status !== 'ARCHIVED') notice = { partnerId: venue.partner_id, venueName: venue.name };
       return { permanentlyDeleted: false };
     }, { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' });
+    if (notice) await this.partnerEmailService?.send(notice.partnerId, 'venue_deleted', { venueName: notice.venueName, reference: id });
+    return result;
   }
 
   // Service (Activity) Images
@@ -2418,6 +2426,7 @@ export class VenuesService {
       'A partner submitted venue changes for review.',
       { partnerId, venueId, venueRequestId: request.id },
     );
+    await this.partnerEmailService?.send(partnerId, 'venue_update_submitted', { reference: request.id });
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -2545,6 +2554,7 @@ export class VenuesService {
       `${venue.name}: your updated venue details are now live.`,
       { venueId, requestId: id },
     );
+    await this.partnerEmailService?.send(venue.partnerId, 'venue_update_approved', { venueName: venue.name, reference: id });
     return venue;
   }
 
@@ -2582,6 +2592,7 @@ export class VenuesService {
         "Your venue changes were not approved. Please review and submit again.",
       { venueId: request.venue_id, requestId: id },
     );
+    await this.partnerEmailService?.send(request.partner_id, 'venue_update_rejected', { reference: id, reason: dto.adminNotes });
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -3326,6 +3337,7 @@ export class VenuesService {
       `${saved.name} has been submitted and is being reviewed by ACTIV`,
       { serviceId: saved.id },
     );
+    await this.partnerEmailService?.send(partnerId, 'activity_submitted', { activityName: saved.name, reference: saved.id });
 
     return saved;
   }
@@ -3551,6 +3563,9 @@ export class VenuesService {
         : `${saved.name} was rejected: ${dto.reason}`,
       { serviceId, ...(!approved ? { reason: dto.reason } : {}) },
     );
+    await this.partnerEmailService?.send(record.venues.partner_id, approved ? 'activity_approved' : 'activity_rejected', {
+      activityName: saved.name, venueName: record.venues.name, reference: serviceId, reason: approved ? undefined : dto.reason,
+    });
     return saved;
   }
 
