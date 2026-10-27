@@ -40,7 +40,9 @@ class _AddActivityAmenitiesScreenState
   @override
   void initState() {
     super.initState();
-    ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'amenities');
+    if (!ActivityFlowCheckpoint.restoring) {
+      ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'amenities');
+    }
     _api = ActivitySetupApi(client: widget.client);
     _fetchAmenities();
   }

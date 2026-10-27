@@ -20,57 +20,55 @@ class ActivityResumeNavigator {
     http.Client? client,
   ) async {
     final id = checkpoint.activityId;
-    late final Widget page;
-
-    switch (checkpoint.step) {
-      case 'activityType':
-        page = AddListActivityTypeScreen(client: client);
-        break;
-      case 'photoUpload':
-        page = AddVenuePhotoUploadScreen(client: client);
-        break;
-      case 'photoReview':
-        page = AddVenuePhotoListViewScreen(
-          activityId: id,
-          images: await ActivityImageDraftStore.read(id),
-          client: client,
-        );
-        break;
-      case 'details':
-        page = AddSelectedVenueFormScreen(activityId: id, client: client);
-        break;
-      case 'amenities':
-        page = AddActivityAmenitiesScreen(activityId: id, client: client);
-        break;
-      case 'timing':
-        page = AddVenueTimingScreen(activityId: id, client: client);
-        break;
-      case 'configure':
-        page = AddActivityConfigureScreen(
+    final pages = <Widget>[
+      AddListActivityTypeScreen(client: client),
+      AddVenuePhotoUploadScreen(client: client),
+      AddVenuePhotoListViewScreen(
+        activityId: id,
+        images: await ActivityImageDraftStore.read(id),
+        client: client,
+      ),
+      AddSelectedVenueFormScreen(activityId: id, client: client),
+      AddActivityAmenitiesScreen(activityId: id, client: client),
+      AddVenueTimingScreen(activityId: id, client: client),
+      AddActivityConfigureScreen(
           activityId: id,
           activityName: checkpoint.data['activityName']?.toString() ?? 'Activity',
           timing: Map<String, dynamic>.from(
             checkpoint.data['timing'] as Map? ?? const {},
           ),
           client: client,
-        );
-        break;
-      case 'submitReview':
-        page = AddActivitySubmitReviewScreen(
+        ),
+      AddActivitySubmitReviewScreen(
           activityId: id,
           activityName: checkpoint.data['activityName']?.toString() ?? 'Activity',
           timing: _timing(checkpoint.data['timing']),
           client: client,
-        );
-        break;
-      default:
-        return;
-    }
+        ),
+    ];
+    const stepOrder = [
+      'activityType', 'photoUpload', 'photoReview', 'details',
+      'amenities', 'timing', 'configure', 'submitReview',
+    ];
+    final target = stepOrder.indexOf(checkpoint.step);
+    if (target < 0) return;
 
     if (context.mounted) {
-      await Navigator.push<void>(
-        context,
-        MaterialPageRoute<void>(builder: (_) => page),
+      // Push every preceding route in order. Do not await intermediate pushes:
+      // that would wait for the user to pop the route before adding the next
+      // one. The final route is therefore backed by the real flow history.
+      ActivityFlowCheckpoint.restoring = true;
+      for (var i = 0; i <= target; i++) {
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(builder: (_) => pages[i]),
+        );
+      }
+      ActivityFlowCheckpoint.restoring = false;
+      await ActivityFlowCheckpoint.save(
+        activityId: id,
+        step: checkpoint.step,
+        data: checkpoint.data,
       );
     }
   }

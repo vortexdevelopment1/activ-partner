@@ -54,7 +54,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
   Future<void> _recordCheckpoint() async {
     final id = widget.activityId;
-    if (id != null && id.isNotEmpty) {
+    if (id != null && id.isNotEmpty && !ActivityFlowCheckpoint.restoring) {
       await ActivityFlowCheckpoint.save(activityId: id, step: 'photoReview');
     }
   }

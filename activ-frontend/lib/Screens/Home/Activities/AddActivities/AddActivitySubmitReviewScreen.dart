@@ -29,6 +29,29 @@ class AddActivitySubmitReviewScreen extends StatefulWidget {
 
 class _State extends State<AddActivitySubmitReviewScreen> {
   bool _saving = false;
+  String _description = 'Activity details';
+  String? _imageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivitySummary();
+  }
+
+  Future<void> _loadActivitySummary() async {
+    try {
+      final api = ActivitySetupApi(client: widget.client);
+      final activity = await api.activity(widget.activityId);
+      api.dispose();
+      if (!mounted) return;
+      setState(() {
+        final description = activity['description']?.toString().trim() ?? '';
+        if (description.isNotEmpty) _description = description;
+        final images = activity['imageUrls'];
+        if (images is List && images.isNotEmpty) _imageUrl = images.first.toString();
+      });
+    } catch (_) {}
+  }
 
   Future<void> _submit() async {
     if (_saving) return;
@@ -66,6 +89,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
       await SharedPreference.addStringToSF(
           'activity_draft_resume_${widget.activityId}',
           jsonEncode(widget.timing));
+      await ActivityFlowCheckpoint.markCompletedDraft(widget.activityId);
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -91,48 +115,76 @@ class _State extends State<AddActivitySubmitReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return OnboardingScaffold(
+      showLogo: false,
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Submit Activity For Review',
-                style: OnboardingStyles.heading,
-              ),
+            padding: const EdgeInsets.fromLTRB(20, 34, 20, 8),
+            child: Row(
+              children: [
+                Material(
+                  color: Colors.white,
+                  shape: const CircleBorder(),
+                  elevation: 2,
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, size: 24),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text('Submit Activity For Review', maxLines: 1,
+                        style: OnboardingStyles.heading.copyWith(fontSize: 25)),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               children: [
                 Container(
-                  padding: const EdgeInsets.all(22),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     border: Border.all(color: AppColors.gray),
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(widget.activityName,
-                          style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      const Text('Pending review',
-                          style: TextStyle(color: Colors.orange, fontSize: 18)),
-                      const SizedBox(height: 20),
-                      const Text('What happens next?',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 12),
-                      const Text(
-                          'ACTIV will review your activity details. After approval, your activity will go live and users can start booking.'),
+                      if (_imageUrl != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.network(_imageUrl!, width: 78, height: 78, fit: BoxFit.cover),
+                        ),
+                      if (_imageUrl != null) const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.activityName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                            Text(_description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(color: const Color(0xFFFF9E2C), borderRadius: BorderRadius.circular(18)),
+                              child: const Text('Pending', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 24),
+                const Text('What happens next?', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                _reviewSteps(),
               ],
             ),
           ),
@@ -156,6 +208,38 @@ class _State extends State<AddActivitySubmitReviewScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _reviewSteps() {
+    const labels = [
+      'ACTIV reviews\nyour activity',
+      'Venue verification\ncross-check',
+      'Activity\napproved',
+      'Activity goes\nlive',
+      'Users can\nstart booking',
+    ];
+    const icons = [Icons.person_outline, Icons.verified_user_outlined, Icons.business_center_outlined, Icons.language, Icons.calendar_month_outlined];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < labels.length; i++)
+          Expanded(
+            child: Column(
+              children: [
+                Row(children: [
+                  if (i > 0) const Expanded(child: Divider(color: Color(0xFFD7D7D7), thickness: 2)),
+                  Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: AppColors.purple, width: 2)), child: Icon(icons[i], color: AppColors.purple, size: 22)),
+                  if (i < labels.length - 1) const Expanded(child: Divider(color: Color(0xFFD7D7D7), thickness: 2)),
+                ]),
+                const SizedBox(height: 6),
+                Text('${i + 1}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(labels[i], textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.grey, height: 1.2)),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

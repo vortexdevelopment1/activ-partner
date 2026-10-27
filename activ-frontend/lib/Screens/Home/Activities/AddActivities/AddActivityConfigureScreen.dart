@@ -32,6 +32,7 @@ class _State extends State<AddActivityConfigureScreen> {
     } catch (_) {}
   }
   Future<void> _saveInterruptedCheckpoint() async {
+    if (ActivityFlowCheckpoint.restoring) return;
     await ActivityFlowCheckpoint.save(
       activityId: widget.activityId,
       step: 'configure',
