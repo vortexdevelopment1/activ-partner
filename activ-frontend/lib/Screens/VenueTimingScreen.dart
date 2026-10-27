@@ -14,7 +14,7 @@ import '../Style/app_colors.dart';
 import '../Style/app_size.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import '../Utills/browser_session.dart';
+import '../Utills/slot_timing_draft.dart';
 import 'ActivityReviewScreen.dart';
 import 'VenuePhotoUploadScreen.dart';
 import 'onboarding_widgets.dart';
@@ -89,34 +89,37 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
   final int totalSteps = totalSetup;
 
   String get _sessionKey => 'timing_draft_${widget.activityId}_${widget.categoryId}';
+  bool _draftReady = false;
 
   @override
   void initState() {
     super.initState();
-    if (isBrowserSession) {
-      try {
-        final raw = readBrowserSession(_sessionKey);
-        if (raw != null) {
-          final data = jsonDecode(raw);
-          selectedDays = List<String>.from(data['days']);
-          timings = {
-            for (final entry in (data['timings'] as Map).entries)
-              entry.key.toString(): DayTiming(timeSlots: (entry.value as List)
-                .map((e) => Map<String, String>.from(e)).toList()),
-          };
-          _slotCapacityController.text = data['capacity']?.toString() ?? '1';
-        }
-      } catch (_) {}
-      _slotCapacityController.addListener(_saveSessionTimings);
+    _restoreTimings();
+    _slotCapacityController.addListener(_saveSessionTimings);
+  }
+
+  Future<void> _restoreTimings() async {
+    final data = await SlotTimingDraft.read(_sessionKey);
+    if (!mounted) return;
+    if (data != null) {
+      selectedDays = List<String>.from(data['days'] as List? ?? []);
+      timings = {
+        for (final entry in (data['timings'] as Map? ?? {}).entries)
+          entry.key.toString(): DayTiming(timeSlots: (entry.value as List)
+              .map((slot) => Map<String, String>.from(slot as Map)).toList()),
+      };
+      _slotCapacityController.text = data['capacity']?.toString() ?? '1';
     }
+    _draftReady = true;
+    setState(() {});
   }
 
   void _saveSessionTimings() {
-    if (!isBrowserSession) return;
-    writeBrowserSession(_sessionKey, jsonEncode({
+    if (!_draftReady) return;
+    SlotTimingDraft.save(_sessionKey, {
       'days': selectedDays, 'capacity': _slotCapacityController.text,
       'timings': {for (final entry in timings.entries) entry.key: entry.value.timeSlots},
-    }));
+    });
   }
 
   @override
@@ -127,6 +130,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   @override
   void dispose() {
+    _saveSessionTimings();
     _slotCapacityController.dispose();
     super.dispose();
   }
@@ -306,7 +310,7 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
         }
         goToBackScreen(context);
         // Return true to allow the pop action to proceed
-        return Future.value(true);
+        return;
       },
       child: Container(
         decoration: context.getYellowGradient,
@@ -524,10 +528,10 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
                                               // Copy To All Text
                                               InkWell(
                                                 onTap: hasAnyTimingSelected()
-                                                    ? _copyTimingsToAllDays
+                                                    ? () => _copyTimingsToAllDays(day)
                                                     : null,
                                                 child: Visibility(
-                                                  visible: (day == selectedDays.first), // 👈 pehle wale day par hi dikhana
+                                                  visible: true,
                                                   child: Container(
                                                     padding: const EdgeInsets.fromLTRB(2, 2, 2, 4),
                                                     child: Row(
@@ -1138,13 +1142,15 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
     ));
   }
 
-  Future<void> _copyTimingsToAllDays() async {
+  Future<void> _copyTimingsToAllDays(String sourceDay) async {
     if (selectedDays.isEmpty) return;
     final confirmed = await confirmCopyTimingsToAllDays(context);
     if (!mounted || !confirmed || selectedDays.isEmpty) return;
-    final source = timings[selectedDays.first]!;
+    final source = timings[sourceDay]!;
+    if (source.timeSlots.isEmpty) return;
     setState(() {
       for (final day in selectedDays) {
+        if (day == sourceDay) continue;
         timings[day] = DayTiming(
           timeSlots: source.timeSlots
               .map((slot) => Map<String, String>.from(slot))

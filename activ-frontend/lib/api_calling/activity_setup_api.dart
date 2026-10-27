@@ -99,6 +99,14 @@ class ActivitySetupApi {
     await _request('DELETE', '/venues/activities/$id/management');
   }
 
+  Future<List<String>> removePhoto(String id, String imageUrl) async {
+    final data = await _request('DELETE', '/venues/activities/$id/images', {'imageUrl': imageUrl});
+    if (data is! Map || data['imageUrls'] is! List) {
+      throw const ActivitySetupException('Unable to confirm the updated photos. Please retry.');
+    }
+    return (data['imageUrls'] as List).map((url) => url.toString()).toList();
+  }
+
   Future<void> saveAnswers(String id, Map<String, dynamic> answers) async {
     await _request('POST', '/venues/activities/$id/answers', {
       'answers': [

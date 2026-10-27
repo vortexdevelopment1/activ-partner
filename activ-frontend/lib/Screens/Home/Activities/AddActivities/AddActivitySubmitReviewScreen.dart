@@ -159,7 +159,8 @@ class _State extends State<AddActivitySubmitReviewScreen> {
                       if (_imageUrl != null)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(14),
-                          child: Image.network(_imageUrl!, width: 78, height: 78, fit: BoxFit.cover),
+                          child: Image.network(_imageUrl!, width: 78, height: 78, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox(width: 78, height: 78, child: Icon(Icons.image_outlined))),
                         ),
                       if (_imageUrl != null) const SizedBox(width: 14),
                       Expanded(

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../onboarding_widgets.dart';
+import '../../Utills/slot_timing_draft.dart';
 
 class _Slot {
   String open, close;
@@ -55,6 +56,39 @@ class _State extends State<ManageSlotsScreen> {
   String _venueId = '';
   String? _category, _error;
   bool _loading = true, _saving = false;
+  bool _draftReady = false;
+  final _dirtyCategories = <String>{};
+  String get _draftKey => 'manage_slot_timing_$_venueId';
+
+  Map<String, dynamic> _scheduleJson(Map<String, List<_Slot>> schedule) => {
+    for (final entry in schedule.entries) entry.key: [for (final slot in entry.value) {
+      'open': slot.open, 'close': slot.close, 'capacity': slot.capacity.text,
+      'price': slot.price.text, 'discount': slot.discount.text,
+    }],
+  };
+
+  void _rememberDraft() {
+    if (!_draftReady || _category == null) return;
+    _dirtyCategories.add(_category!);
+    _persistDraft();
+  }
+
+  void _persistDraft() {
+    if (!_draftReady) return;
+    SlotTimingDraft.save(_draftKey, {for (final category in _dirtyCategories)
+      category: _scheduleJson(_schedules[category]!)});
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    final edit = _draftReady && !_loading && !_saving;
+    final category = _category;
+    super.setState(fn);
+    if (edit && !_saving && category != null) {
+      _dirtyCategories.add(category);
+      _persistDraft();
+    }
+  }
   Map<String, List<_Slot>> get _current => _schedules[_category]!;
 
   @override
@@ -141,12 +175,29 @@ class _State extends State<ManageSlotsScreen> {
         _schedules[category] = schedule;
       }
       _category = _names.keys.firstOrNull;
+      final draft = await SlotTimingDraft.read(_draftKey);
+      if (!mounted) return;
+      for (final category in draft?.keys ?? <String>[]) {
+        if (!_schedules.containsKey(category)) continue;
+        for (final slots in _schedules[category]!.values) {
+          for (final slot in slots) { slot.dispose(); }
+        }
+        _schedules[category] = {
+          for (final entry in (draft![category] as Map).entries)
+            entry.key.toString(): [for (final slot in entry.value as List) _Slot(
+              open: slot['open'], close: slot['close'], capacity: slot['capacity'],
+              price: slot['price'], discount: slot['discount'],
+            )],
+        };
+        _dirtyCategories.add(category);
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _error = 'Unable to load slots. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+      _draftReady = true;
     }
   }
 
@@ -229,6 +280,10 @@ class _State extends State<ManageSlotsScreen> {
             'venue_timing': {_category!: timing}
           })).timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _dirtyCategories.remove(_category);
+        _persistDraft();
+      }
       _message(response.statusCode == 200 || response.statusCode == 201
           ? 'Slots and pricing updated successfully.'
           : 'Unable to save slots. Your changes are still here.');
@@ -269,6 +324,7 @@ class _State extends State<ManageSlotsScreen> {
       TextField(
         key: key,
         controller: controller,
+        onChanged: (_) => _rememberDraft(),
         enabled: !_saving,
         keyboardType: TextInputType.numberWithOptions(decimal: money),
         inputFormatters: [
@@ -626,7 +682,6 @@ class _State extends State<ManageSlotsScreen> {
         ]));
   }
 
-  @override
   Widget _dayButton(String day) {
     final selected = _current.containsKey(day);
     final button = OutlinedButton(
@@ -667,6 +722,7 @@ class _State extends State<ManageSlotsScreen> {
     );
   }
 
+  @override
   Widget build(BuildContext context) => OnboardingScaffold(
       showLogo: false,
       child: Column(children: [

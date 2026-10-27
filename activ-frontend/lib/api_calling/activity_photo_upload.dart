@@ -107,10 +107,11 @@ class ActivityPhotoUploader {
     }
   }
 
-  Future<void> uploadImages({
+  Future<List<String>> uploadImages({
     required String token,
     required String serviceId,
     required List<XFile> images,
+    bool replaceImages = true,
   }) async {
     final files = <http.MultipartFile>[];
     final uniqueImages = <XFile>[];
@@ -139,7 +140,7 @@ class ActivityPhotoUploader {
           Uri.parse('$baseUrl/venues/activities/$serviceId/images'),
         )
           ..headers['Authorization'] = 'Bearer $token'
-          ..fields['replaceImages'] = 'true'
+          ..fields['replaceImages'] = replaceImages.toString()
           ..files.addAll(files))
         .then(http.Response.fromStream)
         .timeout(const Duration(minutes: 2));
@@ -149,6 +150,7 @@ class ActivityPhotoUploader {
       throw const ActivityUploadException(
           'The photos were not saved. Please try again.');
     }
+    return (uploaded['imageUrls'] as List).map((url) => url.toString()).toList();
   }
 
   Future<String> upload({

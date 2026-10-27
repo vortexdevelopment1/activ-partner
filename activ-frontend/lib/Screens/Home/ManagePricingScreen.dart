@@ -6,6 +6,7 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../../Utills/common_utilities.dart';
 import '../StringExtensions.dart';
+import '../../Utills/slot_timing_draft.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
@@ -73,6 +74,48 @@ class _State extends State<ManagePricingScreen> {
   bool _saving = false;
 
   bool _loading = true;
+  bool _draftReady = false, _dirty = false;
+  String get _draftKey => 'manage_pricing_timing_$_venueId';
+
+  void _persistDraft() {
+    if (!_draftReady || !_dirty) return;
+    SlotTimingDraft.save(_draftKey, {for (final day in _days) day.label: {
+      'selected': day.selected, 'slots': [for (final slot in day.slots) {
+        'open': _fmt(slot.openTime), 'close': _fmt(slot.closeTime),
+        'price': slot.basePrice.text, 'dynamicPrice': slot.dynamicPrice.text,
+        'capacity': slot.capacity, 'dynamicEnabled': slot.dynamicEnabled,
+        'expanded': slot.expanded,
+      }],
+    }});
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await SlotTimingDraft.read(_draftKey);
+    if (!mounted) return;
+    if (draft != null && draft.isNotEmpty) {
+      for (final day in _days) {
+        final saved = draft[day.label];
+        if (saved is! Map) continue;
+        for (final slot in day.slots) { slot.dispose(); }
+        day.selected = saved['selected'] == true;
+        day.slots = [for (final slot in saved['slots'] as List) _SlotData(
+          openTime: _parseTime(slot['open']), closeTime: _parseTime(slot['close']),
+          basePrice: slot['price'], dynamicPrice: slot['dynamicPrice'], capacity: slot['capacity'],
+          dynamicEnabled: slot['dynamicEnabled'], expanded: slot['expanded'],
+        )];
+      }
+      _dirty = true;
+    }
+    setState(() {});
+    _draftReady = true;
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    final edit = _draftReady && !_loading && !_saving;
+    super.setState(fn);
+    if (edit && !_saving) { _dirty = true; _persistDraft(); }
+  }
 
   static const _dayLabelMap = {
     'monday': 'Mon', 'tuesday': 'Tue', 'wednesday': 'Wed',
@@ -182,6 +225,7 @@ class _State extends State<ManagePricingScreen> {
             }
             _loading = false;
           });
+          await _restoreDraft();
           return;
         }
       }
@@ -203,6 +247,7 @@ class _State extends State<ManagePricingScreen> {
           basePrice: s.basePrice.text,
           dynamicPrice: s.dynamicPrice.text,
           dynamicEnabled: s.dynamicEnabled,
+          capacity: s.capacity,
           expanded: s.expanded,
         )).toList();
       }
@@ -256,6 +301,9 @@ class _State extends State<ManagePricingScreen> {
       CommonUtilities.showLog('savePricing: ${res.statusCode} ${res.body}');
       if (!mounted) return;
       if (res.statusCode == 200 || res.statusCode == 201) {
+        _dirty = false;
+        await SlotTimingDraft.clear(_draftKey);
+        if (!mounted) return;
         CommonUtilities.createSnackBar(context, 'Pricing updated successfully.');
       } else {
         final msg = jsonDecode(res.body)['message'] ?? 'Failed to update pricing';
@@ -550,12 +598,19 @@ class _State extends State<ManagePricingScreen> {
     for (int d = 0; d < _days.length; d++) {
       final day = _days[d];
       if (!day.selected) continue;
-      widgets.add(Text(day.fullName,
+      widgets.add(Row(children: [Expanded(child: Text(day.fullName,
           style: const TextStyle(
               fontSize: 14,
               fontFamily: 'Satoshi',
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1F1F1F))));
+              color: Color(0xFF1F1F1F)))),
+        TextButton.icon(
+          key: Key('copy-pricing-${day.label}'),
+          onPressed: _saving ? null : () => _copyToAll(d),
+          icon: const Icon(Icons.copy_outlined, size: 16),
+          label: const Text('Copy to all'),
+        ),
+      ]));
       widgets.add(const SizedBox(height: 8));
       for (int s = 0; s < day.slots.length; s++) {
         widgets.add(_buildSlotCard(d, s));
@@ -569,6 +624,7 @@ class _State extends State<ManagePricingScreen> {
   Widget _buildSlotCard(int dayIdx, int slotIdx) {
     final slot = _days[dayIdx].slots[slotIdx];
     return Container(
+      key: ObjectKey(slot),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),

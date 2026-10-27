@@ -84,7 +84,8 @@ export class QuestionsService {
     });
     return questions
       .filter((question) =>
-        !['abcd', 'abcde', 'asdf2'].includes(question.question.trim().toLowerCase()),
+        !['abcd', 'abcde', 'asdf2', 'equipment available'].includes(
+          question.question.trim().toLowerCase().replace(/\s+/g, ' ')),
       )
       .map((question) => this.mapQuestion(question));
   }

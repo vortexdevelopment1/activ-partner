@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 import '../../../../api_calling/api_request.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
+import '../../../../Utills/activity_question_visibility.dart';
 import '../../../CommonCode.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivityAmenitiesScreen.dart';
@@ -97,6 +98,7 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
 
   void _applyLoadedData(
       Map<String, dynamic> activity, List<Map<String, dynamic>> questions) {
+    questions = questions.where((question) => !isRemovedActivityQuestion(question['questionText'])).toList();
     final originalOrder = <Map<String, dynamic>, int>{
       for (var i = 0; i < questions.length; i++) questions[i]: i,
     };

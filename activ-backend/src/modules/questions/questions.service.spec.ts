@@ -9,6 +9,7 @@ describe('partner activity question visibility', () => {
           { ...row, id: 'test-category', question: 'ABCDE', service_category_id: 'badminton' },
           { ...row, id: 'test-global', question: ' abcd ', service_category_id: null },
           { ...row, id: 'test-placeholder-2', question: ' asdf2 ', service_category_id: 'badminton' },
+          { ...row, id: 'equipment', question: ' Equipment   Available ', service_category_id: 'badminton' },
           { ...row, id: 'courts', question: 'Total Courts', service_category_id: 'badminton' },
           { ...row, id: 'real-label', question: 'Court ABCDE layout', service_category_id: 'badminton' },
         ]),

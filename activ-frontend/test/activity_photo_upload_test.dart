@@ -147,7 +147,9 @@ void main() {
         home: AddVenuePhotoListViewScreen(
       images: List.generate(4,
           (_) => XFile.fromData(bytes, path: 'assets/activities/swimming.png')),
-      client: MockClient((_) async {
+      activityId: 'activity',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/questions')) return json([]);
         calls++;
         return http.Response(
             '{"message":"Activities can only be added to an approved venue"}',

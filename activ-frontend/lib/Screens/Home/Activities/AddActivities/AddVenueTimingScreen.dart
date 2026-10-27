@@ -12,9 +12,8 @@ import 'package:intl/intl.dart';
 import '../../../../Style/app_colors.dart';
 import '../../../../Style/app_size.dart';
 import 'AddActivityConfigureScreen.dart';
-import '../../../../api_calling/api_request.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
-import 'dart:convert';
+import '../../../../Utills/slot_timing_draft.dart';
 import '../../../onboarding_widgets.dart';
 
 class DayTiming {
@@ -25,7 +24,8 @@ class DayTiming {
 class AddVenueTimingScreen extends StatefulWidget {
   final String activityId;
   const AddVenueTimingScreen(
-      {super.key, required this.activityId, this.client});
+      {super.key, required this.activityId, this.client, this.initialTiming});
+  final Map<String, dynamic>? initialTiming;
   final http.Client? client;
 
   @override
@@ -38,17 +38,57 @@ class AddVenueTimingScreen extends StatefulWidget {
 class _State extends State<AddVenueTimingScreen> {
   bool _submitting = false;
   late final ActivitySetupApi _api;
+  bool _draftReady = false;
+  String get _draftKey => 'add_slot_timing_${widget.activityId}';
   @override
   void initState() {
     super.initState();
-    if (!ActivityFlowCheckpoint.restoring) {
-      ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing');
-    }
     _api = ActivitySetupApi(client: widget.client);
+    _restoreTimings();
+  }
+
+  Future<void> _restoreTimings() async {
+    final draft = await SlotTimingDraft.read(_draftKey);
+    if (!mounted) return;
+    final checkpoint = draft == null && widget.initialTiming == null
+        ? await ActivityFlowCheckpoint.read(widget.activityId) : null;
+    if (!mounted) return;
+    final saved = draft?['timings'] ?? widget.initialTiming ?? checkpoint?.data['timing'];
+    if (saved is Map) {
+      for (final day in days) {
+        final slots = saved[day] ?? saved[dayMap[day]];
+        if (slots is! List) continue;
+        final values = slots.whereType<Map>().where((slot) => slot['open'] != '-').map(
+          (slot) => slot.map((key, value) => MapEntry(key.toString(), value?.toString() ?? '')),
+        ).toList();
+        if (values.isNotEmpty || (draft?['days'] as List? ?? []).contains(day)) {
+          selectedDays.add(day);
+          timings[day] = DayTiming(timeSlots: values);
+        }
+      }
+    }
+    _draftReady = true;
+    setState(() {});
+    if (!ActivityFlowCheckpoint.restoring) {
+      ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing',
+          data: {'timing': buildVenueTiming()});
+    }
+  }
+
+  void _saveTimings() {
+    if (!_draftReady) return;
+    SlotTimingDraft.save(_draftKey, {
+      'days': selectedDays,
+      'timings': {for (final entry in timings.entries) entry.key: entry.value.timeSlots},
+    });
   }
 
   @override
+  void setState(VoidCallback fn) { super.setState(fn); _saveTimings(); }
+
+  @override
   void dispose() {
+    _saveTimings();
     _api.dispose();
     super.dispose();
   }
@@ -56,8 +96,12 @@ class _State extends State<AddVenueTimingScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (!hasAnyTimingSelected() || !_validateTimings()) return;
-    final activity = await _api.activity(widget.activityId);
-    await Navigator.push(
+    _saveTimings();
+    setState(() => _submitting = true);
+    try {
+      final activity = await _api.activity(widget.activityId);
+      if (!mounted) return;
+      await Navigator.push(
         context,
         MaterialPageRoute<void>(
           builder: (_) => AddActivityConfigureScreen(
@@ -66,8 +110,18 @@ class _State extends State<AddVenueTimingScreen> {
             activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
                 .toString(),
             client: widget.client,
+            hasPreviousTimingRoute: true,
           ),
         ));
+      if (mounted) {
+        await ActivityFlowCheckpoint.save(activityId: widget.activityId,
+            step: 'timing', data: {'timing': buildVenueTiming()});
+      }
+    } catch (error) {
+      if (mounted) _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   List<String> days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -168,6 +222,10 @@ class _State extends State<AddVenueTimingScreen> {
   bool _validateTimings() {
     for (var day in selectedDays) {
       var slots = timings[day]!.timeSlots;
+      if (slots.isEmpty) {
+        _showError('Please add a time range for $day');
+        return false;
+      }
       for (var slot in slots) {
         String? open = slot["open"];
         String? close = slot["close"];
@@ -225,7 +283,7 @@ class _State extends State<AddVenueTimingScreen> {
         }
         goToBackScreen(context);
         // Return true to allow the pop action to proceed
-        return Future.value(true);
+        return;
       },
       child: Container(
         decoration: context.getYellowGradient,
@@ -446,12 +504,10 @@ class _State extends State<AddVenueTimingScreen> {
                                               // Copy To All Text
                                               InkWell(
                                                 onTap: hasAnyTimingSelected()
-                                                    ? _copyTimingsToAllDays
+                                                    ? () => _copyTimingsToAllDays(day)
                                                     : null,
                                                 child: Visibility(
-                                                  visible: (day ==
-                                                      selectedDays
-                                                          .first), // 👈 pehle wale day par hi dikhana
+                                                  visible: true,
                                                   child: Container(
                                                     padding: const EdgeInsets
                                                         .fromLTRB(2, 2, 2, 4),
@@ -978,13 +1034,15 @@ class _State extends State<AddVenueTimingScreen> {
     );
   }
 
-  Future<void> _copyTimingsToAllDays() async {
+  Future<void> _copyTimingsToAllDays(String sourceDay) async {
     if (selectedDays.isEmpty) return;
     final confirmed = await confirmCopyTimingsToAllDays(context);
     if (!mounted || !confirmed || selectedDays.isEmpty) return;
-    final source = timings[selectedDays.first]!;
+    final source = timings[sourceDay]!;
+    if (source.timeSlots.isEmpty) return;
     setState(() {
       for (final day in selectedDays) {
+        if (day == sourceDay) continue;
         timings[day] = DayTiming(
           timeSlots: source.timeSlots
               .map((slot) => Map<String, String>.from(slot))
@@ -1012,10 +1070,11 @@ class _State extends State<AddVenueTimingScreen> {
                 fontFamily: 'Satoshi', color: AppColors.darkBlack)),
             const SizedBox(height: 6),
             TextFormField(
+              key: ObjectKey(slot),
               initialValue: slot[key] ?? '',
               keyboardType: TextInputType.number,
               decoration: OnboardingStyles.inputDecoration(hintText: hint),
-              onChanged: (value) => slot[key] = value,
+              onChanged: (value) => setState(() => slot[key] = value),
             ),
           ],
         );

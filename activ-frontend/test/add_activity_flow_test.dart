@@ -10,6 +10,7 @@ import 'package:activ_app/Screens/Home/Activities/VenueActivityListScreen.dart';
 import 'package:activ_app/Screens/Home/Activities/AddActivities/AddSelectedVenueFormScreen.dart';
 import 'package:activ_app/Screens/Home/Activities/AddActivities/AddVenuePhotoListViewScreen.dart';
 import 'package:activ_app/Screens/Home/Activities/AddActivities/AddVenueTimingScreen.dart';
+import 'package:activ_app/Screens/Home/Activities/AddActivities/AddActivityConfigureScreen.dart';
 import 'package:activ_app/api_calling/activity_setup_api.dart';
 import 'package:activ_app/api_calling/api_constant.dart';
 import 'package:flutter/material.dart';
@@ -195,11 +196,11 @@ void main() {
       await tester.ensureVisible(find.text('Continue Editing'));
       await tester.tap(find.text('Continue Editing'));
       await tester.pumpAndSettle();
-      final editor = tester.widget<AddActivitySubmitReviewScreen>(
-          find.byType(AddActivitySubmitReviewScreen));
+      final editor = tester.widget<AddActivityConfigureScreen>(
+          find.byType(AddActivityConfigureScreen));
       expect(editor.activityId, 'saved-activity');
       expect(editor.timing, timing);
-      expect(find.text('Submit Activity For Review'), findsOneWidget);
+      expect(find.text('Please review activity details and proceed'), findsOneWidget);
       expect(find.byType(AddActivitySubmissionResultScreen), findsNothing);
       expect(tester.takeException(), isNull);
     });

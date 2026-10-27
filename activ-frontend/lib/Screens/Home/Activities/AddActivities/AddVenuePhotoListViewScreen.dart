@@ -39,7 +39,6 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   int? _coverIndex = 0; // by default first image is cover
   String activityName = "Activity";
   bool _isUploading = false;
-  late final Future<_ActivitySetup> _setup;
 
 
   @override
@@ -47,7 +46,6 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     super.initState();
     getData();
     _images = List.from(widget.images); // copy images
-    _setup = _setupFuture();
     _restorePersistedImages();
     _recordCheckpoint();
   }
@@ -396,7 +394,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                             setState(() => _isUploading = true);
 
                                             try {
-                                              final setup = await _setup;
+                                              final setup = await _setupFuture();
                                               if (widget.uploadFuture != null) {
                                                 await widget.uploadFuture!;
                                               }
@@ -445,7 +443,10 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   Future<_ActivitySetup> _setupFuture() async {
-    final activityId = widget.activityId ?? await widget.activityIdFuture!;
+    final activityId = widget.activityId ?? await widget.activityIdFuture;
+    if (activityId == null || activityId.isEmpty) {
+      throw const ActivitySetupException('This activity is missing its ID. Reopen it from Activities.');
+    }
     final api = ActivitySetupApi(client: widget.client);
     try {
       final results = await Future.wait<dynamic>([
