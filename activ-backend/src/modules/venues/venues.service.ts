@@ -50,6 +50,7 @@ import { ManageActivityDto } from "./dto/manage-activity.dto";
 import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 import { CommissionService } from "../commission/commission.service";
 import { deleteVenue } from "./delete-venue";
+import { syncLegacyActivityVisibility } from './activity-visibility';
 
 @Injectable()
 export class VenuesService {
@@ -812,9 +813,10 @@ export class VenuesService {
         "You can only manage bookings for your own venues",
       );
     }
-    await this.prisma.venues.update({
-      where: { id },
-      data: { booking_accept: bookingAccept },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
+      await tx.venues.update({ where: { id }, data: { booking_accept: bookingAccept } });
+      await syncLegacyActivityVisibility(tx, id);
     });
     const saved = await this.findOne(id);
 
@@ -1270,8 +1272,19 @@ export class VenuesService {
     const prisma = this.prisma as any;
     if (!prisma.facilities || !prisma.slots || !prisma.activities) return;
 
+    await this.prisma.$transaction(async (tx) => {
+      // Serialize generation with pause/resume so a concurrent schedule save
+      // cannot recreate bookable slots or re-publish a paused activity.
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venueId}::uuid FOR UPDATE`;
+      await this.syncLegacyActivitySlotsInTransaction(tx, venueId);
+      await syncLegacyActivityVisibility(tx, venueId);
+    }, { maxWait: 10000, timeout: 60000 });
+  }
+
+  private async syncLegacyActivitySlotsInTransaction(prisma: any, venueId: string): Promise<void> {
+
     const services = await prisma.partner_venue_services.findMany({
-      where: { venue_id: venueId, status: "APPROVED" },
+      where: { venue_id: venueId, status: "APPROVED", is_active: true },
       include: { partner_service_categories: true },
     });
 
@@ -1829,6 +1842,7 @@ export class VenuesService {
       }),
     ]);
 
+    if (approved) await this.syncLegacyActivitySlots(id);
     const updatedVenue = await this.findOne(id);
     if (approved) {
       await this.handlePartnerApproval(updatedVenue);
@@ -2941,7 +2955,7 @@ export class VenuesService {
     if (dto.isActive === false && !dto.reason?.trim())
       throw new BadRequestException("Choose a reason to pause bookings");
     const result = await this.prisma.$transaction(async (tx) => {
-      if (archive) {
+      if (archive || dto.isActive !== undefined) {
         await tx.$queryRawUnsafe('SELECT id FROM venues WHERE id = $1::uuid FOR UPDATE', managed.venue_id);
       }
       const service = await tx.partner_venue_services.findUniqueOrThrow({
@@ -3069,6 +3083,9 @@ export class VenuesService {
           });
           autoDeactivated = changed.count > 0;
         }
+      }
+      if (archive || dto.isActive !== undefined) {
+        await syncLegacyActivityVisibility(tx, managed.venue_id);
       }
       return { updated, autoDeactivated };
     });
