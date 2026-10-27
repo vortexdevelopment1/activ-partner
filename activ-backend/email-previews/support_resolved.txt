@@ -1,0 +1,26 @@
+Subject: Your Support Request Has Been Resolved – ACTIV Partner
+
+Hi Seemant,
+
+Your Support Request Has Been Resolved
+
+Our support team has marked your request as resolved.
+
+If you still need help with this issue, contact our support team and quote the request reference below.
+
+Venue: Sports Arena Complex
+
+Application Status: Resolved
+
+Reference: SUP-EXAMPLE-001
+
+Subject: Help updating my venue details
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

@@ -1,0 +1,24 @@
+Subject: Your ACTIV Venue Has Been Suspended
+
+Hi Seemant,
+
+Your Venue Has Been Suspended
+
+Your venue has been suspended and is no longer available for new bookings on ACTIV.
+
+Review the reason below and contact our support team for clarification and assistance with reactivation. Existing bookings should still be managed with the support team.
+
+Venue: Sports Arena Complex
+
+Application Status: Suspended
+
+Reason / notes: Please contact support to resolve the pending venue verification.
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

@@ -40,14 +40,16 @@ describe('signed agreement email via Google Workspace SMTP', () => {
       filename: params.agreement.filename,
     });
     expect(messageId).toBe('gmail-1');
-    expect((service as any).googleOAuthService.sendEmail).toHaveBeenCalledWith({
+    expect((service as any).googleOAuthService.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       recipientEmail: params.toEmail,
       recipientName: params.partnerName,
       subject: 'Your Signed Partnership Agreement – ACTIV Partner',
       text: expect.stringContaining('Your Partnership Agreement has been successfully signed.'),
       pdfBuffer,
       filename: 'signed.pdf',
-    });
+      html: expect.stringContaining('Has Been Signed'),
+      inlineImages: [expect.objectContaining({ cid: 'activ-partner-logo' })],
+    }));
   });
 
   it('sends the signed PDF through the authorized support mailbox', async () => {
@@ -60,7 +62,11 @@ describe('signed agreement email via Google Workspace SMTP', () => {
       from: { name: 'ACTIV Partner Support', address: 'support@activ.live' },
       to: { name: 'Lalit Jangid', address: 'registered@example.com' },
       subject: 'Your Signed Partnership Agreement – ACTIV Partner',
-      attachments: [{ filename: 'signed.pdf', content: Buffer.from('JVBERg==', 'base64'), contentType: 'application/pdf' }],
+      attachments: expect.arrayContaining([
+        { filename: 'signed.pdf', content: Buffer.from('JVBERg==', 'base64'), contentType: 'application/pdf' },
+        expect.objectContaining({ cid: 'activ-partner-logo' }),
+      ]),
+      html: expect.stringContaining('Has Been Signed'),
     }));
     expect(close).toHaveBeenCalled();
   });

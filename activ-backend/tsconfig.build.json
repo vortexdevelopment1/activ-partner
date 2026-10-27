@@ -5,6 +5,7 @@
     "test",
     "dist",
     "generated",
+    "scripts",
     "prisma7.config.ts",
     "**/*spec.ts"
   ]

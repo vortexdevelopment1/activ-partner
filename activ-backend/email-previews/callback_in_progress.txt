@@ -1,0 +1,26 @@
+Subject: Your Callback Request Is In Progress – ACTIV Partner
+
+Hi Seemant,
+
+Your Callback Request Is In Progress
+
+Our team is working on your callback request and will contact you using the details you provided.
+
+Venue: Sports Arena Complex
+
+Application Status: In progress
+
+Reference: CALL-EXAMPLE-001
+
+Callback Date: 28 October 2026
+
+Callback Time: 10:00 AM - 11:00 AM
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

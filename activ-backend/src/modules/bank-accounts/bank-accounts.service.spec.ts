@@ -19,7 +19,7 @@ describe('bank account persistence', () => {
       findMany: jest.fn().mockResolvedValue([record]), updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     }, bookings: { aggregate: jest.fn().mockResolvedValue({ _sum: { total_paise: 12000n } }) },
     partner_payouts: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount_paise: 8000n } }) } };
-    service = new BankAccountsService(prisma, { notify: jest.fn().mockResolvedValue(undefined) } as any);
+    service = new BankAccountsService(prisma, { notify: jest.fn().mockResolvedValue(undefined) } as any, { send: jest.fn().mockResolvedValue(true) } as any);
   });
 
   it('writes submitted details to the normalized database table with authenticated partner ownership', async () => {
@@ -31,6 +31,7 @@ describe('bank account persistence', () => {
       cancelled_cheque_url: '/uploads/cheque.pdf', status: 'UNDER_REVIEW',
     }) });
     expect(saved.status).toBe('under_review');
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'bank_submitted', { bankName: 'HDFC Bank', accountLast4: '7890', reference: 'account' });
     expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
       'bank_account_submitted', expect.any(String), expect.any(String),
       { partnerId: 'partner', bankAccountId: 'account' },
@@ -73,11 +74,14 @@ describe('bank account persistence', () => {
   it('persists admin review in the same table and rejects concurrent reviews', async () => {
     prisma.partner_bank_accounts.findFirst.mockResolvedValue(record);
     await service.review('account', { status: BankAccountStatus.APPROVED }, 'admin');
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'bank_approved', expect.objectContaining({ accountLast4: '7890' }));
+    (service as any).partnerEmailService.send.mockClear();
     expect(prisma.partner_bank_accounts.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'account', status: 'UNDER_REVIEW' }, data: expect.objectContaining({ status: 'APPROVED', reviewed_by: 'admin' }),
     }));
     prisma.partner_bank_accounts.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.review('account', { status: BankAccountStatus.APPROVED }, 'admin')).rejects.toThrow('already been reviewed');
+    expect((service as any).partnerEmailService.send).not.toHaveBeenCalled();
   });
 
   it('uses owned booking earnings and does not invent bank credits', async () => {

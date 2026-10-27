@@ -1,0 +1,28 @@
+Subject: We’ll Call You Soon – ACTIV Partner
+
+Hi Seemant,
+
+Your Callback Request Has Been Received
+
+Thank you for your request. A member of our team will call you during your chosen time slot.
+
+You can find your requested callback date and time below.
+
+Venue: Sports Arena Complex
+
+Application Status: Received
+
+Reference: CALL-EXAMPLE-001
+
+Callback Date: 28 October 2026
+
+Callback Time: 10:00 AM - 11:00 AM
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

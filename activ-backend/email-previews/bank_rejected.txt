@@ -1,0 +1,28 @@
+Subject: Your Bank Details Need Attention – ACTIV Partner
+
+Hi Seemant,
+
+Your Bank Account Was Not Approved
+
+We couldn’t verify the bank account details you submitted.
+
+Review the reason below and update your bank details and supporting document before submitting again.
+
+Venue: Sports Arena Complex
+
+Application Status: Rejected
+
+Bank: Example Bank
+
+Account: Ending in 4321
+
+Reason / notes: The account holder name does not match the supporting document.
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

@@ -24,6 +24,7 @@ describe('Finish agreement email', () => {
     mailService = { sendSignedAgreementEmailViaGmail: jest.fn().mockResolvedValue('gmail-message-id') };
     service = Object.assign(Object.create(VenuesService.prototype), {
       prisma, mailService, adminNotificationsService: { notify: jest.fn() }, logger: { error: jest.fn() }, findOne: jest.fn().mockResolvedValue(signedVenue),
+      partnerEmailService: { send: jest.fn().mockResolvedValue(true) },
       generatePartnerAgreementPdf: jest.fn().mockResolvedValue({ base64: 'JVBERg==', filename: 'signed.pdf', mimeType: 'application/pdf' }),
     });
   });
@@ -36,6 +37,7 @@ describe('Finish agreement email', () => {
   it('sends the agreement before completing review submission', async () => {
     const result = await service.submitForReview('venue-1', 'partner-1');
     expect(result).toMatchObject({ agreementEmailSent: true });
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner-1', 'venue_under_review', expect.objectContaining({ reference: 'venue-1' }));
     expect(mailService.sendSignedAgreementEmailViaGmail).toHaveBeenCalled();
     expect(service.generatePartnerAgreementPdf).toHaveBeenCalled();
     expect(prisma.audit_events.create).toHaveBeenCalled();

@@ -153,46 +153,20 @@ export class GoogleOAuthService {
     const client = this.client();
     client.setCredentials({ refresh_token: refreshToken });
     const gmail = google.gmail({ version: 'v1', auth: client });
-    const boundary = `activ-${randomBytes(12).toString('hex')}`;
-    const alternative = `${boundary}-alternative`;
-    const lines = [
-      `From: ACTIV Partner Support <${sender}>`,
-      `To: ${params.recipientName ? `${params.recipientName} <${params.recipientEmail}>` : params.recipientEmail}`,
-      `Subject: ${params.subject}`,
-      'MIME-Version: 1.0',
-      `Content-Type: multipart/mixed; boundary="${boundary}"`,
-      '',
-      `--${boundary}`,
-      ...(params.html ? [`Content-Type: multipart/alternative; boundary="${alternative}"`, '', `--${alternative}`] : []),
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: 8bit',
-      '',
-      params.text,
-    ];
-    if (params.html) {
-      lines.push(`--${alternative}`, 'Content-Type: text/html; charset="UTF-8"',
-        'Content-Transfer-Encoding: base64', '',
-        Buffer.from(params.html).toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '',
-        `--${alternative}--`);
-    }
-    for (const image of params.inlineImages ?? []) {
-      lines.push(`--${boundary}`, `Content-Type: ${image.contentType}`,
-        'Content-Transfer-Encoding: base64', `Content-ID: <${image.cid}>`,
-        `Content-Disposition: inline; filename="${image.filename}"`, '',
-        image.content.toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '');
-    }
-    if (params.pdfBuffer && params.filename) {
-      lines.push(
-        `--${boundary}`,
-        'Content-Type: application/pdf',
-        'Content-Transfer-Encoding: base64',
-        `Content-Disposition: attachment; filename="${params.filename}"`,
-        '',
-        params.pdfBuffer.toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '',
-      );
-    }
-    lines.push(`--${boundary}--`, '');
-    const raw = Buffer.from(lines.join('\r\n')).toString('base64url');
+    // Use Nodemailer's MIME builder for nested alternative/related parts,
+    // UTF-8 subjects and safely encoded names/filenames. Gmail receives the
+    // resulting message only; this does not open an SMTP connection.
+    const MailComposer = require('nodemailer/lib/mail-composer') as typeof import('nodemailer/lib/mail-composer');
+    const message = new MailComposer({
+      from: { name: 'ACTIV Partner Support', address: sender },
+      to: { name: params.recipientName || '', address: params.recipientEmail },
+      subject: params.subject, text: params.text, html: params.html,
+      attachments: [
+        ...(params.inlineImages ?? []),
+        ...(params.pdfBuffer && params.filename ? [{ filename: params.filename, content: params.pdfBuffer, contentType: 'application/pdf' }] : []),
+      ],
+    });
+    const raw = (await message.compile().build()).toString('base64url');
     const response = await gmail.users.messages.send({
       userId: 'me',
       requestBody: { raw },

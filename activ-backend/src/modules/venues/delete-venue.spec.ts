@@ -6,7 +6,7 @@ describe('single-request admin venue deletion', () => {
   const setup = (venue: any, activeBooking = false) => {
     const tx = {
       $queryRawUnsafe: jest.fn(async (sql: string) => {
-        if (sql.startsWith('SELECT id, partner_id')) return venue ? [venue] : [];
+        if (sql.startsWith('SELECT id, name, partner_id')) return venue ? [venue] : [];
         if (sql.includes('FROM venue_delete_bookings') && activeBooking) return [{ id: 'booking' }];
         return [];
       }),
@@ -14,7 +14,7 @@ describe('single-request admin venue deletion', () => {
       venues: { update: jest.fn(), delete: jest.fn() },
     };
     const prisma = { $transaction: jest.fn(async (callback) => callback(tx)) };
-    const service = Object.assign(Object.create(VenuesService.prototype), { prisma }) as VenuesService;
+    const service = Object.assign(Object.create(VenuesService.prototype), { prisma, partnerEmailService: { send: jest.fn().mockResolvedValue(true) } }) as VenuesService;
     return { tx, prisma, service };
   };
   const admin = { id: 'admin', role: 'admin' };
@@ -25,6 +25,7 @@ describe('single-request admin venue deletion', () => {
     await expect(service.remove('venue', admin)).resolves.toEqual({ permanentlyDeleted: true });
     expect(tx.venues.update).not.toHaveBeenCalled();
     expect(tx.venues.delete).toHaveBeenCalledWith({ where: { id: 'venue' } });
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('owner', 'venue_deleted', expect.objectContaining({ reference: 'venue' }));
     expect(tx.$queryRawUnsafe).toHaveBeenCalledWith(
       `SELECT booking.id FROM venue_delete_bookings booking WHERE ${ACTIVE_BOOKING_PREDICATE} LIMIT 1`,
     );
@@ -50,6 +51,7 @@ describe('single-request admin venue deletion', () => {
     const { service, tx } = setup({ ...venue, status: 'ARCHIVED', booking_accept: false });
     await expect(service.remove('venue', { id: 'owner', role: 'partner' })).resolves.toEqual({ permanentlyDeleted: false });
     expect(tx.venues.delete).not.toHaveBeenCalled();
+    expect((service as any).partnerEmailService.send).not.toHaveBeenCalled();
   });
 
   it.each([{ id: 'other', role: 'partner' }, { id: 'owner', role: 'user' }])('rejects unauthorized deletion by $role', async (user) => {

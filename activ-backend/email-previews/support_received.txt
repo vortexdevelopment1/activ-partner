@@ -1,0 +1,26 @@
+Subject: We’ve Received Your Support Request – ACTIV Partner
+
+Hi Seemant,
+
+Your Support Request Has Been Received
+
+Thank you for reaching out to ACTIV. Your support request has been saved and sent to our team.
+
+Our team will review your request and contact you with an update.
+
+Venue: Sports Arena Complex
+
+Application Status: Received
+
+Reference: SUP-EXAMPLE-001
+
+Subject: Help updating my venue details
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

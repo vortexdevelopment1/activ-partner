@@ -1,0 +1,28 @@
+Subject: You’re Invited to ACTIV Partner
+
+Hi Seemant,
+
+You’ve Been Invited To Your Venue Team
+
+Your venue administrator has created an ACTIV Partner team account for you.
+
+Use the account details below to sign in. If a temporary password is provided, change it after your first login.
+
+Venue: Sports Arena Complex
+
+Application Status: Invited
+
+Role: Venue Manager
+
+Email: teammate@example.com
+
+Temporary Password: Example-only-Change-Me
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

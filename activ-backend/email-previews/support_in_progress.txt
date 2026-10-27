@@ -1,0 +1,26 @@
+Subject: Your Support Request Is In Progress – ACTIV Partner
+
+Hi Seemant,
+
+Your Support Request Is In Progress
+
+Our support team is now working on your request.
+
+We’ll contact you if we need more information and let you know when the request is resolved.
+
+Venue: Sports Arena Complex
+
+Application Status: In progress
+
+Reference: SUP-EXAMPLE-001
+
+Subject: Help updating my venue details
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

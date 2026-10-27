@@ -37,16 +37,19 @@ describe('post-onboarding activity review', () => {
         status: record.status.toLowerCase(), imageUrls: ['1', '2', '3', '4'], amenities: ['Parking'] })),
       questionsService: { findByCategoryId: jest.fn(async () => [{ id: 'required', isRequired: true }]) },
       adminNotificationsService: { notify: jest.fn() }, notificationsService: { notify: jest.fn() },
+      partnerEmailService: { send: jest.fn().mockResolvedValue(true) },
       syncLegacyActivitySlots: jest.fn(),
     }) as VenuesService;
     await service.submitActivityForReview('activity', 'partner');
     expect(record.status).toBe('PENDING');
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'activity_submitted', { activityName: 'Swimming', reference: 'activity' });
     expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
       'activity_submitted', expect.any(String), expect.any(String), { partnerId: 'partner', venueId: 'venue', serviceId: 'activity' });
     const [pending, total] = await service.findPendingActivities({ skip: 0, limit: 15 } as any);
     expect(total).toBe(1); expect(pending[0].id).toBe('activity');
     await service.processActivityApproval('activity', { status: 'approved' } as any, 'admin');
     expect(record).toMatchObject({ status: 'APPROVED', is_active: true, approved_by: 'admin' });
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'activity_approved', expect.objectContaining({ activityName: 'Swimming', reference: 'activity' }));
     expect((service as any).notificationsService.notify).toHaveBeenCalledWith(
       'partner', 'activity_approved', expect.any(String), expect.any(String), { serviceId: 'activity' });
     expect((await service.findPendingActivities({ skip: 0, limit: 15 } as any))[1]).toBe(0);

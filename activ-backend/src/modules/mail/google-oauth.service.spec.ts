@@ -81,4 +81,21 @@ describe('GoogleOAuthService', () => {
       userId: 'me', requestBody: { raw: expect.any(String) },
     });
   });
+
+  it('encodes HTML, a plain-text alternative, embedded logo and agreement PDF together', async () => {
+    config.GOOGLE_REFRESH_TOKEN = 'configured-token';
+    await service.sendEmail({ recipientEmail: 'partner@example.com', subject: 'Agreement', text: 'Plain version',
+      html: '<p>Signed agreement</p><img src="cid:logo">',
+      inlineImages: [{ filename: 'logo.png', content: Buffer.from('logo'), contentType: 'image/png', cid: 'logo' }],
+      pdfBuffer: Buffer.from('pdf'), filename: 'agreement.pdf' });
+    const raw = Buffer.from(gmail.users.messages.send.mock.calls[0][0].requestBody.raw, 'base64url').toString();
+    expect(raw).toContain('multipart/alternative');
+    expect(raw).toContain('Content-Type: text/plain');
+    expect(raw).toContain('Plain version');
+    expect(raw).toContain('Content-Type: text/html');
+    expect(raw).toContain('Signed agreement');
+    expect(raw).toContain('Content-ID: <logo>');
+    expect(raw).toContain('Content-Type: application/pdf');
+    expect(raw).toMatch(/filename="?agreement\.pdf"?/);
+  });
 });

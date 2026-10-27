@@ -11,12 +11,14 @@ describe('suspension emails', () => {
     sender.sendEmail.mockReset().mockResolvedValue('message-id');
     service = new MailService(new ConfigService({}), sender as any);
   });
-  it('emails the venue name and exact reason without an attachment', async () => {
+  it('emails the venue name and exact reason with branded HTML and inline logo', async () => {
     await expect(service.sendSuspensionEmail({ toEmail: 'owner@example.com', partnerName: 'Owner', venueName: 'Arena', reason: 'Invalid business details' })).resolves.toBe(true);
-    expect(sender.sendEmail).toHaveBeenCalledWith({
+    expect(sender.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       recipientEmail: 'owner@example.com', subject: 'Your ACTIV venue has been suspended',
       text: expect.stringContaining('Reason: Invalid business details'),
-    });
+      html: expect.stringContaining('Has Been Suspended'),
+      inlineImages: [expect.objectContaining({ cid: 'activ-partner-logo' })],
+    }));
     expect(sender.sendEmail.mock.calls[0][0].text).toContain('Arena');
     expect(sender.sendEmail.mock.calls[0][0].text).toContain('support@activ.live');
   });

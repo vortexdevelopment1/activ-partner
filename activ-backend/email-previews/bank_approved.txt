@@ -1,0 +1,26 @@
+Subject: Your Bank Account Has Been Approved – ACTIV Partner
+
+Hi Seemant,
+
+Your Bank Account Has Been Verified
+
+Your submitted bank account details have been approved.
+
+You can review your verified bank details and payout information in ACTIV Partner.
+
+Venue: Sports Arena Complex
+
+Application Status: Approved
+
+Bank: Example Bank
+
+Account: Ending in 4321
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

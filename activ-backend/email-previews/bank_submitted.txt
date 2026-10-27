@@ -1,0 +1,26 @@
+Subject: Your Bank Details Are Under Review – ACTIV Partner
+
+Hi Seemant,
+
+Your Bank Details Are Under Review
+
+We’ve received your bank account details and supporting document.
+
+Our team will verify your submission and email you when the review is complete.
+
+Venue: Sports Arena Complex
+
+Application Status: Under review
+
+Bank: Example Bank
+
+Account: Ending in 4321
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/

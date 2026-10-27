@@ -1,0 +1,24 @@
+Subject: An Update on Your Venue Application – ACTIV Partner
+
+Hi Seemant,
+
+Your Venue Application Was Not Approved
+
+Our team has reviewed your venue application. We’re unable to approve it at this time.
+
+Review the reason below, update the relevant details in ACTIV Partner, and submit your application again when ready.
+
+Venue: Sports Arena Complex
+
+Application Status: Rejected
+
+Reason / notes: The venue address could not be verified. Please correct the address and supporting documents.
+
+Regards,
+Team ACTIV
+
+Questions? Contact support@activ.live
+
+ACTIV Partner: https://activ-partner.vercel.app/
+
+Official website: https://activ.live/
