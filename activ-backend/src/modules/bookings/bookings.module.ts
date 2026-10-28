@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookingsService } from './bookings.service';
+import { BookingExpiryService } from './booking-expiry.service';
 import { BookingsController } from './bookings.controller';
 import { Booking } from './entities/booking.entity';
 import { VenueService } from '../venues/entities/venue-service.entity';
@@ -15,7 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [BookingsController],
-  providers: [BookingsService],
+  providers: [BookingsService, BookingExpiryService],
   exports: [BookingsService, TypeOrmModule],
 })
 export class BookingsModule {}

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,8 +29,10 @@ class _Booking {
     required this.totalAmount,
     required this.commission,
     required this.paymentMode,
-    required this.status,
-  });
+    required _BookingStatus status,
+    this.endsAt,
+    this.checkedIn = false,
+  }) : _status = status;
 
   final String id;
   final String reference;
@@ -44,7 +47,20 @@ class _Booking {
   final double totalAmount;
   final double commission;
   final String paymentMode;
-  _BookingStatus status;
+  final DateTime? endsAt;
+  bool checkedIn;
+  _BookingStatus _status;
+  _BookingStatus get status {
+    if (!checkedIn && endsAt != null && !endsAt!.isAfter(DateTime.now()) &&
+        (_status == _BookingStatus.upcoming || _status == _BookingStatus.ongoing)) {
+      return _BookingStatus.noShow;
+    }
+    return _status;
+  }
+  set status(_BookingStatus value) {
+    _status = value;
+    if (value == _BookingStatus.ongoing) checkedIn = true;
+  }
 
   double get earnings => totalAmount - commission;
 
@@ -105,6 +121,8 @@ class _Booking {
       totalAmount: total,
       commission: total * .15,
       paymentMode: json['paymentMode']?.toString() ?? 'Not available',
+      endsAt: DateTime.tryParse(json['endsAt']?.toString() ?? ''),
+      checkedIn: json['checkedIn'] == true,
       status: _statusFromApi(json['status']?.toString()),
     );
   }
@@ -168,6 +186,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   String _venueName = '';
   String _avatarUrl = '';
   String? _error;
+  Timer? _statusTimer;
+  final _statusTick = ValueNotifier<int>(0);
 
   @override
   void initState() {
@@ -203,10 +223,32 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
+    _statusTick.dispose();
     _bookingAction.dispose();
     _searchCtrl.dispose();
     if (widget.client == null) _client.close();
     super.dispose();
+  }
+
+  void _scheduleStatusUpdate() {
+    _statusTimer?.cancel();
+    final active = _bookings.where((b) => !b.checkedIn && b.endsAt != null &&
+        (b.status == _BookingStatus.upcoming || b.status == _BookingStatus.ongoing)).toList()
+      ..sort((a, b) => a.endsAt!.compareTo(b.endsAt!));
+    if (active.isEmpty) return;
+    final end = active.first.endsAt!;
+    final delay = end.difference(DateTime.now());
+    _statusTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      if (!mounted) return;
+      setState(() {
+        for (final booking in active) {
+          if (!booking.endsAt!.isAfter(end)) booking.status = _BookingStatus.noShow;
+        }
+      });
+      _statusTick.value++;
+      _scheduleStatusUpdate();
+    });
   }
 
   List<_Booking> get _filtered {
@@ -343,6 +385,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
             ..clear()
             ..addAll(collected);
         });
+        _scheduleStatusUpdate();
       }
     } catch (e) {
       if (mounted) {
@@ -737,7 +780,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => ValueListenableBuilder<String?>(
+      builder: (ctx) => ListenableBuilder(
+        listenable: _statusTick,
+        builder: (ctx, _) => ValueListenableBuilder<String?>(
           valueListenable: _bookingAction,
           builder: (ctx, action, _) => PopScope(
               canPop: action == null,
@@ -813,7 +858,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                     ),
                   ),
                 ),
-              ))),
+              )))),
     );
   }
 

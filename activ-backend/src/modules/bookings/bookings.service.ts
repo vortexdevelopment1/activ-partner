@@ -29,6 +29,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/entities/notification.entity";
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
+import { bookingHasEnded } from './booking-expiry';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
@@ -472,6 +473,8 @@ export class BookingsService {
           throw new BadRequestException('This booking can no longer be updated');
         const checkedIn = /^Checked-in: /m.test(walkIn.notes ?? '');
         if (action === 'check-in' && checkedIn) return result;
+        if (action !== 'no-show' && !checkedIn && bookingHasEnded(walkIn.ends_at, new Date(), true))
+          throw new BadRequestException('This slot has ended without check-in and is a no-show. Please refresh.');
         const updated = await tx.partner_walk_in_reservations.updateMany({
           where: { id, status: 'RESERVED' },
           data: {
@@ -505,6 +508,9 @@ export class BookingsService {
         throw new BadRequestException('Booking is already marked as no-show');
       }
       if ((previous?.to_status === 'CHECKED_IN' || booking.checked_in_at) && action === 'check-in') return result;
+      if (action !== 'no-show' && previous?.to_status !== 'CHECKED_IN' && !booking.checked_in_at &&
+          bookingHasEnded(booking.slots.ends_at))
+        throw new BadRequestException('This slot has ended without check-in and is a no-show. Please refresh.');
       const updated = await tx.bookings.updateMany({
         where: { id, status: 'CONFIRMED' },
         data: { updated_at: new Date(), ...(action === 'complete' ? { status: 'COMPLETED' as const } : {}) },

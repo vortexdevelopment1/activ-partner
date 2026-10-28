@@ -51,6 +51,14 @@ describe('activity management on the current schema', () => {
     expect(result.bookings[0].status).toBe('No Show');
   });
 
+  it('returns an expired unchecked-in booking as no-show with its actual payment method', async () => {
+    prisma.bookings.findMany.mockResolvedValueOnce([{ id: 'booking', starts_at: new Date('2020-01-01'),
+      total_paise: 90000n, status: 'CONFIRMED', users: { name: 'Customer' },
+      slots: { ends_at: new Date('2020-01-02') }, payments: [{ provider: 'upi' }] }]);
+    const result = await service.getActivityManagement('activity', 'partner');
+    expect(result.bookings[0]).toMatchObject({ status: 'No Show', checkedIn: false, paymentMode: 'UPI' });
+  });
+
   it('keeps a checked-in walk-in ongoing after refreshing management', async () => {
     prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([{
       id: 'walk-in', participant_name: 'Customer', status: 'RESERVED', amount_paise: 50000n,

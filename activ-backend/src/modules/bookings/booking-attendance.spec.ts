@@ -77,6 +77,15 @@ describe('current-schema booking attendance actions', () => {
     await expect(service.markNoShow('missing', 'owner')).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it.each(['WALK_IN', 'ACTIV'] as const)('%s rejects a new check-in after the slot ends', async source => {
+    const { service, walkIn, booking, prisma } = setup(source);
+    Object.assign(walkIn, { ends_at: new Date('2020-01-01') });
+    Object.assign(booking.slots, { ends_at: new Date('2020-01-01') });
+    await expect(service.checkIn('booking', 'owner')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.booking_events.create).not.toHaveBeenCalled();
+    expect(prisma.partner_walk_in_reservations.updateMany).not.toHaveBeenCalled();
+  });
+
   it('handles a repeated no-show saved by the incoming implementation', async () => {
     const { service, prisma } = setup('ACTIV', 'NO_SHOW');
     await expect(service.markNoShow('booking', 'owner')).resolves.toMatchObject({ status: 'no_show' });

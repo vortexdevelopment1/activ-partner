@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'package:activ_app/Screens/PdfViewerPage.dart';
+import 'LegalDocumentPreview.dart';
 import 'package:dio/dio.dart' as dio_pkg;
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
@@ -56,15 +56,12 @@ class _State extends State<LegalInformationScreen> {
   File? fileImage;
   File? originalFileImage;
 
-  File? _pickedPanCardFile;
   String? _filePanCardName;
   String? _filePanCardSize;
 
-  File? _pickedAadhaarCardFile;
   String? _fileAadhaarCardName;
   String? _fileAadhaarCardSize;
 
-  File? _pickedGSTINCardFile;
   String? _fileGSTINCardName;
   String? _fileGSTINCardSize;
 
@@ -147,11 +144,18 @@ class _State extends State<LegalInformationScreen> {
 
   Future<void> _restoreRemoteDocument(String? url, String documentType) async {
     if (url == null || url.isEmpty) return;
-    final response = await http.get(Uri.parse(url));
+    final backend = Uri.parse(BASE_URL);
+    final uri = backend.resolve(url.trim());
+    if (uri.scheme != 'http' && uri.scheme != 'https') return;
+    final token = await SharedPreference.readStr('jwt_token') ?? '';
+    final response = await http.get(uri, headers: {
+      if (uri.origin == backend.origin && token.isNotEmpty)
+        'Authorization': 'Bearer $token',
+    }).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200 || response.bodyBytes.isEmpty || !mounted) return;
     final bytes = Uint8List.fromList(response.bodyBytes);
     final contentType = response.headers['content-type']?.toLowerCase() ?? '';
-    final extension = contentType.contains('pdf') ? 'pdf' : 'jpg';
+    final extension = LegalDocumentPreview.isPdf(bytes) || contentType.contains('pdf') ? 'pdf' : 'jpg';
     final fileName = '${documentType}_saved.$extension';
     setState(() {
       if (documentType == 'panCard') {
@@ -172,6 +176,24 @@ class _State extends State<LegalInformationScreen> {
       }
     });
   }
+
+  Widget _pdfPreview(Uint8List bytes, String title) => Container(
+    margin: const EdgeInsets.only(top: 8),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      border: Border.all(color: AppColors.gray),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Column(children: [
+      SizedBox(height: 300, child: LegalDocumentPreview(bytes: bytes)),
+      TextButton.icon(
+        onPressed: () => LegalDocumentPreview.open(context, bytes, title),
+        icon: const Icon(Icons.fullscreen),
+        label: const Text('View document'),
+      ),
+    ]),
+  );
 
   getData() async
   {
@@ -272,6 +294,8 @@ class _State extends State<LegalInformationScreen> {
 
                                     // View Aadhaar Card Click
                                     getViewAadhaarCardPDF(context),
+                                    if (_aadhaarCardBytes != null && LegalDocumentPreview.isPdf(_aadhaarCardBytes!))
+                                      _pdfPreview(_aadhaarCardBytes!, 'Aadhaar Card'),
 
                                     _aadhaarCardBytes != null ?   Visibility(
                                       visible: (aadhaarCardFileExtension == "jpg" || aadhaarCardFileExtension == "png" || aadhaarCardFileExtension == "jpeg") ? true : false,
@@ -283,7 +307,7 @@ class _State extends State<LegalInformationScreen> {
                                             borderRadius: BorderRadius.circular(8), // 👈 corner radius
                                             child: Image.memory(
                                               _aadhaarCardBytes!,
-                                              fit: BoxFit.cover,
+                                              fit: BoxFit.contain,
                                               width: double.infinity,
                                               height: 100,
                                             ),
@@ -304,6 +328,8 @@ class _State extends State<LegalInformationScreen> {
 
                                     // View Pan Card Click
                                     getViewPanCardPDF(context),
+                                    if (_panCardBytes != null && LegalDocumentPreview.isPdf(_panCardBytes!))
+                                      _pdfPreview(_panCardBytes!, 'PAN Card'),
 
                                     _panCardBytes != null ?   Visibility(
                                       visible: (panCardFileExtension == "jpg" || panCardFileExtension == "png" || panCardFileExtension == "jpeg") ? true : false,
@@ -315,7 +341,7 @@ class _State extends State<LegalInformationScreen> {
                                             borderRadius: BorderRadius.circular(8), // 👈 corner radius
                                             child: Image.memory(
                                               _panCardBytes!,
-                                              fit: BoxFit.cover,
+                                              fit: BoxFit.contain,
                                               width: double.infinity,
                                               height: 100,
                                             ),
@@ -449,11 +475,8 @@ class _State extends State<LegalInformationScreen> {
                                     Visibility(
                                       visible: _gstinCardBytes!=null ? true : false,
                                       child: InkWell(
-                                        onTap: _pickedGSTINCardFile == null ? null : ()
-                                        {
-                                          File pickedPanCardFile1 = File(_pickedGSTINCardFile!.path);
-                                          CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, "GSTIN Card"));
-                                        },
+                                        onTap: _gstinCardBytes == null ? null : () =>
+                                            LegalDocumentPreview.open(context, _gstinCardBytes!, 'GST Certificate'),
                                         child: Container(
                                           margin: const EdgeInsets.fromLTRB(0, 8, 0, 15),
                                           decoration: BoxDecoration(
@@ -495,7 +518,6 @@ class _State extends State<LegalInformationScreen> {
                                                   onTap: ()
                                                   {
                                                     setState(() {
-                                                      _pickedGSTINCardFile = null;
                                                       _gstinCardBytes = null;
                                                       _fileGSTINCardName = null;
                                                       _fileGSTINCardSize = null;
@@ -518,6 +540,8 @@ class _State extends State<LegalInformationScreen> {
                                       ),
                                     ),
 
+                                    if (_gstinCardBytes != null && LegalDocumentPreview.isPdf(_gstinCardBytes!))
+                                      _pdfPreview(_gstinCardBytes!, 'GST Certificate'),
                                     _gstinCardBytes != null ?   Visibility(
                                       visible: (gstInCardFileExtension == "jpg" || gstInCardFileExtension == "png" || gstInCardFileExtension == "jpeg") ? true : false,
                                       child: Container(
@@ -528,7 +552,7 @@ class _State extends State<LegalInformationScreen> {
                                             borderRadius: BorderRadius.circular(8), // 👈 corner radius
                                             child: Image.memory(
                                               _gstinCardBytes!,
-                                              fit: BoxFit.cover,
+                                              fit: BoxFit.contain,
                                               width: double.infinity,
                                               height: 100,
                                             ),
@@ -1233,14 +1257,8 @@ class _State extends State<LegalInformationScreen> {
     return Visibility(
       visible: _panCardBytes!=null ? true : false,
       child: InkWell(
-        onTap: _pickedPanCardFile == null ? null : ()
-        {
-          if(panCardFileExtension == "pdf" || panCardFileExtension == "PDF")
-          {
-            File pickedPanCardFile1 = File(_pickedPanCardFile!.path);
-            CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, "Pan Card"));
-          }else{}
-        },
+        onTap: _panCardBytes == null ? null : () =>
+            LegalDocumentPreview.open(context, _panCardBytes!, 'PAN Card'),
         child: Container(
           margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
           decoration: BoxDecoration(
@@ -1282,7 +1300,6 @@ class _State extends State<LegalInformationScreen> {
                   onTap: ()
                   {
                     setState(() {
-                      _pickedPanCardFile = null;
                       _panCardBytes = null;
                       _filePanCardName = null;
                       _filePanCardSize = null;
@@ -1452,14 +1469,8 @@ class _State extends State<LegalInformationScreen> {
     return Visibility(
       visible: _aadhaarCardBytes!=null ? true : false,
       child: InkWell(
-        onTap: _pickedAadhaarCardFile == null ? null : ()
-        {
-          if(aadhaarCardFileExtension == "pdf" || aadhaarCardFileExtension == "PDF")
-          {
-            File pickedPanCardFile1 = File(_pickedAadhaarCardFile!.path);
-            CommonUtilities.NavigateWithPush(context, PdfViewerPage(pickedPanCardFile1, 'Aadhaar Card'));
-          }else{}
-        },
+        onTap: _aadhaarCardBytes == null ? null : () =>
+            LegalDocumentPreview.open(context, _aadhaarCardBytes!, 'Aadhaar Card'),
         child: Container(
           margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
           decoration: BoxDecoration(
@@ -1501,7 +1512,6 @@ class _State extends State<LegalInformationScreen> {
                   onTap: ()
                   {
                     setState(() {
-                      _pickedAadhaarCardFile = null;
                       _aadhaarCardBytes = null;
                       _fileAadhaarCardName = null;
                       _fileAadhaarCardSize = null;
@@ -1889,7 +1899,6 @@ class _State extends State<LegalInformationScreen> {
         {
           _panChanged = true;
           panCardFileExtension = ext;
-          _pickedPanCardFile = file;
           _panCardBytes = fileBytes;
           _filePanCardName = platformFile.name;
           _filePanCardSize = _getFileSize(fileLength, 2);
@@ -1898,7 +1907,6 @@ class _State extends State<LegalInformationScreen> {
         {
           _aadhaarChanged = true;
           aadhaarCardFileExtension = ext;
-          _pickedAadhaarCardFile = file;
           _aadhaarCardBytes = fileBytes;
           _fileAadhaarCardName = platformFile.name;
           _fileAadhaarCardSize = _getFileSize(fileLength, 2);
@@ -1907,7 +1915,6 @@ class _State extends State<LegalInformationScreen> {
         {
           _gstinChanged = true;
           gstInCardFileExtension = ext;
-          _pickedGSTINCardFile = file;
           _gstinCardBytes = fileBytes;
           _fileGSTINCardName = platformFile.name;
           _fileGSTINCardSize = _getFileSize(fileLength, 2);

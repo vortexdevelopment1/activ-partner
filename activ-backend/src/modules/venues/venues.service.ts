@@ -51,6 +51,8 @@ import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 import { CommissionService } from "../commission/commission.service";
 import { deleteVenue } from "./delete-venue";
 import { syncLegacyActivityVisibility } from './activity-visibility';
+import { attendanceStatus, INDIA_OFFSET_MS } from '../bookings/booking-expiry';
+import { paymentMethodLabel } from '../payments/payment-method';
 
 @Injectable()
 export class VenuesService {
@@ -2758,7 +2760,7 @@ export class VenuesService {
                 where: { status: "CAPTURED" },
                 orderBy: { created_at: "desc" },
                 take: 1,
-                select: { provider: true },
+                select: { provider: true, provider_payment_id: true, provider_order_id: true, amount_paise: true },
               },
             },
           }),
@@ -2815,26 +2817,23 @@ export class VenuesService {
       (sum, reservation) => sum + fallbackWalkInAmount(reservation),
       0,
     );
+    const paymentModes = await Promise.all(bookings.map(b => paymentMethodLabel(b.payments?.[0])));
+    const now = new Date();
     const walkInBookings = walkIns.map((reservation) => {
       const details = this.mapWalkInReservation(reservation);
       return {
         id: reservation.id,
         customerName: reservation.participant_name ?? "Walk-in Customer",
         activity: service.title,
-        startsAt: reservation.starts_at,
-        endsAt: reservation.ends_at,
-        status:
-          reservation.status === "COMPLETED"
-            ? "Completed"
-            : reservation.status === "NO_SHOW"
-              ? "No Show"
-              : /^Checked-in: /m.test(reservation.notes ?? "") ||
-                  (reservation.starts_at <= new Date() && reservation.ends_at > new Date())
-                ? "Ongoing"
-                : "Upcoming",
+        startsAt: new Date(reservation.starts_at.getTime() - INDIA_OFFSET_MS),
+        endsAt: new Date(reservation.ends_at.getTime() - INDIA_OFFSET_MS),
+        status: attendanceStatus({ status: reservation.status, startsAt: reservation.starts_at,
+          endsAt: reservation.ends_at, walkIn: true,
+          checkedIn: /^Checked-in: /m.test(reservation.notes ?? '') }, now),
         amount: fallbackWalkInAmount(reservation) / 100,
         participants: reservation.participant_count ?? 1,
         source: "WALK_IN",
+        checkedIn: /^Checked-in: /m.test(reservation.notes ?? ''),
         phone: reservation.participant_phone_e164,
         email: details.participantEmail,
         bookedOn: reservation.created_at,
@@ -2900,7 +2899,7 @@ export class VenuesService {
           )
         : null,
       bookings: [
-        ...bookings.map((b) => ({
+        ...bookings.map((b, index) => ({
         id: b.id,
         bookingReference: b.booking_reference,
         customerName: b.users.name ?? "Customer",
@@ -2908,28 +2907,14 @@ export class VenuesService {
         activity: service.title,
         startsAt: b.starts_at,
         endsAt: b.slots.ends_at,
-        status:
-          b.status === "CONFIRMED"
-            ? b.booking_events?.[0]?.to_status === "NO_SHOW"
-              ? "No Show"
-              : b.checked_in_at || b.booking_events?.[0]?.to_status === "CHECKED_IN" ||
-                  (b.starts_at <= new Date() && b.slots.ends_at > new Date())
-                ? "Ongoing"
-                : "Upcoming"
-            : b.status === "COMPLETED"
-              ? "Completed"
-              : b.status === "NO_SHOW"
-                ? "No Show"
-                : b.status === "CANCELLED"
-                  ? "Canceled"
-                  : b.status === "RESCHEDULED"
-                    ? "Rescheduled"
-                    : "Pending Payment",
+        status: attendanceStatus({ status: b.status, startsAt: b.starts_at, endsAt: b.slots.ends_at,
+          checkedIn: !!b.checked_in_at, attendance: b.booking_events?.[0]?.to_status }, now),
         amount: Number(b.total_paise) / 100,
         participants: b.booking_attempts?.quantity ?? 1,
         bookedOn: b.created_at,
-        paymentMode: b.payments?.[0]?.provider ?? "Not available",
+        paymentMode: paymentModes[index],
         source: "ACTIV",
+        checkedIn: !!b.checked_in_at || b.booking_events?.[0]?.to_status === 'CHECKED_IN',
       })),
         ...walkInBookings,
       ].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()),
