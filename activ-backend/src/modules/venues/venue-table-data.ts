@@ -5,14 +5,16 @@ export function mapVenueAvailability(rows: Array<{ service_category_id: string; 
   open_time: string; close_time: string; capacity: number; price_paise: bigint;
   discounted_price_paise: bigint }>) {
   const result: Record<string, Array<{ day: string; slots: Array<{ openTime: string;
-    closeTime: string; capacity: number; price: number; discountedPrice: number }> }>> = {};
+    closeTime: string; capacity: number; price: number; discountedPrice: number; discountPercentage: number }> }>> = {};
   for (const row of rows) {
     const days = result[row.service_category_id] ??= [];
     let day = days.find((entry) => entry.day === row.day);
     if (!day) { day = { day: row.day, slots: [] }; days.push(day); }
+    const price = Number(row.price_paise) / 100;
+    const discountedPrice = Number(row.discounted_price_paise) / 100;
     day.slots.push({ openTime: row.open_time, closeTime: row.close_time,
-      capacity: row.capacity, price: Number(row.price_paise) / 100,
-      discountedPrice: Number(row.discounted_price_paise) / 100 });
+      capacity: row.capacity, price, discountedPrice,
+      discountPercentage: price > 0 ? Math.round((price - discountedPrice) / price * 100) : 0 });
   }
   return result;
 }
@@ -53,10 +55,12 @@ export function availabilityRows(venueId: string, categoryId: string, days: Reco
           throw new BadRequestException('Invalid slot size or time range shorter than slot size');
         }
       }
-      const numbers = [slot.capacity ?? 0, slot.price ?? 0, slot.discountedPrice ?? 0].map(Number);
+      const numbers = [slot.capacity ?? 0, slot.price ?? 0,
+        slot.discountedPrice === undefined ? (slot.price ?? 0) : slot.discountedPrice].map(Number);
       if (numbers.some((value) => !Number.isFinite(value) || value < 0) || !Number.isInteger(numbers[0])) {
         throw new BadRequestException('Invalid capacity or price');
       }
+      if (numbers[1] > 0 && numbers[2] > numbers[1]) throw new BadRequestException('Discounted price must not exceed slot price');
       return { id: randomUUID(), venue_id: venueId, service_category_id: categoryId,
         day: day.toLowerCase(), sort_order: index, open_time: slot.open, close_time: slot.close,
         capacity: numbers[0], price_paise: BigInt(Math.round(numbers[1] * 100)),

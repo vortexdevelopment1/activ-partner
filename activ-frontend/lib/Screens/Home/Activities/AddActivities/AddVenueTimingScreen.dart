@@ -254,6 +254,12 @@ class _State extends State<AddVenueTimingScreen> {
           _showError("Enter a valid base slot price for $day");
           return false;
         }
+        final price = double.parse(slot['price']!);
+        final discounted = double.tryParse(slot['discountedPrice'] ?? '') ?? price;
+        if (discounted < 0 || discounted > price) {
+          _showError("Discounted slot price must be between 0 and the base price for $day");
+          return false;
+        }
       }
     }
     return true;
@@ -867,6 +873,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                   "close": "07:00 PM",
                                                   "capacity": "",
                                                   "price": "",
+                                                  "discountedPrice": "",
                                                 });
                                               });
                                             },
@@ -989,6 +996,7 @@ class _State extends State<AddVenueTimingScreen> {
             "close": slot["close"] ?? "-",
             "capacity": slot["capacity"] ?? "-",
             "price": slot["price"] ?? "-",
+            "discountedPrice": slot["discountedPrice"] ?? slot["price"] ?? "-",
           };
         }).toList();
       } else {
@@ -1089,14 +1097,39 @@ class _State extends State<AddVenueTimingScreen> {
             key: 'capacity'),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
           decoration: BoxDecoration(
             color: AppColors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.gray),
           ),
-          child: field(
-              label: 'Base Slot Price (₹)', hint: '₹ 500', key: 'price'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            field(label: 'Slot Price (₹)', hint: '₹ 500', key: 'price'),
+            const SizedBox(height: 16),
+            field(label: 'Discounted Slot Price (₹)', hint: '₹ 350', key: 'discountedPrice'),
+            const SizedBox(height: 14),
+            Builder(builder: (_) {
+              final base = double.tryParse(slot['price'] ?? '');
+              final discounted = double.tryParse(slot['discountedPrice'] ?? '');
+              final percent = base != null && base > 0 && discounted != null && discounted >= 0 && discounted <= base
+                  ? ((base - discounted) / base * 100).round() : 0;
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9EEFF),
+                  border: Border.all(color: const Color(0xFF9D38EB), width: 1.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.local_offer_outlined, color: Color(0xFF9D38EB), size: 25),
+                  const SizedBox(width: 10),
+                  Text('User will see ', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 16)),
+                  Text('Flat $percent% OFF', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 17, fontWeight: FontWeight.w700)),
+                ]),
+              );
+            }),
+          ]),
         ),
       ],
     );

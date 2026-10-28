@@ -188,7 +188,10 @@ class _AddActivityAmenitiesScreenState
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
-                          mainAxisExtent: 113,
+                          // Keep enough vertical room for the icon, label and
+                          // card padding on small screens. 113px caused a
+                          // five-pixel overflow for the longer amenity labels.
+                          mainAxisExtent: 125,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
                         ),

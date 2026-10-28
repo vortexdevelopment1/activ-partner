@@ -135,7 +135,14 @@ class _State extends State<AddActivityConfigureScreen> {
       _card('Operational Details', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         for (final e in widget.timing.entries.where((e) => (e.value as List? ?? []).any((s) => s['open'] != null && s['open'] != '-'))) ...[
           Text(e.key.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-          for (final s in (e.value as List)) Text('${s['open'] ?? '-'}    ${s['close'] ?? '-'}    ₹${s['price'] ?? '-'}'),
+          for (final s in (e.value as List)) Builder(builder: (_) {
+            final price = double.tryParse('${s['price'] ?? ''}');
+            final discounted = double.tryParse('${s['discountedPrice'] ?? ''}');
+            final percent = price != null && price > 0 && discounted != null
+                ? ((price - discounted) / price * 100).round() : 0;
+            return Text('${s['open'] ?? '-'}    ${s['close'] ?? '-'}    ₹${s['discountedPrice'] ?? s['price'] ?? '-'}'
+                '${percent > 0 ? '  ($percent% OFF)' : ''}');
+          }),
           const Divider(),
         ],
       ])),

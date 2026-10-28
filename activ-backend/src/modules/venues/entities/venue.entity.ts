@@ -76,7 +76,7 @@ export class Venue {
 
   // Per-category day-wise availability: { catId: [{ day, slots: [{ openTime, closeTime, capacity }] }] }
   @Column({ name: 'availability', type: 'jsonb', nullable: true })
-  availability: Record<string, Array<{ day: string; slots: Array<{ openTime: string; closeTime: string; capacity: number; price: number; discountedPrice: number }> }>>;
+  availability: Record<string, Array<{ day: string; slots: Array<{ openTime: string; closeTime: string; capacity: number; price: number; discountedPrice: number; discountPercentage: number }> }>>;
 
   @Column({ type: 'json', nullable: true })
   amenities: string[];
