@@ -3495,7 +3495,11 @@ export class VenuesService {
       this.prisma.partner_venue_services.findMany({
         where,
         include: { venues: true },
-        orderBy: { submitted_at: "asc" },
+        orderBy: [
+          { submitted_at: { sort: "desc", nulls: "last" } },
+          { created_at: "desc" },
+          { id: "desc" },
+        ],
         skip: pagination.skip,
         take: pagination.limit,
       }),
