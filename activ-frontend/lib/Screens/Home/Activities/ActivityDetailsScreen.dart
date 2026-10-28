@@ -712,7 +712,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           textAlign: TextAlign.start,
-                          "${slot['open']} - ${slot['close']}",
+                          "${slot['open']} - ${slot['close']}  ${slot['discountedPrice'] != null && slot['discountedPrice'].toString() != slot['price'].toString() ? '₹${slot['discountedPrice']} (${slot['discountPercentage'] ?? ''}% OFF)' : ''}",
                           style: const TextStyle(
                             fontSize: AppSize.size_14,
                             fontFamily: 'Satoshi',
