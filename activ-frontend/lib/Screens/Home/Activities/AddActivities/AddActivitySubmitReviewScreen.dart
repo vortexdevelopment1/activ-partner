@@ -223,6 +223,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
                 OnboardingButton(
                   label: 'Save as Draft',
                   outlined: true,
+                  disabledForegroundColor: Colors.black,
                   onPressed: _saving ? null : _saveDraft,
                 ),
               ],
@@ -250,9 +251,26 @@ class _State extends State<AddActivitySubmitReviewScreen> {
             child: Column(
               children: [
                 Row(children: [
-                  if (i > 0) const Expanded(child: Divider(color: Color(0xFFD7D7D7), thickness: 2)),
-                  Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: AppColors.purple, width: 2)), child: Icon(icons[i], color: AppColors.purple, size: 22)),
-                  if (i < labels.length - 1) const Expanded(child: Divider(color: Color(0xFFD7D7D7), thickness: 2)),
+                  Expanded(
+                    child: i == 0
+                        ? const SizedBox.shrink()
+                        : Container(height: 2, color: const Color(0xFFD7D7D7)),
+                  ),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.purple, width: 2),
+                    ),
+                    child: Icon(icons[i], color: AppColors.purple, size: 22),
+                  ),
+                  Expanded(
+                    child: i == labels.length - 1
+                        ? const SizedBox.shrink()
+                        : Container(height: 2, color: const Color(0xFFD7D7D7)),
+                  ),
                 ]),
                 const SizedBox(height: 6),
                 Text('${i + 1}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),

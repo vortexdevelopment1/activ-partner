@@ -92,6 +92,7 @@ class _State extends State<HomeScreen> {
   bool _needsPricing = false, _needsTeam = false, _needsBankAccount = false;
   String? _setupError;
   bool _dashboardLoading = false;
+  int _unreadNotificationCount = 0;
 
   // ── Dummy stats ──────────────────────────────────────────────────────────────
   List<_StatItem> _approvedStats = const [
@@ -125,6 +126,7 @@ class _State extends State<HomeScreen> {
     _fetchVenueName();
     _loadUserPermissions();
     _loadProfilePhoto();
+    _fetchUnreadNotificationCount();
   }
 
   Future<void> _redirectTeamMemberIfNeeded() async {
@@ -402,6 +404,46 @@ class _State extends State<HomeScreen> {
     }
   }
 
+  Future<void> _fetchUnreadNotificationCount() async {
+    try {
+      final token = checkString(await SharedPreference.readStr('jwt_token'));
+      if (token.isEmpty) return;
+      final res = await (widget.client?.get ?? http.get)(
+        Uri.parse('$NOTIFICATIONS_URL/unread-count'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'accept': '*/*',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final count = body['data']?['count'];
+        if (mounted && count is num) {
+          setState(() => _unreadNotificationCount = count.toInt());
+          return;
+        }
+      }
+
+      final listRes = await (widget.client?.get ?? http.get)(
+        Uri.parse(NOTIFICATIONS_URL),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'accept': '*/*',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (listRes.statusCode == 200) {
+        final raw = jsonDecode(listRes.body)['data'];
+        if (raw is List) {
+          final unread = raw
+              .where((item) => item is Map && item['isRead'] != true)
+              .length;
+          if (mounted) setState(() => _unreadNotificationCount = unread);
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _openSetup(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => screen));
     if (mounted) await _fetchVenueName();
@@ -539,10 +581,6 @@ class _State extends State<HomeScreen> {
                         _buildVenueStatusCard(),
                       ],
                       const SizedBox(height: 20),
-                      _buildSectionLabel('Insights & Growth'),
-                      const SizedBox(height: 10),
-                      _buildInsightsRow(),
-                      const SizedBox(height: 20),
                       _buildRecentBookingsHeader(),
                       const SizedBox(height: 10),
                       if (_isApproved && _bookings.isNotEmpty)
@@ -604,19 +642,72 @@ class _State extends State<HomeScreen> {
           Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
           const Spacer(),
           InkWell(
-            onTap: () => Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                    builder: (_) => NotificationsScreen(client: widget.client))),
+                  builder: (_) => NotificationsScreen(client: widget.client),
+                ),
+              );
+              if (mounted) _fetchUnreadNotificationCount();
+            },
             borderRadius: BorderRadius.circular(4),
-            child: SvgPicture.asset(
-              'assets/ic_notifications.svg',
-              width: 24,
-              height: 24,
-            ),
+            child: _buildNotificationBell(),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNotificationBell() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        SvgPicture.asset(
+          'assets/ic_notifications.svg',
+          width: 24,
+          height: 24,
+        ),
+        if (_unreadNotificationCount > 0)
+          Positioned(
+            top: -4,
+            right: -6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE51E25),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 3,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 16,
+                minHeight: 16,
+              ),
+              child: Center(
+                child: Text(
+                  _unreadNotificationCount > 99
+                      ? '99+'
+                      : '$_unreadNotificationCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                    fontFamily: 'Satoshi',
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1033,38 +1124,6 @@ class _State extends State<HomeScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // ── Insights row ──────────────────────────────────────────────────────────────
-
-  Widget _buildInsightsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: Opacity(
-            opacity: 0.4,
-            child: _actionCard(
-              title: 'Analytics',
-              subtitle: 'View detailed insights',
-              image: 'assets/ic_analytics.png',
-              onTap: () => CommonUtilities.createSnackBar(context, 'Coming soon!'),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Opacity(
-            opacity: 0.4,
-            child: _actionCard(
-              title: 'Offers & Deals',
-              subtitle: 'Manage promotions',
-              image: 'assets/ic_deals.png',
-              onTap: () => CommonUtilities.createSnackBar(context, 'Coming soon!'),
-            ),
-          ),
-        ),
-      ],
     );
   }
 

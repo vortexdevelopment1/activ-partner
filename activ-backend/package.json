@@ -27,6 +27,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate --config ./prisma7.config.ts",
+    "prisma:email:check": "node scripts/check-email-schema.cjs",
     "prisma:migrate:status": "prisma migrate status --config ./prisma7.config.ts",
     "prisma:migrate:deploy": "prisma migrate deploy --config ./prisma7.config.ts",
     "prisma:pull": "prisma db pull",

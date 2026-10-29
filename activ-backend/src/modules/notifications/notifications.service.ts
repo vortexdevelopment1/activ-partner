@@ -74,21 +74,23 @@ export class NotificationsService {
     }
   }
 
-  async findByPartner(partnerId: string): Promise<Notification[]> {
-    const userId = await this.getPartnerUserId(partnerId);
-    if (!userId) return [];
+  async findByPartner(partnerId: string, currentUserId?: string): Promise<Notification[]> {
+    const defaultUserId = await this.getPartnerUserId(partnerId);
+    const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
+    if (userIds.length === 0) return [];
     const notifications = await this.prisma.notifications.findMany({
-      where: { user_id: userId },
+      where: { user_id: { in: userIds } },
       orderBy: { created_at: 'desc' },
       take: 100,
     });
     return notifications.map((notification) => this.mapNotification(notification, partnerId));
   }
 
-  async markRead(id: string, partnerId: string): Promise<Notification> {
-    const userId = await this.getPartnerUserId(partnerId);
-    const notification = userId && await this.prisma.notifications.findFirst({
-      where: { id, user_id: userId },
+  async markRead(id: string, partnerId: string, currentUserId?: string): Promise<Notification> {
+    const defaultUserId = await this.getPartnerUserId(partnerId);
+    const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
+    const notification = userIds.length > 0 && await this.prisma.notifications.findFirst({
+      where: { id, user_id: { in: userIds } },
     });
     if (!notification) throw new NotFoundException('Notification not found');
     const updated = await this.prisma.notifications.update({
@@ -98,20 +100,22 @@ export class NotificationsService {
     return this.mapNotification(updated, partnerId);
   }
 
-  async markAllRead(partnerId: string): Promise<void> {
-    const userId = await this.getPartnerUserId(partnerId);
-    if (!userId) return;
+  async markAllRead(partnerId: string, currentUserId?: string): Promise<void> {
+    const defaultUserId = await this.getPartnerUserId(partnerId);
+    const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
+    if (userIds.length === 0) return;
     await this.prisma.notifications.updateMany({
-      where: { user_id: userId, read_at: null },
+      where: { user_id: { in: userIds }, read_at: null },
       data: { read_at: new Date() },
     });
   }
 
-  async unreadCount(partnerId: string): Promise<number> {
-    const userId = await this.getPartnerUserId(partnerId);
-    if (!userId) return 0;
+  async unreadCount(partnerId: string, currentUserId?: string): Promise<number> {
+    const defaultUserId = await this.getPartnerUserId(partnerId);
+    const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
+    if (userIds.length === 0) return 0;
     return this.prisma.notifications.count({
-      where: { user_id: userId, read_at: null },
+      where: { user_id: { in: userIds }, read_at: null },
     });
   }
 }

@@ -815,12 +815,14 @@ class _State extends State<CategoryQuestionsScreen> {
               });
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
                   Checkbox(
                     value: isChecked,
                     activeColor: AppColors.darkBlack,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
                     onChanged: (val) {
                       setState(() {
                         final list = List<String>.from(selected);
@@ -833,12 +835,15 @@ class _State extends State<CategoryQuestionsScreen> {
                       });
                     },
                   ),
-                  Text(
-                    opt,
-                    style: const TextStyle(
-                      fontSize: AppSize.size_14,
-                      fontFamily: 'Satoshi',
-                      color: AppColors.darkBlack,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      opt,
+                      style: const TextStyle(
+                        fontSize: AppSize.size_14,
+                        fontFamily: 'Satoshi',
+                        color: AppColors.darkBlack,
+                      ),
                     ),
                   ),
                 ],
@@ -925,6 +930,165 @@ class _State extends State<CategoryQuestionsScreen> {
 
   // ─── Build ────────────────────────────────────────────────────────────────
 
+  Widget _buildManagedLayout(bool hasNoQuestions) {
+    final categoryTitle = widget.currentCategory['title']?.toString() ?? 'Activity';
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F6D2),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Material(
+                            color: Colors.white,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: IconButton(
+                              tooltip: 'Back',
+                              constraints: const BoxConstraints.tightFor(
+                                width: 36,
+                                height: 36,
+                              ),
+                              padding: EdgeInsets.zero,
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                size: 20,
+                                color: AppColors.darkBlack,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 18),
+                          const Expanded(
+                            child: Text(
+                              'Update Activity Details',
+                              style: TextStyle(
+                                fontFamily: 'Satoshi',
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkBlack,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        categoryTitle,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.darkBlack,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Provide Activity Specific Details',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontFamily: 'Satoshi',
+                          color: AppColors.black1,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    child: ListView(
+                      children: [
+                        const SizedBox(height: 16),
+                        if (_isLoading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Column(children: [
+                              AppSkeleton(height: 58),
+                              SizedBox(height: 14),
+                              AppSkeleton(height: 58),
+                              SizedBox(height: 14),
+                              AppSkeleton(height: 58),
+                            ]),
+                          )
+                        else if (_errorMessage.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Center(
+                              child: Text(
+                                _errorMessage,
+                                style: const TextStyle(
+                                  fontSize: AppSize.size_14,
+                                  fontFamily: 'Satoshi',
+                                  color: AppColors.black1,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          )
+                        else if (hasNoQuestions)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Center(
+                              child: Text(
+                                'No additional questions for the selected categories.',
+                                style: TextStyle(
+                                  fontSize: AppSize.size_14,
+                                  fontFamily: 'Satoshi',
+                                  color: AppColors.black1,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          )
+                        else ...[
+                          ..._sections.where((s) => s.questions.isNotEmpty).expand((section) =>
+                            section.questions.map((q) => _buildQuestionWidget(section.categoryId, q))
+                          ),
+                          ..._globalQuestions.map((q) => _buildQuestionWidget('global', q)),
+                        ],
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                Column(
+                  children: [
+                    bottomBarShadow(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              if (_isLoading || _savingManaged || _errorMessage.isNotEmpty) return;
+                              if (hasNoQuestions || _validate()) { _saveManagedAnswers(); }
+                            },
+                            child: getButtonBlack(context, _savingManaged ? 'Saving...' : 'Save Changes', 'categoryQuestions_managed'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double progress = currentStep / totalSteps;
@@ -933,6 +1097,8 @@ class _State extends State<CategoryQuestionsScreen> {
     // category-specific questions to distinguish them from.
     final bool hasCategorySpecific = _sections.any((s) => s.questions.isNotEmpty);
     final bool showCategoryHeaders = _sections.length > 1 || hasCategorySpecific;
+
+    if (_managedMode) return _buildManagedLayout(hasNoQuestions);
 
     return Stack(
       children: [

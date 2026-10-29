@@ -265,7 +265,8 @@ readiness checks.
 
 ### Release prerequisites and database targeting
 
-The repository contains 13 incremental migrations. The first,
+The repository contains incremental migrations (enumerate the current directories
+and database receipts before deployment). The first,
 `20261008_normalize_venue_data`, starts with ALTER TABLE against existing tables;
 there is no initial empty-database baseline in this history. Do not run this
 history against a fresh production database or automatically mark migrations as
@@ -275,6 +276,13 @@ its unique idempotency index, retry index and allowed-status CHECK constraint.
 The OAuth credential migration is also additive and does not modify partner/venue
 rows. `migrate deploy` applies ALL pending
 migrations, which can include earlier data-changing SQL; inspect that list first.
+
+For `public.email_deliveries does not exist` during approval, follow
+[the schema recovery procedure](EMAIL_SCHEMA_REPAIR.md). The approval transaction
+requires this table and a stable delivery encryption key even in legacy mode
+with the retry worker disabled. Never bypass its durable receipt to publish a
+venue. `npm run prisma:email:check` is offline by default; `--inspect-local`
+permits only read-only loopback catalog checks and rejects remote targets.
 
 Both runtime and Prisma ignore `.env`/`.env.local` when either `NODE_ENV` or
 `APP_ENV` is `production`. Prisma loads local files only for development, without

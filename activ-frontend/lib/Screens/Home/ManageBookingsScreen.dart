@@ -13,6 +13,7 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../Menu/MenuScreen.dart';
 import '../default_partner_avatar.dart';
+import 'NotificationsScreen.dart';
 
 DateTime _indiaTime(DateTime value) =>
     value.toUtc().add(const Duration(hours: 5, minutes: 30));
@@ -201,6 +202,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   String? _error;
   Timer? _statusTimer;
   final _statusTick = ValueNotifier<int>(0);
+  int _unreadNotificationCount = 0;
 
   @override
   void initState() {
@@ -208,6 +210,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     _client = widget.client ?? http.Client();
     _venueId = widget.venueId;
     if (widget.managerLayout) _loadManagerAvatar();
+    _fetchUnreadNotificationCount();
     _load();
   }
 
@@ -232,6 +235,46 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     } catch (_) {
       // The default profile image remains visible if the avatar cannot load.
     }
+  }
+
+  Future<void> _fetchUnreadNotificationCount() async {
+    try {
+      final token = await SharedPreference.readStr('jwt_token') ?? '';
+      if (token.isEmpty) return;
+      final response = await _client.get(
+        Uri.parse('$NOTIFICATIONS_URL/unread-count'),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final count = body['data']?['count'];
+        if (mounted && count is num) {
+          setState(() => _unreadNotificationCount = count.toInt());
+          return;
+        }
+      }
+
+      final listRes = await _client.get(
+        Uri.parse(NOTIFICATIONS_URL),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (listRes.statusCode == 200) {
+        final raw = jsonDecode(listRes.body)['data'];
+        if (raw is List) {
+          final unread = raw
+              .where((item) => item is Map && item['isRead'] != true)
+              .length;
+          if (mounted) setState(() => _unreadNotificationCount = unread);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -554,10 +597,66 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
           Image.asset('assets/logo.png',
               width: 70, height: 36, fit: BoxFit.contain),
           const Spacer(),
-          SvgPicture.asset(
-            'assets/ic_notifications.svg',
-            width: 22,
-            height: 22,
+          InkWell(
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => NotificationsScreen(client: _client),
+                ),
+              );
+              if (mounted) _fetchUnreadNotificationCount();
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                SvgPicture.asset(
+                  'assets/ic_notifications.svg',
+                  width: 22,
+                  height: 22,
+                ),
+                if (_unreadNotificationCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE51E25),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 3,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 15,
+                        minHeight: 15,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _unreadNotificationCount > 99
+                              ? '99+'
+                              : '$_unreadNotificationCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            height: 1.1,
+                            fontFamily: 'Satoshi',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

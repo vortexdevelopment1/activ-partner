@@ -49,9 +49,9 @@ class ActivityDetailsOptions extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => update(!selected),
           child: Row(children: [
+            Checkbox(value: selected, onChanged: update),
             Expanded(child: Text(option,
                 style: OnboardingStyles.body.copyWith(fontSize: 14))),
-            Checkbox(value: selected, onChanged: update),
           ]),
         );
       }),

@@ -180,10 +180,11 @@ class OnboardingButton extends StatelessWidget {
           backgroundColor: outlined ? AppColors.cream : Colors.black,
           foregroundColor: outlined ? Colors.black : AppColors.yellow,
           disabledBackgroundColor: loading
-              ? Colors.black
+              ? (outlined ? AppColors.cream : Colors.black)
               : disabledBackgroundColor ??
                   (outlined ? AppColors.cream : Colors.black),
-          disabledForegroundColor: disabledForegroundColor ?? AppColors.yellow,
+          disabledForegroundColor: disabledForegroundColor ??
+              (outlined ? Colors.black : AppColors.yellow),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(borderRadius),
             side: outlined
@@ -198,14 +199,16 @@ class OnboardingButton extends StatelessWidget {
         onPressed: loading ? null : onPressed,
         child: loading
             ? Shimmer.fromColors(
-                baseColor: AppColors.yellow.withValues(alpha: 0.45),
-                highlightColor: AppColors.yellow.withValues(alpha: 0.95),
+                baseColor: (outlined ? Colors.black : AppColors.yellow)
+                    .withValues(alpha: 0.45),
+                highlightColor: (outlined ? Colors.black : AppColors.yellow)
+                    .withValues(alpha: 0.95),
                 child: Text('$label…',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontFamily: 'Satoshi',
                         fontSize: fontSize,
-                        color: AppColors.yellow)),
+                        color: outlined ? Colors.black : AppColors.yellow)),
               )
             : icon == null
                 ? Text(label, textAlign: TextAlign.center)

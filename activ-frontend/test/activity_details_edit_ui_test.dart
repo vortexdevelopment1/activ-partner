@@ -71,16 +71,15 @@ void main() {
     return writes;
   }
 
-  testWidgets('management uses the exact venue onboarding screen and saves all real category fields', (tester) async {
+  testWidgets('management displays update activity details layout and saves all real category fields', (tester) async {
     final writes = await openEditor(tester);
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
-    expect(find.text('Tell us about your venue!'), findsOneWidget);
-    expect(find.text('Please answer the questions for each selected category'), findsOneWidget);
-    expect(find.text('8/10'), findsOneWidget);
+    expect(find.text('Update Activity Details'), findsOneWidget);
     expect(find.text('Basketball'), findsOneWidget);
-    expect(find.text('Update Activity Details'), findsNothing);
-    expect(find.text('Provide Activity Specific Details'), findsNothing);
-    expect(find.text('Save Changes'), findsNothing);
+    expect(find.text('Provide Activity Specific Details'), findsOneWidget);
+    expect(find.text('Save Changes'), findsOneWidget);
+    expect(find.text('Tell us about your venue!'), findsNothing);
+    expect(find.text('8/10'), findsNothing);
     expect(find.text('Existing description'), findsOneWidget);
     expect(find.text('52'), findsOneWidget);
     expect(find.text('Stale unrelated draft'), findsNothing);
@@ -99,7 +98,7 @@ void main() {
     expect(tester.getCenter(checkbox).dx, lessThan(tester.getCenter(find.text('Indoor')).dx));
     await tester.tap(find.text('Indoor'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Next'));
+    await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(writes, hasLength(1));
     final answers = {for (final answer in writes.single['answers']) answer['questionId']: answer['answer']};
@@ -115,11 +114,11 @@ void main() {
   testWidgets('required validation and Back keep unsaved edits off the server', (tester) async {
     final writes = await openEditor(tester);
     await tester.enterText(find.byKey(const ValueKey('question-basketball-description')), '');
-    await tester.tap(find.text('Next'));
+    await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
     expect(writes, isEmpty);
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(writes, isEmpty);
     expect(find.byType(CategoryQuestionsScreen), findsNothing);
@@ -129,19 +128,19 @@ void main() {
     await openEditor(tester);
     tester.view.physicalSize = const Size(320, 640);
     await tester.pumpAndSettle();
-    expect(find.text('Next').hitTestable(), findsOneWidget);
+    expect(find.text('Save Changes').hitTestable(), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Intermediate'), 150, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('Intermediate').hitTestable(), findsOneWidget);
-    expect(find.text('Back').hitTestable(), findsOneWidget);
-    expect(find.text('Next').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+    expect(find.text('Save Changes').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('failed save keeps answers on the same form and never advances onboarding', (tester) async {
     final writes = await openEditor(tester, failSave: true);
     await tester.enterText(find.byKey(const ValueKey('question-basketball-description')), 'Keep this edit');
-    await tester.tap(find.text('Next'));
+    await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(writes, hasLength(1));
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);

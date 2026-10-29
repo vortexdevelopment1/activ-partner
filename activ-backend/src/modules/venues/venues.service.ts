@@ -3280,7 +3280,27 @@ export class VenuesService {
     partnerId: string,
   ): Promise<any[]> {
     const service = await this.findManagedActivity(serviceId, partnerId);
-    return this.saveAnswers(service.venue_id, answers, partnerId, serviceId);
+    const saved = await this.saveAnswers(service.venue_id, answers, partnerId, serviceId);
+    try {
+      const questionIds = answers.map((a) => a.questionId);
+      const questions = await this.prisma.partner_service_questions.findMany({
+        where: { id: { in: questionIds } },
+      });
+      for (const item of answers) {
+        const q = questions.find((quest) => quest.id === item.questionId);
+        const text = q?.question?.toLowerCase() ?? '';
+        if (text.includes('activity description') || text.includes('description')) {
+          if (typeof item.answer === 'string' && item.answer.trim()) {
+            await this.prisma.partner_venue_services.update({
+              where: { id: serviceId },
+              data: { description: item.answer.trim(), updated_at: new Date() },
+            });
+          }
+          break;
+        }
+      }
+    } catch (_) {}
+    return saved;
   }
 
   async setActivityAmenities(

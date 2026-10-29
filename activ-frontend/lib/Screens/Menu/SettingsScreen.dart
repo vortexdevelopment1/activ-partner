@@ -628,7 +628,12 @@ class _PasswordField extends StatelessWidget {
             const Text('*', style: TextStyle(color: AppColors.red)),
             if (showInfo) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.info_outline, size: 18),
+              const Tooltip(
+                message: 'Current password was sent to your registered email ID with ACTIV venue Partner welcome kit',
+                triggerMode: TooltipTriggerMode.tap,
+                showDuration: Duration(seconds: 6),
+                child: Icon(Icons.info_outline, size: 18),
+              ),
             ],
           ],
         ),
