@@ -193,7 +193,7 @@ export class BookingsController {
   @Get(":id")
   @ApiOperation({ summary: "Get booking by ID" })
   async findOne(@Param("id", ParseUUIDPipe) id: string) {
-    const data = await this.bookingsService.findOne(id);
+    const data = await this.bookingsService.findOneForRead(id);
     return { message: "Booking fetched successfully", data };
   }
 

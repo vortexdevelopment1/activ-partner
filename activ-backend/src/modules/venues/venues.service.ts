@@ -3656,6 +3656,22 @@ export class VenuesService {
           orderBy: { starts_at: "asc" },
         })
       : [];
+    // Facility slots can outlive a partner's edited availability window.
+    // Never show those stale slots in walk-in booking; only slots fully inside
+    // the exact window configured for this activity/day are valid.
+    const exactFacilitySlots = facilitySlots.filter((slot) => {
+      const start = this.istDateTimeToMinutes(slot.starts_at);
+      const end = this.istDateTimeToMinutes(slot.ends_at);
+      return end - start === slotDurationMinutes && operationalWindows.some((window) =>
+        start >= window.open && end <= window.close &&
+        (start - window.open) % slotDurationMinutes === 0,
+      );
+    });
+    // Use persisted facility slots only when the complete set matches the
+    // configured one-hour grid. Otherwise regenerate from each open time so
+    // stale half-hour/misaligned slots cannot leak into walk-in booking.
+    const useFacilitySlots = facilitySlots.length > 0 &&
+      exactFacilitySlots.length === facilitySlots.length;
 
     // ACTIV bookings for this service+date
     const activBookings = service.facility_id
@@ -3690,8 +3706,8 @@ export class VenuesService {
       reservationId?: string;
     }> = [];
 
-    if (facilitySlots.length) {
-      for (const slot of facilitySlots) {
+    if (useFacilitySlots) {
+      for (const slot of exactFacilitySlots) {
         const startMin = this.istDateTimeToMinutes(slot.starts_at);
         const endMin = this.istDateTimeToMinutes(slot.ends_at);
         const hasActivBooking = activBookings.some((booking) =>

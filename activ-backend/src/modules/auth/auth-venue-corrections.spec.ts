@@ -8,7 +8,7 @@ describe('OTP access to venue corrections', () => {
   beforeEach(() => {
     partner = { id: 'partner', status: 'PENDING' };
     prisma = {
-      users: { findUnique: jest.fn(async () => ({ id: 'owner', partner_users: [{ partners: partner }] })) },
+      users: { findUnique: jest.fn(async () => ({ id: 'owner', partner_users: [{ role: 'PARTNER_ADMIN', partners: partner }] })) },
       venues: { findFirst: jest.fn().mockResolvedValue({ id: 'venue' }) },
       otp_challenges: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
     };
@@ -34,7 +34,7 @@ describe('OTP access to venue corrections', () => {
     expect(prisma.venues.findFirst).not.toHaveBeenCalled();
   });
   it('verifies the correction OTP and returns the existing account without creating another', async () => {
-    const user = { id: 'owner', partner_users: [{ partners: partner }] };
+    const user = { id: 'owner', partner_users: [{ role: 'PARTNER_ADMIN', partners: partner }] };
     prisma.users.findUnique.mockResolvedValue(user);
     prisma.otp_challenges.findFirst.mockResolvedValue({ id: 'challenge' });
     const tx = {

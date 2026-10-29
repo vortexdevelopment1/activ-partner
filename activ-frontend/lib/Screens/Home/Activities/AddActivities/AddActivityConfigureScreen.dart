@@ -5,6 +5,8 @@ import '../../../../api_calling/activity_setup_api.dart';
 import '../../../onboarding_widgets.dart';
 import 'AddActivitySubmitReviewScreen.dart';
 import 'AddVenueTimingScreen.dart';
+import 'AddActivityAmenitiesScreen.dart';
+import 'AddSelectedVenueFormScreen.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
 import 'EditActivityPhotosScreen.dart';
 import '../../../../Utills/activity_question_visibility.dart';
@@ -95,7 +97,9 @@ class _State extends State<AddActivityConfigureScreen> {
     decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.gray), borderRadius: BorderRadius.circular(10)),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
-        if (title == 'Photos') TextButton.icon(key: const Key('edit-activity-photos'),
+        if (onEdit != null) TextButton.icon(key: Key(title == 'Photos'
+            ? 'edit-activity-photos'
+            : 'edit-${title.toLowerCase().replaceAll(' ', '-')}'),
           onPressed: onEdit, icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Edit')),
       ]),
       const Divider(), child,
@@ -119,6 +123,41 @@ class _State extends State<AddActivityConfigureScreen> {
         ),
     ]), onEdit: _loading || _editingPhotos || _loadError != null ? null : _editPhotos);
   }
+
+  Map<String, dynamic> get _timingForEdit => {
+    for (final entry in widget.timing.entries)
+      entry.key: (entry.value as List)
+          .map((slot) => Map<String, String>.from(slot as Map))
+          .toList(),
+  };
+
+  void _editDetails() {
+    Navigator.push(context, MaterialPageRoute<void>(
+      builder: (_) => AddSelectedVenueFormScreen(
+        activityId: widget.activityId,
+        client: widget.client,
+      ),
+    ));
+  }
+
+  void _editAmenities() {
+    Navigator.push(context, MaterialPageRoute<void>(
+      builder: (_) => AddActivityAmenitiesScreen(
+        activityId: widget.activityId,
+        client: widget.client,
+      ),
+    ));
+  }
+
+  void _editTiming() {
+    Navigator.push(context, MaterialPageRoute<void>(
+      builder: (_) => AddVenueTimingScreen(
+        activityId: widget.activityId,
+        initialTiming: _timingForEdit,
+        client: widget.client,
+      ),
+    ));
+  }
   @override Widget build(BuildContext context) => PopScope<void>(
     canPop: false,
     onPopInvokedWithResult: (didPop, _) { if (!didPop) _backToPreviousAddStep(); },
@@ -130,8 +169,8 @@ class _State extends State<AddActivityConfigureScreen> {
     ])),
     Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 30), children: [
       _photos(),
-      _card('Activity Specific Details', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [for (final q in _questions) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text('${q['questionText'] ?? ''}\n${q['answer'] ?? '-'}'))])),
-      _card('Amenities List', Text(((_activity['amenities'] as List?) ?? []).asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n'))),
+      _card('Activity Specific Details', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [for (final q in _questions) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text('${q['questionText'] ?? ''}\n${q['answer'] ?? '-'}'))]), onEdit: _editDetails),
+      _card('Amenities List', Text(((_activity['amenities'] as List?) ?? []).asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')), onEdit: _editAmenities),
       _card('Operational Details', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         for (final e in widget.timing.entries.where((e) => (e.value as List? ?? []).any((s) => s['open'] != null && s['open'] != '-'))) ...[
           Text(e.key.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -145,7 +184,7 @@ class _State extends State<AddActivityConfigureScreen> {
           }),
           const Divider(),
         ],
-      ])),
+      ]), onEdit: _editTiming),
     ])),
     Padding(padding: const EdgeInsets.all(20), child: Row(children: [
       Expanded(child: OnboardingButton(label: 'Back', outlined: true, onPressed: _backToPreviousAddStep)),

@@ -9,18 +9,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
 import { MailService } from '../mail/mail.service';
-import { User } from '../users/entities/user.entity';
-import { Partner } from '../partners/entities/partner.entity';
 import { TeamMember, TeamMemberStatus } from '../team/entities/team-member.entity';
-import { Venue } from '../venues/entities/venue.entity';
+import type { Partner } from '../partners/entities/partner.entity';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterPartnerDto } from './dto/register-partner.dto';
@@ -33,6 +29,7 @@ import { ResetPasswordDto, VerifyPasswordResetCodeDto } from './dto/reset-passwo
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VenueStatus } from '../../common/enums/venue-status.enum';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
 
@@ -46,12 +43,6 @@ export class AuthService {
     private otpService: OtpService,
     private mailService: MailService,
     private prisma: PrismaService,
-    @InjectRepository(Partner)
-    private partnerRepository: Repository<Partner>,
-    @InjectRepository(TeamMember)
-    private teamMemberRepository: Repository<TeamMember>,
-    @InjectRepository(Venue)
-    private venueRepository: Repository<Venue>,
     private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
 
@@ -146,17 +137,28 @@ export class AuthService {
       },
     });
 
-    const partnerUser = user?.partner_users[0];
+    // PARTNER_ADMIN is the partner account. PARTNER_USER accounts are staff
+    // only when they also have a normalized staff profile.
+    const partnerUser = user?.partner_users.find(
+      (link) => link.role === PartnerRole.PARTNER_ADMIN,
+    );
     const partner = partnerUser?.partners;
 
     // Team members still use the legacy login path until that module is migrated.
     if (!user || !partnerUser || !partner) {
-      const member = await this.findTeamMemberByIdentifier(identifier, phoneValues);
+      const candidate = await this.findTeamMemberByIdentifier(identifier, phoneValues);
 
-      if (!member) throw new UnauthorizedException('Invalid email or password');
+      if (!candidate) throw new UnauthorizedException('Invalid email or password');
+      const { member } = candidate;
       if (!member.isActive) throw new UnauthorizedException('Your account has been deactivated. Please contact support');
 
-      const isPasswordValid = await member.validatePassword(loginDto.password);
+      if (candidate.userStatus !== UserStatus.ACTIVE || candidate.partnerStatus !== PartnerStatus.ACTIVE) {
+        throw new UnauthorizedException('Your account has been deactivated. Please contact support');
+      }
+
+      if (!candidate.passwordHash) throw new UnauthorizedException('Invalid email or password');
+
+      const isPasswordValid = await bcrypt.compare(loginDto.password, candidate.passwordHash);
       if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
 
       await this.teamService.markActive(member.id);
@@ -229,56 +231,82 @@ export class AuthService {
     return [...values];
   }
 
-  private async findTeamMemberByIdentifier(identifier: string, phoneValues: string[]): Promise<TeamMember | null> {
-    const query = this.teamMemberRepository
-      .createQueryBuilder('member')
-      .where('LOWER(member.email) = LOWER(:identifier)', { identifier });
-
-    if (phoneValues.length > 0) {
-      query.orWhere('member.phone IN (:...phoneValues)', { phoneValues });
+  private async findTeamMemberByIdentifier(identifier: string, phoneValues: string[]) {
+    const candidates = await this.teamService.findLoginCandidates(identifier, phoneValues);
+    if (candidates.length > 1) {
+      // Never choose an arbitrary account when an identifier is shared across
+      // partner memberships. Keep the response generic to avoid enumeration.
+      throw new UnauthorizedException('Invalid email or password');
     }
-
-    return query.getOne();
+    return candidates[0] ?? null;
   }
 
   async registerPartner(registerPartnerDto: RegisterPartnerDto) {
-    const existing = await this.partnerRepository.findOne({
-      where: { email: registerPartnerDto.email },
-    });
+    const email = registerPartnerDto.email.trim().toLowerCase();
+    const phone = this.normalizePhone(registerPartnerDto.phone);
+    const fullName = `${registerPartnerDto.firstName.trim()} ${registerPartnerDto.lastName.trim()}`.trim();
+    const businessName = registerPartnerDto.businessName.trim();
+    const now = new Date();
+    const passwordHash = await bcrypt.hash(registerPartnerDto.password, 10);
 
-    if (existing) {
-      throw new ConflictException('Email is already registered');
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const [existingEmail, existingPhone] = await Promise.all([
+          tx.users.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
+            select: { id: true },
+          }),
+          tx.users.findUnique({ where: { phone_e164: phone }, select: { id: true } }),
+        ]);
+        if (existingEmail) throw new ConflictException('Email is already registered');
+        if (existingPhone) throw new ConflictException('Phone number is already registered');
+
+        const user = await tx.users.create({
+          data: {
+            id: randomUUID(), phone_e164: phone, email, name: fullName,
+            password_hash: passwordHash, status: UserStatus.ACTIVE, updated_at: now,
+          },
+        });
+        const partner = await tx.partners.create({
+          data: { id: randomUUID(), legal_name: businessName, status: PartnerStatus.PENDING, updated_at: now },
+        });
+        await tx.partner_users.create({
+          data: { id: randomUUID(), partner_id: partner.id, user_id: user.id, role: PartnerRole.PARTNER_ADMIN },
+        });
+        await tx.partner_business_profiles.create({
+          data: {
+            id: randomUUID(), partner_id: partner.id, business_name: businessName,
+            owner_name: fullName, email, phone_e164: phone,
+            address_line_1: registerPartnerDto.businessAddress.trim(),
+            city: registerPartnerDto.city.trim(), state: registerPartnerDto.state.trim(),
+            postal_code: registerPartnerDto.zipCode?.trim() || null, updated_at: now,
+          },
+        });
+        return {
+          partner,
+          response: {
+            id: partner.id, firstName: registerPartnerDto.firstName.trim(),
+            lastName: registerPartnerDto.lastName.trim(), email, phone, businessName,
+            status: partner.status.toLowerCase(), isActive: false,
+            createdAt: partner.created_at, updatedAt: partner.updated_at,
+          },
+        };
+      });
+
+      await this.adminNotificationsService.notify(
+        AdminNotificationType.PARTNER_REGISTERED,
+        'New partner registered',
+        `${businessName || fullName || 'A partner'} registered with ACTIV.`,
+        { partnerId: created.partner.id },
+      );
+      return { partner: created.response, ...(await this.generatePartnerTokens(created.partner)) };
+    } catch (error: any) {
+      if (error instanceof ConflictException) throw error;
+      if (error?.code === 'P2002') {
+        throw new ConflictException('A partner with this phone number or email already exists');
+      }
+      throw error;
     }
-
-    const partner = this.partnerRepository.create({
-      firstName: registerPartnerDto.firstName,
-      lastName: registerPartnerDto.lastName,
-      email: registerPartnerDto.email,
-      password: registerPartnerDto.password,
-      phone: registerPartnerDto.phone,
-      businessName: registerPartnerDto.businessName,
-      businessDescription: registerPartnerDto.businessDescription,
-      businessAddress: registerPartnerDto.businessAddress,
-      city: registerPartnerDto.city,
-      state: registerPartnerDto.state,
-      zipCode: registerPartnerDto.zipCode,
-      isActive: false,
-    });
-
-    const saved = await this.partnerRepository.save(partner);
-    await this.adminNotificationsService.notify(
-      AdminNotificationType.PARTNER_REGISTERED,
-      'New partner registered',
-      `${saved.businessName || saved.firstName || 'A partner'} registered with ACTIV.`,
-      { partnerId: saved.id },
-    );
-    const tokens = await this.generatePartnerTokens(saved);
-    const { password, phoneOtp, otpExpiresAt, resetPasswordCode, resetPasswordCodeExpiresAt, ...partnerWithoutSensitive } = saved as any;
-
-    return {
-      partner: partnerWithoutSensitive,
-      ...tokens,
-    };
   }
 
   // ─── Phone OTP Flow ────────────────────────────────────────────────────────
@@ -323,19 +351,23 @@ export class AuthService {
           partner_users: { include: { partners: true } },
         },
       });
-      const partner = user?.partner_users?.[0]?.partners;
+      const partner = user?.partner_users?.find(
+        (link) => link.role === PartnerRole.PARTNER_ADMIN,
+      )?.partners;
       if (partner) {
         if (partner.status !== 'ACTIVE' && !(await this.canResumeVenueCorrections(partner))) {
           throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
         }
       } else {
-        // Team members do not have a partner_users row, so only use the
-        // legacy lookup after the normal partner lookup has found nothing.
-        const teamMember = await this.findTeamMemberByIdentifier(phone, [phone]);
-        if (!teamMember) {
+        const candidate = await this.findTeamMemberByIdentifier(phone, [phone]);
+        if (!candidate) {
           throw new NotFoundException('No account was found for this number. Please create an account first.');
         }
-        if (!teamMember.isActive) {
+        if (
+          !candidate.member.isActive ||
+          candidate.userStatus !== UserStatus.ACTIVE ||
+          candidate.partnerStatus !== PartnerStatus.ACTIVE
+        ) {
           throw new ForbiddenException('Your account is awaiting admin approval. Please try again after it is approved.');
         }
       }
@@ -416,7 +448,9 @@ export class AuthService {
         where: { phone_e164: phone },
         include: { partner_users: { include: { partners: true } } },
       });
-      const partner = user?.partner_users?.[0]?.partners;
+      const partner = user?.partner_users?.find(
+        (link) => link.role === PartnerRole.PARTNER_ADMIN,
+      )?.partners;
       if (!partner) {
         throw new NotFoundException('No account was found for this number. Please create an account first.');
       }

@@ -10,15 +10,20 @@ describe('admin notification event producers', () => {
   const service = <T extends object>(prototype: T, dependencies: object) => Object.assign(Object.create(prototype), dependencies);
 
   it('links saved GST submissions to their review record without including documents in the alert', async () => {
-    const repo = { findOne: jest.fn().mockResolvedValue(null), create: jest.fn(data => data),
-      save: jest.fn().mockResolvedValue({ id: 'gst-id' }) };
-    const partners = service(PartnersService.prototype, { gstVerificationRepo: repo, adminNotificationsService: { notify } });
+    const create = jest.fn().mockResolvedValue({ id: 'gst-id', partner_id: 'partner', gst_number: 'test-gst', legal_name: 'Test', status: 'PENDING', document_url: null, rejection_reason: null, created_at: new Date(), updated_at: new Date() });
+    const transaction = jest.fn((callback) => callback({
+      partner_gst_verification_requests: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create,
+      },
+    }));
+    const partners = service(PartnersService.prototype, { prisma: { $transaction: transaction }, adminNotificationsService: { notify } });
     await partners.submitGstVerification('partner', { gstNumber: 'test-gst', gstName: 'Test' });
     expect(notify).toHaveBeenCalledWith('gst_verification_submitted', expect.any(String), expect.any(String),
       { partnerId: 'partner', gstVerificationId: 'gst-id' });
-    expect(repo.save.mock.invocationCallOrder[0]).toBeLessThan(notify.mock.invocationCallOrder[0]);
+    expect(create.mock.invocationCallOrder[0]).toBeLessThan(notify.mock.invocationCallOrder[0]);
     notify.mockClear();
-    repo.save.mockRejectedValue(new Error('Database failed'));
+    transaction.mockRejectedValue(new Error('Database failed'));
     await expect(partners.submitGstVerification('partner', { gstNumber: 'test-gst', gstName: 'Test' })).rejects.toThrow('Database failed');
     expect(notify).not.toHaveBeenCalled();
   });
@@ -71,12 +76,27 @@ describe('admin notification event producers', () => {
   });
 
   it('also covers the email/password partner registration route', async () => {
+    const tx = {
+      users: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'user', email: 'test@example.com', phone_e164: '+911234567890' }),
+      },
+      partners: {
+        create: jest.fn().mockResolvedValue({ id: 'partner', legal_name: 'Club', status: 'PENDING', created_at: new Date(), updated_at: new Date() }),
+      },
+      partner_users: { create: jest.fn() },
+      partner_business_profiles: { create: jest.fn() },
+    };
     const auth = service(AuthService.prototype, {
-      partnerRepository: { findOne: jest.fn().mockResolvedValue(null), create: jest.fn(data => data),
-        save: jest.fn().mockResolvedValue({ id: 'partner', businessName: 'Club' }) },
+      prisma: { $transaction: jest.fn((callback) => callback(tx)) },
       generatePartnerTokens: jest.fn().mockResolvedValue({}), adminNotificationsService: { notify },
     });
-    await auth.registerPartner({ email: 'test@example.com' } as any);
+    await auth.registerPartner({
+      firstName: 'Test', lastName: 'Partner', email: 'test@example.com',
+      password: 'Password@123', phone: '+911234567890', businessName: 'Club',
+      businessAddress: '1 Main Street', city: 'Jaipur', state: 'Rajasthan',
+    } as any);
     expect(notify).toHaveBeenCalledWith('partner_registered', expect.any(String), expect.any(String), { partnerId: 'partner' });
   });
 });

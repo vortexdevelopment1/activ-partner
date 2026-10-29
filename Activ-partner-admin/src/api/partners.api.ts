@@ -11,7 +11,6 @@ export const partnersApi = {
   }) => api.post('/partners', data),
   getById: (id: string) => api.get(`/partners/${id}`),
   update: (id: string, data: object) => api.patch(`/partners/${id}`, data),
-  verify: (id: string) => api.patch(`/partners/${id}/verify`),
   toggleStatus: (id: string) => api.patch(`/partners/${id}/toggle-status`),
   toggleActive: (id: string, isActive: boolean) =>
     api.patch(`/partners/${id}`, { isActive }),

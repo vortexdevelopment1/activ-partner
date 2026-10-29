@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../../Utills/performance_logger.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -119,6 +120,9 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   Future<http.Response> _getSlotsResponse(Uri uri, String token) async {
+    final requestId = PerformanceLogger.id();
+    final started = DateTime.now();
+    PerformanceLogger.apiStart(requestId, 'GET', uri.toString(), 1);
     final get = widget.client?.get ?? http.get;
     final headers = {'Authorization': 'Bearer $token'};
     var response =
@@ -126,9 +130,19 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
     // Availability reads can be retried safely after a temporary server failure.
     // Reservation POST requests are never retried here.
     if (response.statusCode >= 500) {
+      PerformanceLogger.apiEnd(requestId, 'GET', uri.toString(), 1,
+          DateTime.now().difference(started).inMilliseconds, 'retry',
+          status: response.statusCode, bytes: response.bodyBytes.length);
+      PerformanceLogger.apiStart(requestId, 'GET', uri.toString(), 2);
       response =
           await get(uri, headers: headers).timeout(const Duration(seconds: 15));
     }
+    PerformanceLogger.apiEnd(requestId, 'GET', uri.toString(),
+        response.statusCode >= 500 ? 2 : 1,
+        DateTime.now().difference(started).inMilliseconds,
+        response.statusCode >= 200 && response.statusCode < 300
+            ? 'success' : 'http_error',
+        status: response.statusCode, bytes: response.bodyBytes.length);
     return response;
   }
 
@@ -788,19 +802,44 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                         ),
                       if (_slotError != null)
                         Padding(
-                          padding: const EdgeInsets.only(top: 18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_slotError!,
-                                  style: const TextStyle(
-                                      fontFamily: 'Satoshi',
-                                      fontSize: 13,
-                                      color: Color(0xFFFF6B6B))),
-                              TextButton(
+                          padding: const EdgeInsets.only(top: 18, bottom: 8),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F1),
+                              border: Border.all(
+                                  color: const Color(0xFFFF8A8A), width: 1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.info_outline,
+                                    color: Color(0xFFE64B4B), size: 21),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(_slotError!,
+                                      style: const TextStyle(
+                                          fontFamily: 'Satoshi',
+                                          fontSize: 13,
+                                          height: 1.25,
+                                          color: Color(0xFFC93636))),
+                                ),
+                                TextButton(
                                   onPressed: _loadSlots,
-                                  child: const Text('Retry')),
-                            ],
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: const Color(0xFF7B3FC6),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       if (!_loadingSlots && _slotError == null && slots.isEmpty)

@@ -6,6 +6,7 @@ import 'package:http_parser/http_parser.dart';
 
 import 'api_constant.dart';
 import 'api_request.dart';
+import '../Utills/performance_logger.dart';
 
 class ActivitySetupException implements Exception {
   const ActivitySetupException(this.message);
@@ -25,8 +26,14 @@ class ActivitySetupApi {
   }
 
   Future<dynamic> _request(String method, String path, [Object? body]) async {
+    final requestId = PerformanceLogger.id();
+    final started = DateTime.now();
+    const attempt = 1;
+    PerformanceLogger.apiStart(requestId, method, path, attempt);
     final token = await SharedPreference.readStr('jwt_token');
     if (token == null || token.isEmpty) {
+      PerformanceLogger.apiEnd(requestId, method, path, attempt,
+          DateTime.now().difference(started).inMilliseconds, 'auth_missing');
       throw const ActivitySetupException(
           'Your session has expired. Please sign in again.');
     }
@@ -41,15 +48,21 @@ class ActivitySetupApi {
           .send(request)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 30));
+      final duration = DateTime.now().difference(started).inMilliseconds;
+      final bytes = response.bodyBytes.length;
       dynamic decoded;
       try {
         decoded = jsonDecode(response.body);
       } catch (_) {/* Checked below. */}
       if (response.statusCode == 401) {
+        PerformanceLogger.apiEnd(requestId, method, path, attempt, duration,
+            'http_error', status: response.statusCode, bytes: bytes);
         throw const ActivitySetupException(
             'Your session has expired. Please sign in again.');
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        PerformanceLogger.apiEnd(requestId, method, path, attempt, duration,
+            'http_error', status: response.statusCode, bytes: bytes);
         final message = decoded is Map ? decoded['message'] : null;
         throw ActivitySetupException(
             response.statusCode < 500 && message is String
@@ -57,14 +70,22 @@ class ActivitySetupApi {
                 : 'Unable to save activity. Please try again.');
       }
       if (decoded is! Map) {
+        PerformanceLogger.apiEnd(requestId, method, path, attempt, duration,
+            'invalid_response', status: response.statusCode, bytes: bytes);
         throw const ActivitySetupException(
             'The server returned an invalid response. Please retry.');
       }
+      PerformanceLogger.apiEnd(requestId, method, path, attempt, duration,
+          'success', status: response.statusCode, bytes: bytes);
       return decoded['data'];
     } on TimeoutException {
+      PerformanceLogger.apiEnd(requestId, method, path, attempt,
+          DateTime.now().difference(started).inMilliseconds, 'timeout');
       throw const ActivitySetupException(
           'The request timed out. Please check your connection and retry.');
     } on http.ClientException {
+      PerformanceLogger.apiEnd(requestId, method, path, attempt,
+          DateTime.now().difference(started).inMilliseconds, 'network_error');
       throw const ActivitySetupException(
           'Unable to reach the server. Please check your connection and retry.');
     }

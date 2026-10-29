@@ -9,7 +9,7 @@ describe('current-schema staff OTP login', () => {
   beforeEach(() => {
     teamService = { findByPhone: jest.fn().mockResolvedValue({ id: 'staff-1', partnerId: 'partner-1',
       isActive: true, role: 'staff', permissions: { bookingManagement: true, pricingControl: false } }), markActive: jest.fn() };
-    prisma = { otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'otp' }), update: jest.fn() },
+    prisma = { otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'otp' }), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       users: { findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }) },
       partner_users: { findFirst: jest.fn().mockResolvedValue({ role: 'PARTNER_USER', partners: { id: 'partner-1' } }) },
       venues: { findFirst: jest.fn().mockResolvedValue({ id: 'venue-1', name: 'Arena' }) } };

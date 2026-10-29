@@ -45,12 +45,33 @@ class _State extends State<AddActivitySubmitReviewScreen> {
       api.dispose();
       if (!mounted) return;
       setState(() {
-        final description = activity['description']?.toString().trim() ?? '';
+        final description = _activityDescription(activity);
         if (description.isNotEmpty) _description = description;
         final images = activity['imageUrls'];
         if (images is List && images.isNotEmpty) _imageUrl = images.first.toString();
       });
     } catch (_) {}
+  }
+
+  String _activityDescription(Map<String, dynamic> activity) {
+    final answers = activity['answers'];
+    if (answers is List) {
+      for (final raw in answers.whereType<Map>()) {
+        final questionValue = raw['question'];
+        final question = questionValue is Map
+                ? questionValue['question']
+                : questionValue ?? raw['questionText'] ??
+            (raw['partner_service_questions'] is Map
+                ? raw['partner_service_questions']['question']
+                : null);
+        if (question.toString().trim().toLowerCase() == 'activity description') {
+          final answer = raw['answer'];
+          final text = answer is List ? answer.join(', ') : answer?.toString() ?? '';
+          if (text.trim().isNotEmpty) return text.trim();
+        }
+      }
+    }
+    return activity['description']?.toString().trim() ?? '';
   }
 
   Future<void> _submit() async {

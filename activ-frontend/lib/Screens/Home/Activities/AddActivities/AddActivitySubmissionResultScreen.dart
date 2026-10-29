@@ -73,13 +73,34 @@ class _AddActivitySubmissionResultScreenState
       setState(() {
         final serverTitle = checkString(value!['name']);
         if (serverTitle.isNotEmpty) _title = serverTitle;
-        _description = checkString(value['description']);
+        _description = _activityDescription(value);
         if (_description.isEmpty) _description = 'Ready for admin verification';
         final images = value['imageUrls'];
         if (images is List && images.isNotEmpty && images.first is String)
           _imageUrl = images.first as String;
       });
     } catch (_) {}
+  }
+
+  String _activityDescription(Map<String, dynamic> activity) {
+    final answers = activity['answers'];
+    if (answers is List) {
+      for (final raw in answers.whereType<Map>()) {
+        final questionValue = raw['question'];
+        final question = questionValue is Map
+                ? questionValue['question']
+                : questionValue ?? raw['questionText'] ??
+            (raw['partner_service_questions'] is Map
+                ? raw['partner_service_questions']['question']
+                : null);
+        if (question.toString().trim().toLowerCase() == 'activity description') {
+          final answer = raw['answer'];
+          final text = answer is List ? answer.join(', ') : answer?.toString() ?? '';
+          if (text.trim().isNotEmpty) return text.trim();
+        }
+      }
+    }
+    return checkString(activity['description']);
   }
 
   void _backToActivities() {

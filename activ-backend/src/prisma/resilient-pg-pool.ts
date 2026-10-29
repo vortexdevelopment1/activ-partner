@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { Logger } from '@nestjs/common';
 
 const connectionCodes = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT',
@@ -21,6 +22,8 @@ type CheckoutCallback = (error: Error | undefined, client: PoolClient | undefine
 /** Verify pooled sockets before giving them to Prisma. Never replay application SQL. */
 export class ResilientPgPool extends Pool {
   private readonly checkedAt = new WeakMap<PoolClient, number>();
+  private readonly instrumentedClients = new WeakSet<PoolClient>();
+  private readonly perfLogger = new Logger('ACTIV_PERF');
   connect(): Promise<PoolClient>;
   connect(callback: CheckoutCallback): void;
   connect(callback?: CheckoutCallback): Promise<PoolClient> | void {
@@ -35,13 +38,20 @@ export class ResilientPgPool extends Pool {
   private async checkoutHealthyClient(): Promise<PoolClient> {
     for (let attempt = 0; ; attempt++) {
       let client: PoolClient | undefined;
+      const checkoutStarted = process.hrtime.bigint();
       try {
         client = await super.connect();
+        this.instrumentClient(client);
+        this.logTiming('db_pool_checkout', checkoutStarted, {
+          attempt, total: this.totalCount, idle: this.idleCount, waiting: this.waitingCount,
+        });
         // Avoid adding a network round trip to every query on a busy connection.
         if (Date.now() - (this.checkedAt.get(client) ?? 0) >= 5000) {
           const probe = { text: 'SELECT 1', query_timeout: 5000 };
+          const healthStarted = process.hrtime.bigint();
           await client.query(probe);
           this.checkedAt.set(client, Date.now());
+          this.logTiming('db_health_check', healthStarted, { attempt });
         }
         return client;
       } catch (error) {
@@ -54,5 +64,35 @@ export class ResilientPgPool extends Pool {
         await new Promise(resolve => setTimeout(resolve, 250));
       }
     }
+  }
+
+  private logTiming(event: string, started: bigint, fields: Record<string, number>): void {
+    if (process.env.PERF_LOGGING !== 'true') return;
+    const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
+    this.perfLogger.log([
+      `event=${event}`, `duration_ms=${durationMs.toFixed(1)}`,
+      ...Object.entries(fields).map(([key, value]) => `${key}=${value}`),
+    ].join(' '));
+  }
+
+  private instrumentClient(client: PoolClient): void {
+    if (process.env.PERF_LOGGING !== 'true' || this.instrumentedClients.has(client)) return;
+    this.instrumentedClients.add(client);
+    const originalQuery = client.query.bind(client) as (...args: any[]) => any;
+    client.query = ((...args: any[]) => {
+      const started = process.hrtime.bigint();
+      const result = originalQuery(...args);
+      if (!result || typeof result.then !== 'function') return result;
+      return result.then(
+        (value: unknown) => {
+          this.logTiming('db_query', started, { success: 1 });
+          return value;
+        },
+        (error: unknown) => {
+          this.logTiming('db_query_error', started, { success: 0 });
+          throw error;
+        },
+      );
+    }) as PoolClient['query'];
   }
 }

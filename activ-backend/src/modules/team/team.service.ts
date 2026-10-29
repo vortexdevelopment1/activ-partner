@@ -12,6 +12,7 @@ import { TeamMember, TeamMemberStatus } from "./entities/team-member.entity";
 import { CreateTeamMemberDto } from "./dto/create-team-member.dto";
 import { UpdateTeamMemberDto } from "./dto/update-team-member.dto";
 import { MailService } from "../mail/mail.service";
+import { PartnerRole } from "../../generated/prisma/client";
 
 @Injectable()
 export class TeamService {
@@ -86,6 +87,41 @@ export class TeamService {
       include: this.include,
     });
     return row ? this.toMember(row) : null;
+  }
+
+  /**
+   * Returns only normalized staff accounts.  A partner user is staff only when
+   * it has the staff role and an associated staff profile.  The caller must
+   * reject multiple matches rather than selecting one arbitrarily.
+   */
+  async findLoginCandidates(identifier: string, phoneValues: string[]) {
+    const rows = await this.prisma.partner_staff_profiles.findMany({
+      where: {
+        partner_users: {
+          role: PartnerRole.PARTNER_USER,
+          users: {
+            OR: [
+              { email: { equals: identifier, mode: "insensitive" } },
+              ...(phoneValues.length > 0
+                ? [{ phone_e164: { in: phoneValues } }]
+                : []),
+            ],
+          },
+        },
+      },
+      include: {
+        partner_users: {
+          include: { users: true, partners: true },
+        },
+      },
+    });
+
+    return rows.map((row) => ({
+      member: this.toMember(row),
+      passwordHash: row.partner_users.users.password_hash,
+      userStatus: row.partner_users.users.status,
+      partnerStatus: row.partner_users.partners.status,
+    }));
   }
 
   async create(
