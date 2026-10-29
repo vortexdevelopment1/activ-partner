@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import * as fs from "fs";
@@ -30,12 +31,18 @@ import { NotificationType } from "../notifications/entities/notification.entity"
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
 import { bookingHasEnded } from './booking-expiry';
+import { LegacySlotResolver } from './legacy-slot-resolver';
+import { NormalizedBookingHoldService } from './normalized-booking-hold.service';
+import { buildLegacyIdempotencyContext } from './legacy-idempotency';
+import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
+import { lockSlotsForCapacity } from './slot-capacity-coordinator';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
 
 @Injectable()
 export class BookingsService {
+  private readonly normalizedHoldService = new NormalizedBookingHoldService();
   constructor(
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
@@ -49,6 +56,7 @@ export class BookingsService {
     private readonly bankAccountRepository: Repository<BankAccount>,
     private readonly notificationsService: NotificationsService,
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   private businessDateKey(date = new Date()): string {
@@ -102,6 +110,101 @@ export class BookingsService {
     durationMinutes: number,
   ): number {
     return (pricePerHour / 60) * durationMinutes;
+  }
+
+  /**
+   * Inactive replacement for POST /bookings. The controller deliberately does
+   * not call this until all competing writers are cut over. A stable key is
+   * mandatory for this normalized path; legacy requests without one remain on
+   * the existing implementation and are not advertised as retry-idempotent.
+   */
+  async createNormalizedFromLegacy(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    idempotencyKey: string | undefined,
+    timezone = 'Asia/Kolkata',
+  ) {
+    const resolver = new LegacySlotResolver(this.prisma);
+    const resolved = await resolver.resolve(createBookingDto, timezone);
+    const identity = buildLegacyIdempotencyContext(createBookingDto, userId, resolved.slotId, { 'idempotency-key': idempotencyKey });
+    if (!identity.key) throw new ConflictException('Normalized booking requires an Idempotency-Key header');
+
+    const pending = await this.prisma.$transaction(async tx => {
+      const hold = await this.normalizedHoldService.createHold(
+        tx,
+        userId,
+        resolved.slotId,
+        identity.key!,
+        1,
+        10,
+        new Date(),
+        { venueId: resolved.venueId, serviceId: resolved.serviceId },
+      );
+      return this.normalizedHoldService.finalizeHoldToPendingBooking(tx, hold.id, new Date(), hold.expiresAt);
+    });
+    const record = await this.prisma.bookings.findUnique({
+      where: { id: pending.id },
+      include: this.normalizedBookingInclude,
+    });
+    if (!record) throw new NotFoundException('Booking was not created');
+    return this.mapNormalizedBooking(record);
+  }
+
+  private readonly normalizedBookingInclude = {
+    users: true,
+    slots: {
+      include: {
+        facilities: {
+          include: { venues: true, activities: true, partner_venue_services: true },
+        },
+      },
+    },
+    payments: { orderBy: { created_at: 'desc' as const }, take: 1 },
+  } as const;
+
+  private mapNormalizedBooking(record: any) {
+    const slot = record.slots;
+    const facility = slot.facilities;
+    const service = facility.partner_venue_services?.[0] ?? null;
+    const formatTime = (value: Date) => new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true,
+    }).format(value);
+    const formatDate = (value: Date) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(value);
+    const status = String(record.status).toLowerCase() === 'pending_payment'
+      ? BookingStatus.PENDING
+      : String(record.status).toLowerCase() as BookingStatus;
+    const paymentStatus = record.payments?.[0]?.status;
+    return {
+      id: record.id,
+      userId: record.user_id,
+      user: record.users,
+      venueId: facility.venue_id,
+      venue: facility.venues,
+      serviceId: service?.id ?? facility.activity_id,
+      service: service ? {
+        id: service.id,
+        name: service.title,
+        venueId: service.venue_id,
+        isActive: service.is_active,
+      } : { id: facility.activity_id, name: facility.activities?.name ?? facility.name, venueId: facility.venue_id },
+      categoryId: service?.service_category_id ?? null,
+      bookingDate: formatDate(slot.starts_at),
+      startTime: formatTime(slot.starts_at),
+      endTime: formatTime(slot.ends_at),
+      durationMinutes: Math.round((slot.ends_at.getTime() - slot.starts_at.getTime()) / 60000),
+      totalAmount: Number(record.total_paise) / 100,
+      subtotalAmount: Number(record.subtotal_paise) / 100,
+      discountAmount: Number(record.discount_paise) / 100,
+      status,
+      paymentStatus: paymentStatus ? String(paymentStatus).toLowerCase() : null,
+      cancellationReason: null,
+      notes: null,
+      bookingReference: record.booking_reference,
+      createdAt: record.created_at,
+      updatedAt: record.updated_at,
+    };
   }
 
   // Convert "09:00 AM" / "09:00 PM" → total minutes since midnight
@@ -314,16 +417,13 @@ export class BookingsService {
   }
 
   async findAll(pagination: PaginationDto, status?: BookingStatus) {
-    const where: any = {};
-    if (status) where.status = status;
-
-    return this.bookingRepository.findAndCount({
-      where,
-      relations: ["user", "venue", "service"],
-      skip: pagination.skip,
-      take: pagination.limit,
-      order: { createdAt: "DESC" },
-    });
+    const normalizedStatus = status === BookingStatus.PENDING ? 'PENDING_PAYMENT' : status?.toUpperCase();
+    const where = normalizedStatus ? { status: normalizedStatus as any } : {};
+    const [items, total] = await Promise.all([
+      this.prisma.bookings.findMany({ where, include: this.normalizedBookingInclude, skip: pagination.skip, take: pagination.limit, orderBy: { created_at: 'desc' } }),
+      this.prisma.bookings.count({ where }),
+    ]);
+    return [items.map((item) => this.mapNormalizedBooking(item)), total] as const;
   }
 
   async findByUser(
@@ -331,16 +431,14 @@ export class BookingsService {
     pagination: PaginationDto,
     status?: BookingStatus,
   ) {
-    const where: any = { userId };
-    if (status) where.status = status;
-
-    return this.bookingRepository.findAndCount({
-      where,
-      relations: ["venue", "service", "venue.images"],
-      skip: pagination.skip,
-      take: pagination.limit,
-      order: { createdAt: "DESC" },
-    });
+    const normalizedStatus = status === BookingStatus.PENDING ? 'PENDING_PAYMENT' : status?.toUpperCase();
+    const where: any = { user_id: userId };
+    if (normalizedStatus) where.status = normalizedStatus;
+    const [items, total] = await Promise.all([
+      this.prisma.bookings.findMany({ where, include: this.normalizedBookingInclude, skip: pagination.skip, take: pagination.limit, orderBy: { created_at: 'desc' } }),
+      this.prisma.bookings.count({ where }),
+    ]);
+    return [items.map((item) => this.mapNormalizedBooking(item)), total] as const;
   }
 
   async findByVenue(
@@ -348,16 +446,22 @@ export class BookingsService {
     pagination: PaginationDto,
     status?: BookingStatus,
   ) {
-    const where: any = { venueId };
-    if (status) where.status = status;
+    const normalizedStatus = status === BookingStatus.PENDING ? 'PENDING_PAYMENT' : status?.toUpperCase();
+    const where: any = { slots: { facilities: { venue_id: venueId } } };
+    if (normalizedStatus) where.status = normalizedStatus;
+    const [items, total] = await Promise.all([
+      this.prisma.bookings.findMany({ where, include: this.normalizedBookingInclude, skip: pagination.skip, take: pagination.limit, orderBy: { starts_at: 'desc' } }),
+      this.prisma.bookings.count({ where }),
+    ]);
+    return [items.map((item) => this.mapNormalizedBooking(item)), total] as const;
+  }
 
-    return this.bookingRepository.findAndCount({
-      where,
-      relations: ["user", "service"],
-      skip: pagination.skip,
-      take: pagination.limit,
-      order: { bookingDate: "DESC" },
+  async findOneForRead(id: string) {
+    const booking = await this.prisma.bookings.findUnique({
+      where: { id }, include: this.normalizedBookingInclude,
     });
+    if (!booking) throw new NotFoundException(`Booking with id ${id} not found`);
+    return this.mapNormalizedBooking(booking);
   }
 
   async findOne(id: string): Promise<Booking> {
@@ -375,9 +479,9 @@ export class BookingsService {
 
   async findByReference(reference: string): Promise<Booking> {
     const normalizedReference = reference.trim().toUpperCase();
-    const booking = await this.bookingRepository.findOne({
-      where: { bookingReference: normalizedReference },
-      relations: ["user", "venue", "service"],
+    const booking = await this.prisma.bookings.findUnique({
+      where: { booking_reference: normalizedReference },
+      include: this.normalizedBookingInclude,
     });
 
     if (!booking) {
@@ -386,7 +490,7 @@ export class BookingsService {
       );
     }
 
-    return booking;
+    return this.mapNormalizedBooking(booking) as unknown as Booking;
   }
 
   async cancel(
@@ -394,6 +498,9 @@ export class BookingsService {
     reason: string,
     currentUser: User,
   ): Promise<Booking> {
+    if (normalizedBookingRoutesEnabled(this.config)) {
+      return this.cancelNormalized(id, reason, currentUser) as unknown as Booking;
+    }
     const booking = await this.findOne(id);
 
     if (
@@ -416,7 +523,39 @@ export class BookingsService {
     return this.bookingRepository.save(booking);
   }
 
+  /** Default-off normalized cancellation path; legacy cancellation remains authoritative. */
+  private async cancelNormalized(id: string, reason: string, currentUser: User) {
+    return this.prisma.$transaction(async tx => {
+      const booking = await tx.bookings.findUnique({ where: { id }, include: { slots: true } });
+      if (!booking) throw new NotFoundException('Booking not found');
+      if (currentUser.role === UserRole.USER && booking.user_id !== currentUser.id) {
+        throw new ForbiddenException('You can only cancel your own bookings');
+      }
+      if (booking.status === 'CANCELLED') throw new BadRequestException('Booking is already cancelled');
+      if (booking.status === 'COMPLETED') throw new BadRequestException('Cannot cancel a completed booking');
+      await lockSlotsForCapacity(tx, [booking.slot_id]);
+      await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${booking.id}::uuid FOR UPDATE`;
+      const updated = await tx.bookings.updateMany({
+        where: { id, status: { not: 'CANCELLED' } },
+        data: { status: 'CANCELLED', updated_at: new Date() },
+      });
+      if (updated.count !== 1) throw new ConflictException('Booking changed during cancellation');
+      if (booking.attempt_id) {
+        await tx.booking_attempts.updateMany({
+          where: { id: booking.attempt_id, status: { in: ['HELD', 'PAYMENT_PROCESSING', 'CONSUMED'] } },
+          data: { status: 'RELEASED', updated_at: new Date() },
+        });
+      }
+      const record = await tx.bookings.findUnique({ where: { id }, include: this.normalizedBookingInclude });
+      if (!record) throw new NotFoundException('Booking not found');
+      return this.mapNormalizedBooking(record);
+    });
+  }
+
   async confirm(id: string): Promise<Booking> {
+    if (normalizedBookingRoutesEnabled(this.config)) {
+      throw new ConflictException('Administrative confirmation is not a payment confirmation; use verified payment capture');
+    }
     const booking = await this.findOne(id);
     booking.status = BookingStatus.CONFIRMED;
     const saved = await this.bookingRepository.save(booking);
@@ -527,24 +666,15 @@ export class BookingsService {
   }
 
   async getBookingStats(partnerId?: string) {
-    const query = this.bookingRepository.createQueryBuilder("booking");
-
-    if (partnerId) {
-      query
-        .innerJoin("booking.venue", "venue")
-        .where("venue.partnerId = :partnerId", { partnerId });
-    }
-
-    const total = await query.getCount();
-    const pending = await this.bookingRepository.count({
-      where: partnerId ? {} : { status: BookingStatus.PENDING },
-    });
-    const confirmed = await this.bookingRepository.count({
-      where: { status: BookingStatus.CONFIRMED },
-    });
-    const completed = await this.bookingRepository.count({
-      where: { status: BookingStatus.COMPLETED },
-    });
+    const scope: any = partnerId
+      ? { slots: { facilities: { venues: { partner_id: partnerId } } } }
+      : {};
+    const [total, pending, confirmed, completed] = await Promise.all([
+      this.prisma.bookings.count({ where: scope }),
+      this.prisma.bookings.count({ where: { ...scope, status: 'PENDING_PAYMENT' } }),
+      this.prisma.bookings.count({ where: { ...scope, status: 'CONFIRMED' } }),
+      this.prisma.bookings.count({ where: { ...scope, status: 'COMPLETED' } }),
+    ]);
 
     return { total, pending, confirmed, completed };
   }

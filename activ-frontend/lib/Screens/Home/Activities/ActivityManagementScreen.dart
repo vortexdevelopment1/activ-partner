@@ -943,12 +943,13 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: _text('Activity Status', bold: true)),
-          _badge(_active ? 'ACTIV' : _status, _active ? Colors.green : _purple)
+          _badge(_active ? 'ACTIV' : _status == 'Inactive' ? 'InACTIV' : _status,
+              _active ? const Color(0xFF16A34A) : const Color(0xFFE53935))
         ]),
         const SizedBox(height: 10),
         _text(
             _active
-                ? 'This activity is ACTIV and accepting bookings.'
+                    ? 'This activity is ACTIV and accepting bookings.'
                 : _status == 'Inactive'
                     ? 'This activity is InACTIV and not accepting new bookings.'
                     : 'This activity is $_status and is not accepting bookings.',

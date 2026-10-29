@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
@@ -40,6 +40,8 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { PerformanceInterceptor } from './common/interceptors/performance.interceptor';
+import { PerformanceTimingMiddleware } from './common/middleware/performance-timing.middleware';
 
 @Module({
   imports: [
@@ -106,9 +108,18 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       useClass: AuditLogInterceptor,
     },
     {
+      provide: APP_INTERCEPTOR,
+      useClass: PerformanceInterceptor,
+    },
+    {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(PerformanceTimingMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

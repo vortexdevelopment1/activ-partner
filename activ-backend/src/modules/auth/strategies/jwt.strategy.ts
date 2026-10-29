@@ -2,10 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { UsersService } from '../../users/users.service';
-import { TeamMember } from '../../team/entities/team-member.entity';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { databaseRead } from '../../../prisma/database-read';
 
@@ -15,8 +12,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     configService: ConfigService,
     private usersService: UsersService,
     private prisma: PrismaService,
-    @InjectRepository(TeamMember)
-    private teamMemberRepository: Repository<TeamMember>,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

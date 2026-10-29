@@ -34,10 +34,10 @@ describe('merged facility slot availability', () => {
 
   it('keeps walk-in reservations unavailable when facility slots exist', async () => {
     const { prisma, load } = setup();
-    // Walk-in records currently store the selected wall-clock time in UTC fields.
+    // Walk-in records store India wall-clock time as the corresponding UTC instant.
     prisma.partner_walk_in_reservations.findMany.mockResolvedValue([{
-      id: 'reservation', starts_at: new Date('2030-01-01T06:00:00Z'),
-      ends_at: new Date('2030-01-01T07:00:00Z'),
+      id: 'reservation', starts_at: new Date('2030-01-01T00:30:00Z'),
+      ends_at: new Date('2030-01-01T01:30:00Z'),
     }]);
     expect((await load()).slots[0]).toMatchObject({ status: 'walk_in_reserved', reservationId: 'reservation' });
   });

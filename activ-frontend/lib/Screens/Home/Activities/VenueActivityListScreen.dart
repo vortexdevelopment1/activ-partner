@@ -599,7 +599,7 @@ class _State extends State<VenueActivityListScreen> {
                           size: 18, color: Color(0xFF777777)),
                     ]),
                     const SizedBox(height: 3),
-                    Text(activity.description,
+                    Text('${activity.title} Court Bookings',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

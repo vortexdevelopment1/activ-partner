@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -9,6 +10,7 @@ import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
 
 import '../../Utills/common_utilities.dart';
+import '../../Utills/performance_logger.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../CommonCode.dart';
@@ -18,6 +20,7 @@ import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
 import 'ManageBookingsScreen.dart';
+import 'BankAccountScreen.dart';
 import 'ManagerHomeScreen.dart';
 import 'dashboard_setup_cards.dart';
 import 'NotificationsScreen.dart';
@@ -86,7 +89,7 @@ class _State extends State<HomeScreen> {
 
   /// Toggle: true = approved venue (screenshot 1), false = new venue (screenshot 2)
   bool _isApproved = false;
-  bool _needsPricing = false, _needsTeam = false;
+  bool _needsPricing = false, _needsTeam = false, _needsBankAccount = false;
   String? _setupError;
   bool _dashboardLoading = false;
 
@@ -150,9 +153,16 @@ class _State extends State<HomeScreen> {
   }
 
   Future<void> _fetchVenueName() async {
+    final requestId = PerformanceLogger.id();
+    final started = DateTime.now();
+    PerformanceLogger.apiStart(requestId, 'GET', MY_APPROVED_VENUES_URL, 1);
     try {
       final token = checkString(await SharedPreference.readStr('jwt_token'));
-      if (token.isEmpty) return;
+      if (token.isEmpty) {
+        PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
+            DateTime.now().difference(started).inMilliseconds, 'auth_missing');
+        return;
+      }
 
       final res = await (widget.client?.get ?? http.get)(
         Uri.parse(MY_APPROVED_VENUES_URL),
@@ -160,6 +170,9 @@ class _State extends State<HomeScreen> {
       ).timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200 || res.statusCode == 201) {
+        PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
+            DateTime.now().difference(started).inMilliseconds, 'success',
+            status: res.statusCode, bytes: res.bodyBytes.length);
         final body = jsonDecode(res.body);
         final List items = (body['data'] is List) ? body['data'] : [];
         if (items.isNotEmpty) {
@@ -185,6 +198,7 @@ class _State extends State<HomeScreen> {
             _isApproved = false;
             _needsPricing = false;
             _needsTeam = false;
+            _needsBankAccount = false;
             _setupError = null;
             _approvedStats = _emptyStats();
             _bookings = const [];
@@ -197,10 +211,25 @@ class _State extends State<HomeScreen> {
           final data = jsonDecode(team.body)['data'] as List;
           if (mounted) setState(() => _needsTeam = data.isEmpty);
         }
+        if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
+          final accounts = await (widget.client?.get ?? http.get)(
+            Uri.parse('$BASE_URL/bank-accounts/my'),
+            headers: {'Authorization': 'Bearer $token'},
+          ).timeout(const Duration(seconds: 15));
+          if (accounts.statusCode != 200) throw Exception('Unable to check bank account setup.');
+          final accountData = jsonDecode(accounts.body)['data'];
+          if (mounted) setState(() => _needsBankAccount = accountData is List && accountData.isEmpty);
+        }
       } else {
+        PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
+            DateTime.now().difference(started).inMilliseconds, 'http_error',
+            status: res.statusCode, bytes: res.bodyBytes.length);
         throw Exception('Unable to check venue setup.');
       }
     } catch (e) {
+      PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
+          DateTime.now().difference(started).inMilliseconds,
+          e is TimeoutException ? 'timeout' : 'network_error');
       CommonUtilities.showLog('_fetchVenueName error: $e');
       if (mounted) setState(() => _setupError = 'Unable to check setup.');
     }
@@ -493,8 +522,10 @@ class _State extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       if (_isPartner && _isApproved) DashboardSetupCards(
                         pricingRequired: _needsPricing, teamRequired: _needsTeam,
+                        bankAccountRequired: _needsBankAccount,
                         onPricing: () => _openSetup(ManagePricingScreen(client: widget.client)),
                         onTeam: () => _openSetup(ManageTeamScreen(client: widget.client)),
+                        onBankAccount: () => _openSetup(BankAccountScreen(client: widget.client)),
                       ),
                       if (_isPartner && _setupError != null) TextButton.icon(
                         onPressed: _fetchVenueName, icon: const Icon(Icons.refresh), label: Text('$_setupError Retry')),
@@ -945,29 +976,35 @@ class _State extends State<HomeScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3E8FD),
+                  color: _isBookingsPaused
+                      ? const Color(0xFFFDECEC)
+                      : const Color(0xFFE8F7EC),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('ACTIV',
+                child: Text(_isBookingsPaused ? 'InACTIV' : 'ACTIV',
                     style: TextStyle(
                         fontSize: 12,
                         fontFamily: 'Satoshi',
                         fontWeight: FontWeight.w700,
                         height: 1.333, // 16px / 12px
                         letterSpacing: 0,
-                        color: Color(0xFF9D38EB))),
+                        color: _isBookingsPaused
+                            ? const Color(0xFFE53935)
+                            : const Color(0xFF16A34A))),
               ),
             ],
           ),
-          Text.rich(TextSpan(style: base.merge(medium), children: const [
-            TextSpan(text: 'Your venue is '),
-            TextSpan(text: 'ACTIV', style: bold),
-            TextSpan(text: ' and is accepting bookings.'),
+          Text.rich(TextSpan(style: base.merge(medium), children: [
+            const TextSpan(text: 'Your venue is '),
+            TextSpan(text: _isBookingsPaused ? 'InACTIV' : 'ACTIV', style: bold),
+            TextSpan(text: _isBookingsPaused
+                ? ' and is not accepting new bookings.'
+                : ' and is accepting bookings.'),
           ])),
-          Text.rich(TextSpan(style: base.merge(medium), children: const [
-            TextSpan(text: 'Go '),
-            TextSpan(text: 'InACTIV', style: bold),
-            TextSpan(text: ' and temporarily stop accepting bookings?'),
+          Text.rich(TextSpan(style: base.merge(medium), children: [
+            const TextSpan(text: 'Go '),
+            const TextSpan(text: 'InACTIV', style: bold),
+            const TextSpan(text: ' and temporarily stop accepting bookings?'),
           ])),
           OutlinedButton.icon(
             onPressed: _pausing ? null : () {

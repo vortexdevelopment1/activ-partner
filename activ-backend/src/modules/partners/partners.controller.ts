@@ -12,11 +12,10 @@ import {
   HttpCode,
   HttpStatus,
   UploadedFile,
-  UploadedFiles,
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -112,58 +111,6 @@ export class PartnersController {
     return { message: 'Avatar removed successfully', data };
   }
 
-  @Patch('legal')
-  @Roles(UserRole.PARTNER)
-  @ApiOperation({
-    summary: 'Update legal documents (Partner only — post-approval)',
-    description: 'All fields and files are optional. Only provided values are overwritten.',
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        aadhaarName:   { type: 'string', example: 'Virat Kohli' },
-        aadhaarNumber: { type: 'string', example: '1234-5678-9101' },
-        panNumber:     { type: 'string', example: 'ABCDE1234F' },
-        gstNumber:     { type: 'string', example: '27AAPFU0939F1ZV' },
-        gstName:       { type: 'string', example: 'Acme Fitness Pvt Ltd' },
-        panCard:       { type: 'string', format: 'binary' },
-        aadhaarCard:   { type: 'string', format: 'binary' },
-        gstinDoc:      { type: 'string', format: 'binary' },
-      },
-    },
-  })
-  @UseInterceptors(FileFieldsInterceptor(
-    [
-      { name: 'panCard', maxCount: 1 },
-      { name: 'aadhaarCard', maxCount: 1 },
-      { name: 'gstinDoc', maxCount: 1 },
-    ],
-    {
-      storage: memoryStorage(),
-    },
-  ))
-  async updateLegal(
-    @CurrentUser() partner: Partner,
-    @Body() body: { aadhaarName?: string; aadhaarNumber?: string; panNumber?: string; gstNumber?: string; gstName?: string },
-    @UploadedFiles() files: { panCard?: Express.Multer.File[]; aadhaarCard?: Express.Multer.File[]; gstinDoc?: Express.Multer.File[] },
-  ) {
-    const fields: Record<string, string> = {};
-
-    if (body.aadhaarName)   fields.aadhaarName   = body.aadhaarName;
-    if (body.aadhaarNumber) fields.aadhaarNumber = body.aadhaarNumber;
-    if (body.panNumber)     fields.panNumber     = body.panNumber;
-    if (body.gstNumber)     fields.gstNumber     = body.gstNumber;
-    if (body.gstName)       fields.gstName       = body.gstName;
-    if (files?.panCard?.[0])     fields.panCardUrl     = await this.cloudinaryService.uploadFile(files.panCard[0], 'activ/legal', 'auto');
-    if (files?.aadhaarCard?.[0]) fields.aadhaarCardUrl = await this.cloudinaryService.uploadFile(files.aadhaarCard[0], 'activ/legal', 'auto');
-    if (files?.gstinDoc?.[0])    fields.gstinDocUrl    = await this.cloudinaryService.uploadFile(files.gstinDoc[0], 'activ/legal', 'auto');
-
-    const data = await this.partnersService.updateLegalInfo(partner.id, fields);
-    return { message: 'Legal information updated successfully', data };
-  }
-
   @Patch('profile')
   @Roles(UserRole.PARTNER)
   @ApiOperation({ summary: 'Update own partner profile' })
@@ -184,14 +131,6 @@ export class PartnersController {
   ) {
     const data = await this.partnersService.update(id, updatePartnerDto);
     return { message: 'Partner updated successfully', data };
-  }
-
-  @Patch(':id/verify')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Verify partner (Admin only)' })
-  async verify(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.partnersService.verify(id);
-    return { message: 'Partner verified successfully', data };
   }
 
   @Patch(':id/toggle-status')
@@ -314,8 +253,8 @@ export class PartnersController {
   @ApiOperation({
     summary: 'Approve GST verification — writes to partner row and deletes request (Admin only)',
   })
-  async approveGstVerification(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.partnersService.approveGstVerification(id);
+  async approveGstVerification(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() admin: any) {
+    const data = await this.partnersService.approveGstVerification(id, admin.id);
     return { message: 'GST verification approved and partner updated successfully', data };
   }
 

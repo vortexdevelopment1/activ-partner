@@ -3,11 +3,10 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Partner } from './entities/partner.entity';
+import type { Partner } from './entities/partner.entity';
 import {
   GstVerificationRequest,
   GstVerificationStatus,
@@ -15,12 +14,6 @@ import {
 import { SubmitGstVerificationDto } from './dto/submit-gst-verification.dto';
 import { ReviewGstVerificationDto } from './dto/review-gst-verification.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import { Venue } from '../venues/entities/venue.entity';
-import { VenueImage } from '../venues/entities/venue-image.entity';
-import { VenueService as VenueServiceEntity } from '../venues/entities/venue-service.entity';
-import { VenueAnswer } from '../venues/entities/venue-answer.entity';
-import { Booking } from '../bookings/entities/booking.entity';
-import { Payment } from '../payments/entities/payment.entity';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
@@ -28,28 +21,11 @@ import { AdminNotificationType } from '../admin-notifications/entities/admin-not
 import { PrismaService } from '../../prisma/prisma.service';
 import { deletePartnerAccount } from './delete-partner-account';
 import { MailService } from '../mail/mail.service';
-import { PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
+import { PartnerKycStatus, PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
 
 @Injectable()
 export class PartnersService {
   constructor(
-    @InjectRepository(Partner)
-    private readonly partnerRepository: Repository<Partner>,
-    @InjectRepository(GstVerificationRequest)
-    private readonly gstVerificationRepo: Repository<GstVerificationRequest>,
-    @InjectRepository(Venue)
-    private readonly venueRepository: Repository<Venue>,
-    @InjectRepository(VenueImage)
-    private readonly venueImageRepository: Repository<VenueImage>,
-    @InjectRepository(VenueServiceEntity)
-    private readonly venueServiceRepository: Repository<VenueServiceEntity>,
-    @InjectRepository(VenueAnswer)
-    private readonly venueAnswerRepository: Repository<VenueAnswer>,
-    @InjectRepository(Booking)
-    private readonly bookingRepository: Repository<Booking>,
-    @InjectRepository(Payment)
-    private readonly paymentRepository: Repository<Payment>,
-    private readonly dataSource: DataSource,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
@@ -250,14 +226,20 @@ export class PartnersService {
     return [items, total] as const;
   }
 
-  async findOne(id: string): Promise<Partner> {
-    const partner = await this.partnerRepository.findOne({ where: { id } });
-
-    if (!partner) {
-      throw new NotFoundException(`Partner with id ${id} not found`);
-    }
-
-    return partner;
+  async findOne(id: string) {
+    const partner = await this.prisma.partners.findUnique({
+      where: { id },
+      include: {
+        partner_business_profiles: true,
+        partner_users: {
+          where: { role: PartnerRole.PARTNER_ADMIN },
+          include: { users: true },
+        },
+        _count: { select: { venues: true } },
+      },
+    });
+    if (!partner) throw new NotFoundException(`Partner with id ${id} not found`);
+    return this.mapPrismaPartner(partner);
   }
 
   private mapPrismaPartner(partner: any) {
@@ -284,7 +266,36 @@ export class PartnersService {
       venueCount: partner._count?.venues ?? 0,
       createdAt: partner.created_at,
       updatedAt: partner.updated_at,
+      // These fields existed only on the legacy entity. Keep stable keys for
+      // old clients, but never invent values from unrelated tables.
+      businessDescription: null,
+      country: null,
+      contactPhone: profile?.phone_e164 ?? owner?.phone_e164 ?? null,
+      gstinDocUrl: profile?.gst_document_url ?? null,
+      panCardUrl: profile?.pan_document_url ?? null,
+      aadhaarName: null,
+      aadhaarNumber: null,
+      aadhaarCardUrl: null,
+      bankAccountNumber: null,
+      bankIfscCode: null,
+      bankAccountHolderName: null,
+      logoUrl: null,
+      documents: null,
     };
+  }
+
+  private mapPrismaGstVerification(request: any): GstVerificationRequest {
+    return {
+      id: request.id,
+      partnerId: request.partner_id,
+      gstNumber: request.gst_number,
+      gstName: request.legal_name,
+      gstDocUrl: request.document_url,
+      status: String(request.status).toLowerCase() as GstVerificationStatus,
+      adminNotes: request.rejection_reason,
+      createdAt: request.created_at,
+      updatedAt: request.updated_at,
+    } as GstVerificationRequest;
   }
 
   async update(id: string, updatePartnerDto: UpdatePartnerDto): Promise<any> {
@@ -318,9 +329,93 @@ export class PartnersService {
       return mapped;
     }
 
-    const partner = await this.findOne(id);
-    Object.assign(partner, updatePartnerDto);
-    return this.partnerRepository.save(partner);
+    const unsupported = [
+      'businessDescription', 'country', 'gstinDocUrl', 'panCardUrl',
+      'aadhaarName', 'aadhaarNumber', 'aadhaarCardUrl', 'bankAccountNumber',
+      'bankIfscCode', 'bankAccountHolderName', 'isVerified',
+    ].filter((field) => (updatePartnerDto as any)[field] !== undefined);
+    if (unsupported.length > 0) {
+      throw new BadRequestException(`Unsupported partner profile fields: ${unsupported.join(', ')}`);
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.partners.findUnique({
+        where: { id },
+        include: {
+          partner_business_profiles: true,
+          partner_users: { where: { role: PartnerRole.PARTNER_ADMIN }, include: { users: true } },
+        },
+      });
+      if (!current) throw new NotFoundException(`Partner with id ${id} not found`);
+      const ownerLink = current.partner_users[0];
+      if (!ownerLink) throw new NotFoundException('Partner owner not found');
+
+      const currentName = (ownerLink.users.name || '').trim().split(/\s+/).filter(Boolean);
+      const firstName = updatePartnerDto.firstName?.trim() ?? currentName[0] ?? '';
+      const lastName = updatePartnerDto.lastName?.trim() ?? currentName.slice(1).join(' ');
+      const nextName = [firstName, lastName].filter(Boolean).join(' ') || null;
+      const nextEmail = updatePartnerDto.email?.trim().toLowerCase();
+      const nextPhone = updatePartnerDto.phone ? this.normalizePhone(updatePartnerDto.phone) : undefined;
+
+      if (nextEmail && nextEmail !== (ownerLink.users.email || '').toLowerCase()) {
+        const emailOwner = await tx.users.findFirst({
+          where: { email: { equals: nextEmail, mode: 'insensitive' }, id: { not: ownerLink.user_id } },
+          select: { id: true },
+        });
+        if (emailOwner) throw new ConflictException('Email is already registered');
+      }
+      if (nextPhone && nextPhone !== ownerLink.users.phone_e164) {
+        const phoneOwner = await tx.users.findUnique({ where: { phone_e164: nextPhone }, select: { id: true } });
+        if (phoneOwner && phoneOwner.id !== ownerLink.user_id) throw new ConflictException('Phone number is already registered');
+      }
+
+      const user = await tx.users.update({
+        where: { id: ownerLink.user_id },
+        data: {
+          ...(nextName !== null ? { name: nextName } : {}),
+          ...(nextEmail !== undefined ? { email: nextEmail } : {}),
+          ...(nextPhone !== undefined ? { phone_e164: nextPhone } : {}),
+          updated_at: new Date(),
+        },
+      });
+      const profile = await tx.partner_business_profiles.upsert({
+        where: { partner_id: id },
+        create: {
+          id: randomUUID(), partner_id: id,
+          business_name: updatePartnerDto.businessName?.trim() || current.legal_name,
+          owner_name: nextName, email: nextEmail ?? user.email, phone_e164: nextPhone ?? user.phone_e164,
+          address_line_1: updatePartnerDto.businessAddress?.trim() || null,
+          city: updatePartnerDto.city?.trim() || null, state: updatePartnerDto.state?.trim() || null,
+          postal_code: updatePartnerDto.zipCode?.trim() || null, updated_at: new Date(),
+        },
+        update: {
+          ...(updatePartnerDto.businessName !== undefined ? { business_name: updatePartnerDto.businessName.trim() } : {}),
+          owner_name: nextName,
+          ...(nextEmail !== undefined ? { email: nextEmail } : {}),
+          ...(nextPhone !== undefined ? { phone_e164: nextPhone } : {}),
+          ...(updatePartnerDto.businessAddress !== undefined ? { address_line_1: updatePartnerDto.businessAddress.trim() } : {}),
+          ...(updatePartnerDto.city !== undefined ? { city: updatePartnerDto.city.trim() } : {}),
+          ...(updatePartnerDto.state !== undefined ? { state: updatePartnerDto.state.trim() } : {}),
+          ...(updatePartnerDto.zipCode !== undefined ? { postal_code: updatePartnerDto.zipCode.trim() } : {}),
+          updated_at: new Date(),
+        },
+      });
+      const partner = await tx.partners.update({
+        where: { id },
+        data: {
+          ...(updatePartnerDto.businessName !== undefined ? { legal_name: updatePartnerDto.businessName.trim() } : {}),
+          updated_at: new Date(),
+        },
+      });
+      return { partner, user, profile };
+    });
+
+    return this.mapPrismaPartner({
+      ...result.partner,
+      partner_business_profiles: result.profile,
+      partner_users: [{ users: result.user }],
+      _count: { venues: 0 },
+    });
   }
 
   async updateOwnProfile(id: string, updatePartnerDto: UpdatePartnerDto): Promise<Partner> {
@@ -349,18 +444,6 @@ export class PartnersService {
     });
   }
 
-  async verify(id: string): Promise<Partner> {
-    const partner = await this.findOne(id);
-    partner.isVerified = true;
-    return this.partnerRepository.save(partner);
-  }
-
-  async updateLogo(partnerId: string, logoUrl: string): Promise<Partner> {
-    const partner = await this.findOne(partnerId);
-    partner.logoUrl = logoUrl;
-    return this.partnerRepository.save(partner);
-  }
-
   async updateAvatar(partnerId: string, avatarUrl: string): Promise<Partner> {
     const owner = await this.prisma.partner_users.findFirst({
       where: { partner_id: partnerId, role: 'PARTNER_ADMIN' },
@@ -384,53 +467,6 @@ export class PartnersService {
     return { id: partnerId, avatarUrl: '' } as Partner;
   }
 
-  async updateLegalInfo(
-    partnerId: string,
-    fields: {
-      aadhaarName?: string;
-      aadhaarNumber?: string;
-      panNumber?: string;
-      gstNumber?: string;
-      gstName?: string;
-      panCardUrl?: string;
-      aadhaarCardUrl?: string;
-      gstinDocUrl?: string;
-    },
-  ): Promise<Partner> {
-    const partner = await this.findOne(partnerId);
-
-    // ── Regular fields via entity save ───────────────────────────────────────
-    let aadhaarTouched = false;
-    let panTouched     = false;
-    let gstTouched     = false;
-
-    if (fields.aadhaarName !== undefined)    { partner.aadhaarName    = fields.aadhaarName;    aadhaarTouched = true; }
-    if (fields.aadhaarNumber !== undefined)  { partner.aadhaarNumber  = fields.aadhaarNumber;  aadhaarTouched = true; }
-    if (fields.aadhaarCardUrl !== undefined) { partner.aadhaarCardUrl = fields.aadhaarCardUrl; aadhaarTouched = true; }
-    if (fields.panNumber !== undefined)      { partner.panNumber      = fields.panNumber;       panTouched = true; }
-    if (fields.panCardUrl !== undefined)     { partner.panCardUrl     = fields.panCardUrl;      panTouched = true; }
-    if (fields.gstNumber !== undefined)      { partner.gstNumber      = fields.gstNumber;       gstTouched = true; }
-    if (fields.gstName !== undefined)        { partner.gstName        = fields.gstName;         gstTouched = true; }
-    if (fields.gstinDocUrl !== undefined)    { partner.gstinDocUrl    = fields.gstinDocUrl;     gstTouched = true; }
-
-    await this.partnerRepository.save(partner);
-
-    // ── Timestamp columns via raw SQL (bypasses TypeORM change detection) ────
-    const setClauses: string[] = [];
-    if (aadhaarTouched) setClauses.push(`aadhaar_verified_at = NOW()`);
-    if (panTouched)     setClauses.push(`pan_verified_at     = NOW()`);
-    if (gstTouched)     setClauses.push(`gst_verified_at     = NOW()`);
-
-    if (setClauses.length > 0) {
-      await this.dataSource.query(
-        `UPDATE partners SET ${setClauses.join(', ')} WHERE id = $1`,
-        [partnerId],
-      );
-    }
-
-    return this.findOne(partnerId);
-  }
-
   async deleteAccount(partnerId: string): Promise<void> {
     await this.prisma.$transaction(
       (tx) => deletePartnerAccount(tx, partnerId),
@@ -445,97 +481,158 @@ export class PartnersService {
     dto: SubmitGstVerificationDto,
     gstDocFile?: Express.Multer.File,
   ): Promise<GstVerificationRequest> {
-    const existing = await this.gstVerificationRepo.findOne({
-      where: { partnerId, status: GstVerificationStatus.PENDING },
-    });
-
-    if (existing) {
-      throw new ConflictException(
-        'You already have a pending GST verification request. Please wait for admin review.',
-      );
-    }
-
     const gstDocUrl = gstDocFile
       ? ((gstDocFile as Express.Multer.File & { cloudinaryUrl?: string }).cloudinaryUrl ?? null)
       : null;
 
-    const request = this.gstVerificationRepo.create({ partnerId, ...dto, gstDocUrl });
-    const saved = await this.gstVerificationRepo.save(request);
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.partner_gst_verification_requests.findFirst({
+        where: { partner_id: partnerId, status: PartnerKycStatus.PENDING },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'You already have a pending GST verification request. Please wait for admin review.',
+        );
+      }
+      return tx.partner_gst_verification_requests.create({
+        data: {
+          id: randomUUID(),
+          partner_id: partnerId,
+          gst_number: dto.gstNumber,
+          legal_name: dto.gstName,
+          document_url: gstDocUrl,
+          status: PartnerKycStatus.PENDING,
+          updated_at: new Date(),
+        },
+      });
+    }, { isolationLevel: 'Serializable', maxWait: 10000, timeout: 30000 });
     await this.adminNotificationsService.notify(
       AdminNotificationType.GST_VERIFICATION_SUBMITTED,
       'GST verification submitted',
       'A partner submitted GST details for review.',
       { partnerId, gstVerificationId: saved.id },
     );
-    return saved;
+    return this.mapPrismaGstVerification(saved);
   }
 
   async findMyGstVerification(partnerId: string): Promise<GstVerificationRequest> {
-    return this.gstVerificationRepo.findOne({
-      where: { partnerId },
-      order: { createdAt: 'DESC' },
+    const request = await this.prisma.partner_gst_verification_requests.findFirst({
+      where: { partner_id: partnerId },
+      orderBy: { created_at: 'desc' },
     });
+    return request ? this.mapPrismaGstVerification(request) : null;
   }
 
   async findAllGstVerifications(
     pagination: PaginationDto,
     status?: GstVerificationStatus,
   ): Promise<[GstVerificationRequest[], number]> {
-    const qb = this.gstVerificationRepo
-      .createQueryBuilder('gst')
-      .orderBy('gst.createdAt', 'DESC');
-
-    if (status) {
-      qb.andWhere({ status });
-    }
-
+    const where: any = {};
+    if (status) where.status = status.toUpperCase();
     if (pagination.search) {
-      qb.andWhere(
-        '(gst.gstNumber ILIKE :search OR gst.gstName ILIKE :search)',
-        { search: `%${pagination.search}%` },
-      );
+      where.OR = [
+        { gst_number: { contains: pagination.search, mode: 'insensitive' } },
+        { legal_name: { contains: pagination.search, mode: 'insensitive' } },
+      ];
     }
-
-    qb.skip(pagination.skip).take(pagination.limit);
-    return qb.getManyAndCount();
+    const [requests, total] = await Promise.all([
+      this.prisma.partner_gst_verification_requests.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      this.prisma.partner_gst_verification_requests.count({ where }),
+    ]);
+    return [requests.map((request) => this.mapPrismaGstVerification(request)), total];
   }
 
   async findOneGstVerification(id: string): Promise<GstVerificationRequest> {
-    const request = await this.gstVerificationRepo.findOne({ where: { id } });
+    const request = await this.prisma.partner_gst_verification_requests.findUnique({
+      where: { id },
+    });
     if (!request) throw new NotFoundException('GST verification request not found');
-    return request;
+    return this.mapPrismaGstVerification(request);
   }
 
-  async approveGstVerification(id: string): Promise<Partner> {
-    const request = await this.findOneGstVerification(id);
+  async approveGstVerification(id: string, reviewerId: string) {
+    if (!reviewerId) throw new UnauthorizedException('Authenticated reviewer is required');
+    const approvedAt = new Date();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const request = await tx.partner_gst_verification_requests.findUnique({ where: { id } });
+      if (!request) throw new NotFoundException('GST verification request not found');
+      if (request.status !== PartnerKycStatus.PENDING) {
+        throw new BadRequestException('Only pending requests can be approved');
+      }
+      const profile = await tx.partner_business_profiles.findUnique({
+        where: { partner_id: request.partner_id },
+        select: { partner_id: true, business_name: true, kyc_status: true },
+      });
+      if (!profile) throw new NotFoundException('Partner business profile not found');
 
-    if (request.status !== GstVerificationStatus.PENDING) {
-      throw new BadRequestException('Only pending requests can be approved');
-    }
+      const claimed = await tx.partner_gst_verification_requests.updateMany({
+        where: { id, status: PartnerKycStatus.PENDING },
+        data: {
+          status: PartnerKycStatus.APPROVED,
+          reviewed_by: reviewerId,
+          reviewed_at: approvedAt,
+          updated_at: approvedAt,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('GST verification request is no longer pending');
+      }
 
-    const partner = await this.findOne(request.partnerId);
-    partner.gstNumber     = request.gstNumber;
-    partner.gstName       = request.gstName;
-    partner.gstinDocUrl   = request.gstDocUrl;
-    partner.gstVerifiedAt = new Date();
-    await this.partnerRepository.save(partner);
+      const updatedProfile = await tx.partner_business_profiles.update({
+        where: { partner_id: request.partner_id },
+        data: {
+          gst_number: request.gst_number,
+          gst_document_url: request.document_url,
+          updated_at: approvedAt,
+        },
+        select: { partner_id: true, business_name: true, kyc_status: true, gst_number: true, gst_document_url: true },
+      });
+      return { request, updatedProfile, reviewedAt: approvedAt };
+    }, { isolationLevel: 'Serializable', maxWait: 10000, timeout: 30000 });
 
-    await this.gstVerificationRepo.remove(request);
-    return partner;
+    return {
+      request: {
+        ...this.mapPrismaGstVerification({
+        ...result.request,
+        status: PartnerKycStatus.APPROVED,
+        reviewed_by: reviewerId,
+        reviewed_at: result.reviewedAt,
+        }),
+        reviewedBy: reviewerId,
+        reviewedAt: result.reviewedAt,
+      },
+      businessProfile: {
+        partnerId: result.updatedProfile.partner_id,
+        businessName: result.updatedProfile.business_name,
+        gstNumber: result.updatedProfile.gst_number,
+        gstDocumentUrl: result.updatedProfile.gst_document_url,
+        kycStatus: String(result.updatedProfile.kyc_status).toLowerCase(),
+      },
+    };
   }
 
   async rejectGstVerification(
     id: string,
     dto: ReviewGstVerificationDto,
   ): Promise<GstVerificationRequest> {
-    const request = await this.findOneGstVerification(id);
-
-    if (request.status !== GstVerificationStatus.PENDING) {
+    const updated = await this.prisma.partner_gst_verification_requests.updateMany({
+      where: { id, status: PartnerKycStatus.PENDING },
+      data: {
+        status: PartnerKycStatus.REJECTED,
+        rejection_reason: dto.adminNotes ?? null,
+        updated_at: new Date(),
+      },
+    });
+    if (updated.count === 0) {
+      const request = await this.prisma.partner_gst_verification_requests.findUnique({ where: { id } });
+      if (!request) throw new NotFoundException('GST verification request not found');
       throw new BadRequestException('Only pending requests can be rejected');
     }
-
-    request.status     = GstVerificationStatus.REJECTED;
-    request.adminNotes = dto.adminNotes ?? null;
-    return this.gstVerificationRepo.save(request);
+    return this.findOneGstVerification(id);
   }
 }

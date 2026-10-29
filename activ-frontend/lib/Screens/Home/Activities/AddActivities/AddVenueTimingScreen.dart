@@ -991,12 +991,14 @@ class _State extends State<AddVenueTimingScreen> {
           timings.containsKey(day) &&
           timings[day]!.timeSlots.isNotEmpty) {
         venueTiming[apiKey] = timings[day]!.timeSlots.map((slot) {
+          final price = (slot["price"] ?? "").trim();
+          final discounted = (slot["discountedPrice"] ?? "").trim();
           return {
             "open": slot["open"] ?? "-",
             "close": slot["close"] ?? "-",
             "capacity": slot["capacity"] ?? "-",
-            "price": slot["price"] ?? "-",
-            "discountedPrice": slot["discountedPrice"] ?? slot["price"] ?? "-",
+            "price": price.isEmpty ? "-" : price,
+            "discountedPrice": discounted.isEmpty ? (price.isEmpty ? "-" : price) : discounted,
           };
         }).toList();
       } else {

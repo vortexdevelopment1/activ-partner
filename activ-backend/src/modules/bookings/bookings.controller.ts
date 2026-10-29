@@ -11,7 +11,9 @@ import {
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  Headers,
 } from "@nestjs/common";
+import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -30,13 +32,17 @@ import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import { User } from "../users/entities/user.entity";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
+import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
 
 @ApiTags("Bookings")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("bookings")
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Post()
   @Roles(UserRole.USER)
@@ -44,8 +50,11 @@ export class BookingsController {
   async create(
     @Body() createBookingDto: CreateBookingDto,
     @CurrentUser() user: User,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    const data = await this.bookingsService.create(createBookingDto, user.id);
+    const data = normalizedBookingRoutesEnabled(this.config)
+      ? await this.bookingsService.createNormalizedFromLegacy(createBookingDto, user.id, idempotencyKey)
+      : await this.bookingsService.create(createBookingDto, user.id);
     return { message: "Booking created successfully", data };
   }
 
@@ -193,7 +202,7 @@ export class BookingsController {
   @Get(":id")
   @ApiOperation({ summary: "Get booking by ID" })
   async findOne(@Param("id", ParseUUIDPipe) id: string) {
-    const data = await this.bookingsService.findOne(id);
+    const data = await this.bookingsService.findOneForRead(id);
     return { message: "Booking fetched successfully", data };
   }
 
