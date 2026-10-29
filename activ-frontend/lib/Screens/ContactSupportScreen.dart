@@ -188,7 +188,7 @@ class _State extends State<ContactSupportScreen> {
                                         ),
                                         child: Column(
                                           mainAxisAlignment:
-                                              MainAxisAlignment.end,
+                                              MainAxisAlignment.center,
                                           children: [
                                             if (_emailWarning != null)
                                               _emailFailureNotice(),
