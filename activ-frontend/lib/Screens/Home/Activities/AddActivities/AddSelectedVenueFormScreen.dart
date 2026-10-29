@@ -10,6 +10,7 @@ import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../../Utills/activity_question_visibility.dart';
 import '../../../CommonCode.dart';
 import '../../../onboarding_widgets.dart';
+import '../../../activity_details_fields.dart';
 import 'AddActivityAmenitiesScreen.dart';
 
 class AddSelectedVenueFormScreen extends StatefulWidget {
@@ -271,36 +272,14 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
           validator: validate,
           builder: (field) =>
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                for (final option in options)
-                  Builder(builder: (context) {
-                    final isSelected = (field.value ?? []).contains(option);
-                    void updateSelection(bool? selected) {
-                      final value = List<String>.from(field.value ?? []);
-                      selected == true
-                          ? value.add(option)
-                          : value.remove(option);
-                      field.didChange(value);
-                      _answers[id] = value;
-                    }
-
-                    return GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => updateSelection(!isSelected),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(option,
-                                style: OnboardingStyles.body.copyWith(
-                                    fontSize: 14)),
-                          ),
-                          Checkbox(
-                            value: isSelected,
-                            onChanged: updateSelection,
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                ActivityDetailsOptions(
+                  options: options,
+                  values: field.value ?? [],
+                  onChanged: (value) {
+                    field.didChange(value);
+                    _answers[id] = value;
+                  },
+                ),
                 if (field.hasError)
                   Text(field.errorText!,
                       style: const TextStyle(color: Colors.red)),
@@ -343,18 +322,12 @@ class _DetailsState extends State<AddSelectedVenueFormScreen> {
             _answers[id] = type == 'number' ? num.tryParse(value) : value,
       );
     }
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 22),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(
-              '${question['questionText'] ?? 'Activity details'}${required ? ' *' : ''}',
-              style: OnboardingStyles.body.copyWith(
-                  fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          input,
-          if ((question['helperText'] ?? '').toString().isNotEmpty)
-            Text(question['helperText'].toString()),
-        ]));
+    return ActivityDetailsField(
+      label: (question['questionText'] ?? 'Activity details').toString(),
+      isRequired: required,
+      helperText: (question['helperText'] ?? '').toString(),
+      child: input,
+    );
   }
 
   @override

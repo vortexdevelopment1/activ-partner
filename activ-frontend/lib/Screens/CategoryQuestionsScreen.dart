@@ -154,10 +154,16 @@ class CategoryQuestionsScreen extends StatefulWidget {
     this.accumulatedTimings = const [],
     this.client,
     this.reviewMode = false,
+    this.activityId,
+    this.initialManagementData = const {},
+    this.onSaveActivity,
   });
 
   final http.Client? client;
   final bool reviewMode;
+  final String? activityId;
+  final Map<String, dynamic> initialManagementData;
+  final Future<bool> Function(List<Map<String, dynamic>> answers)? onSaveActivity;
 
   @override
   State<CategoryQuestionsScreen> createState() => _State();
@@ -168,6 +174,8 @@ class _State extends State<CategoryQuestionsScreen> {
   List<_Question> _globalQuestions = []; // shown once, not per-category
   bool _isLoading = true;
   String _errorMessage = '';
+  bool _savingManaged = false;
+  bool get _managedMode => widget.activityId?.isNotEmpty == true;
 
   // Keys are composite: "${categoryId}_${questionId}"
   // This ensures identical question IDs across different categories
@@ -184,7 +192,7 @@ class _State extends State<CategoryQuestionsScreen> {
   String get _sessionKey => 'question_draft_${widget.venueId}_${widget.currentCategory['id'] ?? ''}';
 
   void _saveSessionAnswers() {
-    if (!isBrowserSession || _isLoading || _errorMessage.isNotEmpty) return;
+    if (_managedMode || !isBrowserSession || _isLoading || _errorMessage.isNotEmpty) return;
     writeBrowserSession(_sessionKey, jsonEncode({
       ..._answers,
       for (final entry in _textControllers.entries) entry.key: entry.value.text,
@@ -217,15 +225,26 @@ class _State extends State<CategoryQuestionsScreen> {
     final categoryId = widget.currentCategory['id']?.toString() ?? '';
     final categoryTitle = widget.currentCategory['title']?.toString() ?? '';
 
-    if (categoryId.isEmpty) {
+    if (categoryId.isEmpty && !_managedMode) {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     try {
+      final headers = <String, String>{};
+      if (_managedMode) {
+        final token = await SharedPreference.readStr('jwt_token');
+        if (token == null || token.isEmpty) throw StateError('Sign in required');
+        headers['Authorization'] = 'Bearer $token';
+      }
       final response = await (widget.client?.get ?? http.get)(
-        Uri.parse('$QUESTIONS_BY_CATEGORY_URL/$categoryId'),
-      );
+        Uri.parse(_managedMode
+            ? '$BASE_URL/venues/activities/${widget.activityId}/questions'
+            : '$QUESTIONS_BY_CATEGORY_URL/$categoryId'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+      if (_managedMode && response.statusCode != 200) throw StateError('Question loading failed');
+      final managedAnswers = <String, dynamic>{};
 
       CommonUtilities.showLog('Questions [$categoryTitle] status: ${response.statusCode}');
 
@@ -242,6 +261,11 @@ class _State extends State<CategoryQuestionsScreen> {
           data = [];
         }
 
+        if (_managedMode) {
+          for (final item in data.whereType<Map>()) {
+            managedAnswers[item['id'].toString()] = item['answer'];
+          }
+        }
         final questions = data
             .map((e) => _Question.fromJson(e as Map<String, dynamic>))
             .where((q) => q.isActive &&
@@ -315,7 +339,24 @@ class _State extends State<CategoryQuestionsScreen> {
         }
       }
 
-      {
+      if (_managedMode) {
+        final all = [...globals, for (final section in filteredSections) ...section.questions];
+        void restore(String sectionId, _Question question) {
+          final answer = _managedInitialAnswer(question, all, managedAnswers[question.id]);
+          if (answer == null) return;
+          final key = _key(sectionId, question.id);
+          if (_textControllers.containsKey(key)) {
+            _textControllers[key]!.text = answer.toString();
+          } else {
+            if (['select', 'radio'].contains(question.questionType) && !question.options.contains(answer)) return;
+            _answers[key] = answer is List ? answer.map((value) => value.toString()).toList() : answer;
+          }
+        }
+        for (final section in filteredSections) {
+          for (final question in section.questions) { restore(section.categoryId, question); }
+        }
+        for (final question in globals) { restore('global', question); }
+      } else {
         final raw = await SharedPreference.readStr('activity_questions_display');
         if (!mounted) return;
         final saved = raw == null || raw.isEmpty ? <dynamic>[] : jsonDecode(raw) as List;
@@ -342,7 +383,7 @@ class _State extends State<CategoryQuestionsScreen> {
         }
       }
       if (!mounted) return;
-      if (isBrowserSession) {
+      if (isBrowserSession && !_managedMode) {
         try {
           final raw = readBrowserSession(_sessionKey);
           final draft = raw == null ? <String, dynamic>{} : jsonDecode(raw) as Map<String, dynamic>;
@@ -379,6 +420,47 @@ class _State extends State<CategoryQuestionsScreen> {
   // ─── Answer helpers ───────────────────────────────────────────────────────
 
   // Always pass categoryId so we look up the category-scoped slot.
+  dynamic _managedInitialAnswer(_Question question, List<_Question> all, dynamic saved) {
+    String normalize(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    const labels = <String, List<String>>{
+      'description': ['activity description'],
+      'numberOfCourt': ['total courts', 'total turfs', 'total nets', 'total arenas', 'total tables', 'total fields', 'number of courts'],
+      'courtType': ['court type', 'court surface', 'pitch type', 'pitch surface', 'turf type', 'field type', 'table type', 'lane type', 'range type', 'arena type', 'activity type'],
+      'playingEnvironment': ['playing environment', 'environment'],
+      'coachingAvailable': ['coaching available', 'coaching'],
+      'recommendedFor': ['recommended for'],
+    };
+    for (final entry in labels.entries) {
+      final selectedLabel = entry.value.where((label) => all.any((q) => normalize(q.questionText) == label)).firstOrNull;
+      if (selectedLabel == normalize(question.questionText) && widget.initialManagementData[entry.key] != null) {
+        return widget.initialManagementData[entry.key];
+      }
+    }
+    return saved;
+  }
+
+  Future<void> _saveManagedAnswers() async {
+    if (_savingManaged || widget.onSaveActivity == null) return;
+    final payload = <Map<String, dynamic>>[];
+    void add(String sectionId, _Question question) {
+      payload.add({'questionId': question.id, 'answer': _getAnswer(sectionId, question) ??
+          (['checkbox', 'multiselect'].contains(question.questionType) ? <String>[] : '')});
+    }
+    for (final section in _sections) {
+      for (final question in section.questions) { add(section.categoryId, question); }
+    }
+    for (final question in _globalQuestions) { add('global', question); }
+    setState(() => _savingManaged = true);
+    try {
+      final saved = await widget.onSaveActivity!(payload);
+      if (mounted && saved) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) CommonUtilities.createSnackBar(context, 'Unable to save activity details. Please try again.');
+    } finally {
+      if (mounted) setState(() => _savingManaged = false);
+    }
+  }
+
   dynamic _getAnswer(String categoryId, _Question q) {
     final k = _key(categoryId, q.id);
     if (_textControllers.containsKey(k)) {
@@ -603,6 +685,7 @@ class _State extends State<CategoryQuestionsScreen> {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: TextFormField(
+            key: ValueKey('question-$categoryId-${q.id}'),
             controller: _textControllers[k],
             textInputAction: TextInputAction.next,
             textCapitalization: TextCapitalization.sentences,
@@ -986,7 +1069,7 @@ class _State extends State<CategoryQuestionsScreen> {
                           Expanded(
                             flex: 3,
                             child: InkWell(
-                              onTap: () => Navigator.pop(context),
+                              onTap: _savingManaged ? null : () => Navigator.pop(context),
                               child: getBackButton(context, "Back", "categoryQuestions"),
                             ),
                           ),
@@ -994,12 +1077,13 @@ class _State extends State<CategoryQuestionsScreen> {
                             flex: 7,
                             child: InkWell(
                               onTap: () {
-                                if (_isLoading) return;
+                                if (_isLoading || _savingManaged || _errorMessage.isNotEmpty) return;
                                 if (hasNoQuestions || _validate()) {
-                                  _submitAnswers();
+                                  if (_managedMode) { _saveManagedAnswers(); }
+                                  else { _submitAnswers(); }
                                 }
                               },
-                              child: getButtonBlack(context, "Next", "categoryQuestions"),
+                              child: getButtonBlack(context, _savingManaged ? 'Saving...' : 'Next', "categoryQuestions"),
                             ),
                           ),
                         ],

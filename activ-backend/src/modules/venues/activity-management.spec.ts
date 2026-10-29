@@ -234,4 +234,94 @@ describe('activity management on the current schema', () => {
     await expect(service.updateActivityManagement('activity', 'partner', {}, true)).rejects.toThrow('Update failed');
     expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
   });
+
+  function prepareQuestions() {
+    prisma.$queryRaw = jest.fn().mockResolvedValue([]);
+    prisma.partner_service_questions = { findMany: jest.fn().mockResolvedValue([
+      { id: 'description', question: 'Activity Description' },
+      { id: 'arenas', question: 'Total Arenas' },
+      { id: 'courts', question: 'Total Courts' },
+      { id: 'playing', question: 'Playing Environment' },
+    ]) };
+    prisma.partner_users = { findFirst: jest.fn().mockResolvedValue({ id: 'owner' }) };
+    prisma.partner_venue_answers.findFirst = jest.fn().mockResolvedValue(null);
+    prisma.partner_venue_answers.create = jest.fn().mockResolvedValue({});
+    prisma.partner_venue_answers.update = jest.fn().mockResolvedValue({});
+  }
+
+  it('saves the real category questions and legacy summaries in one transaction', async () => {
+    prepareQuestions();
+    record.onboarding_data = { preserved: true };
+    await service.updateActivityManagement('activity', 'partner', { answers: [
+      { questionId: 'description', answer: 'Updated description' },
+      { questionId: 'arenas', answer: '52' }, { questionId: 'courts', answer: '3' },
+      { questionId: 'playing', answer: [] },
+    ] });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.partner_venue_answers.create).toHaveBeenCalledTimes(4);
+    expect(prisma.partner_venue_answers.create.mock.calls[1][0].data).toMatchObject({
+      venue_id: 'venue', venue_service_id: 'activity', question_id: 'arenas', answer: '52',
+    });
+    expect(prisma.partner_venue_services.update.mock.calls[0][0].data).toMatchObject({
+      description: 'Updated description', onboarding_data: { preserved: true, numberOfCourt: '3', playingEnvironment: [] },
+    });
+    expect(prisma.partner_service_questions.findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ service_category_id: 'badminton' }, { service_category_id: null }] },
+      { OR: [{ venue_service_id: 'activity' }, { venue_service_id: null }] },
+    ]);
+  });
+
+  it('rejects foreign or repeated question ids before writing any answers', async () => {
+    prepareQuestions();
+    prisma.partner_service_questions.findMany.mockResolvedValue([]);
+    await expect(service.updateActivityManagement('activity', 'partner', {
+      answers: [{ questionId: 'foreign', answer: 'wrong category' }],
+    })).rejects.toThrow('Questions must belong');
+    await expect(service.updateActivityManagement('activity', 'partner', {
+      answers: [{ questionId: 'same', answer: 'one' }, { questionId: 'same', answer: 'two' }],
+    })).rejects.toThrow('Duplicate activity question');
+    expect(prisma.partner_venue_answers.create).not.toHaveBeenCalled();
+    expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
+  });
+
+  it('does not update summary fields after an answer write failure', async () => {
+    prepareQuestions();
+    prisma.partner_service_questions.findMany.mockResolvedValue([{ id: 'description', question: 'Activity Description' }]);
+    prisma.partner_venue_answers.create.mockRejectedValue(new Error('Write failed'));
+    await expect(service.updateActivityManagement('activity', 'partner', {
+      answers: [{ questionId: 'description', answer: 'New' }],
+    })).rejects.toThrow('Write failed');
+    expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty required answers and oversized summary values from the question form', async () => {
+    prepareQuestions();
+    prisma.partner_service_questions.findMany.mockResolvedValue([
+      { id: 'description', question: 'Activity Description', is_required: true },
+    ]);
+    await expect(service.updateActivityManagement('activity', 'partner', {
+      answers: [{ questionId: 'description', answer: '   ' }],
+    })).rejects.toThrow('Please answer: Activity Description');
+    expect(prisma.partner_venue_answers.create).not.toHaveBeenCalled();
+    await expect(service.updateActivityManagement('activity', 'partner', {
+      answers: [{ questionId: 'description', answer: 'x'.repeat(5001) }],
+    })).rejects.toThrow('Activity details exceed the allowed length');
+    expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
+  });
+
+  it('restores venue onboarding answers but prioritizes the edited activity answers', async () => {
+    (service as any).findOwnedActivity = jest.fn().mockResolvedValue({ venueId: 'venue', categoryId: 'badminton' });
+    (service as any).questionsService = { findByCategoryId: jest.fn().mockResolvedValue([
+      { id: 'arenas' }, { id: 'courts' },
+    ]) };
+    prisma.partner_venue_answers.findMany.mockResolvedValue([
+      { question_id: 'courts', answer: '3', venue_service_id: 'activity' },
+      { question_id: 'arenas', answer: '52', venue_service_id: null },
+      { question_id: 'courts', answer: 'old venue answer', venue_service_id: null },
+    ]);
+    expect(await service.getActivityQuestions('activity', 'partner')).toEqual([
+      { id: 'arenas', answer: '52' }, { id: 'courts', answer: '3' },
+    ]);
+    expect(prisma.partner_venue_answers.findMany.mock.calls[0][0].where.venue_id).toBe('venue');
+  });
 });

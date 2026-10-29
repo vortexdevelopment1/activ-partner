@@ -2916,6 +2916,9 @@ export class VenuesService {
       if (archive || dto.isActive !== undefined) {
         await tx.$queryRawUnsafe('SELECT id FROM venues WHERE id = $1::uuid FOR UPDATE', managed.venue_id);
       }
+      if (dto.answers !== undefined) {
+        await tx.$queryRaw`SELECT id FROM partner_venue_services WHERE id = ${serviceId}::uuid FOR UPDATE`;
+      }
       const service = await tx.partner_venue_services.findUniqueOrThrow({
         where: { id: serviceId },
       });
@@ -2927,6 +2930,69 @@ export class VenuesService {
       }
       if (service.status === "ARCHIVED")
         throw new BadRequestException("This activity has been deleted");
+      // The management editor uses the onboarding question form. Persist all
+      // category answers and legacy summary fields in this same transaction.
+      if (dto.answers !== undefined) {
+        const ids = dto.answers.map(answer => answer.questionId);
+        if (new Set(ids).size !== ids.length) throw new BadRequestException('Duplicate activity question');
+        const questions = ids.length ? await tx.partner_service_questions.findMany({ where: {
+          id: { in: ids },
+          AND: [
+            { OR: [{ service_category_id: service.service_category_id }, { service_category_id: null }] },
+            { OR: [{ venue_service_id: serviceId }, { venue_service_id: null }] },
+          ],
+        } }) : [];
+        if (questions.length !== ids.length) throw new BadRequestException('Questions must belong to this activity category');
+        const actor = ids.length ? await tx.partner_users.findFirst({ where: { partner_id: partnerId }, orderBy: { role: 'desc' } }) : null;
+        for (const item of dto.answers) {
+          const definition = questions.find(question => question.id === item.questionId)!;
+          if (definition.is_required && (item.answer == null ||
+              (typeof item.answer === 'string' && !item.answer.trim()) ||
+              (Array.isArray(item.answer) && !item.answer.length))) {
+            throw new BadRequestException(`Please answer: ${definition.question}`);
+          }
+          const where = { venue_id: service.venue_id, venue_service_id: serviceId, question_id: item.questionId };
+          const existing = await tx.partner_venue_answers.findFirst({ where });
+          const answer = item.answer as runtime.InputJsonValue;
+          if (existing) {
+            await tx.partner_venue_answers.update({ where: { id: existing.id }, data: {
+              answer, answered_by_partner_user_id: actor?.id ?? null, updated_at: new Date(),
+            } });
+          } else {
+            await tx.partner_venue_answers.create({ data: {
+              id: randomUUID(), ...where, answer,
+              answered_by_partner_user_id: actor?.id ?? null, updated_at: new Date(),
+            } });
+          }
+        }
+        const byLabel = new Map(questions.map(question => [
+          this.normalizeQuestionLabel(question.question),
+          dto.answers!.find(answer => answer.questionId === question.id)!.answer,
+        ]));
+        const labels = {
+          description: ['Activity Description'],
+          numberOfCourt: ['Total Courts', 'Total Turfs', 'Total Nets', 'Total Arenas', 'Total Tables', 'Total Fields', 'Number of Courts'],
+          courtType: ['Court Type', 'Court Surface', 'Pitch Type', 'Pitch Surface', 'Turf Type', 'Field Type', 'Table Type', 'Lane Type', 'Range Type', 'Arena Type', 'Activity Type'],
+          playingEnvironment: ['Playing Environment', 'Environment'],
+          coachingAvailable: ['Coaching Available', 'Coaching'],
+          recommendedFor: ['Recommended For'],
+        };
+        // Preserve older clients' flat payloads while keeping the management
+        // summary consistent with the newly saved category answers.
+        dto = { ...dto };
+        for (const [field, candidates] of Object.entries(labels)) {
+          const label = candidates.map(value => this.normalizeQuestionLabel(value)).find(value => byLabel.has(value));
+          if (label !== undefined) {
+            const value = byLabel.get(label);
+            dto[field] = ['playingEnvironment', 'coachingAvailable', 'recommendedFor'].includes(field)
+              ? this.answerAsList(value) : this.answerAsText(value);
+          }
+        }
+        if ((dto.description?.length ?? 0) > 5000 ||
+            (dto.numberOfCourt?.length ?? 0) > 50 || (dto.courtType?.length ?? 0) > 200) {
+          throw new BadRequestException('Activity details exceed the allowed length');
+        }
+      }
       if (archive || dto.isActive === false) {
         // Preserve bookings and track exactly which slots this action blocks.
         if (service.facility_id) {
@@ -3187,11 +3253,19 @@ export class VenuesService {
         ? this.questionsService.findByCategoryId(service.categoryId)
         : Promise.resolve([]),
       this.prisma.partner_venue_answers.findMany({
-        where: { venue_service_id: serviceId },
+        where: { venue_id: service.venueId,
+          OR: [{ venue_service_id: serviceId }, { venue_service_id: null }] },
+        orderBy: { updated_at: 'asc' },
       }),
     ]);
 
-    const answerMap = new Map(answers.map((a) => [a.question_id, a.answer]));
+    // Older venue onboarding stored category answers without a service id.
+    // Restore those too, but an explicit activity answer always takes priority.
+    const answerMap = new Map(answers.filter(answer => !answer.venue_service_id)
+      .map(answer => [answer.question_id, answer.answer]));
+    for (const answer of answers.filter(answer => answer.venue_service_id === serviceId)) {
+      answerMap.set(answer.question_id, answer.answer);
+    }
 
     return questions.map((q) => ({
       ...q,

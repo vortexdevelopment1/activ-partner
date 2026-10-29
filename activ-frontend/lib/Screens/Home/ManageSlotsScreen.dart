@@ -226,7 +226,7 @@ class _State extends State<ManageSlotsScreen> {
                 ? 0.0
                 : double.tryParse(slot.discount.text);
         if (capacity == null || capacity <= 0) {
-          _message('Maximum users must be a positive whole number.');
+          _message('Please enter the maximum number of users allowed per slot');
           return;
         }
         if (price == null || !price.isFinite || price <= 0) {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import '../../../api_calling/api_constant.dart';
 import '../../../api_calling/api_request.dart';
 import '../ManageSlotsScreen.dart';
 import 'DirectBookSlotScreen.dart';
+import '../../CategoryQuestionsScreen.dart';
 
 const _background = Color(0xFFF0F6D2);
 const _purple = Color(0xFFA536F5);
@@ -334,12 +336,20 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _information() async {
-    final values = await Navigator.push<Map<String, dynamic>>(
+    await Navigator.push<bool>(
         context,
         MaterialPageRoute(
-            builder: (_) => _ActivityInfoPage(
-                activity: widget.activity, data: _data, name: _name)));
-    if (values != null && mounted) await _save(values);
+            builder: (_) => CategoryQuestionsScreen(
+              venueId: _data['venueId']?.toString() ?? widget.venueId,
+              activityId: widget.activity.activityId,
+              currentCategory: {
+                'id': _data['categoryId']?.toString() ?? widget.activity.operateValue['id']?.toString() ?? '',
+                'title': _data['categoryName']?.toString() ?? widget.activity.operateValue['title']?.toString() ?? _name,
+              },
+              initialManagementData: Map<String, dynamic>.from(_data),
+              client: _client,
+              onSaveActivity: (answers) => _save({'answers': answers}),
+            )));
   }
 
   Future<void> _upload() async {
@@ -426,6 +436,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               load: () => _images,
               upload: _upload,
               remove: _removeImage,
+              cover: () => _data['coverImageUrl']?.toString(),
+              saveCover: (url) async {
+                _response(await _client.patch(
+                  Uri.parse('$BASE_URL/venues/services/${widget.activity.activityId}/cover'),
+                  headers: await _headers(), body: jsonEncode({'imageUrl': url}),
+                ).timeout(const Duration(seconds: 15)));
+                _changed = true;
+                await _load();
+              },
               imageUrl: _imageUrl)));
 
   Future<void> _bookSlots() async {
@@ -977,15 +996,17 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         ] else if (_canControl)
           _button(_saving ? 'Resuming...' : 'Resume Booking',
               _saving ? null : _resumeBooking),
-        const SizedBox(height: 26),
-        _text('What happens next?', bold: true),
-        const SizedBox(height: 20),
-        _effect(Icons.calendar_today_outlined,
-            'Upcoming bookings will be blocked during inactive period'),
-        _effect(Icons.visibility_off_outlined,
-            'Venue will be hidden from search & discovery'),
-        _effect(
-            Icons.notifications_none, 'ACTIV team may reach out if required'),
+        if (_canControl && !_active) ...[
+          const SizedBox(height: 26),
+          _text('What happens next?', bold: true),
+          const SizedBox(height: 20),
+          _effect(Icons.calendar_today_outlined,
+              'Upcoming bookings will be blocked during inactive period'),
+          _effect(Icons.visibility_off_outlined,
+              'Venue will be hidden from search & discovery'),
+          _effect(
+              Icons.notifications_none, 'ACTIV team may reach out if required'),
+        ],
       ]));
 
   Future<void> _showPauseReasonSheet() async {
@@ -1202,296 +1223,6 @@ Widget _button(String label, VoidCallback? onPressed) => SizedBox(
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
         child: Text(label,
             style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15))));
-
-class _ActivityInfoPage extends StatefulWidget {
-  const _ActivityInfoPage(
-      {required this.activity, required this.data, required this.name});
-
-  final ActivityModel activity;
-  final Map<String, dynamic> data;
-  final String name;
-
-  @override
-  State<_ActivityInfoPage> createState() => _ActivityInfoPageState();
-}
-
-class _ActivityInfoPageState extends State<_ActivityInfoPage> {
-  late final TextEditingController _description;
-  late final TextEditingController _totalCourts;
-  late final TextEditingController _courtType;
-  late Set<String> _playingEnvironment;
-  late Set<String> _coachingAvailable;
-  late Set<String> _recommendedFor;
-
-  static const _playingOptions = [
-    'Indoor',
-    'Outdoor',
-    'Air Conditioned',
-    'Covered',
-    'Floodlights',
-    'Spectator Seating',
-  ];
-  static const _coachingOptions = [
-    'Beginner',
-    'Intermediate',
-    'Advanced',
-    'Kids',
-    'Personal',
-  ];
-  static const _recommendedOptions = [
-    'Beginners',
-    'Casual',
-    'Competitive',
-    'Kids',
-    'Corporate',
-  ];
-
-  bool get _isTurfActivity {
-    final text = [
-      widget.name,
-      widget.activity.title,
-      widget.activity.operateValue['title'],
-      widget.activity.operateValue['type'],
-      widget.activity.operateValue['name'],
-      widget.data['categoryTitle'],
-      widget.data['categoryName'],
-      widget.data['name'],
-    ]
-        .whereType<Object>()
-        .map((value) => value.toString().toLowerCase())
-        .join(' ');
-    return text.contains('cricket') || text.contains('turf');
-  }
-
-  String get _totalUnitsLabel =>
-      _isTurfActivity ? 'Total Turfs' : 'Total Courts';
-  String get _typeLabel => _isTurfActivity ? 'Pitch Type' : 'Court Type';
-
-  @override
-  void initState() {
-    super.initState();
-    _description = TextEditingController(
-        text:
-            _readString('description', fallback: widget.activity.description));
-    _totalCourts = TextEditingController(
-        text: _readString('numberOfCourt',
-            fallback: widget.activity.numberOfCourt));
-    _courtType = TextEditingController(
-        text: _readString('courtType', fallback: widget.activity.flooringType));
-    _playingEnvironment = _readList('playingEnvironment',
-        fallback: widget.activity.physicalSetup);
-    _coachingAvailable = _readList('coachingAvailable');
-    _recommendedFor =
-        _readList('recommendedFor', fallback: widget.activity.activitySuited);
-  }
-
-  @override
-  void dispose() {
-    _description.dispose();
-    _totalCourts.dispose();
-    _courtType.dispose();
-    super.dispose();
-  }
-
-  String _readString(String key, {String fallback = ''}) {
-    final value = widget.data[key]?.toString();
-    if (value != null && value.trim().isNotEmpty) return value;
-    return fallback;
-  }
-
-  Set<String> _readList(String key, {String fallback = ''}) {
-    final value = widget.data[key];
-    if (value is List) {
-      return value
-          .map((item) => item.toString())
-          .where((item) => item.isNotEmpty)
-          .toSet();
-    }
-    if (fallback.trim().isEmpty) return {};
-    return fallback
-        .split(RegExp(r'[,|]'))
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toSet();
-  }
-
-  void _save() {
-    Navigator.pop(context, {
-      'description': _description.text.trim(),
-      'numberOfCourt': _totalCourts.text.trim(),
-      'courtType': _courtType.text.trim(),
-      'playingEnvironment': _playingEnvironment.toList(),
-      'coachingAvailable': _coachingAvailable.toList(),
-      'recommendedFor': _recommendedFor.toList(),
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: _background,
-        body: SafeArea(
-            child: Center(
-                child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(children: [
-                      Expanded(
-                          child: SingleChildScrollView(
-                              padding:
-                                  const EdgeInsets.fromLTRB(28, 28, 28, 28),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(children: [
-                                      Material(
-                                          color: Colors.white,
-                                          shape: const CircleBorder(),
-                                          elevation: 2,
-                                          child: IconButton(
-                                              tooltip: 'Back',
-                                              onPressed: () =>
-                                                  Navigator.pop(context),
-                                              icon: const Icon(Icons.arrow_back,
-                                                  size: 22))),
-                                      const SizedBox(width: 18),
-                                      Expanded(
-                                          child: _text(
-                                              'Update Activity Details',
-                                              bold: true,
-                                              size: 24)),
-                                    ]),
-                                    const SizedBox(height: 44),
-                                    _text(widget.name, bold: true, size: 26),
-                                    const SizedBox(height: 6),
-                                    _text('Provide Activity Specific Details',
-                                        size: 16),
-                                    const SizedBox(height: 28),
-                                    _fieldLabel('Activity Description',
-                                        required: true),
-                                    _input(
-                                        controller: _description,
-                                        maxLines: 5,
-                                        maxLength: 5000),
-                                    const SizedBox(height: 22),
-                                    _fieldLabel(_totalUnitsLabel),
-                                    _input(
-                                        controller: _totalCourts,
-                                        keyboardType: TextInputType.number),
-                                    const SizedBox(height: 22),
-                                    _fieldLabel(_typeLabel),
-                                    _input(controller: _courtType),
-                                    const SizedBox(height: 22),
-                                    _fieldLabel('Playing Environment'),
-                                    _checkPanel(
-                                        options: _playingOptions,
-                                        values: _playingEnvironment,
-                                        onChanged: (next) => setState(
-                                            () => _playingEnvironment = next)),
-                                    const SizedBox(height: 22),
-                                    const SizedBox(height: 22),
-                                    _fieldLabel('Coaching Available'),
-                                    _checkPanel(
-                                        options: _coachingOptions,
-                                        values: _coachingAvailable,
-                                        onChanged: (next) => setState(
-                                            () => _coachingAvailable = next)),
-                                    const SizedBox(height: 22),
-                                    _fieldLabel('Recommended For'),
-                                    _checkPanel(
-                                        options: _recommendedOptions,
-                                        values: _recommendedFor,
-                                        onChanged: (next) => setState(
-                                            () => _recommendedFor = next)),
-                                  ]))),
-                      Container(
-                          color: _background,
-                          padding: EdgeInsets.fromLTRB(28, 16, 28,
-                              16 + MediaQuery.paddingOf(context).bottom),
-                          child: _button('Save Changes', _save)),
-                    ])))),
-      );
-
-  Widget _fieldLabel(String label, {bool required = false}) => Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-          text: TextSpan(
-              text: label,
-              style: const TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontSize: 15,
-                  color: Color(0xFF202020)),
-              children: [
-            if (required)
-              const TextSpan(
-                  text: ' *', style: TextStyle(color: Colors.redAccent)),
-          ])));
-
-  Widget _input(
-          {required TextEditingController controller,
-          int maxLines = 1,
-          int? maxLength,
-          TextInputType? keyboardType}) =>
-      TextField(
-          controller: controller,
-          maxLines: maxLines,
-          maxLength: maxLength,
-          keyboardType: keyboardType,
-          style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15),
-          decoration: InputDecoration(
-              counterText: '',
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _border)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _purple))));
-
-  Widget _checkPanel(
-          {required List<String> options,
-          required Set<String> values,
-          required ValueChanged<Set<String>> onChanged}) =>
-      Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: _border),
-              borderRadius: BorderRadius.circular(8)),
-          child: Column(
-              children: options
-                  .map((option) => InkWell(
-                      onTap: () {
-                        final next = {...values};
-                        next.contains(option)
-                            ? next.remove(option)
-                            : next.add(option);
-                        onChanged(next);
-                      },
-                      child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          child: Row(children: [
-                            _checkBox(values.contains(option)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _text(option, size: 15)),
-                          ]))))
-                  .toList()));
-
-  Widget _checkBox(bool checked) => AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-          color: checked ? _purple : Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: checked ? _purple : _border, width: 2)),
-      child: checked
-          ? const Icon(Icons.check, color: Colors.white, size: 14)
-          : null);
-}
 
 // Keep the existing slot and pricing editors while selecting this activity's data.
 class _ActivityClient extends http.BaseClient {
@@ -2056,11 +1787,15 @@ class _ImagesPage extends StatefulWidget {
       required this.load,
       required this.upload,
       required this.remove,
+      required this.cover,
+      required this.saveCover,
       required this.imageUrl});
   final String activityName;
   final List<String> Function() load;
   final Future<void> Function() upload;
   final Future<void> Function(String) remove;
+  final String? Function() cover;
+  final Future<void> Function(String) saveCover;
   final String Function(String) imageUrl;
   @override
   State<_ImagesPage> createState() => _ImagesPageState();
@@ -2068,10 +1803,91 @@ class _ImagesPage extends StatefulWidget {
 
 class _ImagesPageState extends State<_ImagesPage> {
   bool _busy = false;
+  late List<String> _images;
+  String? _savedCover;
+  String? _dragging;
+  Offset? _dragPosition;
+  Timer? _dragScroll;
+  final _scroll = ScrollController();
+  final _scrollKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _images = widget.load().toSet().toList();
+    _savedCover = widget.cover() ?? _images.firstOrNull;
+    if (_images.remove(_savedCover)) _images.insert(0, _savedCover!);
+  }
+
+  @override
+  void dispose() {
+    _dragScroll?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _refreshImages() {
+    final latest = widget.load().toSet();
+    _images = [
+      ..._images.where(latest.contains),
+      ...latest.where((url) => !_images.contains(url)),
+    ];
+    _savedCover = widget.cover() ?? latest.firstOrNull;
+  }
+
+  void _moveImage(String url, String target) {
+    if (_busy || url == target) return;
+    final from = _images.indexOf(url);
+    final to = _images.indexOf(target);
+    if (from < 0 || to < 0) return;
+    setState(() { _images.removeAt(from); _images.insert(to, url); });
+  }
+
+  void _startDrag(String url) {
+    setState(() => _dragging = url);
+    _dragScroll?.cancel();
+    _dragScroll = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      final box = _scrollKey.currentContext?.findRenderObject();
+      if (!mounted || !_scroll.hasClients || box is! RenderBox || _dragPosition == null) return;
+      final y = box.globalToLocal(_dragPosition!).dy;
+      final delta = y < 72 ? -20.0 : y > box.size.height - 72 ? 20.0 : 0.0;
+      if (delta == 0) return;
+      final next = (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent).toDouble();
+      if (next != _scroll.offset) _scroll.jumpTo(next);
+    });
+  }
+
+  void _endDrag() {
+    _dragScroll?.cancel();
+    _dragPosition = null;
+    if (mounted) setState(() => _dragging = null);
+  }
+
+  Future<void> _save() async {
+    if (_busy || _dragging != null) return;
+    setState(() => _busy = true);
+    try {
+      final cover = _images.firstOrNull;
+      if (cover != null && cover != _savedCover) await widget.saveCover(cover);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(16, 0, 16, 100),
+          content: Text('Unable to save the cover photo. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _run(Future<void> Function() action) async {
+    if (_busy || _dragging != null) return;
     setState(() => _busy = true);
     try {
       await action();
+      if (mounted) _refreshImages();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2086,6 +1902,8 @@ class _ImagesPageState extends State<_ImagesPage> {
             child: SafeArea(
                 bottom: false,
                 child: ListView(
+                  key: _scrollKey,
+                  controller: _scroll,
                   padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
                   children: [
                     SizedBox(
@@ -2104,9 +1922,15 @@ class _ImagesPageState extends State<_ImagesPage> {
                                         : () => Navigator.pop(context),
                                     icon: const Icon(Icons.arrow_back,
                                         size: 24)))),
-                        Center(
-                            child:
-                                _text('Update Images', bold: true, size: 28)),
+                        IgnorePointer(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 52),
+                              child: FittedBox(fit: BoxFit.scaleDown,
+                                child: _text('Update Images', bold: true, size: 28)),
+                            ),
+                          ),
+                        ),
                       ]),
                     ),
                     const SizedBox(height: 36),
@@ -2129,14 +1953,17 @@ class _ImagesPageState extends State<_ImagesPage> {
                     _text("Upload this activity's images", size: 17),
                     const SizedBox(height: 8),
                     _text(
-                        '${widget.load().length} / 12 Images Uploaded'
-                        '${widget.load().length > 12 ? ' - remove ${widget.load().length - 12}' : ''}',
+                        '${_images.length} / 12 Images Uploaded'
+                        '${_images.length > 12 ? ' - remove ${_images.length - 12}' : ''}',
                         size: 15,
-                        color: widget.load().length > 12
+                        color: _images.length > 12
                             ? Colors.redAccent
                             : _purple),
-                    const SizedBox(height: 34),
-                    if (widget.load().isEmpty)
+                    const SizedBox(height: 12),
+                    _text('Long press and drag a photo to the first position to set it as cover.',
+                        size: 13, color: Colors.black54),
+                    const SizedBox(height: 20),
+                    if (_images.isEmpty)
                       Padding(
                           padding: const EdgeInsets.only(top: 80),
                           child: Center(
@@ -2152,10 +1979,36 @@ class _ImagesPageState extends State<_ImagesPage> {
                                   mainAxisSpacing: 18,
                                   crossAxisSpacing: 18,
                                   childAspectRatio: .78),
-                          itemCount: widget.load().length,
+                          itemCount: _images.length,
                           itemBuilder: (_, i) {
-                            final url = widget.load()[i];
-                            return _imageSlot(url);
+                            final url = _images[i];
+                            return DragTarget<String>(
+                              key: ValueKey('activity-image-$url'),
+                              onWillAcceptWithDetails: (details) => !_busy && details.data != url,
+                              onAcceptWithDetails: (details) => _moveImage(details.data, url),
+                              builder: (_, candidates, __) => LayoutBuilder(
+                                builder: (_, bounds) {
+                                  final tile = _imageSlot(url, isCover: i == 0);
+                                  return LongPressDraggable<String>(
+                                    data: url,
+                                    maxSimultaneousDrags: _busy || _dragging != null ? 0 : 1,
+                                    onDragStarted: () => _startDrag(url),
+                                    onDragUpdate: (details) => _dragPosition = details.globalPosition,
+                                    onDragEnd: (_) => _endDrag(),
+                                    feedback: SizedBox(width: bounds.maxWidth, height: bounds.maxHeight,
+                                      child: Material(color: Colors.transparent, elevation: 8,
+                                        borderRadius: BorderRadius.circular(18),
+                                        child: _imageSlot(url, controls: false))),
+                                    childWhenDragging: Opacity(opacity: .3, child: tile),
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(18),
+                                        border: candidates.isEmpty ? null : Border.all(color: _purple, width: 3)),
+                                      child: Padding(padding: EdgeInsets.all(candidates.isEmpty ? 0 : 3), child: tile)),
+                                  );
+                                },
+                              ),
+                            );
                           }),
                   ],
                 ))),
@@ -2164,10 +2017,10 @@ class _ImagesPageState extends State<_ImagesPage> {
             child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: _button('Save Changes',
-                    _busy ? null : () => Navigator.pop(context)))),
+                    _busy || _dragging != null ? null : _save))),
       ]));
 
-  Widget _imageSlot(String url) => Stack(
+  Widget _imageSlot(String url, {bool isCover = false, bool controls = true}) => Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -2194,7 +2047,15 @@ class _ImagesPageState extends State<_ImagesPage> {
               ),
             ),
           ),
-          Positioned(
+          if (isCover)
+            Positioned(left: 8, bottom: 8,
+              child: Container(
+                key: ValueKey('activity-cover-$url'),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                child: const Text('Cover photo', style: TextStyle(color: Colors.white, fontSize: 12)),
+              )),
+          if (controls) Positioned(
             top: 8,
             right: 8,
             child: Material(

@@ -4,9 +4,29 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsDefined,
+  IsUUID,
+  ValidateNested,
+  ArrayMaxSize,
 } from "class-validator";
+import { Type } from 'class-transformer';
+
+export class ManageActivityAnswerDto {
+  @IsUUID()
+  questionId: string;
+
+  @IsDefined()
+  answer: unknown;
+}
 
 export class ManageActivityDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ManageActivityAnswerDto)
+  answers?: ManageActivityAnswerDto[];
+
   @IsOptional()
   @IsString()
   @MaxLength(200)
