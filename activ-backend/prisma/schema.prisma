@@ -120,6 +120,9 @@ model payments {
   provider_order_id   String?
   provider_payment_id String?
   provider_event_id   String?       @unique
+  payment_intent_key  String?       @unique
+  currency            String        @default("INR")
+  order_status        PaymentOrderStatus @default(PENDING)
   status              PaymentStatus @default(CREATED)
   amount_paise        BigInt
   created_at          DateTime      @default(now())
@@ -1028,6 +1031,13 @@ enum PaymentStatus {
   REFUND_PENDING
   REFUNDED
   EXCEPTION_REVIEW
+}
+
+enum PaymentOrderStatus {
+  PENDING
+  CREATED
+  FAILED
+  UNCERTAIN
 }
 
 enum PublishStatus {

@@ -19,6 +19,7 @@ import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
 import 'ManageBookingsScreen.dart';
+import 'BankAccountScreen.dart';
 import 'ManagerHomeScreen.dart';
 import 'dashboard_setup_cards.dart';
 import 'NotificationsScreen.dart';
@@ -87,7 +88,7 @@ class _State extends State<HomeScreen> {
 
   /// Toggle: true = approved venue (screenshot 1), false = new venue (screenshot 2)
   bool _isApproved = false;
-  bool _needsPricing = false, _needsTeam = false;
+  bool _needsPricing = false, _needsTeam = false, _needsBankAccount = false;
   String? _setupError;
   bool _dashboardLoading = false;
 
@@ -196,6 +197,7 @@ class _State extends State<HomeScreen> {
             _isApproved = false;
             _needsPricing = false;
             _needsTeam = false;
+            _needsBankAccount = false;
             _setupError = null;
             _approvedStats = _emptyStats();
             _bookings = const [];
@@ -207,6 +209,15 @@ class _State extends State<HomeScreen> {
           if (team.statusCode != 200) throw Exception('Unable to check team setup.');
           final data = jsonDecode(team.body)['data'] as List;
           if (mounted) setState(() => _needsTeam = data.isEmpty);
+        }
+        if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
+          final accounts = await (widget.client?.get ?? http.get)(
+            Uri.parse('$BASE_URL/bank-accounts/my'),
+            headers: {'Authorization': 'Bearer $token'},
+          ).timeout(const Duration(seconds: 15));
+          if (accounts.statusCode != 200) throw Exception('Unable to check bank account setup.');
+          final accountData = jsonDecode(accounts.body)['data'];
+          if (mounted) setState(() => _needsBankAccount = accountData is List && accountData.isEmpty);
         }
       } else {
         PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
@@ -510,8 +521,10 @@ class _State extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       if (_isPartner && _isApproved) DashboardSetupCards(
                         pricingRequired: _needsPricing, teamRequired: _needsTeam,
+                        bankAccountRequired: _needsBankAccount,
                         onPricing: () => _openSetup(ManagePricingScreen(client: widget.client)),
                         onTeam: () => _openSetup(ManageTeamScreen(client: widget.client)),
+                        onBankAccount: () => _openSetup(BankAccountScreen(client: widget.client)),
                       ),
                       if (_isPartner && _setupError != null) TextButton.icon(
                         onPressed: _fetchVenueName, icon: const Icon(Icons.refresh), label: Text('$_setupError Retry')),

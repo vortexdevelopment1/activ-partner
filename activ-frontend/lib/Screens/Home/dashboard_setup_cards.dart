@@ -6,10 +6,13 @@ class DashboardSetupCards extends StatefulWidget {
       {super.key,
       required this.pricingRequired,
       required this.teamRequired,
+      required this.bankAccountRequired,
       required this.onPricing,
-      required this.onTeam});
-  final bool pricingRequired, teamRequired;
+      required this.onTeam,
+      required this.onBankAccount});
+  final bool pricingRequired, teamRequired, bankAccountRequired;
   final VoidCallback onPricing, onTeam;
+  final VoidCallback onBankAccount;
 
   @override
   State<DashboardSetupCards> createState() => _DashboardSetupCardsState();
@@ -30,7 +33,8 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
   void didUpdateWidget(DashboardSetupCards oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pricingRequired != widget.pricingRequired ||
-        oldWidget.teamRequired != widget.teamRequired) {
+        oldWidget.teamRequired != widget.teamRequired ||
+        oldWidget.bankAccountRequired != widget.bankAccountRequired) {
       _index = 0;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _pages.hasClients) _pages.jumpToPage(0);
@@ -41,6 +45,7 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
   @override
   Widget build(BuildContext context) {
     final tasks = [
+      if (widget.bankAccountRequired && !_dismissed.contains('bank')) 'bank',
       if (widget.pricingRequired && !_dismissed.contains('pricing')) 'pricing',
       if (widget.teamRequired && !_dismissed.contains('team')) 'team'
     ];
@@ -59,6 +64,7 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                   onPageChanged: (value) => setState(() => _index = value),
                   itemBuilder: (context, index) {
                     final task = tasks[index];
+                    final bank = task == 'bank';
                     final pricing = task == 'pricing';
                     return Container(
                         key: Key('setup-$task'),
@@ -86,7 +92,9 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                                   children: [
                                     Expanded(
                                         child: Text(
-                                            pricing
+                                            bank
+                                                ? 'Add bank account details'
+                                                : pricing
                                                 ? 'Add pricing to start accepting bookings'
                                                 : 'Add team members',
                                             style: OnboardingStyles.heading
@@ -99,7 +107,7 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                                         child: IconButton(
                                             padding: EdgeInsets.zero,
                                             tooltip:
-                                                'Dismiss ${pricing ? 'pricing' : 'team'} reminder',
+                                                'Dismiss ${bank ? 'bank account' : pricing ? 'pricing' : 'team'} reminder',
                                             icon: const Icon(Icons.close,
                                                 size: 20),
                                             onPressed: () {
@@ -118,7 +126,9 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                                   ]),
                               const SizedBox(height: 5),
                               Text(
-                                  pricing
+                                  bank
+                                      ? 'Add your bank account details to receive payouts for your bookings.'
+                                      : pricing
                                       ? "Congratulations on your venue's approval! Set your prices per slot and start accepting bookings."
                                       : 'Invite your team members to smoothly operate and manage your venue.',
                                   maxLines: 2,
@@ -137,16 +147,20 @@ class _DashboardSetupCardsState extends State<DashboardSetupCards> {
                                           shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(9))),
-                                      onPressed: pricing
-                                          ? widget.onPricing
-                                          : widget.onTeam,
+                                      onPressed: bank
+                                          ? widget.onBankAccount
+                                          : pricing
+                                              ? widget.onPricing
+                                              : widget.onTeam,
                                       child: Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
                                             Flexible(
                                                 child: Text(
-                                                    pricing
+                                                    bank
+                                                        ? 'Add Bank Account'
+                                                        : pricing
                                                         ? 'Set Pricing'
                                                         : 'Add team members',
                                                     style: OnboardingStyles.body

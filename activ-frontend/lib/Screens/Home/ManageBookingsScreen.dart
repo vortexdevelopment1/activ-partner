@@ -8,6 +8,9 @@ import 'package:intl/intl.dart';
 import 'package:flutter_svg/svg.dart';
 
 import '../../Utills/common_utilities.dart';
+
+DateTime _indiaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 5, minutes: 30));
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../Menu/MenuScreen.dart';
@@ -76,7 +79,7 @@ class _Booking {
       reference: (json['bookingReference'] ??
               json['booking_reference'] ??
               json['public_code'] ??
-              json['id'])
+              _displayWalkInReference(json['id']))
           .toString(),
       customerName:
           '$first $last'.trim().isEmpty ? 'Customer' : '$first $last'.trim(),
@@ -100,14 +103,14 @@ class _Booking {
   factory _Booking.fromManagement(
       Map<String, dynamic> json, String fallbackActivity) {
     final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
-    final local = startsAt?.toLocal();
+    final local = startsAt == null ? null : _indiaTime(startsAt);
     final total = double.tryParse(json['amount']?.toString() ?? '') ?? 0;
     return _Booking(
       id: json['id']?.toString() ?? '',
       reference: (json['bookingReference'] ??
               json['booking_reference'] ??
               json['public_code'] ??
-              json['id'])
+              _displayWalkInReference(json['id']))
           .toString(),
       customerName: json['customerName']?.toString() ?? 'Customer',
       phone: json['phone']?.toString() ?? '0',
@@ -126,6 +129,14 @@ class _Booking {
       status: _statusFromApi(json['status']?.toString()),
     );
   }
+
+String _displayWalkInReference(Object? value) {
+  final id = value?.toString() ?? '';
+  if (id.isEmpty) return 'Not available';
+  return id.contains('-') && id.length >= 32
+      ? 'WI-${id.substring(0, 8).toUpperCase()}'
+      : id;
+}
 
   static String _formatDate(String? value) {
     final parsed = DateTime.tryParse(value ?? '');

@@ -66,6 +66,22 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
     ORDER BY c.conname
   `);
 
+  const constraintAndIndexDefinitions = async (table: string) => {
+    const [constraintRows, indexRows] = await Promise.all([
+      constraints(table),
+      prisma.$queryRawUnsafe<Row[]>(`
+        SELECT indexname AS name, indexdef AS definition
+        FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = '${table}'
+        ORDER BY indexname
+      `),
+    ]);
+    return [
+      ...constraintRows.map(row => String(row.definition)),
+      ...indexRows.map(row => String(row.definition)),
+    ];
+  };
+
   it.each([
     ['bookings', ['id', 'booking_reference', 'public_code', 'user_id', 'slot_id', 'attempt_id', 'status', 'policy_version', 'subtotal_paise', 'discount_paise', 'total_paise']],
     ['booking_attempts', ['id', 'user_id', 'slot_id', 'quantity', 'status', 'expires_at', 'idempotency_key', 'quote_snapshot']],
@@ -93,8 +109,8 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
   });
 
   it('has the required idempotency and provider uniqueness constraints', async () => {
-    const attemptConstraints = (await constraints('booking_attempts')).map(row => String(row.definition));
-    const paymentConstraints = (await constraints('payments')).map(row => String(row.definition));
+    const attemptConstraints = await constraintAndIndexDefinitions('booking_attempts');
+    const paymentConstraints = await constraintAndIndexDefinitions('payments');
     expect(attemptConstraints.some(definition => /user_id.*idempotency_key|idempotency_key.*user_id/i.test(definition))).toBe(true);
     expect(paymentConstraints.some(definition => /provider.*provider_order_id|provider_order_id.*provider/i.test(definition))).toBe(true);
     expect(paymentConstraints.some(definition => /provider_event_id/i.test(definition))).toBe(true);
@@ -133,7 +149,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
   });
 
   it('has unique booking reference and public code constraints', async () => {
-    const definitions = (await constraints('bookings')).map(row => String(row.definition));
+    const definitions = await constraintAndIndexDefinitions('bookings');
     expect(definitions.some(definition => /booking_reference/i.test(definition))).toBe(true);
     expect(definitions.some(definition => /public_code/i.test(definition))).toBe(true);
   });
@@ -215,6 +231,18 @@ describeInspection('main database read-only booking/payment inspection', () => {
       ORDER BY table_name, ordinal_position
     `;
     expect(result.length).toBeGreaterThan(0);
+    const columnsByTable = new Map<string, Set<string>>();
+    for (const row of result) {
+      const table = String(row.table_name);
+      const columns = columnsByTable.get(table) ?? new Set<string>();
+      columns.add(String(row.column_name));
+      columnsByTable.set(table, columns);
+    }
+    const missing = [
+      ...['payment_deadline'].filter(column => !columnsByTable.get('bookings')?.has(column)).map(column => `bookings.${column}`),
+      ...['payment_intent_key', 'currency', 'order_status'].filter(column => !columnsByTable.get('payments')?.has(column)).map(column => `payments.${column}`),
+    ];
+    if (missing.length) throw new Error(`MAIN_SCHEMA_MISSING ${missing.join(', ')}`);
   });
 
   it('reads constraints, indexes, enums, functions and triggers without mutation', async () => {

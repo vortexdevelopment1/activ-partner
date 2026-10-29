@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '../../generated/prisma/client';
 import { lockSlotsForCapacity } from './slot-capacity-coordinator';
+import { createVerifiedRazorpayEvidence } from '../payments/razorpay-verification.adapter';
 
 type PaymentTransaction = Prisma.TransactionClient;
 
@@ -25,6 +26,36 @@ export type PaymentConfirmationResult = {
 
 /** Internal only. The caller must obtain provider verification before invoking this service. */
 export class NormalizedBookingPaymentService {
+  async confirmRazorpayPayment(
+    tx: PaymentTransaction,
+    input: { bookingId: string; orderId: string; paymentId: string; signature: string; keySecret: string; expectedAmountPaise: bigint; currency: string; eventId?: string },
+  ): Promise<PaymentConfirmationResult> {
+    const evidence = createVerifiedRazorpayEvidence({
+      orderId: input.orderId,
+      paymentId: input.paymentId,
+      signature: input.signature,
+      keySecret: input.keySecret,
+      amountPaise: input.expectedAmountPaise,
+      expectedAmountPaise: input.expectedAmountPaise,
+      currency: input.currency,
+      eventId: input.eventId,
+    });
+    const booking = await tx.bookings.findUnique({ where: { id: input.bookingId }, select: { id: true, total_paise: true } });
+    if (!booking || booking.total_paise !== evidence.amountPaise) throw new ConflictException('Payment amount does not match booking');
+    return this.confirmCapturedPayment(tx, { bookingId: booking.id, provider: evidence.provider, providerOrderId: evidence.orderId, providerPaymentId: evidence.paymentId, providerEventId: evidence.eventId, amountPaise: evidence.amountPaise });
+  }
+
+  /**
+   * Order creation must be supplied by an approved Razorpay client. This
+   * boundary deliberately refuses to fabricate order IDs or hold a database
+   * transaction across the provider network call.
+   */
+  assertOrderCreationReady(input: { bookingStatus: string; paymentDeadline: Date | null; now?: Date }): void {
+    const now = input.now ?? new Date();
+    if (input.bookingStatus !== 'PENDING_PAYMENT') throw new ConflictException('Booking is not payable');
+    if (!input.paymentDeadline || input.paymentDeadline <= now) throw new ConflictException('Payment deadline has expired');
+  }
+
   async confirmCapturedPayment(
     tx: PaymentTransaction,
     evidence: VerifiedCapturedPayment,
@@ -52,7 +83,10 @@ export class NormalizedBookingPaymentService {
       orderBy: { created_at: 'asc' },
     });
     if (existingPayment) {
-      if (existingPayment.provider_payment_id !== evidence.providerPaymentId || existingPayment.amount_paise !== evidence.amountPaise) {
+      // Order creation intentionally has no provider payment ID yet.  Attach
+      // the first verified capture to that CREATED order; reject only a
+      // genuinely conflicting already-recorded provider payment ID.
+      if ((existingPayment.provider_payment_id && existingPayment.provider_payment_id !== evidence.providerPaymentId) || existingPayment.amount_paise !== evidence.amountPaise) {
         throw new ConflictException('Payment evidence does not match the existing payment');
       }
       if (existingPayment.status === 'CAPTURED' && booking.status === 'CONFIRMED') return this.map(existingPayment, true);
@@ -83,7 +117,10 @@ export class NormalizedBookingPaymentService {
       updated_at: now,
     } });
     if (payment.status !== 'CAPTURED') {
-      await tx.payments.updateMany({ where: { id: payment.id, status: { in: ['CREATED', 'AUTHORIZED'] } }, data: { status: 'CAPTURED', updated_at: now } });
+      await tx.payments.updateMany({ where: { id: payment.id, status: { in: ['CREATED', 'AUTHORIZED'] } }, data: {
+        status: 'CAPTURED', provider_payment_id: evidence.providerPaymentId,
+        provider_event_id: evidence.providerEventId, updated_at: now,
+      } });
     }
     const confirmed = await tx.bookings.updateMany({ where: { id: booking.id, status: 'PENDING_PAYMENT' }, data: { status: 'CONFIRMED', updated_at: now } });
     if (confirmed.count !== 1) throw new ConflictException('Booking changed during payment confirmation');

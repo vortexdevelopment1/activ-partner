@@ -34,6 +34,18 @@ describe('NormalizedBookingPaymentService', () => {
     await expect(service.refusePendingPaymentExpiry(tx(), 'booking')).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('connects verified Razorpay evidence to normalized confirmation', async () => {
+    const signature = require('crypto').createHmac('sha256', 'secret').update('order|payment').digest('hex');
+    const database = tx();
+    const result = await service.confirmRazorpayPayment(database, { bookingId: 'booking', orderId: 'order', paymentId: 'payment', signature, keySecret: 'secret', expectedAmountPaise: 1000n, currency: 'INR' });
+    expect(result.paymentStatus).toBe('CAPTURED');
+  });
+
+  it('requires a live payment deadline before order creation', () => {
+    expect(() => service.assertOrderCreationReady({ bookingStatus: 'PENDING_PAYMENT', paymentDeadline: new Date('2020-01-01') })).toThrow('expired');
+    expect(() => service.assertOrderCreationReady({ bookingStatus: 'CONFIRMED', paymentDeadline: new Date('2030-01-01') })).toThrow('not payable');
+  });
+
   it('expires an abandoned pending booking and releases its consumed hold once', async () => {
     const database = tx({ bookings: { findUnique: jest.fn().mockResolvedValue({ id: 'booking', slot_id: 'slot', status: 'PENDING_PAYMENT', payment_deadline: new Date('2029-01-01T00:00:00Z'), booking_attempts: { id: 'attempt', status: 'CONSUMED' }, slots: {} }) } });
     expect(await service.expirePendingPayment(database, 'booking', new Date('2030-01-01T00:00:00Z'))).toBe(true);

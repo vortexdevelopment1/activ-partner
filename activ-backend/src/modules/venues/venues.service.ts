@@ -53,6 +53,8 @@ import { deleteVenue } from "./delete-venue";
 import { syncLegacyActivityVisibility } from './activity-visibility';
 import { attendanceStatus, INDIA_OFFSET_MS } from '../bookings/booking-expiry';
 import { paymentMethodLabel } from '../payments/payment-method';
+import { lockSlotsForCapacity } from '../bookings/slot-capacity-coordinator';
+import { effectiveSlotOccupancy } from '../bookings/slot-capacity';
 
 @Injectable()
 export class VenuesService {
@@ -3693,8 +3695,8 @@ export class VenuesService {
       where: {
         venue_service_id: serviceId,
         status: "RESERVED",
-        starts_at: { lt: dayEnd },
-        ends_at: { gt: dayStart },
+        starts_at: { lt: facilityDayEnd },
+        ends_at: { gt: facilityDayStart },
         notes: court ? { contains: `Court: ${court}` } : undefined,
       },
     });
@@ -3715,8 +3717,8 @@ export class VenuesService {
           endMin > this.istDateTimeToMinutes(booking.slots.starts_at),
         );
         const matchedWalkIn = walkIns.find((reservation) =>
-          startMin < this.dateTimeToMinutes(reservation.ends_at) &&
-          endMin > this.dateTimeToMinutes(reservation.starts_at),
+          startMin < this.istDateTimeToMinutes(reservation.ends_at) &&
+          endMin > this.istDateTimeToMinutes(reservation.starts_at),
         );
         const status = slot.status === "BLOCKED"
           ? "blocked"
@@ -3746,8 +3748,8 @@ export class VenuesService {
             return startMin < bEnd && endMin > bStart;
           });
           const matchedWalkIn = walkIns.find((w) =>
-            startMin < this.dateTimeToMinutes(w.ends_at) &&
-            endMin > this.dateTimeToMinutes(w.starts_at),
+            startMin < this.istDateTimeToMinutes(w.ends_at) &&
+            endMin > this.istDateTimeToMinutes(w.starts_at),
           );
           slots.push({
             startTime: this.minutesToTime(startMin),
@@ -3863,6 +3865,44 @@ export class VenuesService {
           day: dayName,
         },
       });
+      // Some legacy unit fixtures do not provide the normalized Prisma delegate.
+      // Production Prisma transactions always do; retain the legacy validation
+      // path for those fixtures until the writer is fully cut over.
+      if (service.facility_id && tx.slots?.findMany) {
+      const normalizedSlots = await tx.slots.findMany({
+        where: {
+          facility_id: service.facility_id,
+          OR: requestedSlots.map(slot => ({ starts_at: slot.startsAt, ends_at: slot.endsAt })),
+        },
+        select: { id: true, facility_id: true, capacity: true, status: true, starts_at: true, ends_at: true },
+      });
+      if (normalizedSlots.length !== requestedSlots.length) {
+        throw new ConflictException('One or more selected slots are not available in the normalized schedule');
+      }
+      await lockSlotsForCapacity(tx, normalizedSlots.map(slot => slot.id));
+      for (const normalizedSlot of normalizedSlots) {
+        const [slotBookings, slotAttempts, slotWalkIns] = await Promise.all([
+          tx.bookings.findMany({ where: { slot_id: normalizedSlot.id }, select: { id: true, attempt_id: true, status: true, starts_at: true, slots: { select: { ends_at: true } } } }),
+          tx.booking_attempts.findMany({ where: { slot_id: normalizedSlot.id, status: { in: ['HELD', 'PAYMENT_PROCESSING'] }, expires_at: { gt: new Date() } }, select: { status: true, quantity: true, expires_at: true, bookings: { select: { id: true } } } }),
+          tx.partner_walk_in_reservations.findMany({
+            where: {
+              facility_id: normalizedSlot.facility_id,
+              starts_at: { lt: normalizedSlot.ends_at },
+              ends_at: { gt: normalizedSlot.starts_at },
+            },
+            select: { status: true, participant_count: true, starts_at: true, ends_at: true },
+          }),
+        ]);
+        const occupancy = effectiveSlotOccupancy({
+          bookings: slotBookings.map(row => ({ id: row.id, attemptId: row.attempt_id, status: row.status, quantity: 1, startsAt: row.starts_at, endsAt: row.slots.ends_at })),
+          attempts: slotAttempts.map(row => ({ status: row.status, quantity: row.quantity, expiresAt: row.expires_at, bookingId: row.bookings?.id ?? null })),
+          walkIns: slotWalkIns.map(row => ({ status: row.status, participantCount: row.participant_count, startsAt: row.starts_at, endsAt: row.ends_at })),
+        });
+        if (normalizedSlot.status !== 'AVAILABLE' || occupancy + 1 > normalizedSlot.capacity) {
+          throw new ConflictException('One or more selected slots are unavailable');
+        }
+      }
+      }
       if (!windows.length || requestedSlots.some((slot) => {
         const start = this.timeToMinutes(slot.startTime);
         const end = this.timeToMinutes(slot.endTime);
@@ -3957,7 +3997,8 @@ export class VenuesService {
   }
 
   private walkInDateTime(date: string, time: string): Date {
-    return new Date(`${date}T${time}:00.000Z`);
+    const day = new Date(`${date}T00:00:00.000Z`);
+    return this.istWallTimeToUtc(day, this.timeToMinutes(time));
   }
 
   async getWalkIns(
@@ -4009,8 +4050,8 @@ export class VenuesService {
       where: { id: reservationId, venue_service_id: serviceId },
     });
     if (!reservation) throw new NotFoundException("Reservation not found");
-    if (reservation.status !== "RESERVED")
-      throw new BadRequestException("Reservation is already released");
+    if (reservation.status === "CANCELLED") return this.mapWalkInReservation(reservation);
+    if (reservation.status !== "RESERVED") throw new BadRequestException("Reservation is already released");
 
     const released = await this.prisma.partner_walk_in_reservations.update({
       where: { id: reservation.id },
@@ -4036,6 +4077,8 @@ export class VenuesService {
 
   private mapWalkInReservation(reservation: any) {
     const notes = String(reservation.notes ?? "");
+    const istStart = new Date(reservation.starts_at.getTime() + 330 * 60_000);
+    const dateCode = istStart.toISOString().slice(0, 10).replace(/-/g, "");
     const courtMatch = notes.match(/^Court: (.+)$/m);
     const emailMatch = notes.match(/^Email: (.+)$/m);
     const paymentMethodMatch = notes.match(/^Payment method: (.+)$/m);
@@ -4043,15 +4086,16 @@ export class VenuesService {
     const idempotencyKeyMatch = notes.match(/^Idempotency-Key: (.+)$/m);
     return {
       id: reservation.id,
+      bookingReference: `WI-${dateCode}-${String(reservation.id).slice(0, 8).toUpperCase()}`,
       venueServiceId: reservation.venue_service_id,
       venueId: reservation.venue_id,
       partnerId: reservation.partner_id,
       court: courtMatch?.[1] ?? null,
-      date: reservation.starts_at.toISOString().slice(0, 10),
+      date: istStart.toISOString().slice(0, 10),
       slots: [
         {
-          startTime: this.minutesToTime(this.dateTimeToMinutes(reservation.starts_at)),
-          endTime: this.minutesToTime(this.dateTimeToMinutes(reservation.ends_at)),
+          startTime: this.minutesToTime(this.istDateTimeToMinutes(reservation.starts_at)),
+          endTime: this.minutesToTime(this.istDateTimeToMinutes(reservation.ends_at)),
         },
       ],
       participantName: reservation.participant_name,

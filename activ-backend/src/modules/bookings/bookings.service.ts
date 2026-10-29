@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import * as fs from "fs";
@@ -30,12 +31,18 @@ import { NotificationType } from "../notifications/entities/notification.entity"
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
 import { bookingHasEnded } from './booking-expiry';
+import { LegacySlotResolver } from './legacy-slot-resolver';
+import { NormalizedBookingHoldService } from './normalized-booking-hold.service';
+import { buildLegacyIdempotencyContext } from './legacy-idempotency';
+import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
+import { lockSlotsForCapacity } from './slot-capacity-coordinator';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
 
 @Injectable()
 export class BookingsService {
+  private readonly normalizedHoldService = new NormalizedBookingHoldService();
   constructor(
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
@@ -49,6 +56,7 @@ export class BookingsService {
     private readonly bankAccountRepository: Repository<BankAccount>,
     private readonly notificationsService: NotificationsService,
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   private businessDateKey(date = new Date()): string {
@@ -102,6 +110,44 @@ export class BookingsService {
     durationMinutes: number,
   ): number {
     return (pricePerHour / 60) * durationMinutes;
+  }
+
+  /**
+   * Inactive replacement for POST /bookings. The controller deliberately does
+   * not call this until all competing writers are cut over. A stable key is
+   * mandatory for this normalized path; legacy requests without one remain on
+   * the existing implementation and are not advertised as retry-idempotent.
+   */
+  async createNormalizedFromLegacy(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    idempotencyKey: string | undefined,
+    timezone = 'Asia/Kolkata',
+  ) {
+    const resolver = new LegacySlotResolver(this.prisma);
+    const resolved = await resolver.resolve(createBookingDto, timezone);
+    const identity = buildLegacyIdempotencyContext(createBookingDto, userId, resolved.slotId, { 'idempotency-key': idempotencyKey });
+    if (!identity.key) throw new ConflictException('Normalized booking requires an Idempotency-Key header');
+
+    const pending = await this.prisma.$transaction(async tx => {
+      const hold = await this.normalizedHoldService.createHold(
+        tx,
+        userId,
+        resolved.slotId,
+        identity.key!,
+        1,
+        10,
+        new Date(),
+        { venueId: resolved.venueId, serviceId: resolved.serviceId },
+      );
+      return this.normalizedHoldService.finalizeHoldToPendingBooking(tx, hold.id, new Date(), hold.expiresAt);
+    });
+    const record = await this.prisma.bookings.findUnique({
+      where: { id: pending.id },
+      include: this.normalizedBookingInclude,
+    });
+    if (!record) throw new NotFoundException('Booking was not created');
+    return this.mapNormalizedBooking(record);
   }
 
   private readonly normalizedBookingInclude = {
@@ -452,6 +498,9 @@ export class BookingsService {
     reason: string,
     currentUser: User,
   ): Promise<Booking> {
+    if (normalizedBookingRoutesEnabled(this.config)) {
+      return this.cancelNormalized(id, reason, currentUser) as unknown as Booking;
+    }
     const booking = await this.findOne(id);
 
     if (
@@ -474,7 +523,39 @@ export class BookingsService {
     return this.bookingRepository.save(booking);
   }
 
+  /** Default-off normalized cancellation path; legacy cancellation remains authoritative. */
+  private async cancelNormalized(id: string, reason: string, currentUser: User) {
+    return this.prisma.$transaction(async tx => {
+      const booking = await tx.bookings.findUnique({ where: { id }, include: { slots: true } });
+      if (!booking) throw new NotFoundException('Booking not found');
+      if (currentUser.role === UserRole.USER && booking.user_id !== currentUser.id) {
+        throw new ForbiddenException('You can only cancel your own bookings');
+      }
+      if (booking.status === 'CANCELLED') throw new BadRequestException('Booking is already cancelled');
+      if (booking.status === 'COMPLETED') throw new BadRequestException('Cannot cancel a completed booking');
+      await lockSlotsForCapacity(tx, [booking.slot_id]);
+      await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${booking.id}::uuid FOR UPDATE`;
+      const updated = await tx.bookings.updateMany({
+        where: { id, status: { not: 'CANCELLED' } },
+        data: { status: 'CANCELLED', updated_at: new Date() },
+      });
+      if (updated.count !== 1) throw new ConflictException('Booking changed during cancellation');
+      if (booking.attempt_id) {
+        await tx.booking_attempts.updateMany({
+          where: { id: booking.attempt_id, status: { in: ['HELD', 'PAYMENT_PROCESSING', 'CONSUMED'] } },
+          data: { status: 'RELEASED', updated_at: new Date() },
+        });
+      }
+      const record = await tx.bookings.findUnique({ where: { id }, include: this.normalizedBookingInclude });
+      if (!record) throw new NotFoundException('Booking not found');
+      return this.mapNormalizedBooking(record);
+    });
+  }
+
   async confirm(id: string): Promise<Booking> {
+    if (normalizedBookingRoutesEnabled(this.config)) {
+      throw new ConflictException('Administrative confirmation is not a payment confirmation; use verified payment capture');
+    }
     const booking = await this.findOne(id);
     booking.status = BookingStatus.CONFIRMED;
     const saved = await this.bookingRepository.save(booking);

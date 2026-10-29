@@ -519,8 +519,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
                     'Confirmation timed out. Retry to check this booking safely.');
               });
               if (response.statusCode == 409) {
-                throw Exception(
-                    'That slot is already reserved. Go back and choose another slot.');
+                throw Exception(_errorMessage(response.body));
               }
               if (response.statusCode >= 400 && response.statusCode < 500) {
                 checkSavedBooking = false;

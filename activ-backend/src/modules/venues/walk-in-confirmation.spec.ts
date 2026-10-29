@@ -41,6 +41,17 @@ describe('walk-in booking confirmation', () => {
     });
   }
 
+  it('stores India wall-clock walk-in times as UTC instants', async () => {
+    const { service, prisma } = setup();
+    await service.createWalkIn('venue', 'activity', 'partner', {
+      date: '2026-10-26', slots: [{ startTime: '17:00', endTime: '18:00' }],
+      participantName: 'Test Participant', participantPhone: '+919876543210',
+    });
+    const data = prisma.partner_walk_in_reservations.create.mock.calls[0][0].data;
+    expect(data.starts_at).toEqual(new Date('2026-10-26T11:30:00.000Z'));
+    expect(data.ends_at).toEqual(new Date('2026-10-26T12:30:00.000Z'));
+  });
+
   it('rejects an ACTIV booking at the same IST time before saving a walk-in', async () => {
     const { service, prisma } = setup();
     prisma.partner_venue_services.findFirst.mockResolvedValue({
