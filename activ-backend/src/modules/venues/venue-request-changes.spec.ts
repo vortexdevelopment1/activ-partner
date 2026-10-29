@@ -18,7 +18,8 @@ describe('venue corrections before approval', () => {
       },
       partner_venue_services: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       audit_events: { findFirst: jest.fn().mockResolvedValue({ id: 'existing-email-receipt' }) },
-      $transaction: jest.fn((operations) => Promise.all(operations)),
+      $queryRaw: jest.fn(),
+      $transaction: jest.fn((operations) => typeof operations === 'function' ? operations(prisma) : Promise.all(operations)),
     };
     notificationsService = { notify: jest.fn().mockResolvedValue(undefined) };
     mailService = { sendVenueChangesRequestedEmail: jest.fn().mockResolvedValue(true) };
@@ -41,7 +42,7 @@ describe('venue corrections before approval', () => {
       data: expect.objectContaining({ status: 'DRAFT', submitted_at: null }),
     }));
     expect(notificationsService.notify).toHaveBeenCalledWith('partner', 'admin_update', expect.any(String), 'Arena: Clearer photos', { venueId: 'venue' });
-    expect(mailService.sendVenueChangesRequestedEmail).toHaveBeenCalledWith({ toEmail: 'owner@example.com', venueName: 'Arena', reason: 'Clearer photos' });
+    expect(mailService.sendVenueChangesRequestedEmail).toHaveBeenCalledWith({ toEmail: 'owner@example.com', venueName: 'Arena', reason: 'Clearer photos', partnerName: '', deliveryKey: expect.stringContaining('venue-changes:venue:') });
     const enabled = process.env.SIGNED_AGREEMENT_EMAIL_ENABLED;
     process.env.SIGNED_AGREEMENT_EMAIL_ENABLED = 'false';
     try {

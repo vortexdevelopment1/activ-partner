@@ -738,6 +738,9 @@ export class AuthService {
         toEmail: user.email,
         firstName: user.name?.trim().split(/\s+/)[0] || 'there',
         code,
+        deliveryKey: `password-reset:${challenge.id}`,
+        challengeKey,
+        expiresAt: challenge.expires_at,
       });
       if (!sent) {
         throw new ServiceUnavailableException('Unable to send the reset email. Please try again.');

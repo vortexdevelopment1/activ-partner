@@ -13,6 +13,7 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../CommonCode.dart';
 import '../Menu/MenuScreen.dart';
+import '../default_partner_avatar.dart';
 import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
@@ -531,21 +532,7 @@ class _State extends State<HomeScreen> {
   // ── Top bar ───────────────────────────────────────────────────────────────────
 
   Widget _buildHomeAvatar() {
-    Widget fallback() => Image.asset(
-          'assets/ic_profile_logo.png',
-          width: 36,
-          height: 36,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            width: 36,
-            height: 36,
-            decoration: const BoxDecoration(
-              color: Color(0xFF0AAEEF),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person, color: Colors.white, size: 20),
-          ),
-        );
+    Widget fallback() => const DefaultPartnerAvatar();
 
     return ClipOval(
       child: SizedBox(

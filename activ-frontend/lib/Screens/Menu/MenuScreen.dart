@@ -21,6 +21,7 @@ import '../Home/PayoutHistoryScreen.dart';
 import '../Home/VenueInfoScreen.dart';
 import '../Home/ViewDocumentScreen.dart';
 import '../StringExtensions.dart';
+import '../default_partner_avatar.dart';
 import 'SettingsScreen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -433,7 +434,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 width: 130,
                 height: 130,
                 child: ColoredBox(
-                  color: const Color(0xFFC8C8C8),
+                  color: const Color(0xFFD0D0D0),
                   child: _avatarUrl.isNotEmpty
                       ? Image.network(_avatarUrl,
                           fit: BoxFit.cover,
@@ -494,12 +495,7 @@ class _MenuScreenState extends State<MenuScreen> {
     ]);
   }
 
-  Widget _buildDefaultAvatar() => const Icon(
-        Icons.person_outline_rounded,
-        color: AppColors.black1,
-        size: 64,
-        semanticLabel: 'Partner profile',
-      );
+  Widget _buildDefaultAvatar() => const DefaultPartnerAvatar();
 
   Widget _buildMenuRow(_ProfileMenuItem item) {
     return Padding(

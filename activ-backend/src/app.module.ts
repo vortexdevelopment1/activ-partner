@@ -5,6 +5,7 @@ import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import * as path from 'path';
 
 import { getTypeOrmCompatibilityConfig } from './config/database.config';
+import { isProductionEnvironment } from './config/environment';
 import { PrismaModule } from './prisma/prisma.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -44,6 +45,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: isProductionEnvironment(process.env),
       envFilePath: [
         path.resolve(__dirname, '..', '.env.local'),
         path.resolve(__dirname, '..', '.env'),

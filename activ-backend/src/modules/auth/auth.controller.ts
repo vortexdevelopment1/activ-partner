@@ -45,11 +45,11 @@ export class AuthController {
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Start the protected Gmail OAuth setup flow' })
-  googleConnect(
+  async googleConnect(
     @Headers('x-google-oauth-setup-key') setupKey: string,
     @Res() response: Response,
   ) {
-    return response.redirect(this.googleOAuthService.createAuthorizationUrl(setupKey));
+    return response.redirect(await this.googleOAuthService.createAuthorizationUrl(setupKey));
   }
 
   @Public()
@@ -65,7 +65,7 @@ export class AuthController {
       if (error) throw new Error('Google authorization was declined.');
       await this.googleOAuthService.completeAuthorization(code, state);
       return response.status(HttpStatus.OK).type('html').send(
-        '<h1>Google Gmail authorization completed successfully.</h1><p>Authorized Gmail account verified.</p><p>Configure the refresh token securely in your backend environment.</p>',
+        '<h1>Google Gmail authorization saved.</h1><p>The sender account identity was verified and the refresh token was persisted securely.</p>',
       );
     } catch (callbackError) {
       return response.status(HttpStatus.BAD_REQUEST).type('html').send(
@@ -73,6 +73,13 @@ export class AuthController {
       );
     }
   }
+
+  @Get('google/status')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Read sanitized Gmail credential readiness (Admin only)' })
+  googleCredentialStatus() { return this.googleOAuthService.credentialStatus(); }
 
   @Public()
   @Post('login')

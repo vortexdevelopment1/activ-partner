@@ -19,7 +19,7 @@ export class PartnerEmailService {
         ? await this.prisma.partner_business_profiles.findUnique({ where: { partner_id: partnerId }, select: { email: true, owner_name: true } })
         : null;
       return await this.mail.sendTemplateEmail(owner?.users?.email || profile?.email, template,
-        { partnerName: owner?.users?.name || profile?.owner_name || 'Partner', ...data });
+        { ...data, partnerName: data.partnerName || owner?.users?.name || profile?.owner_name || 'Partner' });
     } catch {
       this.logger.warn(`Partner notice could not be delivered (${template})`);
       return false;

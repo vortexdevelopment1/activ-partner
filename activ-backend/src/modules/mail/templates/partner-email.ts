@@ -1,4 +1,6 @@
 export type EmailData = {
+  /** Stable business-event identity; never rendered in the email. */
+  deliveryKey?: string;
   partnerName?: string; venueName?: string; activityName?: string; reason?: string;
   reference?: string; bankName?: string; accountLast4?: string; subject?: string;
   signedAt?: string; callbackDate?: string; callbackTime?: string;

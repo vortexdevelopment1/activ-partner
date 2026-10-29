@@ -4,11 +4,15 @@ import { MailService } from './mail.service';
 import { GoogleOAuthService } from './google-oauth.service';
 import { PartnerEmailService } from './partner-email.service';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { EmailDeliveryService } from './email-delivery.service';
+import { EmailDeliveriesController } from './email-deliveries.controller';
+import { GoogleCredentialStore } from './google-credential.store';
 
 @Global()
 @Module({
   imports: [ConfigModule, PrismaModule],
-  providers: [MailService, GoogleOAuthService, PartnerEmailService],
+  controllers: [EmailDeliveriesController],
+  providers: [MailService, GoogleOAuthService, GoogleCredentialStore, PartnerEmailService, EmailDeliveryService],
   exports: [MailService, GoogleOAuthService, PartnerEmailService],
 })
 export class MailModule {}

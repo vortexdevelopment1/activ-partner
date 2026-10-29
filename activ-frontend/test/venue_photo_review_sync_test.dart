@@ -14,6 +14,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     CommonUtilities.callVenueImagesClear = '';
     VenuePhotoListViewScreen.returnToReviewBuilder = null;
+    VenuePhotoListViewScreen.cachedImageBytes = [];
+    VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+    VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
   });
 
   Future<List<Uint8List>> showUpload(WidgetTester tester,
@@ -76,8 +79,14 @@ void main() {
         'deleted review photo stays deleted after ${systemBack ? "system" : "button"} Back and Next',
         (tester) async {
       final photos = await showUpload(tester);
+      VenuePhotoListViewScreen.cacheSelection(
+          const {'id': 'badminton'}, photos, 0);
       await next(tester);
       await chooseAction(tester, 'Delete photo');
+      expect(VenuePhotoListViewScreen.cachedImagesByCategory['badminton'],
+          orderedEquals(photos.skip(1)));
+      expect(VenuePhotoListViewScreen.cachedImageBytes,
+          orderedEquals(photos.skip(1)));
       if (systemBack) {
         await tester.binding.handlePopRoute();
       } else {

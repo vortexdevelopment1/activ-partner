@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show MatrixUtils;
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -451,19 +452,18 @@ class _OnboardingSupportMenuState extends State<OnboardingSupportMenu> {
       onPopInvokedWithResult: (popped, _) {
         if (!popped && _open) _close();
       },
-      child: OverlayPortal(
+      child: OverlayPortal.overlayChildLayoutBuilder(
         controller: _portal,
-        overlayChildBuilder: (context) {
-          final renderObject = this.context.findRenderObject();
-          if (renderObject is! RenderBox) return const SizedBox.shrink();
-          final anchorTopLeft = renderObject.localToGlobal(Offset.zero);
-          final anchorSize = renderObject.size;
-          final anchorRect = anchorTopLeft & anchorSize;
-          final screenSize = MediaQuery.sizeOf(context);
+        overlayChildBuilder: (context, info) {
+          // Read the anchor after layout, so an open panel follows every drag
+          // and edge snap instead of retaining the button's previous position.
+          final anchorRect = MatrixUtils.transformRect(
+              info.childPaintTransform, Offset.zero & info.childSize);
+          final screenSize = info.overlaySize;
           final padding = MediaQuery.paddingOf(context);
           const edgePadding = 20.0;
           const gap = 8.0;
-          final width = math.min(390.0, MediaQuery.sizeOf(context).width - 40);
+          final width = math.min(390.0, screenSize.width - 40);
           final availableAbove =
               math.max(0.0, anchorRect.top - padding.top - edgePadding - gap);
           final availableBelow = math.max(

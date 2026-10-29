@@ -22,6 +22,17 @@ class VenuePhotoListViewScreen extends StatefulWidget {
   static final Map<String, int> cachedCoverIndexByCategory = {};
   static WidgetBuilder? returnToReviewBuilder;
 
+  static void cacheSelection(Map<String, dynamic> category,
+      List<Uint8List> bytes, int coverIndex) {
+    final categoryId = category['id']?.toString() ?? '';
+    cachedImagesByCategory[categoryId] = List<Uint8List>.from(bytes);
+    cachedCoverIndexByCategory[categoryId] =
+        bytes.isEmpty ? 0 : coverIndex.clamp(0, bytes.length - 1);
+    cachedImageBytes = [
+      for (final photos in cachedImagesByCategory.values) ...photos,
+    ];
+  }
+
   final List<XFile> images;
   final List<Uint8List> imageBytes;
   final Map<String, dynamic> currentCategory;
@@ -123,24 +134,8 @@ class _State extends State<VenuePhotoListViewScreen> {
       VenuePhotoListViewScreen.cachedImagesByCategory.clear();
       VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
     }
-    VenuePhotoListViewScreen.cachedImagesByCategory[categoryId] =
-        List.from(_imageBytes);
-    VenuePhotoListViewScreen.cachedCoverIndexByCategory[categoryId] =
-        _coverIndex ?? 0;
-    if (widget.replaceOnlyCurrentCategory) {
-      VenuePhotoListViewScreen.cachedImageBytes = [
-        for (final bytes
-            in VenuePhotoListViewScreen.cachedImagesByCategory.values)
-          ...bytes,
-      ];
-    } else if (widget.categoryIndex == 1) {
-      VenuePhotoListViewScreen.cachedImageBytes = List.from(_imageBytes);
-    } else {
-      VenuePhotoListViewScreen.cachedImageBytes = [
-        ...VenuePhotoListViewScreen.cachedImageBytes,
-        ..._imageBytes,
-      ];
-    }
+    VenuePhotoListViewScreen.cacheSelection(
+        widget.currentCategory, _imageBytes, _coverIndex ?? 0);
   }
 
 
@@ -174,6 +169,8 @@ class _State extends State<VenuePhotoListViewScreen> {
   }
 
   void _notifyPhotosChanged() {
+    VenuePhotoListViewScreen.cacheSelection(
+        widget.currentCategory, _imageBytes, _coverIndex ?? 0);
     SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex ?? 0);
     widget.onPhotosChanged?.call(
       List<XFile>.unmodifiable(_images),

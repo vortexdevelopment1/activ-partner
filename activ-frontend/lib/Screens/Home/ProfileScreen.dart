@@ -10,6 +10,7 @@ import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../ContactSupportFormScreen.dart';
+import '../default_partner_avatar.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.client});
@@ -433,12 +434,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textAlign: TextAlign.center),
       ]);
 
-  Widget _defaultAvatar() => SvgPicture.asset(
-        'assets/iconamoon_profile.svg',
-        width: 64,
-        height: 64,
-        semanticsLabel: 'Partner profile',
-      );
+  Widget _defaultAvatar() => const DefaultPartnerAvatar();
 
   Widget _field(String label, String value, String iconAsset,
           {required bool compact, required bool mini}) =>

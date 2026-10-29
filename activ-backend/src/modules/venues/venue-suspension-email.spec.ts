@@ -6,19 +6,21 @@ describe('venue suspension email trigger', () => {
     const mailService = { sendSuspensionEmail: jest.fn().mockResolvedValue(true) };
     const service = Object.assign(Object.create(VenuesService.prototype), {
       prisma: {
-        venues: { findUnique: jest.fn().mockResolvedValue({ status: reviewStatus ? 'ARCHIVED' : 'PUBLISHED', review_status: reviewStatus }), update: jest.fn() },
+        venues: { findUnique: jest.fn().mockResolvedValue({ id: 'venue', status: reviewStatus ? 'ARCHIVED' : 'PUBLISHED', review_status: reviewStatus }), update: jest.fn() },
         partner_venue_services: { updateMany: jest.fn() },
         $transaction: jest.fn().mockResolvedValue([]),
       },
       mailService,
       findOne: jest.fn().mockResolvedValue({ id: 'venue', name: 'Arena', partner: { email: 'owner@example.com', firstName: 'Test', lastName: 'Owner' } }),
     }) as VenuesService;
+    (service as any).prisma.$queryRaw = jest.fn();
+    (service as any).prisma.$transaction.mockImplementation(callback => callback((service as any).prisma));
     return { service, mailService };
   };
   it('sends the suspension reason to the registered partner after saving', async () => {
     const { service, mailService } = setup();
     await service.processApproval('venue', { status: VenueStatus.SUSPENDED, reason: 'Invalid business details' }, 'admin');
-    expect(mailService.sendSuspensionEmail).toHaveBeenCalledWith({ toEmail: 'owner@example.com', partnerName: 'Test Owner', venueName: 'Arena', reason: 'Invalid business details' });
+    expect(mailService.sendSuspensionEmail).toHaveBeenCalledWith({ toEmail: 'owner@example.com', partnerName: 'Test Owner', venueName: 'Arena', reason: 'Invalid business details', deliveryKey: expect.stringContaining('venue-suspended:venue:') });
   });
   it('does not send another email for an already suspended venue', async () => {
     const { service, mailService } = setup('suspended');

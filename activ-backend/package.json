@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "email:preview": "ts-node scripts/render-email-previews.ts",
-    "prebuild": "prisma generate",
+    "prebuild": "prisma generate --config ./prisma7.config.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "prestart": "npm run prisma:generate",
@@ -21,11 +21,14 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
+    "test:postgres": "node scripts/run-postgres-integration.cjs",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "prisma generate --config ./prisma7.config.ts",
+    "prisma:migrate:status": "prisma migrate status --config ./prisma7.config.ts",
+    "prisma:migrate:deploy": "prisma migrate deploy --config ./prisma7.config.ts",
     "prisma:pull": "prisma db pull",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -109,6 +112,7 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": ["<rootDir>/../test/no-network.cjs"]
   }
 }

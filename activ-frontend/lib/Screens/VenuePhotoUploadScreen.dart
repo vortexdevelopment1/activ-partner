@@ -28,6 +28,7 @@ class VenuePhotoUploadScreen extends StatefulWidget {
   final int totalCategories;
   final List<Map<String, dynamic>> accumulatedTimings;
   final ImagePicker? imagePicker;
+  final http.Client? client;
   final List<Uint8List> initialImageBytes;
   final int initialCoverIndex;
   final bool replaceOnlyCurrentCategory;
@@ -41,6 +42,7 @@ class VenuePhotoUploadScreen extends StatefulWidget {
     this.totalCategories = 1,
     this.accumulatedTimings = const [],
     this.imagePicker,
+    this.client,
     this.initialImageBytes = const [],
     this.initialCoverIndex = 0,
     this.replaceOnlyCurrentCategory = false,
@@ -57,6 +59,24 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   late final ImagePicker _picker = widget.imagePicker ?? ImagePicker();
   String? _photoError;
   int _coverIndex = 0;
+  int _selectionRevision = 0;
+  bool _pickingPhotos = false;
+  bool _savingDraft = false;
+  // Preview -> original content. Gallery paths may expire or change on re-pick.
+  final Map<String, String> _originalFingerprints = {};
+
+  void _saveSelection() {
+    final previews = _imageBytes.map(venuePhotoFingerprint).toSet();
+    _originalFingerprints.removeWhere((preview, _) => !previews.contains(preview));
+    VenuePhotoListViewScreen.cacheSelection(
+        widget.currentCategory, _imageBytes, _coverIndex);
+    _savingDraft = true;
+    try {
+      SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+    } finally {
+      _savingDraft = false;
+    }
+  }
 
   void _showPhotoError(String message) {
     if (!mounted) return;
@@ -93,16 +113,17 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   }
 
   Future<void> _restoreExistingPhotos() async {
+    final revision = _selectionRevision;
     final venueId = checkString(await SharedPreference.readStr('venue_id'));
     final token = checkString(await SharedPreference.readStr('jwt_token'));
     if (venueId.isEmpty || token.isEmpty) return;
 
     try {
-      final response = await http.get(
+      final response = await (widget.client?.get ?? http.get)(
         Uri.parse('$BASE_URL/venues/$venueId/activities/full'),
         headers: {'Authorization': 'Bearer $token'},
       );
-      if (response.statusCode != 200) return;
+      if (response.statusCode != 200 || !mounted || revision != _selectionRevision) return;
 
       final decoded = jsonDecode(response.body);
       final rawServices = decoded is Map ? decoded['data'] : null;
@@ -135,14 +156,14 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
       final downloaded = <({String url, Uint8List bytes})>[];
       for (final url in urls) {
-        final imageResponse = await http.get(Uri.parse(url));
+        final imageResponse = await (widget.client?.get ?? http.get)(Uri.parse(url));
         if (imageResponse.statusCode == 200 &&
             imageResponse.bodyBytes.isNotEmpty) {
           downloaded.add(
               (url: url, bytes: Uint8List.fromList(imageResponse.bodyBytes)));
         }
       }
-      if (downloaded.isEmpty || !mounted) return;
+      if (downloaded.isEmpty || !mounted || revision != _selectionRevision) return;
 
       final coverUrl = service['coverImageUrl']?.toString();
       var coverIndex = downloaded.indexWhere((item) => item.url == coverUrl);
@@ -164,7 +185,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         _isButtonEnabled =
             _selectedImages.length >= 4 && _selectedImages.length <= 12;
       });
-      SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+      _saveSelection();
       if (categoryId.isNotEmpty) {
         VenuePhotoListViewScreen.cachedImagesByCategory[categoryId] =
             List.from(_imageBytes);
@@ -178,8 +199,10 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   }
 
   void _restoreSessionPhotos() {
+    if (_savingDraft) return;
     final draft = SessionPhotoDraft.read(widget.currentCategory);
     if (!mounted || draft == null) return;
+    _selectionRevision++;
     setState(() {
       _imageBytes
         ..clear()
@@ -197,6 +220,8 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       _isButtonEnabled =
           _selectedImages.length >= 4 && _selectedImages.length <= 12;
     });
+    final previews = _imageBytes.map(venuePhotoFingerprint).toSet();
+    _originalFingerprints.removeWhere((preview, _) => !previews.contains(preview));
   }
 
   @override
@@ -307,13 +332,15 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         return;
       }
     }
-    SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+    _saveSelection();
+    final images = List<XFile>.of(_selectedImages);
+    final bytes = List<Uint8List>.of(_imageBytes);
     Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => VenuePhotoListViewScreen(
-                  images: _selectedImages,
-                  imageBytes: _imageBytes,
+                  images: images,
+                  imageBytes: bytes,
                   currentCategory: widget.currentCategory,
                   remainingCategories: widget.remainingCategories,
                   categoryIndex: widget.categoryIndex,
@@ -330,6 +357,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   void _syncReviewedPhotos(
       List<XFile> images, List<Uint8List> bytes, int coverIndex) {
     if (!mounted) return;
+    _selectionRevision++;
     setState(() {
       _selectedImages
         ..clear()
@@ -340,16 +368,18 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
       _coverIndex = coverIndex;
       _isButtonEnabled = images.length >= 4 && images.length <= 12;
     });
+    _saveSelection();
   }
 
 // Update function to check button status
   void _updateButtonStatus() {
     if (!mounted) return;
+    _selectionRevision++;
     setState(() {
       _isButtonEnabled =
           _selectedImages.length >= 4 && _selectedImages.length <= 12;
     });
-    SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+    _saveSelection();
   }
 
   Future<void> _pickImages1() async {
@@ -399,44 +429,41 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
     _updateButtonStatus(); // ✅ update button state
   }
 
-  Future<void> _pickImages() async {
-    if (mounted) setState(() => _photoError = null);
+  Future<void> _pickImages() => _pickPhotos();
+
+  Future<void> _pickFromCamera() => _pickPhotos(camera: true);
+
+  Future<void> _pickPhotos({bool camera = false}) async {
+    if (_pickingPhotos || !mounted) return;
+    setState(() => _photoError = null);
     if (_selectedImages.length >= 12) {
-      _showPhotoError("You can upload maximum 12 images.");
+      _showPhotoError('You can upload maximum 12 images.');
       return;
     }
-
-    final List<XFile> images = await _picker.pickMultiImage();
-
-    if (images != null && images.isNotEmpty) {
+    _pickingPhotos = true;
+    _selectionRevision++;
+    try {
+      final List<XFile> images;
+      if (camera) {
+        final image = await _picker.pickImage(source: ImageSource.camera);
+        images = image == null ? [] : [image];
+      } else {
+        images = await _picker.pickMultiImage();
+      }
+      if (!mounted) return;
       var duplicateFound = false;
-      for (var img in images) {
-        duplicateFound = await _addSelectedPhoto(img) || duplicateFound;
+      for (final image in images) {
+        duplicateFound = await _addSelectedPhoto(image) || duplicateFound;
       }
       _updateButtonStatus();
-      if (duplicateFound && mounted)
+      if (duplicateFound && mounted) {
         await showDuplicateVenuePhotoDialog(context);
+      }
+    } catch (_) {
+      _showPhotoError('Unable to select photos. Please try again.');
+    } finally {
+      _pickingPhotos = false;
     }
-
-    _updateButtonStatus(); // ✅ update button state
-  }
-
-  Future<void> _pickFromCamera() async {
-    if (mounted) setState(() => _photoError = null);
-    if (_selectedImages.length >= 12) {
-      _showPhotoError("Maximum 12 images allowed.");
-      return;
-    }
-
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    if (image != null) {
-      final duplicateFound = await _addSelectedPhoto(image);
-      _updateButtonStatus();
-      if (duplicateFound && mounted)
-        await showDuplicateVenuePhotoDialog(context);
-    }
-
-    _updateButtonStatus(); // ✅ update button state
   }
 
   // Returns true only when the photo was rejected as a duplicate.
@@ -453,8 +480,10 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
             'Each photo must be 5 MB or smaller. Oversized photos were not added.');
         return false;
       }
-      if (await containsVenuePhoto(raw,
-          selectedPhotos: _selectedImages, processedPhotos: _imageBytes)) {
+      final originalFingerprint = venuePhotoFingerprint(raw);
+      if (_originalFingerprints.containsValue(originalFingerprint) ||
+          await containsVenuePhoto(raw,
+              selectedPhotos: _selectedImages, processedPhotos: _imageBytes)) {
         return true;
       }
       if (!mounted) return false;
@@ -469,12 +498,18 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
         minHeight: 720,
       );
       if (!mounted) return false;
-      if (matchesVenuePhoto(compressed, _imageBytes)) return true;
+      if (_originalFingerprints.containsValue(originalFingerprint) ||
+          matchesVenuePhoto(compressed, _imageBytes)) {
+        return true;
+      }
       setState(() {
+        _selectionRevision++;
         _selectedImages.add(image);
         _imageBytes.add(compressed);
+        _originalFingerprints[venuePhotoFingerprint(compressed)] =
+            originalFingerprint;
       });
-      SessionPhotoDraft.save(widget.currentCategory, _imageBytes, _coverIndex);
+      _saveSelection();
     } catch (_) {
       _showPhotoError('Unable to add this photo. Please try another image.');
     }
@@ -483,6 +518,7 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
 // Show Bottom Popup
   void _showPickOptions() {
+    if (_pickingPhotos) return;
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(

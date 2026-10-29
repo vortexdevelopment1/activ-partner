@@ -1,3 +1,5 @@
+> Historical MSG91 instructions below. The active signed-agreement path uses Gmail API. Follow [the Gmail production runbook](./GMAIL_PRODUCTION_RUNBOOK.md) for current configuration; the bypass flags below do not control the current implementation.
+
 # Signed agreement email setup
 
 Finish sends from **no-reply@activ.co.in** via MSG91 to the saved partner email.

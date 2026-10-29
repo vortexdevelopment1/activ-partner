@@ -11,6 +11,7 @@ import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../Menu/MenuScreen.dart';
+import '../default_partner_avatar.dart';
 
 enum _BookingStatus { upcoming, ongoing, canceled, noShow, completed, pending }
 
@@ -527,17 +528,12 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                 width: 34,
                 height: 34,
                 child: _avatarUrl.isEmpty
-                    ? Image.asset(
-                        'assets/ic_profile_logo.png',
-                        fit: BoxFit.cover,
-                      )
+                    ? const DefaultPartnerAvatar()
                     : Image.network(
                         _avatarUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Image.asset(
-                          'assets/ic_profile_logo.png',
-                          fit: BoxFit.cover,
-                        ),
+                        errorBuilder: (_, __, ___) =>
+                            const DefaultPartnerAvatar(),
                       ),
               ),
             ),

@@ -10,7 +10,7 @@ import type { Category } from "../categories/entities/category.entity";
 import * as bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
-import { randomUUID } from "crypto";
+import { randomUUID, randomInt } from "crypto";
 import type * as runtime from "@prisma/client/runtime/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { Venue } from "./entities/venue.entity";
@@ -331,7 +331,7 @@ export class VenuesService {
     ]);
 
     if (submission.count > 0) {
-      await this.partnerEmailService?.send(partnerId, 'venue_under_review', { venueName: venue.name, reference: venueId });
+      await this.partnerEmailService?.send(partnerId, 'venue_under_review', { venueName: venue.name, reference: venueId, deliveryKey: `venue-submitted:${venueId}:${signedVenue.termsAcceptedAt}` });
       await this.adminNotificationsService.notify(
         AdminNotificationType.VENUE_SUBMITTED,
         'Venue submitted for review',
@@ -380,6 +380,7 @@ export class VenuesService {
         signedAt,
         pdfBuffer: Buffer.from(agreement.base64, 'base64'),
         filename: agreement.filename,
+        deliveryKey: `agreement:${venueId}:${signedAtIso}`,
       });
     } catch (error) {
       this.logger.error(
@@ -1765,6 +1766,7 @@ export class VenuesService {
     approvalDto: VenueApprovalDto,
     adminId: string,
   ): Promise<Venue> {
+    if (approvalDto.status === VenueStatus.APPROVED) return this.approveVenueAtomically(id, adminId);
     const venue = await this.prisma.venues.findUnique({ where: { id } });
     if (!venue) {
       throw new NotFoundException(`Venue with id ${id} not found`);
@@ -1776,16 +1778,11 @@ export class VenuesService {
       if (venue.status !== 'DRAFT') {
         throw new BadRequestException('Changes can only be requested before venue approval');
       }
-      await this.prisma.$transaction([
-        this.prisma.venues.update({ where: { id }, data: {
-          status: 'DRAFT', submitted_at: null, review_status: VenueStatus.PENDING,
-          rejection_reason: reason, approved_at: null, approved_by: null,
-        } }),
-        this.prisma.partner_venue_services.updateMany({
-          where: { venue_id: id, status: { in: ['DRAFT', 'PENDING'] } },
-          data: { status: 'DRAFT', submitted_at: null, updated_at: new Date() },
-        }),
-      ]);
+      if (!venue.submitted_at && venue.review_status === VenueStatus.PENDING && venue.rejection_reason === reason) return this.findOne(id);
+      await this.commitVenueReview(venue, {
+        status: 'DRAFT', submitted_at: null, review_status: VenueStatus.PENDING,
+        rejection_reason: reason, approved_at: null, approved_by: null,
+      }, { status: 'DRAFT', submitted_at: null, updated_at: new Date() });
       const updated = await this.findOne(id);
       await this.notificationsService.notify(updated.partnerId, NotificationType.ADMIN_UPDATE,
         'Changes requested for your venue', `${updated.name}: ${reason}`, { venueId: id });
@@ -1794,7 +1791,8 @@ export class VenuesService {
         { type: 'venue_changes_requested', venueId: id });
       if (updated.partner?.email) {
         await this.mailService.sendVenueChangesRequestedEmail({
-          toEmail: updated.partner.email, venueName: updated.name, reason,
+          toEmail: updated.partner.email, venueName: updated.name, reason, partnerName: [updated.partner?.firstName, updated.partner?.lastName].filter(Boolean).join(' '),
+          deliveryKey: `venue-changes:${id}:${venue.submitted_at?.toISOString?.() || 'initial'}:${reason}`,
         });
       }
       return updated;
@@ -1812,50 +1810,23 @@ export class VenuesService {
     }
 
     const now = new Date();
-    const approved = approvalDto.status === VenueStatus.APPROVED;
     const rejected = approvalDto.status === VenueStatus.REJECTED;
 
-    await this.prisma.$transaction([
-      this.prisma.venues.update({
-        where: { id },
-        data: {
-          status: approved ? "PUBLISHED" : "ARCHIVED",
-          approved_at: approved ? now : null,
-          approved_by: approved ? adminId : null,
-          rejection_reason: approved ? null : approvalDto.reason,
-          review_status: approvalDto.status,
-        },
-      }),
-      this.prisma.partner_venue_services.updateMany({
-        where: { venue_id: id, status: { in: ["DRAFT", "PENDING"] } },
-        data: approved
-          ? {
-              status: "APPROVED",
-              approved_at: now,
-              approved_by: adminId,
-              rejection_reason: null,
-              updated_at: now,
-            }
-          : {
-              status: "REJECTED",
-              rejection_reason: approvalDto.reason,
-              updated_at: now,
-            },
-      }),
-    ]);
+    await this.commitVenueReview(venue, {
+      status: 'ARCHIVED', approved_at: null, approved_by: null,
+      rejection_reason: approvalDto.reason, review_status: approvalDto.status,
+    }, { status: 'REJECTED', rejection_reason: approvalDto.reason, updated_at: now });
 
-    if (approved) await this.syncLegacyActivitySlots(id);
     const updatedVenue = await this.findOne(id);
-    if (approved) {
-      await this.handlePartnerApproval(updatedVenue);
-    } else if (rejected) {
-      await this.handlePartnerRejection(updatedVenue, approvalDto.reason);
+    if (rejected) {
+      await this.handlePartnerRejection(updatedVenue, approvalDto.reason, `venue-rejected:${id}:${now.toISOString()}`);
     } else if (approvalDto.status === VenueStatus.SUSPENDED &&
         !(venue.status === 'ARCHIVED' && venue.review_status === VenueStatus.SUSPENDED)) {
       await this.mailService.sendSuspensionEmail({
         toEmail: updatedVenue.partner?.email,
         partnerName: [updatedVenue.partner?.firstName, updatedVenue.partner?.lastName].filter(Boolean).join(' '),
         venueName: updatedVenue.name,
+        deliveryKey: `venue-suspended:${id}:${now.toISOString()}`,
         reason: approvalDto.reason,
       });
     }
@@ -1863,102 +1834,101 @@ export class VenuesService {
     return this.findOne(id);
   }
 
-  private async handlePartnerApproval(venue: Venue): Promise<void> {
-    const partner = await this.prisma.partners.findUnique({
-      where: { id: venue.partnerId },
-      include: {
-        partner_business_profiles: true,
-        partner_users: { include: { users: true } },
-      },
-    });
-
-    if (!partner) return;
-
-    // Skip if email is not yet set (phone-only OTP registration not yet completed)
-    const partnerUser =
-      partner.partner_users.find((link) => link.role === "PARTNER_ADMIN") ??
-      partner.partner_users[0];
-    if (!partnerUser?.users.email) return;
-
-    // Approval endpoints can be retried by an admin or client. Only send the
-    // welcome/login message once after MSG91 has accepted it.
-    const approvalEmailReceipt = await this.prisma.audit_events.findFirst({
-      where: {
-        action: "partner_approval.email_sent",
-        entity_type: "venues",
-        entity_id: venue.id,
-      },
-    });
-    if (!approvalEmailReceipt) {
-      // Generate a strong readable password
-      const password = this.generatePassword();
-
-      // Hash and save — also activate the partner account
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const now = new Date();
-      await this.prisma.$transaction([
-        this.prisma.users.update({
-          where: { id: partnerUser.user_id },
-          data: {
-            password_hash: hashedPassword,
-            status: "ACTIVE",
-            updated_at: now,
-          },
-        }),
-        this.prisma.partners.update({
-          where: { id: partner.id },
-          data: { status: "ACTIVE", updated_at: now },
-        }),
-      ]);
-
-      // Send email with credentials
-      const emailSent = await this.mailService.sendPartnerApprovalEmail({
-        toEmail: partnerUser.users.email,
-        partnerName:
-          partnerUser.users.name ||
-          partner.partner_business_profiles?.owner_name ||
-          partner.partner_business_profiles?.business_name ||
-          partner.legal_name,
-        venueName: venue.name,
-        password,
+  /** Serialize review decisions with publication and reject a stale admin action. */
+  private async commitVenueReview(venue: any, venueData: any, activityData: any): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venue.id}::uuid FOR UPDATE`;
+      const current = await tx.venues.findUnique({ where: { id: venue.id } });
+      if (!current) throw new NotFoundException('Venue not found');
+      const version = (row: any) => JSON.stringify([row.status, row.review_status ?? null,
+        row.submitted_at ?? null, row.approved_at ?? null, row.rejection_reason ?? null]);
+      if (version(current) !== version(venue)) throw new ConflictException('Venue review changed; refresh before submitting another decision');
+      await tx.venues.update({ where: { id: venue.id }, data: venueData });
+      await tx.partner_venue_services.updateMany({
+        where: { venue_id: venue.id, status: { in: ['DRAFT', 'PENDING'] } }, data: activityData,
       });
+    }, { isolationLevel: 'ReadCommitted', maxWait: 10000, timeout: 60000 });
+  }
 
-      if (emailSent) {
-        await this.prisma.audit_events.create({
-          data: {
-            id: randomUUID(),
-            action: "partner_approval.email_sent",
-            entity_type: "venues",
-            entity_id: venue.id,
-            actor_id: null,
-            after_json: {
-              templateId: "MSG91_APPROVAL_TEMPLATE_ID",
-              recipient: partnerUser.users.email,
-            },
-          },
-        });
+  /** All approval database effects commit together; no transport runs in this transaction. */
+  private async approveVenueAtomically(id: string, adminId: string): Promise<Venue> {
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const hint = await tx.venues.findUnique({ where: { id }, select: { partner_id: true } });
+      if (!hint) throw new NotFoundException('Venue not found');
+      // Shared partner lock serializes approvals for different venues of one owner.
+      await tx.$queryRaw`SELECT id FROM partners WHERE id = ${hint.partner_id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
+      const venue = await tx.venues.findUnique({ where: { id }, include: { partner_venue_profiles: true } });
+      if (!venue) throw new NotFoundException('Venue not found');
+      if (venue.partner_id !== hint.partner_id) throw new ConflictException('Venue ownership changed; refresh before approving');
+      const venueName = venue.partner_venue_profiles?.display_name || venue.name;
+      if (venue.status === 'PUBLISHED') return { changed: false, partnerId: venue.partner_id, venueName, deliveryId: null };
+
+      const partner = await tx.partners.findUnique({ where: { id: venue.partner_id }, include: {
+        partner_business_profiles: true, partner_users: { where: { role: 'PARTNER_ADMIN' }, include: { users: true } },
+      } });
+      if (!partner) throw new NotFoundException('Partner not found');
+      if (partner.status === 'SUSPENDED') throw new BadRequestException('Reactivate the partner account before approving its venue');
+      const owner = partner.partner_users.find(link => link.role === 'PARTNER_ADMIN');
+      if (!owner) throw new BadRequestException('A registered partner owner is required before approval');
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${owner.user_id}::uuid FOR UPDATE`;
+      const account = await tx.users.findUnique({ where: { id: owner.user_id } });
+      if (!account || account.status === 'DELETED' || account.status === 'SUSPENDED') {
+        throw new BadRequestException('An available partner owner account is required before approval');
       }
+      if (!/^\S+@\S+\.\S+$/.test(account.email?.trim() || '')) {
+        throw new BadRequestException('The partner owner must have a valid registered email before approval');
+      }
+      const previousDelivery = await this.mailService.findPartnerApprovalEmail(id, tx);
+      const historicalReceipt = await tx.audit_events.findFirst({ where: {
+        action: 'partner_approval.email_sent', entity_type: 'venues', entity_id: id,
+      } });
+      const password = !account.password_hash && !previousDelivery && !historicalReceipt ? this.generatePassword() : undefined;
+      const now = new Date();
+      await tx.users.update({ where: { id: account.id }, data: {
+        ...(password ? { password_hash: await bcrypt.hash(password, 10) } : {}), status: 'ACTIVE', updated_at: now,
+      } });
+      await tx.partners.update({ where: { id: partner.id }, data: { status: 'ACTIVE', updated_at: now } });
+      const deliveryId = await this.mailService.preparePartnerApprovalEmail({
+        toEmail: account.email.trim(), partnerName: account.name || partner.partner_business_profiles?.owner_name || partner.legal_name,
+        venueName, password, deliveryKey: `venue-approved:${id}`,
+      }, tx, !!historicalReceipt);
+      if (!deliveryId) throw new Error('Durable approval email preparation did not return a delivery record');
+      await tx.venues.update({ where: { id }, data: {
+        status: 'PUBLISHED', approved_at: now, approved_by: adminId, rejection_reason: null, review_status: VenueStatus.APPROVED,
+      } });
+      await tx.partner_venue_services.updateMany({ where: { venue_id: id, status: { in: ['DRAFT', 'PENDING'] } }, data: {
+        status: 'APPROVED', approved_at: now, approved_by: adminId, rejection_reason: null, updated_at: now,
+      } });
+      await this.syncLegacyActivitySlotsInTransaction(tx, id);
+      await syncLegacyActivityVisibility(tx, id);
+      await tx.audit_events.create({ data: {
+        id: randomUUID(), action: 'venue.approved', entity_type: 'venues', entity_id: id, actor_id: adminId,
+        after_json: { deliveryId },
+      } });
+      return { changed: true, partnerId: partner.id, venueName, deliveryId };
+    }, { isolationLevel: 'ReadCommitted', maxWait: 10000, timeout: 60000 });
+
+    if (outcome.changed) {
+      // Transport/notification failures must not turn a committed approval into an API failure.
+      try { await this.mailService.deliverPreparedEmail(outcome.deliveryId); }
+      catch { this.logger.warn('Approval committed; email delivery is pending recovery'); }
+      try {
+        await this.notificationsService.notify(outcome.partnerId, NotificationType.VENUE_APPROVED,
+          'Venue approved', `${outcome.venueName} has been approved and is now live on ACTIV`, { venueId: id });
+      } catch { this.logger.warn('Approval committed; in-app notification failed'); }
+      try {
+        await this.pushNotificationsService.sendToPartner(outcome.partnerId, 'Venue approved',
+          `${outcome.venueName} has been approved and is now live on ACTIV`, { type: 'venue_approved', venueId: id });
+      } catch { this.logger.warn('Approval committed; push notification failed'); }
     }
-
-    await this.notificationsService.notify(
-      partner.id,
-      NotificationType.VENUE_APPROVED,
-      "Venue approved",
-      `${venue.name} has been approved and is now live on ACTIV`,
-      { venueId: venue.id },
-    );
-
-    await this.pushNotificationsService.sendToPartner(
-      partner.id,
-      "Venue approved",
-      `${venue.name} has been approved and is now live on ACTIV`,
-      { type: "venue_approved", venueId: venue.id },
-    );
+    return this.findOne(id);
   }
 
   private async handlePartnerRejection(
     venue: Venue,
     reason: string,
+    deliveryKey?: string,
   ): Promise<void> {
     const partner = await this.prisma.partners.findUnique({
       where: { id: venue.partnerId },
@@ -1982,7 +1952,8 @@ export class VenuesService {
     await this.mailService.sendPartnerRejectionEmail({
       toEmail: partnerUser.users.email,
       firstName,
-      venueId: venue.id,
+      venueId: venue.id, venueName: venue.name,
+      deliveryKey: deliveryKey || `venue-rejected:${venue.id}:${reason}`,
       rejectionReason: reason,
     });
   }
@@ -1992,10 +1963,10 @@ export class VenuesService {
     const special = "@#$!";
     let password = "";
     for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+      password += chars.charAt(randomInt(chars.length));
     }
-    password += special.charAt(Math.floor(Math.random() * special.length));
-    password += Math.floor(Math.random() * 90 + 10);
+    password += special.charAt(randomInt(special.length));
+    password += randomInt(10, 100);
     return password;
   }
 
@@ -2442,7 +2413,7 @@ export class VenuesService {
       'A partner submitted venue changes for review.',
       { partnerId, venueId, venueRequestId: request.id },
     );
-    await this.partnerEmailService?.send(partnerId, 'venue_update_submitted', { reference: request.id });
+    await this.partnerEmailService?.send(partnerId, 'venue_update_submitted', { reference: request.id, venueName: (await this.findOne(venueId)).name, deliveryKey: `venue-update-submitted:${request.id}` });
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -2608,7 +2579,7 @@ export class VenuesService {
         "Your venue changes were not approved. Please review and submit again.",
       { venueId: request.venue_id, requestId: id },
     );
-    await this.partnerEmailService?.send(request.partner_id, 'venue_update_rejected', { reference: id, reason: dto.adminNotes });
+    await this.partnerEmailService?.send(request.partner_id, 'venue_update_rejected', { reference: id, reason: dto.adminNotes, venueName: (await this.findOne(request.venue_id)).name, deliveryKey: `venue-update-rejected:${id}` });
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -3339,7 +3310,7 @@ export class VenuesService {
       `${saved.name} has been submitted and is being reviewed by ACTIV`,
       { serviceId: saved.id },
     );
-    await this.partnerEmailService?.send(partnerId, 'activity_submitted', { activityName: saved.name, reference: saved.id });
+    await this.partnerEmailService?.send(partnerId, 'activity_submitted', { activityName: saved.name, venueName: saved.venue?.name, reference: saved.id, deliveryKey: `activity-submitted:${saved.id}:${saved.submittedAt?.toISOString?.() || saved.updatedAt?.toISOString?.() || 'initial'}` });
 
     return saved;
   }
@@ -3570,7 +3541,7 @@ export class VenuesService {
       { serviceId, ...(!approved ? { reason: dto.reason } : {}) },
     );
     await this.partnerEmailService?.send(record.venues.partner_id, approved ? 'activity_approved' : 'activity_rejected', {
-      activityName: saved.name, venueName: record.venues.name, reference: serviceId, reason: approved ? undefined : dto.reason,
+      activityName: saved.name, venueName: record.venues.name, reference: serviceId, reason: approved ? undefined : dto.reason, deliveryKey: `activity-review:${serviceId}:${saved.updatedAt?.toISOString?.() || dto.status}`,
     });
     return saved;
   }

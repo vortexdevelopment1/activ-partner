@@ -33,7 +33,7 @@ describe('post-onboarding activity review', () => {
     }, partner_venue_answers: { findMany: jest.fn(async () => [{ question_id: 'required' }]) } };
     const service = Object.assign(Object.create(VenuesService.prototype), {
       prisma,
-      findOwnedActivity: jest.fn(async () => ({ id: 'activity', venueId: 'venue', name: 'Swimming', categoryId: 'swimming',
+      findOwnedActivity: jest.fn(async () => ({ id: 'activity', venueId: 'venue', name: 'Swimming', venue: { name: 'Arena' }, categoryId: 'swimming',
         status: record.status.toLowerCase(), imageUrls: ['1', '2', '3', '4'], amenities: ['Parking'] })),
       questionsService: { findByCategoryId: jest.fn(async () => [{ id: 'required', isRequired: true }]) },
       adminNotificationsService: { notify: jest.fn() }, notificationsService: { notify: jest.fn() },
@@ -42,7 +42,7 @@ describe('post-onboarding activity review', () => {
     }) as VenuesService;
     await service.submitActivityForReview('activity', 'partner');
     expect(record.status).toBe('PENDING');
-    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'activity_submitted', { activityName: 'Swimming', reference: 'activity' });
+    expect((service as any).partnerEmailService.send).toHaveBeenCalledWith('partner', 'activity_submitted', { activityName: 'Swimming', venueName: 'Arena', reference: 'activity', deliveryKey: expect.stringContaining('activity-submitted:activity:') });
     expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
       'activity_submitted', expect.any(String), expect.any(String), { partnerId: 'partner', venueId: 'venue', serviceId: 'activity' });
     const [pending, total] = await service.findPendingActivities({ skip: 0, limit: 15 } as any);

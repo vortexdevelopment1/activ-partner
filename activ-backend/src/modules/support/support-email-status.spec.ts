@@ -17,7 +17,7 @@ describe('support partner status emails', () => {
     const notices = { send: jest.fn().mockResolvedValue(true) };
     const service = new SupportService({} as any, {} as any, prisma as any, {} as any, notices as any);
     await service.updateEmail('support', { status: dtoStatus, adminNotes: 'Internal staff-only note' });
-    expect(notices.send).toHaveBeenCalledWith('partner', `support_${suffix}`, { reference: 'support', subject: 'Help with venue' });
+    expect(notices.send).toHaveBeenCalledWith('partner', `support_${suffix}`, { reference: 'support', subject: 'Help with venue', deliveryKey: expect.stringContaining('support-status:support:') });
     expect(JSON.stringify(notices.send.mock.calls)).not.toContain('Internal staff-only');
   });
 
@@ -38,7 +38,7 @@ describe('support partner status emails', () => {
     const service = new SupportService(mail as any, {} as any, prisma as any, {} as any);
     await service.update('callback', { status: dtoStatus, adminNotes: 'Internal-only' });
     expect(mail.sendTemplateEmail).toHaveBeenCalledWith('owner@example.com', `callback_${suffix}`, {
-      partnerName: 'Owner', venueName: 'Arena', reference: 'callback', callbackDate: '2026-10-28', callbackTime: '10:00',
+      deliveryKey: expect.stringContaining('callback-status:callback:'), partnerName: 'Owner', venueName: 'Arena', reference: 'callback', callbackDate: '2026-10-28', callbackTime: '10:00',
     });
   });
 });

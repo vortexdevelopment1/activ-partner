@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:activ_app/Screens/VenuePhotoUploadScreen.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,24 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+class _TemporaryPhoto extends XFile {
+  _TemporaryPhoto(this.bytes) : super.fromData(bytes, name: 'temporary.png');
+  final Uint8List bytes;
+  bool expired = false;
+  @override
+  Future<int> length() async {
+    if (expired) throw StateError('Gallery temporary file expired');
+    return bytes.length;
+  }
+  @override
+  Future<Uint8List> readAsBytes() async {
+    if (expired) throw StateError('Gallery temporary file expired');
+    return bytes;
+  }
+}
 
 class _PhotoPicker extends ImagePicker {
   final List<List<XFile>> batches;
@@ -74,7 +93,7 @@ void main() {
           name: name, mimeType: 'image/png');
 
   Future<void> showUpload(WidgetTester tester, _PhotoPicker picker,
-      {List<Uint8List> initial = const []}) async {
+      {List<Uint8List> initial = const [], http.Client? client}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 1100);
     addTearDown(tester.view.resetPhysicalSize);
@@ -82,6 +101,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: VenuePhotoUploadScreen(
       imagePicker: picker,
+      client: client,
       initialImageBytes: initial,
       currentCategory: const {'id': 'badminton', 'title': 'Badminton'},
     )));
@@ -187,6 +207,44 @@ void main() {
     expectPopup();
     expect(thumbnails(tester), hasLength(1));
     expect(compressor.calls, 1);
+  });
+
+  testWidgets('repeated Browse rejects an original after its temporary file expires',
+      (tester) async {
+    final raw = await photo('badminton');
+    final preview = await photo('tennis');
+    final otherEncoding = await photo('hockey');
+    final temporary = _TemporaryPhoto(raw);
+    compressor.convert = (_) => compressor.calls == 1 ? preview : otherEncoding;
+    await showUpload(tester, _PhotoPicker([
+      [temporary],
+      [file(raw, 'same-photo-new-path.png')],
+    ]));
+    await pick(tester);
+    temporary.expired = true;
+    await pick(tester);
+    expectPopup();
+    expect(thumbnails(tester), hasLength(1));
+    expect(compressor.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('late server restoration cannot replace a newer local selection',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'venue_id': 'venue', 'jwt_token': 'session'});
+    final pending = Completer<http.Response>();
+    var requests = 0;
+    final client = MockClient((_) { requests++; return pending.future; });
+    final local = await photo('badminton');
+    await showUpload(tester, _PhotoPicker([[file(local, 'new-local.png')]]), client: client);
+    expect(requests, 1);
+    await pick(tester);
+    pending.complete(http.Response('{"data":[{"categoryId":"badminton","imageUrls":["https://images.test/stale.png"]}]}', 200));
+    await tester.pumpAndSettle();
+    expect(thumbnails(tester), hasLength(1));
+    expect((thumbnails(tester).single.image as MemoryImage).bytes, orderedEquals(local));
+    expect(requests, 1); // Stale photos were not even downloaded.
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

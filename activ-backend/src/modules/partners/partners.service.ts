@@ -310,6 +310,7 @@ export class PartnersService {
       if (updatePartnerDto.isActive === false && previous?.status !== PartnerStatus.SUSPENDED) {
         const owner = partner.partner_users?.find((link) => link.role === 'PARTNER_ADMIN')?.users;
         await this.mailService.sendSuspensionEmail({
+          deliveryKey: `partner-suspended:${id}:${partner.updated_at.toISOString()}`,
           toEmail: owner?.email || mapped.email,
           partnerName: owner?.name || [mapped.firstName, mapped.lastName].filter(Boolean).join(' ') || mapped.businessName,
         });

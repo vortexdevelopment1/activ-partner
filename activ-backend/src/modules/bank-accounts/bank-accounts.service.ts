@@ -162,8 +162,10 @@ export class BankAccountsService {
       throw new BadRequestException(
           'This rejected bank account has already been updated. Refresh and try again.');
     }
-    await this.partnerEmailService?.send(partnerId, 'bank_submitted', { bankName: dto.bankName, accountLast4: dto.accountNumber.slice(-4), reference: id });
-    return this.findOne(id, partnerId);
+    const saved = await this.findOne(id, partnerId);
+    await this.partnerEmailService?.send(partnerId, 'bank_submitted', { bankName: dto.bankName, accountLast4: dto.accountNumber.slice(-4), reference: id,
+      deliveryKey: `bank-resubmitted:${id}:${saved.updatedAt.toISOString()}` });
+    return saved;
   }
 
   async findAll(pagination: PaginationDto, status?: BankAccountStatus) {

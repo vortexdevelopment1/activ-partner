@@ -56,6 +56,7 @@ export class SupportService {
       { callbackId: saved.id, ...(partnerId ? { partnerId } : {}) },
     );
     await this.mailService.sendCallbackRequestEmail({
+      deliveryKey: `callback-support:${saved.id}`,
       partnerName: dto.partnerName,
       partnerEmail: dto.email,
       phone: dto.phone,
@@ -66,6 +67,7 @@ export class SupportService {
       query: dto.query,
     });
     await this.mailService.sendTemplateEmail?.(dto.email, 'callback_received', {
+      deliveryKey: `callback-received:${saved.id}`,
       partnerName: dto.partnerName, venueName: dto.venueName, reference: saved.id,
       callbackDate: dto.callbackDate, callbackTime: dto.callbackTime,
     });
@@ -135,6 +137,7 @@ export class SupportService {
     const template = this.statusTemplate('callback', updated.status);
     if (current.status !== updated.status && template) {
       await this.mailService.sendTemplateEmail?.(mapped.email, template, {
+        deliveryKey: `callback-status:${id}:${updated.status}:${updated.updated_at?.toISOString?.()}`,
         partnerName: mapped.partnerName, venueName: mapped.venueName, reference: id,
         callbackDate: mapped.callbackDate, callbackTime: mapped.callbackTime,
       });
@@ -201,6 +204,7 @@ export class SupportService {
     );
     try {
       await this.mailService.sendSupportRequestEmail({
+        deliveryKey: `support-internal:${saved.id}`,
         partnerName: partnerUser?.users?.name ?? 'Partner',
         partnerEmail: partnerUser?.users?.email,
         subject: dto.subject,
@@ -210,7 +214,7 @@ export class SupportService {
       // Keep the support request successful even when mail credentials/provider
       // configuration is temporarily unavailable. The request is already saved
       // and remains visible to the admin support queue.
-      console.error('Support request saved but email delivery failed', error);
+      console.error('Support request saved but email delivery failed; review email delivery records');
     }
     await this.partnerEmailService?.send(partnerId, 'support_received', { reference: saved.id, subject: dto.subject });
     return saved;
@@ -266,7 +270,8 @@ export class SupportService {
     });
     const template = this.statusTemplate('support', updated.status);
     if (current.status !== updated.status && template) {
-      await this.partnerEmailService?.send(current.partner_id, template, { reference: id, subject: current.subject });
+      await this.partnerEmailService?.send(current.partner_id, template, { reference: id, subject: current.subject,
+        deliveryKey: `support-status:${id}:${updated.status}:${updated.updated_at?.toISOString?.()}` });
     }
     return updated;
   }

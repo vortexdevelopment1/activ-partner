@@ -1,8 +1,11 @@
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+String venuePhotoFingerprint(Uint8List bytes) => sha256.convert(bytes).toString();
 
 bool matchesVenuePhoto(Uint8List candidate, Iterable<Uint8List> photos) =>
     photos.any((photo) => listEquals(candidate, photo));

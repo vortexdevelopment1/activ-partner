@@ -7,6 +7,45 @@ datasource db {
   provider = "postgresql"
 }
 
+// One current credential per provider/sender. No access token, code or client secret.
+model google_oauth_credentials {
+  id                      String   @id @db.Uuid
+  provider                String
+  sender                  String
+  client_fingerprint      String
+  account_subject         String
+  encrypted_refresh_token String
+  status                  String
+  version                 Int      @default(1)
+  verified_at             DateTime
+  created_at              DateTime @default(now())
+  updated_at              DateTime @default(now()) @updatedAt
+
+  @@unique([provider, sender])
+}
+
+// Email payloads contain personal information and are encrypted by the application.
+// No partner foreign key: removal notices must survive venue/account deletion.
+model email_deliveries {
+  id                  String    @id @db.Uuid
+  idempotency_key     String    @unique
+  provider            String
+  kind                String
+  payload             String?
+  status              String    @default("PENDING")
+  attempts            Int       @default(0)
+  next_attempt_at     DateTime  @default(now())
+  locked_at           DateTime?
+  expires_at          DateTime?
+  provider_message_id String?
+  error_code          String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
+  sent_at             DateTime?
+
+  @@index([status, next_attempt_at])
+}
+
 model partner_amenity_catalog {
   id         String  @id
   title      String
