@@ -49,7 +49,7 @@ These are method-level implementation and runtime-route metrics, not proof of be
 | `complete()` | Attendance method is Prisma-backed | `updateAttendance()` | PRISMA ACTIVE |
 | `checkIn()` | Attendance method is Prisma-backed | `updateAttendance()` | PRISMA ACTIVE |
 | `markNoShow()` | Attendance method is Prisma-backed | `updateAttendance()` | PRISMA ACTIVE |
-| `getBookingStats()` | Prisma | Prisma aggregate/counts | FULLY MIGRATED |
+| `getBookingStats()` | Prisma | Prisma aggregate/counts | FULLY MIGRATED |p
 | `getPayoutStatement()` | Prisma reporting path | Prisma payout projection | PRISMA ACTIVE |
 | `getPayoutHistory()` | Prisma reporting path | Prisma payout projection | PRISMA ACTIVE |
 | `generatePayoutStatementPdf()` | Uses Prisma-backed statement data | Prisma-backed input | PARTIALLY MIGRATED |

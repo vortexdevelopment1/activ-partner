@@ -4,9 +4,9 @@ import { NormalizedRazorpayOrderService } from './normalized-razorpay-order.serv
 describe('NormalizedRazorpayOrderService', () => {
   const service = new NormalizedRazorpayOrderService();
   const booking = { id: 'booking', user_id: 'user', status: 'PENDING_PAYMENT', total_paise: 1000n };
-  const tx = (existing: any = null) => ({
+  const tx = (existing: any = null, legacyPayments: any[] = []) => ({
     bookings: { findUnique: jest.fn().mockResolvedValue(booking) },
-    payments: { findUnique: jest.fn().mockResolvedValue(existing), create: jest.fn().mockResolvedValue({ id: 'payment', booking_id: 'booking', amount_paise: 1000n, currency: 'INR', order_status: 'PENDING' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'payment', provider_order_id: 'order' }) },
+    payments: { findMany: jest.fn().mockResolvedValue(legacyPayments), findUnique: jest.fn().mockResolvedValue(existing), create: jest.fn().mockResolvedValue({ id: 'payment', booking_id: 'booking', amount_paise: 1000n, currency: 'INR', order_status: 'PENDING' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'payment', provider_order_id: 'order' }) },
   } as any);
   const input: any = { bookingId: 'booking', userId: 'user', provider: 'razorpay', amountPaise: 1000n, currency: 'INR', paymentDeadline: new Date('2030-01-01T11:00:00Z'), now: new Date('2030-01-01T10:00:00Z'), providerClient: jest.fn() };
 
@@ -19,6 +19,18 @@ describe('NormalizedRazorpayOrderService', () => {
   it('reuses a persisted provider order', async () => {
     const result = await service.createOrder(tx({ amount_paise: 1000n, currency: 'INR', order_status: 'CREATED', provider_order_id: 'order' }), input);
     expect(result.reused).toBe(true);
+  });
+  it('reuses a User App payment order without claiming its intent', async () => {
+    const database = tx(null, [{ id: 'user-payment', amount_paise: 1000n, currency: 'INR', order_status: 'PENDING', status: 'CREATED', provider_order_id: 'user-order', provider_payment_id: null, payment_intent_key: null }]);
+    const result = await service.createOrder(database, input);
+    expect(result).toMatchObject({ reused: true, payment: { id: 'user-payment', provider_order_id: 'user-order' } });
+    expect(database.payments.create).not.toHaveBeenCalled();
+  });
+  it('rejects ambiguous shared payment orders', async () => {
+    await expect(service.createOrder(tx(null, [
+      { id: 'one', amount_paise: 1000n, currency: 'INR', order_status: 'CREATED', status: 'CREATED', provider_order_id: 'one', payment_intent_key: null },
+      { id: 'two', amount_paise: 1000n, currency: 'INR', order_status: 'CREATED', status: 'CREATED', provider_order_id: 'two', payment_intent_key: null },
+    ]), input)).rejects.toThrow('manual reconciliation');
   });
   it('does not retry an uncertain external outcome', async () => {
     await expect(service.createOrder(tx({ amount_paise: 1000n, currency: 'INR', order_status: 'UNCERTAIN' }), input)).rejects.toBeInstanceOf(ConflictException);

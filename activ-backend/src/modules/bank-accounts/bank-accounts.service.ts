@@ -7,12 +7,12 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { BankAccountStatus } from './entities/bank-account.entity';
+import { BankAccountStatus } from '../../common/domain-types';
 import { SubmitBankAccountDto } from './dto/submit-bank-account.dto';
 import { ReviewBankAccountDto } from './dto/review-bank-account.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
-import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { AdminNotificationType } from '../../common/domain-types';
 import { PartnerEmailService } from '../mail/partner-email.service';
 
 @Injectable()

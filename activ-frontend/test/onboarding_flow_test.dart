@@ -379,7 +379,7 @@ void main() {
   testWidgets('dashboard setup buttons and dismiss controls work without overflow', (tester) async {
     var pricingTapped = 0, teamTapped = 0;
     for (final size in [const Size(320, 640), const Size(430, 956), const Size(1200, 900)]) {
-      await showScreen(tester, Scaffold(body: DashboardSetupCards(pricingRequired: true, teamRequired: true, onPricing: () => pricingTapped++, onTeam: () => teamTapped++)), size: size, textScale: 1.3);
+      await showScreen(tester, Scaffold(body: DashboardSetupCards(pricingRequired: true, teamRequired: true, bankAccountRequired: false, onPricing: () => pricingTapped++, onTeam: () => teamTapped++, onBankAccount: () {})), size: size, textScale: 1.3);
       await tester.tap(find.text('Set Pricing'));
       await tester.tap(find.byTooltip('Dismiss pricing reminder'));
       await tester.pumpAndSettle();

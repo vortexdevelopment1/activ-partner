@@ -12,7 +12,7 @@ import { EmailTemplateId } from '../mail/templates/partner-email';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
-import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { AdminNotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class SupportService {

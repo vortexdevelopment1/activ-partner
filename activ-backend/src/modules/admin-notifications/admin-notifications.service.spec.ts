@@ -1,5 +1,5 @@
 import { AdminNotificationsService } from './admin-notifications.service';
-import { AdminNotificationType } from './entities/admin-notification.entity';
+import { AdminNotificationType } from '../../common/domain-types';
 
 describe('AdminNotificationsService deep links', () => {
   it('fans out to active admins and preserves routing IDs for every notification type', async () => {

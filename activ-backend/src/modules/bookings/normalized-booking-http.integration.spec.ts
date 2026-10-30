@@ -13,6 +13,7 @@ jest.mock('../payments/razorpay-order-client', () => ({
 
 const url = process.env.TEST_DATABASE_URL;
 const databaseName = process.env.TEST_DATABASE_NAME;
+const databasePort = process.env.TEST_DATABASE_PORT || '5432';
 const enabled = process.env.TEST_HTTP_E2E_ALLOW_WRITES === 'true' && Boolean(url && databaseName);
 const describeHttp = enabled ? describe : describe.skip;
 
@@ -46,7 +47,7 @@ describeHttp('normalized booking/payment HTTP integration (local PostgreSQL only
   beforeAll(async () => {
     if (!url || !databaseName) throw new Error('HTTP E2E requires TEST_DATABASE_URL and TEST_DATABASE_NAME');
     const parsed = new URL(url);
-    if (!['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) || (parsed.port || '5432') !== '5432') throw new Error('HTTP E2E refuses non-local PostgreSQL');
+    if (!['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) || (parsed.port || '5432') !== databasePort) throw new Error('HTTP E2E refuses non-local PostgreSQL');
     if (parsed.pathname.slice(1) !== databaseName) throw new Error('HTTP E2E database identity mismatch');
     // AppModule intentionally receives this same local URL through .env.local;
     // the safety check above (host, port and database name) prevents Supabase
@@ -90,10 +91,12 @@ describeHttp('normalized booking/payment HTTP integration (local PostgreSQL only
   async function createFixture(): Promise<Fixture> {
     const ids = { userId: randomUUID(), partnerId: randomUUID(), venueId: randomUUID(), serviceId: randomUUID(), facilityId: randomUUID(), slotId: randomUUID(), categoryId: randomUUID(), activityId: randomUUID() };
     const start = new Date(Date.now() + 2 * 86400000);
-    start.setMinutes(0, 0, 0);
+    // Keep the fixture away from midnight so the local-time request remains a
+    // forward one-hour interval in every timezone used by this test.
+    start.setHours(4, 0, 0, 0);
     const end = new Date(start.getTime() + 3600000);
     const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(start);
-    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(start);
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(start).toLowerCase();
     await prisma.$transaction(async tx => {
       await tx.users.create({ data: { id: ids.userId, phone_e164: `+1555${ids.userId.replace(/-/g, '').slice(0, 10)}`, status: 'ACTIVE', updated_at: new Date() } });
       await tx.partners.create({ data: { id: ids.partnerId, legal_name: `HTTP test partner ${ids.partnerId}`, status: 'ACTIVE', updated_at: new Date() } });
@@ -126,6 +129,56 @@ describeHttp('normalized booking/payment HTTP integration (local PostgreSQL only
     expect(response.body.data).toHaveProperty('items');
     const unauthorized = await new Promise<number>(resolve => { const req = http.request({ hostname: '127.0.0.1', port: address.port, path: '/api/v1/payments/my-payments' }, res => resolve(res.statusCode ?? 0)); req.end(); });
     expect(unauthorized).toBe(401);
+  });
+
+  it('is idempotent for repeated and concurrent order requests', async () => {
+    const booking = await prisma.bookings.findFirstOrThrow({ where: { user_id: fixture.userId, status: 'PENDING_PAYMENT' } });
+    const legacyPaymentId = randomUUID();
+    const legacyOrderId = `user_order_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    await prisma.payments.create({ data: {
+      id: legacyPaymentId,
+      booking_id: booking.id,
+      provider: 'razorpay',
+      provider_order_id: legacyOrderId,
+      status: 'CREATED',
+      amount_paise: booking.total_paise,
+      updated_at: new Date(),
+    } });
+    const first = await request('POST', '/api/v1/payments/create-order', { bookingId: booking.id });
+    expect(first.status).toBe(201);
+    expect(first.body.data).toMatchObject({ paymentId: legacyPaymentId, orderId: legacyOrderId, currency: 'INR' });
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(await prisma.payments.findUniqueOrThrow({ where: { id: legacyPaymentId } })).toMatchObject({
+      id: legacyPaymentId,
+      provider_order_id: legacyOrderId,
+      provider_payment_id: null,
+      payment_intent_key: null,
+      status: 'CREATED',
+    });
+    const ownerToken = token;
+    token = moduleRef.get(JwtService).sign({ sub: randomUUID(), role: 'user', type: 'user' });
+    const foreignOwner = await request('POST', '/api/v1/payments/create-order', { bookingId: booking.id });
+    token = ownerToken;
+    expect([401, 403, 404]).toContain(foreignOwner.status);
+    const repeated = await request('POST', '/api/v1/payments/create-order', { bookingId: booking.id });
+    expect(repeated.status).toBe(201);
+    expect(repeated.body.data).toMatchObject({ paymentId: legacyPaymentId, orderId: legacyOrderId, amount: first.body.data.amount, currency: 'INR' });
+    const concurrent = await Promise.all([
+      request('POST', '/api/v1/payments/create-order', { bookingId: booking.id }),
+      request('POST', '/api/v1/payments/create-order', { bookingId: booking.id }),
+    ]);
+    expect(concurrent.every(result => result.status === 201)).toBe(true);
+    expect(new Set(concurrent.map(result => result.body.data.paymentId))).toEqual(new Set([legacyPaymentId]));
+    expect(await prisma.payments.count({ where: { booking_id: booking.id } })).toBe(1);
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid signatures without confirming the booking', async () => {
+    const booking = await prisma.bookings.findFirstOrThrow({ where: { user_id: fixture.userId, status: 'PENDING_PAYMENT' } });
+    const order = await request('POST', '/api/v1/payments/create-order', { bookingId: booking.id });
+    const invalid = await request('POST', '/api/v1/payments/verify', { bookingId: booking.id, razorpayOrderId: order.body.data.orderId, razorpayPaymentId: 'pay_invalid', razorpaySignature: 'invalid' });
+    expect(invalid.status).toBeGreaterThanOrEqual(400);
+    expect((await prisma.bookings.findUniqueOrThrow({ where: { id: booking.id } })).status).toBe('PENDING_PAYMENT');
   });
 
   it('uses a trusted signature for verification', async () => {

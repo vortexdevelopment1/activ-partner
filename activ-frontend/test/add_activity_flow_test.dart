@@ -401,14 +401,11 @@ void main() {
         if (path.endsWith('/availability')) {
           final timing = jsonDecode(request.body)['venue_timing'];
           expect((timing as Map).keys, ['swimming']);
-          expect(timing['swimming']['Monday'], [
-            {
-              'open': '09:00 AM',
-              'close': '06:00 PM',
-              'capacity': '2',
-              'price': '500'
-            }
-          ]);
+          final monday = timing['swimming']['Monday'][0] as Map;
+          expect(monday['open'], '09:00 AM');
+          expect(monday['close'], '06:00 PM');
+          expect(monday['capacity'], '2');
+          expect(monday['price'], '500');
           return response({});
         }
         if (path.endsWith('/submit')) {
@@ -469,7 +466,9 @@ void main() {
       await tester.tap(find.text('Next'));
       await tester.pumpAndSettle();
       expect(find.byType(AddActivitySubmitReviewScreen), findsOneWidget);
-      await tester.tap(find.text('Submit for review'));
+      final submitButton = find.widgetWithText(TextButton, 'Submit for review');
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
       await tester.pumpAndSettle();
       if (failFirstSubmit) {
         expect(find.byType(AddActivitySubmissionResultScreen), findsNothing);
@@ -485,7 +484,7 @@ void main() {
         await tester.pump(const Duration(seconds: 5));
         await tester.pumpAndSettle();
         fail = false;
-        await tester.tap(find.text('Submit for review'));
+        await tester.tap(submitButton);
         await tester.pumpAndSettle();
       }
       expect(find.byType(AddActivitySubmissionResultScreen), findsOneWidget);

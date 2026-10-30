@@ -1,22 +1,13 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookingsService } from './bookings.service';
 import { BookingExpiryService } from './booking-expiry.service';
 import { BookingsController } from './bookings.controller';
-import { Booking } from './entities/booking.entity';
-import { VenueService } from '../venues/entities/venue-service.entity';
-import { Venue } from '../venues/entities/venue.entity';
-import { Payment } from '../payments/entities/payment.entity';
-import { BankAccount } from '../bank-accounts/entities/bank-account.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Booking, VenueService, Venue, Payment, BankAccount]),
-    NotificationsModule,
-  ],
+  imports: [NotificationsModule],
   controllers: [BookingsController],
   providers: [BookingsService, BookingExpiryService],
-  exports: [BookingsService, TypeOrmModule],
+  exports: [BookingsService],
 })
 export class BookingsModule {}

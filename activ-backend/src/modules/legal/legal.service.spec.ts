@@ -1,5 +1,5 @@
 import { LegalService } from './legal.service';
-import { LegalContentType } from './entities/legal-content.entity';
+import { LegalContentType } from '../../common/domain-types';
 import { PDFDocument } from 'pdf-lib';
 
 describe('legal content on the current database schema', () => {

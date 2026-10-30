@@ -133,7 +133,7 @@ class _Booking {
     );
   }
 
-static String _displayWalkInReference(Object? value) {
+  static String _displayWalkInReference(Object? value) {
   final id = value?.toString() ?? '';
   if (id.isEmpty) return 'Not available';
   return id.contains('-') && id.length >= 32

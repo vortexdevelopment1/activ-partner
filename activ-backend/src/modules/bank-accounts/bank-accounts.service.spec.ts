@@ -1,5 +1,5 @@
 import { BankAccountsService } from './bank-accounts.service';
-import { BankAccountStatus } from './entities/bank-account.entity';
+import { BankAccountStatus } from '../../common/domain-types';
 
 describe('bank account persistence', () => {
   const dto = { accountHolderName: 'Test Partner', bankName: 'HDFC Bank',

@@ -6,35 +6,21 @@ import {
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as path from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { Booking } from "./entities/booking.entity";
-import { VenueService } from "../venues/entities/venue-service.entity";
-import { Venue } from "../venues/entities/venue.entity";
-import { Payment } from "../payments/entities/payment.entity";
 import { PaymentStatus } from "../../common/enums/booking-status.enum";
-import {
-  BankAccount,
-  BankAccountStatus,
-} from "../bank-accounts/entities/bank-account.entity";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { UserRole } from "../../common/enums/user-role.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
-import { User } from "../users/entities/user.entity";
-import { NotificationsService } from "../notifications/notifications.service";
-import { NotificationType } from "../notifications/entities/notification.entity";
+import type { UserRecord as User } from '../../common/domain-types';
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
 import { bookingHasEnded } from './booking-expiry';
 import { LegacySlotResolver } from './legacy-slot-resolver';
 import { NormalizedBookingHoldService } from './normalized-booking-hold.service';
 import { buildLegacyIdempotencyContext } from './legacy-idempotency';
-import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
 import { lockSlotsForCapacity } from './slot-capacity-coordinator';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
@@ -44,60 +30,8 @@ const GST_ON_COMMISSION_RATE = 0.18;
 export class BookingsService {
   private readonly normalizedHoldService = new NormalizedBookingHoldService();
   constructor(
-    @InjectRepository(Booking)
-    private readonly bookingRepository: Repository<Booking>,
-    @InjectRepository(VenueService)
-    private readonly venueServiceRepository: Repository<VenueService>,
-    @InjectRepository(Venue)
-    private readonly venueRepository: Repository<Venue>,
-    @InjectRepository(Payment)
-    private readonly paymentRepository: Repository<Payment>,
-    @InjectRepository(BankAccount)
-    private readonly bankAccountRepository: Repository<BankAccount>,
-    private readonly notificationsService: NotificationsService,
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
   ) {}
-
-  private businessDateKey(date = new Date()): string {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(date)
-      .reduce<Record<string, string>>((result, part) => {
-        if (part.type !== 'literal') result[part.type] = part.value;
-        return result;
-      }, {});
-    return `${parts.year}-${parts.month}-${parts.day}`;
-  }
-
-  /**
-   * Allocate the reference in PostgreSQL so concurrent bookings cannot share
-   * the same daily number. A failed booking may leave a gap, but never a
-   * duplicate reference.
-   */
-  private async allocateBookingReference(): Promise<string> {
-    const dateKey = this.businessDateKey();
-    const rows = await this.bookingRepository.query(
-      `
-        INSERT INTO booking_reference_sequences (sequence_date, last_number)
-        VALUES ($1::date, 1)
-        ON CONFLICT (sequence_date)
-        DO UPDATE SET last_number = booking_reference_sequences.last_number + 1
-        RETURNING last_number
-      `,
-      [dateKey],
-    );
-    const number = Number(rows[0]?.last_number);
-    if (!Number.isInteger(number) || number < 1) {
-      throw new Error('Unable to allocate a booking reference');
-    }
-    const compactDate = dateKey.replace(/-/g, '').slice(2);
-    return `ACT-${compactDate}-${String(number).padStart(4, '0')}`;
-  }
 
   private calculateDuration(startTime: string, endTime: string): number {
     const [startH, startM] = startTime.split(":").map(Number);
@@ -229,7 +163,7 @@ export class BookingsService {
    * Falls back to { price: fallbackPricePerHour, discountedPrice: 0 } if no match.
    */
   private resolveSlotPrice(
-    venue: Venue,
+    venue: any,
     categoryId: string,
     bookingDate: string,
     startTime: string,
@@ -299,121 +233,12 @@ export class BookingsService {
   async create(
     createBookingDto: CreateBookingDto,
     userId: string,
-  ): Promise<Booking> {
-    const {
-      venueId,
-      serviceId,
-      bookingDate,
-      startTime,
-      endTime,
-      notes,
-      categoryId,
-    } = createBookingDto;
-
-    const service = await this.venueServiceRepository.findOne({
-      where: { id: serviceId, venueId, isActive: true },
-    });
-
-    if (!service) {
-      throw new NotFoundException("Service not found or not available");
-    }
-
-    const venue = await this.venueRepository.findOne({ where: { id: venueId } });
-    if (!venue?.bookingAccept) {
-      throw new ForbiddenException("Bookings are currently paused for this venue");
-    }
-
-    const durationMinutes = this.calculateDuration(startTime, endTime);
-
-    if (durationMinutes <= 0) {
-      throw new BadRequestException("End time must be after start time");
-    }
-
-    if (service.minDuration && durationMinutes < service.minDuration) {
-      throw new BadRequestException(
-        `Minimum booking duration is ${service.minDuration} minutes`,
-      );
-    }
-
-    if (service.maxDuration && durationMinutes > service.maxDuration) {
-      throw new BadRequestException(
-        `Maximum booking duration is ${service.maxDuration} minutes`,
-      );
-    }
-
-    // Check for conflicting bookings
-    const conflict = await this.bookingRepository
-      .createQueryBuilder("booking")
-      .where("booking.venueId = :venueId", { venueId })
-      .andWhere("booking.serviceId = :serviceId", { serviceId })
-      .andWhere("booking.bookingDate = :bookingDate", { bookingDate })
-      .andWhere("booking.status NOT IN (:...statuses)", {
-        statuses: [BookingStatus.CANCELLED],
-      })
-      .andWhere(
-        "(booking.startTime < :endTime AND booking.endTime > :startTime)",
-        { startTime, endTime },
-      )
-      .getOne();
-
-    if (conflict) {
-      throw new BadRequestException("This time slot is already booked");
-    }
-
-    // Resolve price from JSONB availability slot; fallback to service.pricePerHour
-    const fallbackPrice = Number(service.pricePerHour);
-    const normalizedAvailability = categoryId
-      ? await this.prisma.partner_venue_availability.findMany({
-          where: { venue_id: venueId, service_category_id: categoryId },
-          select: {
-            day: true,
-            open_time: true,
-            close_time: true,
-            price_paise: true,
-            discounted_price_paise: true,
-          },
-        })
-      : [];
-    const normalizedPrice = this.resolveNormalizedSlotPrice(
-      normalizedAvailability,
-      bookingDate,
-      startTime,
-      fallbackPrice,
-    );
-    const { price: legacyPrice, discountedPrice: legacyDiscountedPrice } =
-      this.resolveSlotPrice(
-        venue,
-        categoryId,
-        bookingDate,
-        startTime,
-        fallbackPrice,
-      );
-    const { price: slotPrice, discountedPrice: slotDiscountedPrice } =
-      normalizedAvailability.length
-        ? normalizedPrice
-        : { price: legacyPrice, discountedPrice: legacyDiscountedPrice };
-
-    // Use discountedPrice when set (> 0), otherwise use base price
-    const effectivePrice =
-      slotDiscountedPrice > 0 ? slotDiscountedPrice : slotPrice;
-    const totalAmount = this.calculateAmount(effectivePrice, durationMinutes);
-
-    const booking = this.bookingRepository.create({
+  ): Promise<any> {
+    return this.createNormalizedFromLegacy(
+      createBookingDto,
       userId,
-      venueId,
-      serviceId,
-      categoryId: categoryId ?? null,
-      bookingDate,
-      startTime,
-      endTime,
-      durationMinutes,
-      totalAmount,
-      notes,
-      status: BookingStatus.PENDING,
-      bookingReference: await this.allocateBookingReference(),
-    });
-
-    return this.bookingRepository.save(booking);
+      `legacy:${userId}:${createBookingDto.venueId}:${createBookingDto.serviceId}:${createBookingDto.bookingDate}:${createBookingDto.startTime}`,
+    );
   }
 
   async findAll(pagination: PaginationDto, status?: BookingStatus) {
@@ -464,20 +289,16 @@ export class BookingsService {
     return this.mapNormalizedBooking(booking);
   }
 
-  async findOne(id: string): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({
+  async findOne(id: string): Promise<any> {
+    const booking = await this.prisma.bookings.findUnique({
       where: { id },
-      relations: ["user", "venue", "service"],
+      include: this.normalizedBookingInclude,
     });
-
-    if (!booking) {
-      throw new NotFoundException(`Booking with id ${id} not found`);
-    }
-
-    return booking;
+    if (!booking) throw new NotFoundException(`Booking with id ${id} not found`);
+    return this.mapNormalizedBooking(booking);
   }
 
-  async findByReference(reference: string): Promise<Booking> {
+  async findByReference(reference: string): Promise<any> {
     const normalizedReference = reference.trim().toUpperCase();
     const booking = await this.prisma.bookings.findUnique({
       where: { booking_reference: normalizedReference },
@@ -490,37 +311,15 @@ export class BookingsService {
       );
     }
 
-    return this.mapNormalizedBooking(booking) as unknown as Booking;
+    return this.mapNormalizedBooking(booking);
   }
 
   async cancel(
     id: string,
     reason: string,
     currentUser: User,
-  ): Promise<Booking> {
-    if (normalizedBookingRoutesEnabled(this.config)) {
-      return this.cancelNormalized(id, reason, currentUser) as unknown as Booking;
-    }
-    const booking = await this.findOne(id);
-
-    if (
-      currentUser.role === UserRole.USER &&
-      booking.userId !== currentUser.id
-    ) {
-      throw new ForbiddenException("You can only cancel your own bookings");
-    }
-
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new BadRequestException("Booking is already cancelled");
-    }
-
-    if (booking.status === BookingStatus.COMPLETED) {
-      throw new BadRequestException("Cannot cancel a completed booking");
-    }
-
-    booking.status = BookingStatus.CANCELLED;
-    booking.cancellationReason = reason;
-    return this.bookingRepository.save(booking);
+  ): Promise<any> {
+    return this.cancelNormalized(id, reason, currentUser);
   }
 
   /** Default-off normalized cancellation path; legacy cancellation remains authoritative. */
@@ -552,32 +351,8 @@ export class BookingsService {
     });
   }
 
-  async confirm(id: string): Promise<Booking> {
-    if (normalizedBookingRoutesEnabled(this.config)) {
-      throw new ConflictException('Administrative confirmation is not a payment confirmation; use verified payment capture');
-    }
-    const booking = await this.findOne(id);
-    booking.status = BookingStatus.CONFIRMED;
-    const saved = await this.bookingRepository.save(booking);
-
-    // Notify the venue partner about the confirmed (paid) booking
-    const venue = await this.venueRepository.findOne({
-      where: { id: saved.venueId },
-    });
-    if (venue?.partnerId) {
-      const service = await this.venueServiceRepository.findOne({
-        where: { id: saved.serviceId },
-      });
-      await this.notificationsService.notify(
-        venue.partnerId,
-        NotificationType.BOOKING_RECEIVED,
-        "New booking received",
-        `${service?.name ?? "Activity"} booked for ${saved.bookingDate} ${saved.startTime}-${saved.endTime}`,
-        { bookingId: saved.id, serviceId: saved.serviceId },
-      );
-    }
-
-    return saved;
+  async confirm(id: string): Promise<never> {
+    throw new ConflictException('Administrative confirmation is blocked: only verified payment capture may confirm a booking');
   }
 
   async complete(id: string, partnerId?: string) {

@@ -63,7 +63,7 @@ void main() {
     await show(tester, client);
     await tester.tap(find.text('+ New Member'));
     await tester.pumpAndSettle();
-    expect(find.text('Phone Number*'), findsOneWidget);
+    expect(find.text('Mobile Number*'), findsOneWidget);
     expect(find.text('Email Address'), findsNothing);
     await tester.enterText(find.byType(TextField).at(0), 'Test Staff');
     await tester.enterText(find.byType(TextField).at(1), '98765 43210');
@@ -103,7 +103,7 @@ void main() {
     expect(writes, 0);
     expect(
         find.text(
-            'Enter a valid phone number with country code, e.g. +919876543210'),
+        'Enter a valid phone number with country code, e.g. +919876543210'),
         findsOneWidget);
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();

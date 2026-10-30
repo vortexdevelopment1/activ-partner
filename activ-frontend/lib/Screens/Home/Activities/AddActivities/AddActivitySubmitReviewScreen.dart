@@ -215,6 +215,7 @@ class _State extends State<AddActivitySubmitReviewScreen> {
             child: Column(
               children: [
                 OnboardingButton(
+                  key: const Key('submit-activity-for-review'),
                   label: _saving ? 'Submitting...' : 'Submit for review',
                   loading: _saving,
                   onPressed: _saving ? null : _submit,

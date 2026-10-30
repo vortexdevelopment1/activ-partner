@@ -6,17 +6,13 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
-import type { Category } from "../categories/entities/category.entity";
+import type { CategoryRecord as Category, VenueRecord as Venue, VenueImageRecord as VenueImage, VenueServiceRecord as VenueService, VenueAnswerRecord as VenueAnswer, PartnerRecord as Partner, VenueUpdateRequestRecord as VenueUpdateRequest } from '../../common/domain-types';
 import * as bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import { randomUUID, randomInt } from "crypto";
 import type * as runtime from "@prisma/client/runtime/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import type { Venue } from "./entities/venue.entity";
-import type { VenueImage } from "./entities/venue-image.entity";
-import type { VenueService } from "./entities/venue-service.entity";
-import type { VenueAnswer } from "./entities/venue-answer.entity";
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { UpdateVenueDto } from "./dto/update-venue.dto";
 import { VenueApprovalDto } from "./dto/venue-approval.dto";
@@ -29,19 +25,15 @@ import { VenueServiceStatus } from "../../common/enums/venue-service-status.enum
 import { UserRole } from "../../common/enums/user-role.enum";
 import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
-import type { Partner } from "../partners/entities/partner.entity";
 import { MailService } from "../mail/mail.service";
 import { PartnerEmailService } from '../mail/partner-email.service';
 import { QuestionsService } from "../questions/questions.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { NotificationType } from "../notifications/entities/notification.entity";
+import { NotificationType } from '../../common/domain-types';
 import { AdminNotificationsService } from "../admin-notifications/admin-notifications.service";
-import { AdminNotificationType } from "../admin-notifications/entities/admin-notification.entity";
+import { AdminNotificationType } from '../../common/domain-types';
 import { PushNotificationsService } from "../push-notifications/push-notifications.service";
-import {
-  VenueUpdateRequest,
-  VenueUpdateRequestStatus,
-} from "./entities/venue-update-request.entity";
+import { VenueUpdateRequestStatus } from '../../common/domain-types';
 import { SubmitVenueUpdateDto } from "./dto/submit-venue-update.dto";
 import { ReviewVenueUpdateDto } from "./dto/review-venue-update.dto";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
@@ -2792,10 +2784,22 @@ export class VenuesService {
     );
     const paymentModes = await Promise.all(bookings.map(b => paymentMethodLabel(b.payments?.[0])));
     const now = new Date();
+    const displayDate = (value: Date) => new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+    }).format(value);
+    const displayTime = (value: Date) => new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true,
+    }).format(value);
     const walkInBookings = walkIns.map((reservation) => {
       const details = this.mapWalkInReservation(reservation);
       return {
         id: reservation.id,
+        bookingReference: details.bookingReference,
+        // Walk-in timestamps are legacy wall-clock values stored in UTC
+        // columns; the explicit Asia/Kolkata formatter is the single API
+        // presentation boundary for them.
+        bookingDate: displayDate(reservation.starts_at),
+        bookingTime: displayTime(reservation.starts_at),
         customerName: reservation.participant_name ?? "Walk-in Customer",
         activity: service.title,
         startsAt: new Date(reservation.starts_at.getTime() - INDIA_OFFSET_MS),
@@ -2875,6 +2879,8 @@ export class VenuesService {
         ...bookings.map((b, index) => ({
         id: b.id,
         bookingReference: b.booking_reference,
+        bookingDate: displayDate(b.starts_at),
+        bookingTime: displayTime(b.starts_at),
         customerName: b.users.name ?? "Customer",
         phone: b.users.phone_e164,
         activity: service.title,

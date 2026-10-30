@@ -30,7 +30,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import { Partner } from '../partners/entities/partner.entity';
+import type { PartnerRecord as Partner } from '../../common/domain-types';
 
 @ApiTags('Support')
 @Controller('support')

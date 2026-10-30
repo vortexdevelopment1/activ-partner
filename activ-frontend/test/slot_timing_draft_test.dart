@@ -83,7 +83,7 @@ void main() {
     final dynamic state = tester.state(find.byType(add.AddVenueTimingScreen));
     expect(state.selectedDays, ['Mon']);
     expect(state.timings['Mon'].timeSlots, [slot('500')]);
-    await tester.enterText(find.byType(TextFormField).last, '650');
+    await tester.enterText(find.byKey(const Key('slot-Mon-price-0')), '650');
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
@@ -118,15 +118,18 @@ void main() {
     }
 
     await copy(0);
-    expect(find.text('100'), findsNWidgets(2));
-    await tester.enterText(find.byType(TextFormField).at(1), '350');
-    await copy(0);
-    expect(find.text('350'), findsNWidgets(2));
-    await tester.enterText(find.byType(TextFormField).at(3), '475');
     final dynamic state = tester.state(find.byType(add.AddVenueTimingScreen));
+    expect(state.timings['Mon'].timeSlots.first['price'], '100');
+    expect(state.timings['Tue'].timeSlots.first['price'], '100');
+    await tester.enterText(find.byKey(const Key('slot-Mon-price-0')), '350');
+    await copy(0);
+    expect(state.timings['Mon'].timeSlots.first['price'], '350');
+    expect(state.timings['Tue'].timeSlots.first['price'], '350');
+    await tester.enterText(find.byKey(const Key('slot-Tue-price-0')), '475');
     expect(state.timings['Mon'].timeSlots.first['price'], '350');
     await copy(1);
-    expect(find.text('475'), findsNWidgets(2));
+    expect(state.timings['Mon'].timeSlots.first['price'], '475');
+    expect(state.timings['Tue'].timeSlots.first['price'], '475');
     expect(state.timings['Mon'].timeSlots.first['capacity'], '4');
   });
 

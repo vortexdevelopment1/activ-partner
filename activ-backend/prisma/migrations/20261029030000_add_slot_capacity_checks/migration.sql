@@ -1,13 +1,10 @@
--- Capacity safety constraints for normalized slots.
--- Apply through reviewed migration tooling; do not use db push as a substitute.
-ALTER TABLE "slots"
-  ADD CONSTRAINT "slots_capacity_nonnegative_check"
-  CHECK ("capacity" >= 0);
-
-ALTER TABLE "slots"
-  ADD CONSTRAINT "slots_booked_quantity_nonnegative_check"
-  CHECK ("booked_quantity" >= 0);
-
-ALTER TABLE "slots"
-  ADD CONSTRAINT "slots_booked_quantity_capacity_check"
-  CHECK ("booked_quantity" <= "capacity");
+-- Production already has equivalent, stronger named checks. Verify them and
+-- do not add duplicate constraints under new names.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'slots_booked_quantity_valid')
+     OR NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'slots_capacity_positive')
+     OR NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'slots_time_order') THEN
+    RAISE EXCEPTION 'Expected production slot capacity constraints are missing; review before applying';
+  END IF;
+END $$;
