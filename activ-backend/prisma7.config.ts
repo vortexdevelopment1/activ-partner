@@ -2,7 +2,17 @@
 // npm install --save-dev prisma dotenv
 import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
-import { getMigrationDatabaseUrlFromEnv } from "./src/config/database.config";
+const databaseUrl = (env: Record<string, any>): string => {
+  if (env.DIRECT_URL) return env.DIRECT_URL;
+  if (env.DATABASE_URL && (!env.DB_HOST || new URL(env.DATABASE_URL).hostname === env.DB_HOST)) return env.DATABASE_URL;
+  const url = new URL('postgresql://localhost');
+  url.hostname = env.DB_HOST || 'localhost';
+  url.port = String(env.DB_PORT || 5432);
+  url.username = env.DB_USERNAME || 'postgres';
+  url.password = env.DB_PASSWORD || 'postgres';
+  url.pathname = `/${env.DB_DATABASE || 'activ_product_db'}`;
+  return url.toString();
+};
 
 const envFile = config({ path: ".env" }).parsed ?? {};
 const localEnvFile = config({ path: ".env.local" }).parsed ?? {};
@@ -18,6 +28,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: getMigrationDatabaseUrlFromEnv(databaseEnv),
+    url: databaseUrl(databaseEnv),
   },
 });

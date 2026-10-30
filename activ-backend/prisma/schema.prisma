@@ -121,8 +121,10 @@ model payments {
   provider_payment_id String?
   provider_event_id   String?       @unique
   payment_intent_key  String?       @unique
-  currency            String        @default("INR")
-  order_status        PaymentOrderStatus @default(PENDING)
+  // Stage A production columns remain nullable until historical evidence
+  // review and Stage C NOT NULL enforcement are approved.
+  currency            String?             @default("INR")
+  order_status        PaymentOrderStatus? @default(PENDING)
   status              PaymentStatus @default(CREATED)
   amount_paise        BigInt
   created_at          DateTime      @default(now())

@@ -131,6 +131,12 @@ void main() {
             'Document changes are not allowed once verified. Contact ACTIV Support for any updates.'),
         findsOneWidget);
     await capture(tester, key, 'support');
+    await tester.scrollUntilVisible(
+      find.text('Contact Support'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Contact Support'));
     await tester.pumpAndSettle();
     expect(find.byType(ContactSupportFormScreen), findsOneWidget);

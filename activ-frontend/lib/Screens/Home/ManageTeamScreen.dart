@@ -123,6 +123,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
 
   final List<_TeamMember> _members = [];
   bool _loading = true;
+  String? _loadError;
 
   static String roleLabelFor(String value) {
     final normalized = value.toLowerCase();
@@ -152,7 +153,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
   }
 
   Future<void> _loadMembers() async {
-    if (mounted) setState(() => _loading = true);
+    if (mounted) setState(() { _loading = true; _loadError = null; });
     try {
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse(TEAM_URL),
@@ -174,14 +175,15 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
           _members
             ..clear()
             ..addAll(nextMembers);
+          _loadError = null;
         });
       } else {
-        _showApiError(response.body, 'Unable to load team members');
+        if (mounted) setState(() => _loadError = 'Unable to load team members');
       }
     } catch (error) {
       CommonUtilities.showLog('Manage team load error: $error');
       if (mounted) {
-        CommonUtilities.createSnackBar(context, 'Unable to load team members');
+        setState(() => _loadError = 'Unable to load team members');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -320,7 +322,18 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
                                 color: AppColors.purple,
                               ),
                             )
-                          : Column(
+                              : _loadError != null
+                                  ? Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(_loadError!),
+                                          const SizedBox(height: 12),
+                                          TextButton(onPressed: _loadMembers, child: const Text('Retry')),
+                                        ],
+                                      ),
+                                    )
+                                  : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
@@ -464,7 +477,8 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
       return;
     }
     if (phoneDigits.length < 10) {
-      CommonUtilities.createSnackBar(context, 'Enter a valid mobile number');
+      CommonUtilities.createSnackBar(
+          context, 'Enter a valid phone number with country code, e.g. +919876543210');
       return;
     }
 
@@ -783,7 +797,7 @@ class _EmptyMembersCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 30),
-          _PurpleButton(label: '＋  New Member', onTap: onAdd),
+          _PurpleButton(label: '+ New Member', onTap: onAdd),
         ],
       ),
     );

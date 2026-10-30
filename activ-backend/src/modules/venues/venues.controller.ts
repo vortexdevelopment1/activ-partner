@@ -46,7 +46,7 @@ import { ActivityApprovalDto } from "./dto/activity-approval.dto";
 import { ActivityReviewQueryDto } from "./dto/activity-review-query.dto";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
 import { AdminVenuesQueryDto } from "./dto/admin-venues-query.dto";
-import { VenueUpdateRequestStatus } from "./entities/venue-update-request.entity";
+import { VenueUpdateRequestStatus } from '../../common/domain-types';
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";

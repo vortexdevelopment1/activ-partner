@@ -6,18 +6,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Partner } from './entities/partner.entity';
-import {
-  GstVerificationRequest,
-  GstVerificationStatus,
-} from './entities/gst-verification-request.entity';
+import type { PartnerRecord as Partner } from '../../common/domain-types';
+import { GstVerificationRequestRecord as GstVerificationRequest, GstVerificationStatus } from '../../common/domain-types';
 import { SubmitGstVerificationDto } from './dto/submit-gst-verification.dto';
 import { ReviewGstVerificationDto } from './dto/review-gst-verification.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
-import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { AdminNotificationType } from '../../common/domain-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { deletePartnerAccount } from './delete-partner-account';
 import { MailService } from '../mail/mail.service';

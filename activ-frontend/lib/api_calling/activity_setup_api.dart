@@ -224,8 +224,21 @@ class ActivitySetupApi {
       throw const ActivitySetupException(
           'This activity is missing its venue or sport. Please retry.');
     }
+    const dayNames = {
+      'Mon': 'Monday',
+      'Tue': 'Tuesday',
+      'Wed': 'Wednesday',
+      'Thu': 'Thursday',
+      'Fri': 'Friday',
+      'Sat': 'Saturday',
+      'Sun': 'Sunday',
+    };
+    final backendTiming = {
+      for (final entry in timing.entries)
+        dayNames[entry.key] ?? entry.key: entry.value,
+    };
     await _request('PATCH', '/venues/$venueId/availability', {
-      'venue_timing': {categoryId: timing},
+      'venue_timing': {categoryId: backendTiming},
     });
     final submitted = await _request('POST', '/venues/activities/$id/submit');
     if (submitted is! Map ||

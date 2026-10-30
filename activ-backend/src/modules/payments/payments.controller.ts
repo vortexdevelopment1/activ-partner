@@ -20,7 +20,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { PaymentStatus } from '../../common/enums/booking-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import { User } from '../users/entities/user.entity';
+import type { UserRecord as User } from '../../common/domain-types';
 
 @ApiTags('Payments')
 @ApiBearerAuth()

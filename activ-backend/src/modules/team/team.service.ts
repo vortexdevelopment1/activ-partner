@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 import { randomInt } from "crypto";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
-import { TeamMember, TeamMemberStatus } from "./entities/team-member.entity";
+import { TeamMemberRecord as TeamMember, TeamMemberStatus } from '../../common/domain-types';
 import { CreateTeamMemberDto } from "./dto/create-team-member.dto";
 import { UpdateTeamMemberDto } from "./dto/update-team-member.dto";
 import { MailService } from "../mail/mail.service";
@@ -29,7 +29,7 @@ export class TeamService {
     const link = record.partner_users;
     const user = link.users;
     const settings = record.permissions as Record<string, any>;
-    return Object.assign(new TeamMember(), {
+    return {
       id: record.id,
       partnerId: link.partner_id,
       fullName: record.display_name || user.name || "",
@@ -46,7 +46,7 @@ export class TeamService {
       },
       createdAt: record.created_at,
       updatedAt: record.updated_at,
-    });
+    };
   }
 
   async findAll(partnerId: string): Promise<TeamMember[]> {

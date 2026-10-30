@@ -4,7 +4,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { LegalContentType } from './entities/legal-content.entity';
+import { LegalContentType } from '../../common/domain-types';
 import { LegalService } from './legal.service';
 import { UpsertLegalContentDto } from './dto/upsert-legal-content.dto';
 

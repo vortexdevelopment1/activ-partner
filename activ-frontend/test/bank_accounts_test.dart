@@ -109,10 +109,14 @@ void main() {
     final accounts = <Map<String, dynamic>>[];
     var posts = 0;
     final client = MockClient((request) async {
-      if (request.url.host == 'ifsc.razorpay.com') {
+      if (request.url.host == 'ifsc.razorpay.com' ||
+          request.url.path.contains('/bank-accounts/ifsc/')) {
         expect(request.headers.containsKey('Authorization'), isFalse);
-        return http.Response(
-            jsonEncode({'BANK': 'HDFC Bank', 'BRANCH': 'Test Branch'}), 200);
+        return request.url.host == 'ifsc.razorpay.com'
+            ? http.Response(
+                jsonEncode({'BANK': 'HDFC Bank', 'BRANCH': 'Test Branch'}), 200)
+            : http.Response(
+                jsonEncode({'data': {'bank': 'HDFC Bank', 'branch': 'Test Branch'}}), 200);
       }
       expect(request.headers['Authorization'], 'Bearer token');
       if (request.method == 'POST') {

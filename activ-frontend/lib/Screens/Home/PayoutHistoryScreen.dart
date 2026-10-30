@@ -360,6 +360,9 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
       );
 
   Widget _record(Map<String, dynamic> record) {
+    final reference = record['reference'] ?? record['payoutReference'];
+    final bankName = record['bankName'] ?? record['bank']?['name'];
+    final accountLast4 = record['accountLast4'] ?? record['bank']?['accountLast4'];
     final status = record['status'].toString(),
         date = DateTime.tryParse((record['payoutDate'] ?? '').toString());
     final statusLabel = status == 'success'
@@ -397,6 +400,17 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
             const Icon(Icons.chevron_right, size: 28),
           ]),
           const SizedBox(height: 10),
+          if (reference != null || bankName != null)
+            Text(
+              [
+                if (reference != null) reference.toString(),
+                if (bankName != null)
+                  '$bankName | XXXX ${accountLast4 ?? '-'}',
+              ].join(' • '),
+              style: _text(14),
+            ),
+          if (reference != null || bankName != null)
+            const SizedBox(height: 8),
           Row(children: [
             Text('₹ ', style: _text(16)),
             Text(

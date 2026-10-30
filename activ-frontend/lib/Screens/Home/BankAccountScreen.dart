@@ -825,10 +825,13 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
           _ifsc.text != code) return;
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        final data = Map<String, dynamic>.from(body['data'] as Map);
+        final rawData = body is Map && body['data'] is Map
+            ? body['data'] as Map
+            : body as Map;
+        final data = Map<String, dynamic>.from(rawData);
         setState(() {
-          _bank.text = data['bank']?.toString() ?? '';
-          _branch.text = data['branch']?.toString() ?? '';
+          _bank.text = (data['bank'] ?? data['BANK'])?.toString() ?? '';
+          _branch.text = (data['branch'] ?? data['BRANCH'])?.toString() ?? '';
           _ifscValid = true;
         });
         _validateLive();

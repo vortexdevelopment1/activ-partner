@@ -28,8 +28,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { User } from '../users/entities/user.entity';
-import { Partner } from '../partners/entities/partner.entity';
+import type { UserRecord as User, PartnerRecord as Partner } from '../../common/domain-types';
 import { GoogleOAuthService } from '../mail/google-oauth.service';
 
 @ApiTags('Authentication')

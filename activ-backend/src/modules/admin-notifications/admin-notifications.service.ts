@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { AdminNotification, AdminNotificationType } from './entities/admin-notification.entity';
+import { AdminNotificationRecord as AdminNotification, AdminNotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class AdminNotificationsService {

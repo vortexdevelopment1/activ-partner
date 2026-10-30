@@ -1,0 +1,10 @@
+id,booking_id,status,provider,provider_order_id,provider_payment_id,amount_paise,currency,order_status
+2fc6d453-97d9-4e5d-b7c1-c3d96604b3d9,c4720442-1205-4ae4-ae1c-6d871be7a768,CAPTURED,razorpay,order_TpjIPAbDviVT0v,pay_TpjIiV2MrGBsxM,200000,,
+50f1964a-b221-465f-b415-9479b58a9d7e,acc1f695-73d3-41cb-bca7-3189c969c2a0,CAPTURED,razorpay,order_TrNFi2ZZeWZhh3,pay_TrNG74f2BXz4tz,50000,,
+a28c3cdd-3b02-499e-aa96-07c09de8ce24,175f7ea0-1be2-437e-8c4d-24b5ca07c959,CAPTURED,razorpay,order_TrUxnhWwNDC1z9,pay_TrUxu3Ttoeh4Gw,50000,,
+094dfb17-5363-47c0-a61e-a0d0cada7153,669a77ee-bea7-4608-a2d8-ebd877700b10,CAPTURED,razorpay,order_TrV57Y9y5vKOzJ,pay_TrV5Be6AHHx5vv,50000,,
+71aafe72-ab77-4493-bccb-77713eb7c53e,622d9496-b767-4b41-b4d3-afaefa975a8d,CAPTURED,razorpay,order_TrVA3USBQvAPae,pay_TrVA81dGQwho7w,200000,,
+601e03ba-259a-4fd0-b95d-38e8e04d44a1,0ca4826c-313b-44ff-af5d-487e29a832b8,CREATED,razorpay,order_TrVaRLqjmyLV2P,,50000,,
+2f782ddb-6333-45bf-ba9a-531d9abdd0d1,273d60b0-46db-4590-9709-3695c5cf2771,CREATED,razorpay,order_TrVfTSiyijrd89,,50000,,
+e47a4b38-3496-4607-a494-8ef49a997111,be4cc9fa-378b-4875-b925-6cc8ad468bfc,CREATED,razorpay,order_TrWMS2y4DLP0JW,,50000,,
+1edf6ed5-d932-4f45-974e-a076b143d5e9,4076d376-fe1b-4d72-bad7-1b044f6c74ea,CAPTURED,razorpay,order_TtEZjh3xMO88Au,pay_TtEZskpArX4fzH,1000,,

@@ -725,6 +725,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     };
     final date =
         DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final bookingDate = booking['bookingDate']?.toString();
+    final bookingTime = booking['bookingTime']?.toString();
     return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: Material(
@@ -746,7 +748,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                       ]),
                       const SizedBox(height: 8),
                       _text(
-                          '${booking['activity'] ?? _name}  |  ${date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
+                          '${booking['activity'] ?? _name}  |  ${bookingDate != null && bookingTime != null ? '$bookingDate  |  $bookingTime' : date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
                           color: Colors.grey,
                           size: 12),
                       const SizedBox(height: 12),
@@ -759,8 +761,11 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   void _bookingDetails(Map<String, dynamic> booking) {
     final status = booking['status']?.toString() ?? 'Upcoming';
-    final date =
-        DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final date = DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final displayDate = booking['bookingDate']?.toString() ??
+        (date == null ? '0' : DateFormat('dd MMM yyyy').format(date));
+    final displayTime = booking['bookingTime']?.toString() ??
+        (date == null ? '0' : DateFormat('hh:mm a').format(date));
     showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -791,17 +796,20 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     ]),
                     const Divider(height: 30),
                     _detailSection('Booking information', [
-                      ('Booking ID', booking['bookingReference']?.toString() ?? booking['id']?.toString() ?? 'Not available'),
+                      ('Booking ID', (booking['bookingReference'] ??
+                              booking['booking_reference'] ??
+                              booking['public_code'] ??
+                              booking['reference'] ??
+                              'Not available')
+                          .toString()),
                       ('Activity', booking['activity']?.toString() ?? _name),
                       (
                         'Date',
-                        date == null
-                            ? '0'
-                            : DateFormat('dd MMM yyyy').format(date)
+                        displayDate
                       ),
                       (
                         'Time',
-                        date == null ? '0' : DateFormat('hh:mm a').format(date)
+                        displayTime
                       ),
                       ('Participants', '${booking['participants']?.toString() ?? '0'} people'),
                       ('Booked On', _formatBookingDate(booking['bookedOn'] ?? booking['createdAt'])),
@@ -1553,6 +1561,17 @@ class _BookingsPageState extends State<_BookingsPage> {
   final _search = TextEditingController();
   String _tab = 'All';
 
+  String _bookingDisplayReference(Map<String, dynamic> booking) {
+    final value = booking['bookingReference'] ??
+        booking['booking_reference'] ??
+        booking['public_code'] ??
+        booking['reference'];
+    if (value != null && value.toString().trim().isNotEmpty) {
+      return value.toString();
+    }
+    return 'Not available';
+  }
+
   @override
   void dispose() {
     _search.dispose();
@@ -1727,6 +1746,8 @@ class _BookingsPageState extends State<_BookingsPage> {
     final status = booking['status']?.toString() ?? 'Upcoming';
     final date =
         DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final bookingDate = booking['bookingDate']?.toString();
+    final bookingTime = booking['bookingTime']?.toString();
     final color = switch (status) {
       'Ongoing' => const Color(0xFF2EB944),
       'Canceled' => const Color(0xFF7D9291),
@@ -1756,7 +1777,7 @@ class _BookingsPageState extends State<_BookingsPage> {
               ]),
               const SizedBox(height: 10),
               _text(
-                  '${widget.activityName}  |  ${date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
+                  '${widget.activityName}  |  ${bookingDate != null && bookingTime != null ? '$bookingDate  |  $bookingTime' : date == null ? '0' : DateFormat('dd MMM yyyy  |  hh:mm a').format(date)}',
                   color: Colors.grey,
                   size: 13,
                   bold: true),
@@ -1804,11 +1825,7 @@ class _BookingsPageState extends State<_BookingsPage> {
                     _bookingDetailSection('Booking information', [
                       (
                         'Booking ID',
-                        (booking['bookingReference'] ??
-                                booking['booking_reference'] ??
-                                booking['id'] ??
-                                '')
-                            .toString()
+                        _bookingDisplayReference(booking)
                       ),
                       ('Activity', widget.activityName),
                       (

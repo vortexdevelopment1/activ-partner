@@ -8,12 +8,12 @@ import 'package:intl/intl.dart';
 import 'package:flutter_svg/svg.dart';
 
 import '../../Utills/common_utilities.dart';
-
-DateTime _indiaTime(DateTime value) =>
-    value.toUtc().add(const Duration(hours: 5, minutes: 30));
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../Menu/MenuScreen.dart';
+
+DateTime _indiaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 5, minutes: 30));
 
 enum _BookingStatus { upcoming, ongoing, canceled, noShow, completed, pending }
 
@@ -130,7 +130,7 @@ class _Booking {
     );
   }
 
-String _displayWalkInReference(Object? value) {
+  static String _displayWalkInReference(Object? value) {
   final id = value?.toString() ?? '';
   if (id.isEmpty) return 'Not available';
   return id.contains('-') && id.length >= 32

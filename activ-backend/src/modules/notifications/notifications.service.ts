@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { Notification, NotificationType } from './entities/notification.entity';
+import { NotificationRecord as Notification, NotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class NotificationsService {

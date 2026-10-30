@@ -1,10 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import * as path from 'path';
 
-import { getTypeOrmCompatibilityConfig } from './config/database.config';
 import { PrismaModule } from './prisma/prisma.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -55,12 +53,6 @@ import { PerformanceTimingMiddleware } from './common/middleware/performance-tim
     }),
     PrismaModule,
     CloudinaryModule,
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) =>
-        getTypeOrmCompatibilityConfig(configService),
-      inject: [ConfigService],
-    }),
     MailModule,
     OtpModule,
     PushNotificationsModule,

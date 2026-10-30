@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
-import { BankAccountStatus } from '../entities/bank-account.entity';
+import { BankAccountStatus } from '../../../common/domain-types';
 
 export class ReviewBankAccountDto {
   @ApiProperty({ enum: [BankAccountStatus.APPROVED, BankAccountStatus.REJECTED] })

@@ -15,8 +15,8 @@ import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
 import { MailService } from '../mail/mail.service';
-import { TeamMember, TeamMemberStatus } from '../team/entities/team-member.entity';
-import type { Partner } from '../partners/entities/partner.entity';
+import { TeamMemberRecord as TeamMember, TeamMemberStatus } from '../../common/domain-types';
+import type { PartnerRecord as Partner } from '../../common/domain-types';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterPartnerDto } from './dto/register-partner.dto';
@@ -31,7 +31,7 @@ import { VenueStatus } from '../../common/enums/venue-status.enum';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
-import { AdminNotificationType } from '../admin-notifications/entities/admin-notification.entity';
+import { AdminNotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class AuthService {

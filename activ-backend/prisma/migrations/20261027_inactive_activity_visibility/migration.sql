@@ -1,12 +1,9 @@
--- Repair only legacy links managed by this partner backend. Do not change
--- shared catalogue activity statuses, partner approval decisions, or bookings.
--- Lock in the same order as partner pause/resume and schedule generation.
-SELECT venue.id FROM venues AS venue
-WHERE EXISTS (SELECT 1 FROM partner_venue_services AS service WHERE service.venue_id = venue.id)
-ORDER BY venue.id FOR UPDATE;
-
-WITH stale_links AS (
-  SELECT link.venue_id, link.activity_id
+-- Review-only guard. Archival is a business decision and must be performed
+-- by a separately approved data migration after an operator reviews the rows.
+DO $$
+DECLARE candidate_count integer;
+BEGIN
+  SELECT count(*) INTO candidate_count
   FROM venue_activities AS link
   JOIN venues AS venue ON venue.id = link.venue_id
   WHERE link.status = 'APPROVED'
@@ -22,9 +19,8 @@ WITH stale_links AS (
       WHERE service.venue_id = link.venue_id
         AND facility.venue_id = link.venue_id AND facility.activity_id = link.activity_id
         AND service.status = 'APPROVED' AND service.is_active = TRUE
-    ))
-)
-UPDATE venue_activities AS link
-SET status = 'ARCHIVED'
-FROM stale_links AS stale
-WHERE link.venue_id = stale.venue_id AND link.activity_id = stale.activity_id;
+    ));
+  IF candidate_count <> 0 THEN
+    RAISE EXCEPTION 'Activity archival requires explicit approval; % candidate rows found', candidate_count;
+  END IF;
+END $$;

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { faqs } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { Faq } from './entities/faq.entity';
+import type { FaqRecord as Faq } from '../../common/domain-types';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';

@@ -30,7 +30,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { UserRole } from "../../common/enums/user-role.enum";
 import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
-import { User } from "../users/entities/user.entity";
+import type { UserRecord as User } from '../../common/domain-types';
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
 import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
 

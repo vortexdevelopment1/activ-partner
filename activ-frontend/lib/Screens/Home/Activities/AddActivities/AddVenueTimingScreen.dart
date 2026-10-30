@@ -861,7 +861,8 @@ class _State extends State<AddVenueTimingScreen> {
                                                   top: 4, bottom: 12),
                                               child: _slotDetails(
                                                   day,
-                                                  timings[day]!.timeSlots.first),
+                                                  timings[day]!.timeSlots.first,
+                                                  0),
                                             ),
 
                                           // Add Slot Time Click Event.
@@ -1071,7 +1072,7 @@ class _State extends State<AddVenueTimingScreen> {
     return false;
   }
 
-  Widget _slotDetails(String day, Map<String, String> slot) {
+  Widget _slotDetails(String day, Map<String, String> slot, int slotIndex) {
     Widget field({required String label, required String hint, required String key}) {
       return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1080,7 +1081,7 @@ class _State extends State<AddVenueTimingScreen> {
                 fontFamily: 'Satoshi', color: AppColors.darkBlack)),
             const SizedBox(height: 6),
             TextFormField(
-              key: ObjectKey(slot),
+              key: ValueKey('slot-${day}-${key}-${slotIndex}'),
               initialValue: slot[key] ?? '',
               keyboardType: TextInputType.number,
               decoration: OnboardingStyles.inputDecoration(hintText: hint),
@@ -1126,8 +1127,10 @@ class _State extends State<AddVenueTimingScreen> {
                 child: Row(children: [
                   const Icon(Icons.local_offer_outlined, color: Color(0xFF9D38EB), size: 25),
                   const SizedBox(width: 10),
-                  Text('User will see ', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 16)),
-                  Text('Flat $percent% OFF', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 17, fontWeight: FontWeight.w700)),
+                  Expanded(child: Text.rich(TextSpan(children: [
+                    const TextSpan(text: 'User will see ', style: TextStyle(color: Color(0xFFA45BDB), fontSize: 16)),
+                    TextSpan(text: 'Flat $percent% OFF', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 17, fontWeight: FontWeight.w700)),
+                  ]), maxLines: 2, overflow: TextOverflow.ellipsis)),
                 ]),
               );
             }),

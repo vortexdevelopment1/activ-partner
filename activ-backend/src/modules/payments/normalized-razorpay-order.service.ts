@@ -56,6 +56,33 @@ export class NormalizedRazorpayOrderService {
     if (booking.status !== 'PENDING_PAYMENT' || booking.total_paise !== input.amountPaise) throw new ConflictException('Booking is not payable');
 
     const intentKey = `booking:${booking.id}`;
+    // The User App predates payment_intent_key and can already have created a
+    // Razorpay order for this booking. Reuse one exact legacy provider order
+    // instead of creating a second gateway order. Never mutate that record or
+    // claim it as this writer's intent.
+    const legacyPayments = await tx.payments.findMany({
+      where: { booking_id: booking.id, provider: input.provider },
+      orderBy: { created_at: 'asc' },
+      select: { id: true, amount_paise: true, currency: true, order_status: true, status: true, provider_order_id: true, provider_payment_id: true, payment_intent_key: true },
+    });
+    const legacyProviderOrders = legacyPayments.filter(payment => payment.provider_order_id && !payment.payment_intent_key);
+    if (legacyProviderOrders.length > 1) throw new ConflictException('Multiple payment orders exist for this booking; manual reconciliation is required');
+    const legacyOrder = legacyProviderOrders[0];
+    if (legacyOrder) {
+      if (legacyOrder.amount_paise !== input.amountPaise || legacyOrder.currency !== 'INR') throw new ConflictException('Existing payment order does not match booking');
+      if (legacyOrder.status === 'CAPTURED' || legacyOrder.provider_payment_id) throw new ConflictException('Payment is already captured; order creation is not allowed');
+      // A User App row created before the additive migration has no
+      // order_status; after the column is added its default is PENDING. The
+      // legacy status CREATED plus a persisted provider order is the only
+      // accepted compatibility evidence, and this branch does not rewrite it.
+      if (legacyOrder.order_status !== 'CREATED' && !(legacyOrder.order_status === 'PENDING' && legacyOrder.status === 'CREATED')) {
+        throw new ConflictException('Existing payment order is not ready for reuse');
+      }
+      return { payment: legacyOrder, reused: true };
+    }
+    if (legacyPayments.some(payment => !payment.payment_intent_key && !payment.provider_order_id)) {
+      throw new ConflictException('An existing payment record requires reconciliation before a new order can be created');
+    }
     const existing = await tx.payments.findUnique({ where: { payment_intent_key: intentKey } });
     if (existing) {
       if (existing.amount_paise !== input.amountPaise || existing.currency !== 'INR') throw new ConflictException('Payment intent does not match booking');

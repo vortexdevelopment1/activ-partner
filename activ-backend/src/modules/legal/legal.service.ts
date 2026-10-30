@@ -4,7 +4,7 @@ import PDFDocument = require('pdfkit');
 import { PrismaService } from '../../prisma/prisma.service';
 import type { content_documents } from '../../generated/prisma/client';
 
-import { LegalContent, LegalContentType } from './entities/legal-content.entity';
+import { LegalContentRecord as LegalContent, LegalContentType } from '../../common/domain-types';
 import { UpsertLegalContentDto } from './dto/upsert-legal-content.dto';
 import { FileExport } from '../payouts/payouts.service';
 
@@ -28,13 +28,13 @@ export class LegalService {
   }
 
   private toLegalContent(record: content_documents, updatedBy?: string): LegalContent & { title: string } {
-    return Object.assign(new LegalContent(), {
+    return {
       id: record.id, type: record.type as LegalContentType,
       title: record.title, content: record.body,
       version: Number(record.version) || 1,
       createdAt: record.created_at, updatedAt: record.updated_at,
       updatedBy: updatedBy ?? null,
-    });
+    };
   }
 
   async upsert(type: LegalContentType, dto: UpsertLegalContentDto, adminId: string): Promise<LegalContent> {

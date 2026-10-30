@@ -10,7 +10,7 @@ import { PaginationDto } from "../../common/dto/pagination.dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateCityCommissionDto } from "./dto/create-city-commission.dto";
 import { UpdateCityCommissionDto } from "./dto/update-city-commission.dto";
-import { CityCommission } from "./entities/city-commission.entity";
+import type { CityCommissionRecord as CityCommission } from '../../common/domain-types';
 
 export const DEFAULT_COMMISSION = 5;
 
