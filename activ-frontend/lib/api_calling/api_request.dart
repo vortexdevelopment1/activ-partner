@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Style/app_size.dart';
 import '../Utills/browser_session.dart';
@@ -59,6 +60,31 @@ class ApiRequest {
 
 class SharedPreference
 {
+  static const _accountKey = 'session_account_identity';
+
+  static Future<void> resetForNewPartner() async {
+    final phoneCode = await readStr('phoneCode');
+    final phone = await readStr('userMobileNumber');
+    await clearSF();
+    if (phoneCode != null) await addStringToSF('phoneCode', phoneCode);
+    if (phone != null) await addStringToSF('userMobileNumber', phone);
+  }
+
+  // Used only to isolate local drafts. The server still verifies every token.
+  static String? _accountIdentity(String? token) {
+    try {
+      final parts = token?.split('.');
+      if (parts == null || parts.length != 3) return null;
+      final payload = jsonDecode(utf8.decode(base64Url.decode(
+          base64Url.normalize(parts[1]))));
+      if (payload is! Map || payload['sub'] is! String ||
+          (payload['sub'] as String).isEmpty) return null;
+      return '${payload['type'] ?? payload['role']}:${payload['sub']}';
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Here you create your sharepref instance to be used for further uses
   static Future<SharedPreferences> storage(){
     return SharedPreferences.getInstance();
@@ -66,6 +92,18 @@ class SharedPreference
 
   static addStringToSF(String key, String value) async
   {
+    if (key == 'jwt_token') {
+      final nextAccount = _accountIdentity(value);
+      final previousAccount = await readStr(_accountKey) ??
+          _accountIdentity(await readStr('jwt_token'));
+      if (nextAccount != null) {
+        if (previousAccount != null && previousAccount != nextAccount) {
+          // Venue IDs, onboarding answers and navigation belong to one account.
+          await clearSF();
+        }
+        await addStringToSF(_accountKey, nextAccount);
+      }
+    }
     if (isBrowserSession) {
       writeBrowserSession(key, value);
       return;
@@ -103,6 +141,11 @@ class SharedPreference
 
   static remove(String key) async
   {
+    if (key == 'jwt_token') {
+      // Login clears the old token before the new account is authenticated.
+      final account = _accountIdentity(await readStr(key));
+      if (account != null) await addStringToSF(_accountKey, account);
+    }
     if (isBrowserSession) {
       removeBrowserSession(key);
       return;

@@ -144,4 +144,14 @@ describe('Finish agreement email', () => {
     await service.acceptTerms('venue-1', 'partner-1', 'Lalit Jangid');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
+
+  it('rejects signing a saved venue owned by another partner before any writes', async () => {
+    prisma.venues.findUnique.mockResolvedValue({
+      partner_id: 'partner-1', partner_venue_profiles: {},
+    });
+    await expect(service.acceptTerms('venue-1', 'other-partner', 'Signature'))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(mailService.sendSignedAgreementEmailViaGmail).not.toHaveBeenCalled();
+  });
 });

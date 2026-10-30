@@ -497,26 +497,32 @@ class _State extends State<CategoryQuestionsScreen> {
 
   // ─── Submit all answers ───────────────────────────────────────────────────
 
-  Future<void> _persistAnswers({
-    required String jwtToken,
-    required List<Map<String, dynamic>> answersPayload,
+  Future<void> _cacheAnswers({
     required List<Map<String, dynamic>> displayList,
     required String categoryId,
   }) async {
-    try {
-      List<dynamic> existingList = [];
-      final existingRaw = checkString(
-          await SharedPreference.readStr('activity_questions_display'));
-      if (existingRaw.isNotEmpty) {
-        existingList = jsonDecode(existingRaw) as List<dynamic>;
-      }
-      final titles = displayList.map((q) => q['categoryTitle']).toSet();
-      existingList.removeWhere((q) =>
-          isPlaceholderActivityQuestion(q['questionText']) ||
-          q['categoryId'] == categoryId ||
-          (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
-      existingList.addAll(displayList);
+    List<dynamic> existingList = [];
+    final existingRaw = checkString(
+        await SharedPreference.readStr('activity_questions_display'));
+    if (existingRaw.isNotEmpty) {
+      existingList = jsonDecode(existingRaw) as List<dynamic>;
+    }
+    final titles = displayList.map((q) => q['categoryTitle']).toSet();
+    existingList.removeWhere((q) =>
+        isPlaceholderActivityQuestion(q['questionText']) ||
+        q['categoryId'] == categoryId ||
+        (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
+    existingList.addAll(displayList);
 
+    await SharedPreference.addStringToSF(
+        'activity_questions_display', jsonEncode(existingList));
+  }
+
+  Future<void> _persistAnswers({
+    required String jwtToken,
+    required List<Map<String, dynamic>> answersPayload,
+  }) async {
+    try {
       final response = await (widget.client?.post ?? http.post)(
         Uri.parse('$VENUE_ANSWERS_URL/${widget.venueId}/answers'),
         headers: {
@@ -527,10 +533,7 @@ class _State extends State<CategoryQuestionsScreen> {
         body: jsonEncode({'answers': answersPayload}),
       );
       CommonUtilities.showLog('Submit answers status: ${response.statusCode}');
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await SharedPreference.addStringToSF(
-            'activity_questions_display', jsonEncode(existingList));
-      } else {
+      if (response.statusCode != 200 && response.statusCode != 201) {
         CommonUtilities.showLog('Submit answers failed: ${response.body}');
       }
     } catch (e) {
@@ -577,11 +580,13 @@ class _State extends State<CategoryQuestionsScreen> {
     }
 
     final categoryId = widget.currentCategory['id']?.toString() ?? '';
+    // The review screen reads this cache once on entry. Commit the display
+    // data before navigating, independently of the background API response.
+    await _cacheAnswers(displayList: displayList, categoryId: categoryId);
+    if (!mounted) return;
     unawaited(_persistAnswers(
       jwtToken: jwtToken,
       answersPayload: answersPayload,
-      displayList: displayList,
-      categoryId: categoryId,
     ));
 
     if (widget.reviewMode) {

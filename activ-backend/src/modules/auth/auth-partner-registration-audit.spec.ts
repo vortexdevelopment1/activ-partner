@@ -36,7 +36,8 @@ describe('partner registration audit', () => {
       buildPartnerAuthResponse: jest.fn().mockReturnValue({ jwt_token: 'token' }),
     }) as AuthService;
 
-    await service.verifyOtp({ phone: '+919876543210', otp: '123456' });
+    await expect(service.verifyOtp({ phone: '+919876543210', otp: '123456' }))
+      .resolves.toMatchObject({ isNewPartner: true });
     expect(tx.audit_events.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       actor_id: user.id, action: 'partner.registered', entity_type: 'partners',
       entity_id: expect.any(String), after_json: { outcome: 'success' },

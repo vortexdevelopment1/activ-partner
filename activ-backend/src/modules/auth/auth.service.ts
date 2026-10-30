@@ -550,11 +550,12 @@ export class AuthService {
         { partnerId: account.link.partners.id },
       );
     }
-    return this.buildPartnerAuthResponse(
+    const response = await this.buildPartnerAuthResponse(
       account.link.partners,
       account.user,
       account.link.role,
     );
+    return account.isNewPartner ? { ...response, isNewPartner: true } : response;
   }
 
   private async canResumeVenueCorrections(partner: { id: string; status: string }): Promise<boolean> {

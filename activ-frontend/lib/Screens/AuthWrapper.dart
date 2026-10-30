@@ -20,6 +20,7 @@ import 'LoginScreen.dart';
 import 'session_navigation.dart';
 import '../Utills/browser_session.dart';
 import '../Utills/venue_onboarding_draft.dart';
+import '../Utills/venue_session_ownership.dart';
 
 /*
 class AuthWrapper extends StatelessWidget {
@@ -160,13 +161,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final pendingLegalCameraDocument =
           await SharedPreference.readStr(_pendingLegalCameraDocumentTypeKey);
 
-      if (userType != "team_member" &&
-          pendingLegalCameraDocument != null &&
-          pendingLegalCameraDocument.isNotEmpty) {
-        _finish(const LegalInformationScreen());
-        return;
-      }
-
       // Team members can only manage bookings; keep them out of partner screens.
       if (userType == "team_member") {
         final response = await (widget.client?.get ?? http.get)(
@@ -212,6 +206,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
             jsonEncode(profileData['member']?['permissions'] ?? {}));
         await SharedPreference.addStringToSF('is_active', 'true');
         _finish(ManagerHomeScreen(client: widget.client));
+        return;
+      }
+      if (!await validateSavedVenueOwnership(client: widget.client)) {
+        _finish(profileData?['isProfileComplete'] == true
+            ? VenueScreen(client: widget.client)
+            : const TellUsAboutScreen());
+        return;
+      }
+      if (pendingLegalCameraDocument != null &&
+          pendingLegalCameraDocument.isNotEmpty) {
+        _finish(const LegalInformationScreen());
         return;
       }
       final bool apiIsProfileComplete =

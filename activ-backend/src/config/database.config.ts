@@ -13,6 +13,9 @@ export const getDatabaseUrlFromEnv = (env: Env): string => {
   return url.toString();
 };
 
+export const getMigrationDatabaseUrlFromEnv = (env: Env): string =>
+  env.DIRECT_URL ? String(env.DIRECT_URL) : getDatabaseUrlFromEnv(env);
+
 export const getDatabaseUrl = (config: ConfigService): string =>
   getDatabaseUrlFromEnv({
     DATABASE_URL: config.get<string>('DATABASE_URL'),

@@ -15,6 +15,7 @@ import 'Home/HomeScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
+import 'VenuePhotoListViewScreen.dart';
 import 'MobileNumberScreen.dart';
 import '../Utills/venue_onboarding_draft.dart';
 import '../Database/auth_service.dart';
@@ -266,6 +267,13 @@ class _State extends State<OTPVerificationScreen> {
           return;
         }
 
+        if (body['data']?['isNewPartner'] == true && !isTeamMember) {
+          await SharedPreference.resetForNewPartner();
+          VenuePhotoListViewScreen.cachedImageBytes.clear();
+          VenuePhotoListViewScreen.cachedImagesByCategory.clear();
+          VenuePhotoListViewScreen.cachedCoverIndexByCategory.clear();
+          VenuePhotoListViewScreen.returnToReviewBuilder = null;
+        }
         await SharedPreference.addStringToSF("jwt_token", token);
         await SharedPreference.addStringToSF(
             "is_profile_complete", isProfileComplete ? "true" : "false");

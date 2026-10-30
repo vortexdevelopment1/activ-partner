@@ -10,10 +10,12 @@ import 'package:intl/intl.dart';
 import '../Style/app_colors.dart';
 import '../Utills/common_utilities.dart';
 import '../Utills/browser_session.dart';
+import '../Utills/venue_session_ownership.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'CommonCode.dart';
 import 'ContactSupportScreen.dart';
+import 'VenueScreen.dart';
 import 'onboarding_widgets.dart';
 
 class ReviewSignAgreement extends StatefulWidget {
@@ -32,10 +34,12 @@ class _State extends State<ReviewSignAgreement> {
   String? _error;
   bool _loading = true, _accepted = false, _submitting = false;
   bool _downloading = false;
+  bool _venueMismatch = false;
   static const _purple = Color(0xFFA634FF);
 
   bool get _canFinish =>
       !_loading &&
+      !_venueMismatch &&
       _content.isNotEmpty &&
       _accepted &&
       _signature.text.trim().isNotEmpty &&
@@ -163,6 +167,10 @@ class _State extends State<ReviewSignAgreement> {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json'
       };
+      if (!await validateSavedVenueOwnership(client: widget.client)) {
+        if (mounted) setState(() => _venueMismatch = true);
+        throw Exception('Your recreated account has no saved venue matching this setup. Restart venue setup to continue.');
+      }
       final uri = Uri.parse('$BASE_URL/venues/$venueId/terms');
       final body = jsonEncode({
         'electronicSignature': _signature.text.trim(),
@@ -172,6 +180,11 @@ class _State extends State<ReviewSignAgreement> {
           await (widget.client?.patch(uri, headers: headers, body: body) ??
                   http.patch(uri, headers: headers, body: body))
               .timeout(const Duration(seconds: 30));
+      if (terms.statusCode == 403 &&
+          terms.body.contains('You can only sign your own venue agreements')) {
+        if (mounted) setState(() => _venueMismatch = true);
+        throw Exception('This setup points to a venue owned by another account. Restart venue setup for your recreated account.');
+      }
       _checkResponse(terms, 'Failed to accept the agreement.');
       final submitUri = Uri.parse('$BASE_URL/venues/$venueId/submit');
       final submit = await (widget.client?.post(submitUri, headers: headers) ??
@@ -198,6 +211,15 @@ class _State extends State<ReviewSignAgreement> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _restartVenueSetup() async {
+    await SharedPreference.remove('venue_id');
+    await SharedPreference.remove('venue_name');
+    await SharedPreference.remove('agreement_signature_draft');
+    if (!mounted) return;
+    CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+        context, VenueScreen(client: widget.client));
   }
 
   @override
@@ -296,6 +318,14 @@ class _State extends State<ReviewSignAgreement> {
                                                     fontSize: 16,
                                                     height: 1.45))),
                           )),
+                      if (_venueMismatch) ...[
+                        const SizedBox(height: 12),
+                        const Text('This venue belongs to another account. Restart venue setup to create a venue for this account.'),
+                        TextButton(
+                          onPressed: _restartVenueSetup,
+                          child: const Text('Restart venue setup'),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
