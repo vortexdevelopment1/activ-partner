@@ -81,17 +81,17 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   String get _name => _data['name']?.toString() ?? widget.activity.title;
   String get _description =>
       _data['description']?.toString() ?? widget.activity.description;
-  String get _activityReference =>
-      (_data['activityReference'] ?? _data['publicReference'] ??
-              widget.activity.activityReference)
-          .toString();
+  String get _activityReference => (_data['activityReference'] ??
+          _data['publicReference'] ??
+          widget.activity.activityReference)
+      .toString();
   String get _status {
     if (_data.isEmpty) return widget.initialStatus;
     return switch (_data['status']) {
-      'approved' => _data['isActive'] == false ||
-              _data['bookingAccept'] == false
-          ? 'Inactive'
-          : 'Active',
+      'approved' =>
+        _data['isActive'] == false || _data['bookingAccept'] == false
+            ? 'Inactive'
+            : 'Active',
       'draft' => 'Draft',
       'pending' || 'submitted' => 'In Review',
       _ => 'Inactive',
@@ -212,28 +212,141 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _resumeBooking() async {
-    if (_saving) return;
-    if (_data['bookingAccept'] == false && widget.venueId.isNotEmpty) {
-      setState(() => _saving = true);
-      try {
-        final response = await _client.patch(
-          Uri.parse('$BASE_URL/venues/${widget.venueId}/pause-bookings'),
-          headers: await _headers(),
-          body: jsonEncode({'bookingAccept': true}),
-        );
-        _response(response);
-      } catch (e) {
-        if (mounted) _message(e.toString().replaceFirst('Exception: ', ''));
-        return;
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-      if (mounted) await _load();
+    if (await _save({'isActive': true}) && mounted) {
+      _message('Bookings resumed for this activity.');
     }
-    if (_data['isActive'] == false) {
-      await _save({'isActive': true});
-    } else if (mounted) {
+  }
+
+  Future<void> _pauseMultiple() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final response = await _client
+          .get(Uri.parse(MY_APPROVED_VENUES_URL), headers: await _headers())
+          .timeout(const Duration(seconds: 15));
+      final venues = (_response(response) as List).whereType<Map>();
+      final venue = venues
+          .where((venue) => (venue['services'] as List? ?? [])
+              .whereType<Map>()
+              .any((service) => service['id'] == widget.activity.activityId))
+          .firstOrNull;
+      if (venue == null) {
+        throw Exception('Unable to find this activity. Please refresh.');
+      }
+      final services = (venue['services'] as List? ?? [])
+          .whereType<Map>()
+          .where((service) =>
+              service['status']?.toString().toLowerCase() == 'approved' &&
+              service['isActive'] != false &&
+              venue['bookingAccept'] != false)
+          .toList();
+      if (!mounted) return;
+      if (services.isEmpty) {
+        _message('All activities are already paused.');
+        return;
+      }
+      final selected = <String>{
+        if (services
+            .any((service) => service['id'] == widget.activity.activityId))
+          widget.activity.activityId,
+      };
+      var reason = '';
+      Map<String, dynamic>? selection;
+      selection = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, update) => AlertDialog(
+                  title: const Text('Pause activities'),
+                  content: SizedBox(
+                      width: 400,
+                      child: SingleChildScrollView(
+                          child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                              'Select activities to pause. Existing bookings will be preserved.'),
+                          CheckboxListTile(
+                              title: const Text('Select all'),
+                              value: selected.length == services.length,
+                              onChanged: (value) => update(() {
+                                    selected.clear();
+                                    if (value == true) {
+                                      selected.addAll(services.map((service) =>
+                                          service['id'].toString()));
+                                    }
+                                  })),
+                          for (final service in services)
+                            CheckboxListTile(
+                                title: Text(
+                                    service['name']?.toString() ?? 'Activity'),
+                                value:
+                                    selected.contains(service['id'].toString()),
+                                onChanged: (value) => update(() {
+                                      if (value == true) {
+                                        selected.add(service['id'].toString());
+                                      } else {
+                                        selected
+                                            .remove(service['id'].toString());
+                                      }
+                                    })),
+                          TextField(
+                              maxLength: 500,
+                              decoration: const InputDecoration(
+                                  labelText: 'Pause reason',
+                                  hintText: 'For example, maintenance'),
+                              onChanged: (value) =>
+                                  update(() => reason = value)),
+                        ],
+                      ))),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: selected.isEmpty || reason.trim().isEmpty
+                            ? null
+                            : () => Navigator.pop(dialogContext, {
+                                  'ids': selected.toList(),
+                                  'reason': reason.trim()
+                                }),
+                        child: const Text('Pause selected')),
+                  ],
+                )),
+      );
+      if (selection == null || !mounted) return;
+      final failed = <String>[];
+      var paused = 0;
+      for (final id in selection['ids'] as List) {
+        try {
+          final result = await _client
+              .patch(
+                Uri.parse('$BASE_URL/venues/activities/$id/management'),
+                headers: await _headers(),
+                body: jsonEncode(
+                    {'isActive': false, 'reason': selection['reason']}),
+              )
+              .timeout(const Duration(seconds: 15));
+          _response(result);
+          paused++;
+          _changed = true;
+        } catch (_) {
+          failed.add(services
+                  .firstWhere((service) => service['id'] == id)['name']
+                  ?.toString() ??
+              'Activity');
+        }
+      }
+      if (!mounted) return;
       await _load();
+      if (mounted) {
+        _message(failed.isEmpty
+            ? '$paused ${paused == 1 ? 'activity' : 'activities'} paused. Existing bookings are preserved.'
+            : '$paused ${paused == 1 ? 'activity' : 'activities'} paused. Could not pause: ${failed.join(', ')}. Please retry.');
+      }
+    } catch (e) {
+      if (mounted) _message(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -340,16 +453,20 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         context,
         MaterialPageRoute(
             builder: (_) => CategoryQuestionsScreen(
-              venueId: _data['venueId']?.toString() ?? widget.venueId,
-              activityId: widget.activity.activityId,
-              currentCategory: {
-                'id': _data['categoryId']?.toString() ?? widget.activity.operateValue['id']?.toString() ?? '',
-                'title': _data['categoryName']?.toString() ?? widget.activity.operateValue['title']?.toString() ?? _name,
-              },
-              initialManagementData: Map<String, dynamic>.from(_data),
-              client: _client,
-              onSaveActivity: (answers) => _save({'answers': answers}),
-            )));
+                  venueId: _data['venueId']?.toString() ?? widget.venueId,
+                  activityId: widget.activity.activityId,
+                  currentCategory: {
+                    'id': _data['categoryId']?.toString() ??
+                        widget.activity.operateValue['id']?.toString() ??
+                        '',
+                    'title': _data['categoryName']?.toString() ??
+                        widget.activity.operateValue['title']?.toString() ??
+                        _name,
+                  },
+                  initialManagementData: Map<String, dynamic>.from(_data),
+                  client: _client,
+                  onSaveActivity: (answers) => _save({'answers': answers}),
+                )));
   }
 
   Future<void> _upload() async {
@@ -438,10 +555,14 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               remove: _removeImage,
               cover: () => _data['coverImageUrl']?.toString(),
               saveCover: (url) async {
-                _response(await _client.patch(
-                  Uri.parse('$BASE_URL/venues/services/${widget.activity.activityId}/cover'),
-                  headers: await _headers(), body: jsonEncode({'imageUrl': url}),
-                ).timeout(const Duration(seconds: 15)));
+                _response(await _client
+                    .patch(
+                      Uri.parse(
+                          '$BASE_URL/venues/services/${widget.activity.activityId}/cover'),
+                      headers: await _headers(),
+                      body: jsonEncode({'imageUrl': url}),
+                    )
+                    .timeout(const Duration(seconds: 15)));
                 _changed = true;
                 await _load();
               },
@@ -504,8 +625,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                   elevation: 2,
                                   child: IconButton(
                                       tooltip: 'Back',
-                                      constraints: const BoxConstraints.tightFor(
-                                          width: 36, height: 36),
+                                      constraints:
+                                          const BoxConstraints.tightFor(
+                                              width: 36, height: 36),
                                       padding: EdgeInsets.zero,
                                       onPressed: _saving
                                           ? null
@@ -763,7 +885,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                 booking['customerName']?.toString() ??
                                     'Customer',
                                 bold: true)),
-                        _badge(status == 'Canceled' ? 'Cancelled' : status, color)
+                        _badge(
+                            status == 'Canceled' ? 'Cancelled' : status, color)
                       ]),
                       const SizedBox(height: 8),
                       _text(
@@ -780,7 +903,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   void _bookingDetails(Map<String, dynamic> booking) {
     final status = booking['status']?.toString() ?? 'Upcoming';
-    final date = DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
+    final date =
+        DateTime.tryParse(booking['startsAt']?.toString() ?? '')?.toLocal();
     final displayDate = booking['bookingDate']?.toString() ??
         (date == null ? '0' : DateFormat('dd MMM yyyy').format(date));
     final displayTime = booking['bookingTime']?.toString() ??
@@ -803,50 +927,62 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     icon: const Icon(Icons.close))
               ]),
               content: SingleChildScrollView(
-                  child: SizedBox(
-                  width: double.maxFinite,
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    _detailSection('Customer information', [
-                      (
-                        'Full Name',
-                        booking['customerName']?.toString() ?? 'Customer'
+                child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      _detailSection('Customer information', [
+                        (
+                          'Full Name',
+                          booking['customerName']?.toString() ?? 'Customer'
+                        ),
+                        (
+                          'Phone Number',
+                          booking['phone']?.toString() ?? 'Not available'
+                        ),
+                      ]),
+                      const Divider(height: 30),
+                      _detailSection('Booking information', [
+                        (
+                          'Booking ID',
+                          (booking['bookingReference'] ??
+                                  booking['booking_reference'] ??
+                                  booking['public_code'] ??
+                                  booking['reference'] ??
+                                  'Not available')
+                              .toString()
+                        ),
+                        ('Activity', booking['activity']?.toString() ?? _name),
+                        ('Date', displayDate),
+                        ('Time', displayTime),
+                        (
+                          'Participants',
+                          '${booking['participants']?.toString() ?? '0'} people'
+                        ),
+                        (
+                          'Booked On',
+                          _formatBookingDate(
+                              booking['bookedOn'] ?? booking['createdAt'])
+                        ),
+                      ]),
+                      const Divider(height: 30),
+                      _detailSection('Payment information', [
+                        ('Payment Mode', _paymentLabel(booking['paymentMode'])),
+                        (
+                          'Total Amount',
+                          _currency.format(num.tryParse(
+                                  booking['amount']?.toString() ?? '') ??
+                              0)
+                        ),
+                      ]),
+                      const Divider(height: 30),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _text('Manage Booking', bold: true, size: 16),
                       ),
-                      ('Phone Number', booking['phone']?.toString() ?? 'Not available'),
-                    ]),
-                    const Divider(height: 30),
-                    _detailSection('Booking information', [
-                      ('Booking ID', (booking['bookingReference'] ??
-                              booking['booking_reference'] ??
-                              booking['public_code'] ??
-                              booking['reference'] ??
-                              'Not available')
-                          .toString()),
-                      ('Activity', booking['activity']?.toString() ?? _name),
-                      (
-                        'Date',
-                        displayDate
-                      ),
-                      (
-                        'Time',
-                        displayTime
-                      ),
-                      ('Participants', '${booking['participants']?.toString() ?? '0'} people'),
-                      ('Booked On', _formatBookingDate(booking['bookedOn'] ?? booking['createdAt'])),
-                    ]),
-                    const Divider(height: 30),
-                    _detailSection('Payment information', [
-                      ('Payment Mode', _paymentLabel(booking['paymentMode'])),
-                      ('Total Amount', _currency.format(num.tryParse(booking['amount']?.toString() ?? '') ?? 0)),
-                    ]),
-                    const Divider(height: 30),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: _text('Manage Booking', bold: true, size: 16),
-                    ),
-                    const SizedBox(height: 14),
-                    _bookingManagementActions(booking, status, context),
-                  ])),
-                ),
+                      const SizedBox(height: 14),
+                      _bookingManagementActions(booking, status, context),
+                    ])),
+              ),
             ));
   }
 
@@ -856,9 +992,13 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     if (terminal != null) {
       return Align(
         alignment: Alignment.centerLeft,
-        child: _badge(terminal, terminal == 'Completed'
-            ? _purple
-            : terminal == 'No Show' ? Colors.redAccent : const Color(0xFF7D9291)),
+        child: _badge(
+            terminal,
+            terminal == 'Completed'
+                ? _purple
+                : terminal == 'No Show'
+                    ? Colors.redAccent
+                    : const Color(0xFF7D9291)),
       );
     }
     final canManage = status == 'Upcoming' || status == 'Pending Payment';
@@ -871,7 +1011,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFFFF6262),
             side: const BorderSide(color: Color(0xFFFF6262)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             padding: const EdgeInsets.symmetric(vertical: 13),
           ),
           child: const Text('Mark No-show'),
@@ -887,7 +1028,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
             backgroundColor: _purple,
             foregroundColor: Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             padding: const EdgeInsets.symmetric(vertical: 13),
           ),
           child: const Text('Check-in'),
@@ -896,17 +1038,19 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     ]);
   }
 
-  Future<void> _patchBooking(
-      Map<String, dynamic> booking, String action, BuildContext dialogContext) async {
+  Future<void> _patchBooking(Map<String, dynamic> booking, String action,
+      BuildContext dialogContext) async {
     if (_saving) return;
     final bookingId = booking['id']?.toString();
     if (bookingId == null || bookingId.isEmpty) return;
     setState(() => _saving = true);
     try {
-      final response = await _client.patch(
-        Uri.parse('$BASE_URL/bookings/$bookingId/$action'),
-        headers: await _headers(),
-      ).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .patch(
+            Uri.parse('$BASE_URL/bookings/$bookingId/$action'),
+            headers: await _headers(),
+          )
+          .timeout(const Duration(seconds: 15));
       final body = jsonDecode(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(body['message'] ?? 'Unable to update booking.');
@@ -916,7 +1060,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
         );
       }
     } finally {
@@ -926,7 +1071,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   String _formatBookingDate(dynamic value) {
     final parsed = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
-    return parsed == null ? 'Not available' : DateFormat('dd MMM yyyy').format(parsed);
+    return parsed == null
+        ? 'Not available'
+        : DateFormat('dd MMM yyyy').format(parsed);
   }
 
   String _paymentLabel(dynamic value) {
@@ -970,13 +1117,18 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: _text('Activity Status', bold: true)),
-          _badge(_active ? 'ACTIV' : _status == 'Inactive' ? 'InACTIV' : _status,
+          _badge(
+              _active
+                  ? 'ACTIV'
+                  : _status == 'Inactive'
+                      ? 'InACTIV'
+                      : _status,
               _active ? const Color(0xFF16A34A) : const Color(0xFFE53935))
         ]),
         const SizedBox(height: 10),
         _text(
             _active
-                    ? 'This activity is ACTIV and accepting bookings.'
+                ? 'This activity is ACTIV and accepting bookings.'
                 : _status == 'Inactive'
                     ? 'This activity is InACTIV and not accepting new bookings.'
                     : 'This activity is $_status and is not accepting bookings.',
@@ -1009,11 +1161,20 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           _text('What happens next?', bold: true),
           const SizedBox(height: 20),
           _effect(Icons.calendar_today_outlined,
-              'Upcoming bookings will be blocked during inactive period'),
+              'New bookings are paused. Existing bookings are preserved.'),
           _effect(Icons.visibility_off_outlined,
-              'Venue will be hidden from search & discovery'),
+              'This activity is hidden from search & discovery'),
           _effect(
               Icons.notifications_none, 'ACTIV team may reach out if required'),
+        ],
+        if (_canControl) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+              onPressed: _saving ? null : _pauseMultiple,
+              icon: const Icon(Icons.pause_circle_outline),
+              label: Text(_saving
+                  ? 'Updating bookings...'
+                  : 'Pause multiple activities')),
         ],
       ]));
 
@@ -1281,8 +1442,8 @@ class _BookingsPage extends StatefulWidget {
   final List<Map<String, dynamic>> bookings;
   final String activityName;
   final NumberFormat currency;
-  final Future<void> Function(
-      Map<String, dynamic> booking, String action, BuildContext dialogContext) onBookingAction;
+  final Future<void> Function(Map<String, dynamic> booking, String action,
+      BuildContext dialogContext) onBookingAction;
 
   @override
   State<_BookingsPage> createState() => _BookingsPageState();
@@ -1550,14 +1711,14 @@ class _BookingsPageState extends State<_BookingsPage> {
                         'Full Name',
                         booking['customerName']?.toString() ?? 'Customer'
                       ),
-                      ('Phone Number', booking['phone']?.toString() ?? 'Not available'),
+                      (
+                        'Phone Number',
+                        booking['phone']?.toString() ?? 'Not available'
+                      ),
                     ]),
                     const Divider(height: 30),
                     _bookingDetailSection('Booking information', [
-                      (
-                        'Booking ID',
-                        _bookingDisplayReference(booking)
-                      ),
+                      ('Booking ID', _bookingDisplayReference(booking)),
                       ('Activity', widget.activityName),
                       (
                         'Date',
@@ -1569,12 +1730,22 @@ class _BookingsPageState extends State<_BookingsPage> {
                         'Time',
                         date == null ? '0' : DateFormat('hh:mm a').format(date)
                       ),
-                      ('Participants', '${booking['participants']?.toString() ?? '0'} people'),
-                      ('Booked On', _formatBookingDate(booking['bookedOn'] ?? booking['createdAt'])),
+                      (
+                        'Participants',
+                        '${booking['participants']?.toString() ?? '0'} people'
+                      ),
+                      (
+                        'Booked On',
+                        _formatBookingDate(
+                            booking['bookedOn'] ?? booking['createdAt'])
+                      ),
                     ]),
                     const Divider(height: 30),
                     _bookingDetailSection('Payment information', [
-                      ('Payment Mode', booking['paymentMode']?.toString() ?? 'Not available'),
+                      (
+                        'Payment Mode',
+                        booking['paymentMode']?.toString() ?? 'Not available'
+                      ),
                       (
                         'Total Amount',
                         widget.currency.format(
@@ -1589,47 +1760,57 @@ class _BookingsPageState extends State<_BookingsPage> {
                     ),
                     const SizedBox(height: 14),
                     (() {
-                      final status = booking['status']?.toString() ?? 'Upcoming';
+                      final status =
+                          booking['status']?.toString() ?? 'Upcoming';
                       final terminal = _terminalBookingLabel(status);
                       if (terminal != null) {
                         return Align(
                           alignment: Alignment.centerLeft,
-                          child: _badge(terminal, terminal == 'Completed'
-                              ? _purple
-                              : terminal == 'No Show' ? Colors.redAccent : const Color(0xFF7D9291)),
+                          child: _badge(
+                              terminal,
+                              terminal == 'Completed'
+                                  ? _purple
+                                  : terminal == 'No Show'
+                                      ? Colors.redAccent
+                                      : const Color(0xFF7D9291)),
                         );
                       }
-                      final canManage = status == 'Upcoming' || status == 'Pending Payment';
+                      final canManage =
+                          status == 'Upcoming' || status == 'Pending Payment';
                       return Row(children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: canManage
-                              ? () => widget.onBookingAction(booking, 'no-show', dialogContext)
-                              : null,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFFF6262),
-                            side: const BorderSide(color: Color(0xFFFF6262)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: canManage
+                                ? () => widget.onBookingAction(
+                                    booking, 'no-show', dialogContext)
+                                : null,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFFF6262),
+                              side: const BorderSide(color: Color(0xFFFF6262)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Mark No-show'),
                           ),
-                          child: const Text('Mark No-show'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: canManage
-                              ? () => widget.onBookingAction(booking, 'check-in', dialogContext)
-                              : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _purple,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: canManage
+                                ? () => widget.onBookingAction(
+                                    booking, 'check-in', dialogContext)
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _purple,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Check-in'),
                           ),
-                          child: const Text('Check-in'),
                         ),
-                      ),
-                    ]);
+                      ]);
                     })(),
                   ])),
             ));
@@ -1637,7 +1818,9 @@ class _BookingsPageState extends State<_BookingsPage> {
 
   String _formatBookingDate(dynamic value) {
     final parsed = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
-    return parsed == null ? 'Not available' : DateFormat('dd MMM yyyy').format(parsed);
+    return parsed == null
+        ? 'Not available'
+        : DateFormat('dd MMM yyyy').format(parsed);
   }
 
   Widget _bookingDetailSection(String title, List<(String, String)> items) =>
@@ -1857,7 +2040,10 @@ class _ImagesPageState extends State<_ImagesPage> {
     final from = _images.indexOf(url);
     final to = _images.indexOf(target);
     if (from < 0 || to < 0) return;
-    setState(() { _images.removeAt(from); _images.insert(to, url); });
+    setState(() {
+      _images.removeAt(from);
+      _images.insert(to, url);
+    });
   }
 
   void _startDrag(String url) {
@@ -1865,11 +2051,20 @@ class _ImagesPageState extends State<_ImagesPage> {
     _dragScroll?.cancel();
     _dragScroll = Timer.periodic(const Duration(milliseconds: 40), (_) {
       final box = _scrollKey.currentContext?.findRenderObject();
-      if (!mounted || !_scroll.hasClients || box is! RenderBox || _dragPosition == null) return;
+      if (!mounted ||
+          !_scroll.hasClients ||
+          box is! RenderBox ||
+          _dragPosition == null) return;
       final y = box.globalToLocal(_dragPosition!).dy;
-      final delta = y < 72 ? -20.0 : y > box.size.height - 72 ? 20.0 : 0.0;
+      final delta = y < 72
+          ? -20.0
+          : y > box.size.height - 72
+              ? 20.0
+              : 0.0;
       if (delta == 0) return;
-      final next = (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent).toDouble();
+      final next = (_scroll.offset + delta)
+          .clamp(0.0, _scroll.position.maxScrollExtent)
+          .toDouble();
       if (next != _scroll.offset) _scroll.jumpTo(next);
     });
   }
@@ -1890,9 +2085,10 @@ class _ImagesPageState extends State<_ImagesPage> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(16, 0, 16, 100),
-          content: Text('Unable to save the cover photo. Please try again.')));
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.fromLTRB(16, 0, 16, 100),
+            content:
+                Text('Unable to save the cover photo. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1942,9 +2138,12 @@ class _ImagesPageState extends State<_ImagesPage> {
                         IgnorePointer(
                           child: Center(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 52),
-                              child: FittedBox(fit: BoxFit.scaleDown,
-                                child: _text('Update Images', bold: true, size: 28)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 52),
+                              child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: _text('Update Images',
+                                      bold: true, size: 28)),
                             ),
                           ),
                         ),
@@ -1973,12 +2172,13 @@ class _ImagesPageState extends State<_ImagesPage> {
                         '${_images.length} / 12 Images Uploaded'
                         '${_images.length > 12 ? ' - remove ${_images.length - 12}' : ''}',
                         size: 15,
-                        color: _images.length > 12
-                            ? Colors.redAccent
-                            : _purple),
+                        color:
+                            _images.length > 12 ? Colors.redAccent : _purple),
                     const SizedBox(height: 12),
-                    _text('Long press and drag a photo to the first position to set it as cover.',
-                        size: 13, color: Colors.black54),
+                    _text(
+                        'Long press and drag a photo to the first position to set it as cover.',
+                        size: 13,
+                        color: Colors.black54),
                     const SizedBox(height: 20),
                     if (_images.isEmpty)
                       Padding(
@@ -2001,27 +2201,45 @@ class _ImagesPageState extends State<_ImagesPage> {
                             final url = _images[i];
                             return DragTarget<String>(
                               key: ValueKey('activity-image-$url'),
-                              onWillAcceptWithDetails: (details) => !_busy && details.data != url,
-                              onAcceptWithDetails: (details) => _moveImage(details.data, url),
+                              onWillAcceptWithDetails: (details) =>
+                                  !_busy && details.data != url,
+                              onAcceptWithDetails: (details) =>
+                                  _moveImage(details.data, url),
                               builder: (_, candidates, __) => LayoutBuilder(
                                 builder: (_, bounds) {
                                   final tile = _imageSlot(url, isCover: i == 0);
                                   return LongPressDraggable<String>(
                                     data: url,
-                                    maxSimultaneousDrags: _busy || _dragging != null ? 0 : 1,
+                                    maxSimultaneousDrags:
+                                        _busy || _dragging != null ? 0 : 1,
                                     onDragStarted: () => _startDrag(url),
-                                    onDragUpdate: (details) => _dragPosition = details.globalPosition,
+                                    onDragUpdate: (details) =>
+                                        _dragPosition = details.globalPosition,
                                     onDragEnd: (_) => _endDrag(),
-                                    feedback: SizedBox(width: bounds.maxWidth, height: bounds.maxHeight,
-                                      child: Material(color: Colors.transparent, elevation: 8,
-                                        borderRadius: BorderRadius.circular(18),
-                                        child: _imageSlot(url, controls: false))),
-                                    childWhenDragging: Opacity(opacity: .3, child: tile),
+                                    feedback: SizedBox(
+                                        width: bounds.maxWidth,
+                                        height: bounds.maxHeight,
+                                        child: Material(
+                                            color: Colors.transparent,
+                                            elevation: 8,
+                                            borderRadius:
+                                                BorderRadius.circular(18),
+                                            child: _imageSlot(url,
+                                                controls: false))),
+                                    childWhenDragging:
+                                        Opacity(opacity: .3, child: tile),
                                     child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(18),
-                                        border: candidates.isEmpty ? null : Border.all(color: _purple, width: 3)),
-                                      child: Padding(padding: EdgeInsets.all(candidates.isEmpty ? 0 : 3), child: tile)),
+                                        decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(18),
+                                            border: candidates.isEmpty
+                                                ? null
+                                                : Border.all(
+                                                    color: _purple, width: 3)),
+                                        child: Padding(
+                                            padding: EdgeInsets.all(
+                                                candidates.isEmpty ? 0 : 3),
+                                            child: tile)),
                                   );
                                 },
                               ),
@@ -2037,7 +2255,8 @@ class _ImagesPageState extends State<_ImagesPage> {
                     _busy || _dragging != null ? null : _save))),
       ]));
 
-  Widget _imageSlot(String url, {bool isCover = false, bool controls = true}) => Stack(
+  Widget _imageSlot(String url, {bool isCover = false, bool controls = true}) =>
+      Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -2065,32 +2284,40 @@ class _ImagesPageState extends State<_ImagesPage> {
             ),
           ),
           if (isCover)
-            Positioned(left: 8, bottom: 8,
-              child: Container(
-                key: ValueKey('activity-cover-$url'),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                child: const Text('Cover photo', style: TextStyle(color: Colors.white, fontSize: 12)),
-              )),
-          if (controls) Positioned(
-            top: 8,
-            right: 8,
-            child: Material(
-              color: const Color(0xFF7450B6),
-              shape: const CircleBorder(),
-              elevation: 3,
-              child: IconButton(
-                tooltip: 'Remove image',
-                style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  fixedSize: const Size.square(42),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Positioned(
+                left: 8,
+                bottom: 8,
+                child: Container(
+                  key: ValueKey('activity-cover-$url'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Cover photo',
+                      style: TextStyle(color: Colors.white, fontSize: 12)),
+                )),
+          if (controls)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: const Color(0xFF7450B6),
+                shape: const CircleBorder(),
+                elevation: 3,
+                child: IconButton(
+                  tooltip: 'Remove image',
+                  style: IconButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    fixedSize: const Size.square(42),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed:
+                      _busy ? null : () => _run(() => widget.remove(url)),
+                  icon: const Icon(Icons.delete_outline, size: 24),
                 ),
-                onPressed: _busy ? null : () => _run(() => widget.remove(url)),
-                icon: const Icon(Icons.delete_outline, size: 24),
               ),
             ),
-          ),
         ],
       );
 }

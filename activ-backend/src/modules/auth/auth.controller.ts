@@ -254,11 +254,11 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.PARTNER)
+  @Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
   @Patch('partner/change-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Change password — venue partner',
+    summary: 'Change password — venue partner or team member',
     description:
       'Allows a venue partner to update their own account password using their JWT. ' +
       'Validates the current password before applying the new one.',
@@ -268,7 +268,7 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     const data = await this.authService.changePartnerPassword(
-      partner.id,
+      partner.role === 'team_member' ? partner.partnerId : partner.id,
       dto,
       partner.userId,
     );

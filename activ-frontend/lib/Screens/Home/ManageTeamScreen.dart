@@ -32,19 +32,23 @@ class _TeamMember {
     required this.id,
     required this.name,
     required this.phone,
+    required this.email,
     required this.role,
     required this.status,
     required this.createdAt,
     required this.bookingManagement,
+    this.deliverySummary,
   });
 
   final String id;
   final String name;
   final String phone;
+  final String email;
   final String role;
   final String status;
   final String createdAt;
   final bool bookingManagement;
+  final String? deliverySummary;
 
   factory _TeamMember.fromJson(Map<String, dynamic> json) {
     final permissions = json['permissions'] is Map<String, dynamic>
@@ -57,10 +61,14 @@ class _TeamMember {
       id: checkString(json['id']),
       name: checkString(json['fullName'] ?? json['name']),
       phone: checkString(json['phone']),
+      email: checkString(json['email']),
       role: role.isEmpty ? 'staff' : role,
       status: status.isEmpty ? 'invite_sent' : status,
       createdAt: _formatDate(checkString(json['createdAt'])),
       bookingManagement: permissions['bookingManagement'] == true,
+      deliverySummary: json['invitationDelivery'] is Map
+          ? 'Last invite: Email ${json['invitationDelivery']['emailSent'] == true ? 'sent' : 'not confirmed'}, SMS ${json['invitationDelivery']['smsSent'] == true ? 'sent' : 'not confirmed'}'
+          : null,
     );
   }
 
@@ -101,6 +109,7 @@ class _TeamMember {
 
   String get statusLabel {
     if (status.toLowerCase() == 'active') return 'Active';
+    if (status.toLowerCase() == 'invite_pending') return 'Invite Pending';
     return 'Invite Sent';
   }
 }
@@ -159,7 +168,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         Uri.parse(TEAM_URL),
         headers: await _authHeaders(),
       );
-      CommonUtilities.showLog('GET team ${response.statusCode}: ${response.body}');
+      CommonUtilities.showLog('GET team ${response.statusCode}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final decoded = jsonDecode(response.body);
@@ -197,18 +206,46 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         headers: await _authHeaders(),
         body: jsonEncode(data.toPayload()),
       );
-      CommonUtilities.showLog('POST team ${response.statusCode}: ${response.body}');
+      CommonUtilities.showLog('POST team ${response.statusCode}');
 
       if (!mounted || !dialogContext.mounted) return;
       if (response.statusCode == 200 || response.statusCode == 201) {
         Navigator.pop(dialogContext);
         await _loadMembers();
+        if (mounted) _showInvitationResult(jsonDecode(response.body)['data']);
       } else {
         _showApiError(response.body, 'Failed to send invite');
       }
     } catch (error) {
       CommonUtilities.showLog('Manage team create error: $error');
       if (mounted) CommonUtilities.createSnackBar(context, 'Failed to send invite');
+    }
+  }
+
+  void _showInvitationResult(dynamic member) {
+    final delivery = member is Map ? member['invitationDelivery'] : null;
+    if (delivery is! Map) return;
+    final email = delivery['emailSent'] == true ? 'sent' : 'not confirmed';
+    final sms = delivery['smsSent'] == true ? 'sent' : 'not confirmed';
+    CommonUtilities.createSnackBar(context,
+        'Email: $email. SMS: $sms. The member can sign in using their phone OTP.');
+  }
+
+  Future<void> _resendInvitation(_TeamMember member, BuildContext dialogContext) async {
+    try {
+      final response = await (widget.client?.post ?? http.post)(
+        Uri.parse('$TEAM_URL/${member.id}/invite'), headers: await _authHeaders(),
+      );
+      if (!mounted || !dialogContext.mounted) return;
+      if (response.statusCode == 200) {
+        Navigator.pop(dialogContext);
+        await _loadMembers();
+        if (mounted) _showInvitationResult(jsonDecode(response.body)['data']);
+      } else {
+        _showApiError(response.body, 'Unable to resend invitation');
+      }
+    } catch (_) {
+      if (mounted) CommonUtilities.createSnackBar(context, 'Unable to resend invitation');
     }
   }
 
@@ -223,7 +260,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         headers: await _authHeaders(),
         body: jsonEncode(data.toPayload()),
       );
-      CommonUtilities.showLog('PATCH team ${response.statusCode}: ${response.body}');
+      CommonUtilities.showLog('PATCH team ${response.statusCode}');
 
       if (!mounted || !dialogContext.mounted) return;
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -244,7 +281,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         Uri.parse('$TEAM_URL/${member.id}'),
         headers: await _authHeaders(),
       );
-      CommonUtilities.showLog('DELETE team ${response.statusCode}: ${response.body}');
+      CommonUtilities.showLog('DELETE team ${response.statusCode}');
 
       if (!mounted || !dialogContext.mounted) return;
       if (response.statusCode == 200 || response.statusCode == 204) {
@@ -282,6 +319,8 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         return _TeamMemberDialog(
           roles: _roles,
           member: member,
+          onResend: member == null || member.status == 'active'
+              ? null : () => _resendInvitation(member, dialogContext),
           onSubmit: (data) {
             if (member == null) {
               return _createMember(data, dialogContext);
@@ -353,9 +392,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
                                 else
                                   Expanded(
                                     child: ListView.separated(
-                                      physics: _members.length <= 3
-                                          ? const NeverScrollableScrollPhysics()
-                                          : const BouncingScrollPhysics(),
+                                      physics: const BouncingScrollPhysics(),
                                       padding: EdgeInsets.zero,
                                       itemCount: _members.length,
                                       separatorBuilder: (_, __) =>
@@ -390,12 +427,14 @@ class _TeamMemberFormData {
   const _TeamMemberFormData({
     required this.fullName,
     required this.phone,
+    required this.email,
     required this.role,
     required this.bookingManagement,
   });
 
   final String fullName;
   final String phone;
+  final String email;
   final String role;
   final bool bookingManagement;
 
@@ -403,6 +442,7 @@ class _TeamMemberFormData {
     return {
       'fullName': fullName,
       'phone': phone,
+      if (email.isNotEmpty) 'email': email,
       'role': role,
       'permissions': {
         'bookingManagement': bookingManagement,
@@ -417,12 +457,14 @@ class _TeamMemberDialog extends StatefulWidget {
     required this.onSubmit,
     this.member,
     this.onDelete,
+    this.onResend,
   });
 
   final List<_RoleOption> roles;
   final _TeamMember? member;
   final Future<void> Function(_TeamMemberFormData data) onSubmit;
   final Future<void> Function()? onDelete;
+  final Future<void> Function()? onResend;
 
   @override
   State<_TeamMemberDialog> createState() => _TeamMemberDialogState();
@@ -431,6 +473,7 @@ class _TeamMemberDialog extends StatefulWidget {
 class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
   late String _role;
   late bool _bookingManagement;
   bool _saving = false;
@@ -443,6 +486,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
     super.initState();
     final member = widget.member;
     _nameController = TextEditingController(text: member?.name ?? '');
+    _emailController = TextEditingController(text: member?.email ?? '');
     _phoneController = TextEditingController(
       text: _phoneDigits(member?.phone ?? ''),
     );
@@ -457,6 +501,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -469,16 +514,22 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   }
 
   Future<void> _submit() async {
+    if (_saving || _deleting) return;
     final name = _nameController.text.trim();
-    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    final phoneDigits = _phoneDigits(_phoneController.text);
+    final email = _emailController.text.trim().toLowerCase();
 
     if (name.isEmpty) {
       CommonUtilities.createSnackBar(context, 'Full name is required');
       return;
     }
-    if (phoneDigits.length < 10) {
+    if (phoneDigits.length != 10) {
       CommonUtilities.createSnackBar(
           context, 'Enter a valid phone number with country code, e.g. +919876543210');
+      return;
+    }
+    if ((!_isEdit || email.isNotEmpty) && !RegExp(r'^\S+@\S+\.\S+$').hasMatch(email)) {
+      CommonUtilities.createSnackBar(context, 'Enter a valid email address');
       return;
     }
 
@@ -487,6 +538,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
       _TeamMemberFormData(
         fullName: name,
         phone: '+91$phoneDigits',
+        email: email,
         role: _role,
         bookingManagement: _bookingManagement,
       ),
@@ -584,7 +636,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                       keyboardType: TextInputType.phone,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(10),
+                        LengthLimitingTextInputFormatter(12),
                       ],
                     ),
                   ),
@@ -592,12 +644,19 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'A login link will be sent via SMS/WhatsApp',
+                'An invitation will be sent by SMS and email. Members can sign in using phone OTP.',
                 style: TextStyle(
                   color: _ManageTeamScreenState._muted,
                   fontFamily: 'Satoshi',
                   fontSize: 13,
                 ),
+              ),
+              const SizedBox(height: 18),
+              const _RequiredLabel('Email Address'),
+              _InputBox(
+                controller: _emailController,
+                hint: 'member@example.com',
+                keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 18),
               const _RequiredLabel('Role'),
@@ -659,6 +718,15 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                 ],
               ),
               if (_isEdit) ...[
+                if (widget.onResend != null)
+                  TextButton(
+                    onPressed: _saving || _deleting ? null : () async {
+                      setState(() => _saving = true);
+                      await widget.onResend!();
+                      if (mounted) setState(() => _saving = false);
+                    },
+                    child: const Text('Resend Invite'),
+                  ),
                 const SizedBox(height: 26),
                 _deleting
                     ? const Center(
@@ -924,6 +992,14 @@ class _MemberCard extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+          if (member.email.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(member.email, style: const TextStyle(fontSize: 13, color: _ManageTeamScreenState._muted)),
+          ],
+          if (member.deliverySummary != null) ...[
+            const SizedBox(height: 8),
+            Text(member.deliverySummary!, style: const TextStyle(fontSize: 12, color: _ManageTeamScreenState._muted)),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [

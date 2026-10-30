@@ -298,8 +298,9 @@ export class LegacyMailService {
 
   async sendTeamMemberInviteEmail(params: {
     toEmail: string;
+    phone?: string;
     fullName: string;
-    password: string;
+    password?: string;
     role: string;
   }) {
     const { toEmail, fullName, password, role } = params;
@@ -364,7 +365,7 @@ export class LegacyMailService {
     phone: string;
     fullName: string;
     role: string;
-    password: string;
+    password?: string;
   }): Promise<boolean> {
     const authkey = this.configService.get<string>("MSG91_AUTHKEY")?.trim();
     const templateId = this.configService
@@ -400,7 +401,7 @@ export class LegacyMailService {
           VAR1: params.fullName,
           VAR2: params.role,
           VAR3: appLink,
-          VAR4: params.password,
+          VAR4: params.password || 'Use phone OTP to sign in',
         },
       ],
     };
@@ -419,7 +420,7 @@ export class LegacyMailService {
       const accepted = response.ok && result?.type !== "error";
       if (!accepted) {
         this.logger.error(
-          `MSG91 team invite SMS failed for ${mobile}: ${JSON.stringify(result)}`,
+          `MSG91 team invite SMS was not accepted (HTTP ${response.status})`,
         );
         return false;
       }
@@ -428,7 +429,7 @@ export class LegacyMailService {
       return true;
     } catch (error) {
       this.logger.error(
-        `Failed to send team invite SMS to ${mobile}: ${error.message}`,
+        'Team invite SMS could not be sent; check MSG91 configuration and connectivity',
       );
       return false;
     }

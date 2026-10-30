@@ -42,6 +42,9 @@ describe('partner registration audit', () => {
       actor_id: user.id, action: 'partner.registered', entity_type: 'partners',
       entity_id: expect.any(String), after_json: { outcome: 'success' },
     }) });
+    expect(tx.partner_users.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { user_id: user.id, role: 'PARTNER_ADMIN' },
+    }));
     expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
       'partner_registered', expect.any(String), expect.any(String), { partnerId: 'partner-id' },
     );

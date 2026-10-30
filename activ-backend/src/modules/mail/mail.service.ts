@@ -73,6 +73,13 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     return this.deliveries.findApproval(venueId, tx);
   }
 
+  async prepareTeamMemberInviteEmail(
+    params: Params<'sendTeamMemberInviteEmail'> & { deliveryKey: string }, tx: any,
+  ): Promise<string> {
+    if (!this.deliveries) throw new Error('Durable invitation delivery is required');
+    return (await this.deliveries.enqueue(this.job('invitation', params, params.toEmail), tx)).id;
+  }
+
   /** Approval always requires an outbox, including migration-compatible legacy mode. */
   async preparePartnerApprovalEmail(params: Parameters<MailService['sendPartnerApprovalEmail']>[0], tx: any, alreadySent = false): Promise<string> {
     if (!this.deliveries) throw new Error('Durable approval email delivery is required');
@@ -153,7 +160,9 @@ export class MailService extends LegacyMailService implements OnModuleInit {
       case 'approval': id = 'venue_approved'; data.email = p.toEmail;
         if (!p.password) data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';
         break;
-      case 'invitation': id = 'team_invitation'; data.partnerName = p.fullName; data.email = p.toEmail; break;
+      case 'invitation': id = 'team_invitation'; data.partnerName = p.fullName; data.email = p.toEmail;
+        data.message = 'Sign in using your invited phone number and phone OTP, or your existing password.';
+        break;
       case 'reset': id = 'password_reset'; data.partnerName = p.firstName; break;
       case 'rejection': id = 'venue_rejected'; data.partnerName = p.firstName; data.reference = p.venueId; data.reason = p.rejectionReason; break;
       case 'support': return { recipientEmail: job.recipient, recipientName: 'ACTIV Support',

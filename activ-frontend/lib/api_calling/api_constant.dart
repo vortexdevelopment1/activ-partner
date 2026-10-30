@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 
 const LOCAL = "LOCAL";
 const DEVELOPMENT = "DEVELOPMENT";
@@ -44,7 +47,10 @@ String BASE_URL =
         .trim()
         .replaceFirst(RegExp(r'/+$'), '');
 
-Future<void> initializeApiBaseUrl() async {
+Future<void> initializeApiBaseUrl({
+  http.Client? client,
+  Duration localProbeTimeout = const Duration(seconds: 2),
+}) async {
   if (!dotenv.isInitialized) {
     await dotenv.load(fileName: '.env');
   }
@@ -60,7 +66,15 @@ Future<void> initializeApiBaseUrl() async {
     return;
   }
   if (kDebugMode && localUrl.isNotEmpty) {
-    BASE_URL = _localUrlForCurrentPlatform(localUrl);
+    final candidate = _localUrlForCurrentPlatform(localUrl);
+    if (await _localApiIsAvailable(candidate, client, localProbeTimeout)) {
+      BASE_URL = candidate;
+    } else if (deployedUrl.isNotEmpty) {
+      BASE_URL = deployedUrl;
+    } else {
+      throw StateError('Local backend is unavailable and API_URL is not configured.');
+    }
+    debugPrint('ACTIV Partner API: $BASE_URL');
     return;
   }
   if (localUrl.isEmpty) {
@@ -79,6 +93,22 @@ Future<void> initializeApiBaseUrl() async {
   }
 
   BASE_URL = deployedUrl.isNotEmpty ? deployedUrl : localUrl;
+}
+
+Future<bool> _localApiIsAvailable(
+    String baseUrl, http.Client? client, Duration timeout) async {
+  try {
+    // Public, read-only endpoint supported by existing backend releases.
+    final response = await (client?.get ?? http.get)(
+      Uri.parse('$baseUrl/categories/active'),
+    ).timeout(timeout);
+    if (response.statusCode != 200) return false;
+    final body = jsonDecode(response.body);
+    return body is Map && body['data'] is List;
+  } catch (_) {
+    // Includes refused connections, timeouts and browser CORS restrictions.
+    return false;
+  }
 }
 
 String _localUrlForCurrentPlatform(String localUrl) {

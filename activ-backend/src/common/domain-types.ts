@@ -27,6 +27,7 @@ export enum AdminNotificationType {
 }
 
 export enum TeamMemberStatus {
+  INVITE_PENDING = 'invite_pending',
   INVITE_SENT = 'invite_sent',
   ACTIVE = 'active',
 }
@@ -48,6 +49,7 @@ export enum GstVerificationStatus { PENDING = 'pending', APPROVED = 'approved', 
 export enum VenueUpdateRequestStatus { PENDING = 'pending', APPROVED = 'approved', REJECTED = 'rejected' }
 
 export interface TeamMemberRecord {
+    invitationDelivery?: { emailSent: boolean; smsSent: boolean };
   id: string; partnerId: string; fullName: string; email?: string | null;
   phone?: string | null; avatarUrl?: string; role: string;
   status: TeamMemberStatus; isActive: boolean; permissions: Record<string, boolean>;

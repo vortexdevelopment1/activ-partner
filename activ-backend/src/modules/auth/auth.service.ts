@@ -162,6 +162,7 @@ export class AuthService {
       if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
 
       await this.teamService.markActive(member.id);
+      member.status = TeamMemberStatus.ACTIVE;
 
       const accessToken = this.jwtService.sign(
         { sub: member.id, role: 'team_member', type: 'team_member', partnerId: member.partnerId, permissions: member.permissions },
@@ -443,7 +444,8 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
-    if (intent === 'login') {
+    const staffMember = await this.teamService.findByPhone(phone);
+    if (intent === 'login' && !staffMember) {
       const user = await this.prisma.users.findUnique({
         where: { phone_e164: phone },
         include: { partner_users: { include: { partners: true } } },
@@ -459,7 +461,6 @@ export class AuthService {
       }
     }
 
-    const staffMember = await this.teamService.findByPhone(phone);
     if (staffMember) {
       const claimed = await this.prisma.otp_challenges.updateMany({
         where: {
@@ -501,7 +502,7 @@ export class AuthService {
 
       let isNewPartner = false;
       let link = await tx.partner_users.findFirst({
-        where: { user_id: user.id },
+        where: { user_id: user.id, role: PartnerRole.PARTNER_ADMIN },
         include: { partners: { include: { partner_business_profiles: true } } },
       });
 

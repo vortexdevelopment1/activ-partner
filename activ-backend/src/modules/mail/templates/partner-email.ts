@@ -4,7 +4,7 @@ export type EmailData = {
   partnerName?: string; venueName?: string; activityName?: string; reason?: string;
   reference?: string; bankName?: string; accountLast4?: string; subject?: string;
   signedAt?: string; callbackDate?: string; callbackTime?: string;
-  code?: string; password?: string; role?: string; email?: string; message?: string;
+  code?: string; password?: string; role?: string; email?: string; phone?: string; message?: string;
 };
 type Definition = {
   subject: string; heading: string; highlight: string; status: string;
@@ -147,7 +147,7 @@ export function renderPartnerEmail(id: EmailTemplateId, data: EmailData = {}, br
     ['Bank', data.bankName], ['Account', data.accountLast4 ? `Ending in ${data.accountLast4.replace(/\D/g, '').slice(-4)}` : undefined],
     ['Signed On', data.signedAt], ['Callback Date', data.callbackDate], ['Callback Time', data.callbackTime],
     ['Subject', data.subject], ['Role', data.role], ['Email', data.email],
-    ['Verification Code', data.code], ['Temporary Password', data.password],
+    ['Verification Code', data.code], ['Temporary Password', data.password], ['Mobile Number', data.phone],
   ];
   const paragraph = (text: string) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#30363b;">${escapeHtml(text).replace(/\n/g, '<br>')}</p>`;
   const detailRows = rows.filter(([, value]) => value).map(([label, value]) => `<tr><td width="35%" style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:12px;color:#424b48;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:13px;font-weight:600;color:#17231d;word-break:break-word;">${label === 'Application Status' ? `<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:${badgeBackground};color:${color};font-size:12px;">${escapeHtml(value)}</span>` : escapeHtml(value)}</td></tr>`).join('');

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, Matches, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TeamMemberRole } from '../../../common/enums/team-member-role.enum';
 
@@ -23,7 +23,13 @@ class PermissionsDto {
 export class CreateTeamMemberDto {
   @ApiProperty({ example: 'Abhishek Sharma' })
   @IsNotEmpty()
+  @IsString()
   fullName: string;
+
+  @ApiPropertyOptional({ example: 'member@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @ApiProperty({ example: '+919876543210', description: 'Mobile number in E.164 format' })
   @IsNotEmpty()

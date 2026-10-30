@@ -37,6 +37,13 @@ Run these commands from `activ-frontend`. Restart or rebuild after changing
 still override either URL, including setting a URL to blank. For Render-only builds,
 leave `LOCAL_API_URL` blank.
 
+Debug runs check the local API's public `/categories/active` endpoint at startup
+with a two-second timeout. A valid response selects `LOCAL_API_URL`; an unavailable
+local backend selects `API_URL`. Android emulators map `localhost` to `10.0.2.2`.
+The selected backend stays fixed for the session; restart the app to check again.
+An explicit `--dart-define=API_URL=...` pins the backend and skips this check.
+Release builds continue to prefer the deployed API.
+
 Environment values are public in the compiled app. Keep passwords and private
 keys in the backend environment only. Local `.env` files are ignored by Git.
 

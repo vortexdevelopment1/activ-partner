@@ -97,6 +97,7 @@ void main() {
         venueId: 'venue',
         venueName: 'Arena',
         client: client,
+        now: () => DateTime.utc(2026, 10, 30, 2, 30),
       )));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));

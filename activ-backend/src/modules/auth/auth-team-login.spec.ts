@@ -29,4 +29,10 @@ describe('current-schema staff OTP login', () => {
     await expect(service.verifyOtp({ phone: '+919876543210', otp: '123456' })).rejects.toBeInstanceOf(UnauthorizedException);
     expect(jwtService.sign).not.toHaveBeenCalled();
   });
+  it('allows invited staff to verify a Login OTP without creating a partner account', async () => {
+    const result = await service.verifyOtp({ phone: '+919876543210', otp: '123456' }, 'login');
+    expect(result.userType).toBe('team_member');
+    expect(teamService.markActive).toHaveBeenCalledWith('staff-1');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
 });

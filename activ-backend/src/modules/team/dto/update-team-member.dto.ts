@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TeamMemberRole } from '../../../common/enums/team-member-role.enum';
 
@@ -21,6 +21,11 @@ class UpdatePermissionsDto {
 }
 
 export class UpdateTeamMemberDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
   @ApiPropertyOptional({ example: 'Abhishek Sharma' })
   @IsOptional()
   @IsString()

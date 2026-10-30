@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:async';
 
@@ -57,12 +56,16 @@ class _Booking {
   bool checkedIn;
   _BookingStatus _status;
   _BookingStatus get status {
-    if (!checkedIn && endsAt != null && !endsAt!.isAfter(DateTime.now()) &&
-        (_status == _BookingStatus.upcoming || _status == _BookingStatus.ongoing)) {
+    if (!checkedIn &&
+        endsAt != null &&
+        !endsAt!.isAfter(DateTime.now()) &&
+        (_status == _BookingStatus.upcoming ||
+            _status == _BookingStatus.ongoing)) {
       return _BookingStatus.noShow;
     }
     return _status;
   }
+
   set status(_BookingStatus value) {
     _status = value;
     if (value == _BookingStatus.ongoing) checkedIn = true;
@@ -134,12 +137,12 @@ class _Booking {
   }
 
   static String _displayWalkInReference(Object? value) {
-  final id = value?.toString() ?? '';
-  if (id.isEmpty) return 'Not available';
-  return id.contains('-') && id.length >= 32
-      ? 'WI-${id.substring(0, 8).toUpperCase()}'
-      : id;
-}
+    final id = value?.toString() ?? '';
+    if (id.isEmpty) return 'Not available';
+    return id.contains('-') && id.length >= 32
+        ? 'WI-${id.substring(0, 8).toUpperCase()}'
+        : id;
+  }
 
   static String _formatDate(String? value) {
     final parsed = DateTime.tryParse(value ?? '');
@@ -173,7 +176,35 @@ class ManageBookingsScreen extends StatefulWidget {
     this.venueId = '',
     this.client,
     this.managerLayout = false,
-  });
+  })  : _initialBooking = null,
+        _initialActivity = '';
+
+  const ManageBookingsScreen._details(
+      {required Map<String, dynamic> booking,
+      required String activity,
+      this.client})
+      : venueId = '',
+        managerLayout = false,
+        _initialBooking = booking,
+        _initialActivity = activity;
+
+  final Map<String, dynamic>? _initialBooking;
+  final String _initialActivity;
+
+  /// Opens the same booking details and actions without loading the full list.
+  static Future<bool?> showBookingDetails(
+    BuildContext context, {
+    required Map<String, dynamic> booking,
+    required String activity,
+    http.Client? client,
+  }) =>
+      showDialog<bool>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.4),
+        barrierDismissible: false,
+        builder: (_) => ManageBookingsScreen._details(
+            booking: booking, activity: activity, client: client),
+      );
 
   final String venueId;
   final http.Client? client;
@@ -209,6 +240,12 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     super.initState();
     _client = widget.client ?? http.Client();
     _venueId = widget.venueId;
+    if (widget._initialBooking != null) {
+      _bookings.add(_Booking.fromManagement(
+          widget._initialBooking!, widget._initialActivity));
+      _scheduleStatusUpdate();
+      return;
+    }
     if (widget.managerLayout) _loadManagerAvatar();
     _fetchUnreadNotificationCount();
     _load();
@@ -268,9 +305,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       if (listRes.statusCode == 200) {
         final raw = jsonDecode(listRes.body)['data'];
         if (raw is List) {
-          final unread = raw
-              .where((item) => item is Map && item['isRead'] != true)
-              .length;
+          final unread =
+              raw.where((item) => item is Map && item['isRead'] != true).length;
           if (mounted) setState(() => _unreadNotificationCount = unread);
         }
       }
@@ -289,8 +325,13 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
 
   void _scheduleStatusUpdate() {
     _statusTimer?.cancel();
-    final active = _bookings.where((b) => !b.checkedIn && b.endsAt != null &&
-        (b.status == _BookingStatus.upcoming || b.status == _BookingStatus.ongoing)).toList()
+    final active = _bookings
+        .where((b) =>
+            !b.checkedIn &&
+            b.endsAt != null &&
+            (b.status == _BookingStatus.upcoming ||
+                b.status == _BookingStatus.ongoing))
+        .toList()
       ..sort((a, b) => a.endsAt!.compareTo(b.endsAt!));
     if (active.isEmpty) return;
     final end = active.first.endsAt!;
@@ -299,7 +340,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       if (!mounted) return;
       setState(() {
         for (final booking in active) {
-          if (!booking.endsAt!.isAfter(end)) booking.status = _BookingStatus.noShow;
+          if (!booking.endsAt!.isAfter(end))
+            booking.status = _BookingStatus.noShow;
         }
       });
       _statusTick.value++;
@@ -476,8 +518,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
       };
       if (mounted) {
         setState(() {});
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(widget._initialBooking != null ? true : null);
       }
+      if (widget._initialBooking != null) return;
       // Refresh the shared booking list in the background so the next view
       // uses the server state without requiring a manual pull-to-refresh.
       await _load();
@@ -492,6 +535,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget._initialBooking != null) {
+      return _bookingDetailsDialog(_bookings.single);
+    }
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
@@ -621,7 +667,8 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                     top: -4,
                     right: -5,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
                         color: const Color(0xFFE51E25),
                         borderRadius: BorderRadius.circular(9),
@@ -887,9 +934,13 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => ListenableBuilder(
-        listenable: _statusTick,
-        builder: (ctx, _) => ValueListenableBuilder<String?>(
+      builder: (_) => _bookingDetailsDialog(booking),
+    );
+  }
+
+  Widget _bookingDetailsDialog(_Booking booking) => ListenableBuilder(
+      listenable: _statusTick,
+      builder: (ctx, _) => ValueListenableBuilder<String?>(
           valueListenable: _bookingAction,
           builder: (ctx, action, _) => PopScope(
               canPop: action == null,
@@ -965,9 +1016,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                     ),
                   ),
                 ),
-              )))),
-    );
-  }
+              ))));
 
   Widget _detailSection(String title, List<(String, String)> items) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
