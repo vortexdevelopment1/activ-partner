@@ -598,8 +598,12 @@ export class VenuesService {
     const signature = signatureOverride !== undefined
       ? signatureOverride.trim()
       : venue.electronicSignature?.trim() ?? '';
-    const acceptanceDate = hasSignature ? venue.termsAcceptedAt : null;
-    const isAccepted = hasSignature && Boolean(venue.termsAcceptedAt);
+    const acceptanceDate = hasSignature
+      ? (venue.termsAcceptedAt && !isNaN(new Date(venue.termsAcceptedAt).getTime())
+          ? new Date(venue.termsAcceptedAt)
+          : new Date())
+      : null;
+    const isAccepted = hasSignature;
     const acceptedAt = acceptanceDate
       ? new Date(acceptanceDate).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
@@ -929,6 +933,31 @@ export class VenuesService {
         })
       : null;
     const legal = review.partner_venue_legal_documents;
+    const partnerId = venue.partnerId || venue.partner?.id;
+    const bankAccount = partnerId && this.prisma.partner_bank_accounts
+      ? await this.prisma.partner_bank_accounts.findFirst({
+          where: { partner_id: partnerId },
+          orderBy: [{ is_primary: 'desc' }, { created_at: 'desc' }],
+        })
+      : null;
+    const mappedBankAccount = bankAccount
+      ? {
+          id: bankAccount.id,
+          partnerId: bankAccount.partner_id,
+          accountHolderName: bankAccount.account_holder_name,
+          bankName: bankAccount.bank_name,
+          accountNumber: bankAccount.account_number,
+          ifscCode: bankAccount.ifsc_code,
+          accountType: bankAccount.account_type,
+          branchName: bankAccount.branch_name,
+          cancelledChequeUrl: bankAccount.cancelled_cheque_url,
+          status: bankAccount.status ? String(bankAccount.status).toLowerCase() : 'under_review',
+          isPrimary: bankAccount.is_primary,
+          rejectionReason: bankAccount.rejection_reason,
+          createdAt: bankAccount.created_at,
+          updatedAt: bankAccount.updated_at,
+        }
+      : null;
     return {
       ...venue,
       status:
@@ -954,7 +983,16 @@ export class VenuesService {
         gstNumber: legal?.gst_number ?? null,
         gstName: legal?.gst_name ?? null,
         gstinDocUrl: legal?.gstin_doc_url ?? null,
+        bankAccountNumber: bankAccount?.account_number ?? null,
+        bankIfscCode: bankAccount?.ifsc_code ?? null,
+        bankAccountHolderName: bankAccount?.account_holder_name ?? null,
+        bankName: bankAccount?.bank_name ?? null,
+        bankAccountType: bankAccount?.account_type ?? null,
+        bankBranchName: bankAccount?.branch_name ?? null,
+        bankCancelledChequeUrl: bankAccount?.cancelled_cheque_url ?? null,
+        bankStatus: bankAccount?.status ? String(bankAccount.status).toLowerCase() : null,
       },
+      bankAccount: mappedBankAccount,
     };
   }
 

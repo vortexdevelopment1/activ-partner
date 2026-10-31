@@ -23,6 +23,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         CommonUtilities.emailVaidatation(widget.emailId) ? widget.emailId : '',
   );
   bool _loading = false;
+  String? _emailError;
 
   @override
   void dispose() {
@@ -33,7 +34,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _sendCode() async {
     if (_loading || !_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _emailError = null;
+    });
     try {
       await PasswordResetService(widget.client).sendCode(_email.text.trim());
       if (!mounted) return;
@@ -43,8 +47,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ));
     } on PasswordResetException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        if ([400, 403, 404].contains(error.statusCode)) {
+          setState(() => _emailError = error.message);
+        } else {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(error.message)));
+        }
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -61,7 +69,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-
                 const SizedBox(height: 10),
                 const Text(
                   'Forgot Password',
@@ -88,8 +95,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: 58,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 58),
                   child: TextFormField(
                     key: const Key('forgot-email'),
                     controller: _email,
@@ -102,6 +109,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     decoration: OnboardingStyles.inputDecoration(
                       hintText: 'Enter your email address.',
                     ).copyWith(
+                      errorText: _emailError,
+                      errorMaxLines: 3,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 19,
@@ -123,6 +132,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ? null
                             : 'Enter a valid email address.',
                     onFieldSubmitted: (_) => _sendCode(),
+                    onChanged: (_) {
+                      if (_emailError != null) {
+                        setState(() => _emailError = null);
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(height: 28),

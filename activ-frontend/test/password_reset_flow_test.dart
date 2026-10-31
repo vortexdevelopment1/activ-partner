@@ -22,6 +22,42 @@ void main() {
     }
   });
 
+  for (final size in [const Size(360, 740), const Size(430, 932)]) {
+    testWidgets(
+        'unregistered email stays on form with inline validation at ${size.width}px',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const message =
+          'This email is not registered for an active ACTIV Partner account.';
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        expect(request.url.path.endsWith('/forgot-password'), isTrue);
+        expect(jsonDecode(request.body), {'email': 'unknown@yopmail.com.com'});
+        return http.Response(jsonEncode({'message': message}), 400);
+      });
+      await tester.pumpWidget(MaterialApp(
+          home: ForgotPasswordScreen(
+              emailId: 'unknown@yopmail.com.com', client: client)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forgot-send')));
+      await tester.pumpAndSettle();
+      expect(requests, 1);
+      expect(find.text('Forgot Password'), findsOneWidget);
+      expect(find.text('Verify code'), findsNothing);
+      expect(find.text(message), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      await tester.enterText(
+          find.byKey(const Key('forgot-email')), 'partner@example.com');
+      await tester.pump();
+      expect(find.text(message), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final size in [const Size(430, 932), const Size(360, 740)]) {
     testWidgets('password recovery works at ${size.width}px', (tester) async {
       tester.view.devicePixelRatio = 1;

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { VenuesService } from './venues.service';
 import { PDFDocument } from 'pdf-lib';
+import * as layout from './agreement-pdf-layout';
 
 describe('Finish agreement email', () => {
   const originalEmailEnabled = process.env.SIGNED_AGREEMENT_EMAIL_ENABLED;
@@ -130,6 +131,38 @@ describe('Finish agreement email', () => {
     expect(pdf.getPageCount()).toBe(3);
     expect(agreement.mimeType).toBe('application/pdf');
     expect(agreement.filename).toBe('activ-partner-agreement-venue-1.pdf');
+  });
+
+  it('populates acceptance date and acceptance method when downloaded with a signature override', async () => {
+    const unsignedVenue = { ...signedVenue, termsAcceptedAt: null, electronicSignature: null };
+    service.findOne = jest.fn().mockResolvedValue(unsignedVenue);
+    const spy = jest.spyOn(layout, 'fillAgreementAcceptance');
+    const agreement = await VenuesService.prototype.generatePartnerAgreementPdf.call(
+      service, 'venue-1', { id: 'partner-1', role: 'partner' }, 'Nikhil Gupta',
+    );
+    expect(spy).toHaveBeenCalled();
+    const lastCall = spy.mock.calls[spy.mock.calls.length - 1];
+    const values = lastCall[2];
+    expect(values[4]).not.toBe('');
+    expect(values[5]).toBe('Electronic Acceptance via ACTIV Venue Partner App');
+    expect(values[6]).toBe('Nikhil Gupta');
+    spy.mockRestore();
+  });
+
+  it('leaves acceptance date and method empty when agreement is unsigned', async () => {
+    const unsignedVenue = { ...signedVenue, termsAcceptedAt: null, electronicSignature: null };
+    service.findOne = jest.fn().mockResolvedValue(unsignedVenue);
+    const spy = jest.spyOn(layout, 'fillAgreementAcceptance');
+    await VenuesService.prototype.generatePartnerAgreementPdf.call(
+      service, 'venue-1', { id: 'partner-1', role: 'partner' },
+    );
+    expect(spy).toHaveBeenCalled();
+    const lastCall = spy.mock.calls[spy.mock.calls.length - 1];
+    const values = lastCall[2];
+    expect(values[4]).toBe('');
+    expect(values[5]).toBe('');
+    expect(values[6]).toBe('');
+    spy.mockRestore();
   });
 
   it('rejects another partner before sending mail', async () => {

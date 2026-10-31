@@ -501,6 +501,12 @@ export class LegacyMailService {
     callbackTime: string;
     query: string;
   }) {
+    if (this.hasBrandedTransport()) {
+      return this.sendLegacyTemplateEmail(
+        this.configService.get<string>('SUPPORT_EMAIL', 'support@activ.live'),
+        'callback_request', { ...params, email: params.partnerEmail, message: params.query },
+      );
+    }
     const {
       partnerName,
       partnerEmail,

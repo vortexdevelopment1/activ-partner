@@ -746,9 +746,8 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.findPasswordResetUser(dto.email);
 
-    // Always return a generic success response so this endpoint can't be used to enumerate registered emails
     if (!user) {
-      return { message: 'If an account exists for this email, a reset code has been sent.' };
+      throw new BadRequestException('This email is not registered for an active ACTIV Partner account.');
     }
 
     // Namespace email recovery challenges so they cannot be used for phone OTP login.
@@ -786,14 +785,15 @@ export class AuthService {
       throw error;
     }
 
-    return { message: 'If an account exists for this email, a reset code has been sent.' };
+    return { message: 'A reset code has been sent to your registered email.' };
   }
 
   private findPasswordResetUser(email: string) {
     return this.prisma.users.findFirst({
       where: {
         email: { equals: email.trim(), mode: 'insensitive' },
-        partner_users: { some: {} },
+        status: UserStatus.ACTIVE,
+        partner_users: { some: { partners: { status: PartnerStatus.ACTIVE } } },
       },
     });
   }

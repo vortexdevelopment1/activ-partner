@@ -19,6 +19,7 @@ import {
   Trash2,
   RefreshCw,
   FileText,
+  Landmark,
 } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
@@ -28,7 +29,7 @@ import { RejectModal } from './RejectModal';
 import { RequestChangesModal } from './RequestChangesModal';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import type { Venue, VenueAnswer } from '../../types';
+import type { Venue, VenueAnswer, BankAccount } from '../../types';
 import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
 const assetUrl = resolveAssetUrl;
@@ -191,6 +192,20 @@ export const VenueDetail: React.FC = () => {
 
   // venue.partner is a flat merged user+partner object from the API
   const partner = typeof venue.partner === 'object' ? (venue.partner as any) : null;
+  const bankAccount: BankAccount | null | undefined = venue.bankAccount ?? (partner?.bankAccountNumber ? {
+    id: '',
+    partnerId: venue.partnerId,
+    accountHolderName: partner.bankAccountHolderName || '',
+    bankName: partner.bankName || '',
+    accountNumber: partner.bankAccountNumber,
+    ifscCode: partner.bankIfscCode || '',
+    accountType: partner.bankAccountType || '',
+    branchName: partner.bankBranchName,
+    cancelledChequeUrl: partner.bankCancelledChequeUrl,
+    status: (partner.bankStatus as any) || 'under_review',
+    createdAt: '',
+    updatedAt: '',
+  } : null);
   const partnerName = [partner?.firstName, partner?.lastName]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .join(' ')
@@ -577,9 +592,10 @@ export const VenueDetail: React.FC = () => {
                 <InfoRow label="City / State" value={partner.city && partner.state ? `${partner.city}, ${partner.state}` : (partner.city ?? partner.state ?? null)} />
                 <InfoRow label="GST No." value={partner.gstNumber} />
                 <InfoRow label="PAN No." value={partner.panNumber} />
-                <InfoRow label="Bank Account" value={partner.bankAccountNumber} />
-                <InfoRow label="IFSC" value={partner.bankIfscCode} />
-                <InfoRow label="Account Holder" value={partner.bankAccountHolderName} />
+                <InfoRow label="Bank Name" value={partner.bankName || bankAccount?.bankName} />
+                <InfoRow label="Bank Account" value={partner.bankAccountNumber || bankAccount?.accountNumber} />
+                <InfoRow label="IFSC" value={partner.bankIfscCode || bankAccount?.ifscCode} />
+                <InfoRow label="Account Holder" value={partner.bankAccountHolderName || bankAccount?.accountHolderName} />
               </div>
             </div>
           )}
@@ -608,6 +624,55 @@ export const VenueDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          
+          {/* Bank Details */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Landmark size={16} className="text-gray-400" /> Bank Details
+              </h3>
+              {bankAccount?.status ? (
+                <Badge status={bankAccount.status} />
+              ) : (
+                <span className="text-xs text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full font-medium">
+                  Not Submitted
+                </span>
+              )}
+            </div>
+            {bankAccount ? (
+              <div className="space-y-3">
+                <div className="space-y-2.5">
+                  <InfoRow label="Bank Name" value={bankAccount.bankName || partner?.bankName} />
+                  <InfoRow label="Account Holder" value={bankAccount.accountHolderName || partner?.bankAccountHolderName} />
+                  <InfoRow label="Account No." value={bankAccount.accountNumber || partner?.bankAccountNumber} />
+                  <InfoRow label="IFSC Code" value={bankAccount.ifscCode || partner?.bankIfscCode} />
+                  <InfoRow label="Account Type" value={bankAccount.accountType || partner?.bankAccountType} />
+                  <InfoRow label="Branch" value={bankAccount.branchName || partner?.bankBranchName} />
+                </div>
+                {(bankAccount.cancelledChequeUrl || partner?.bankCancelledChequeUrl) && (
+                  <div className="pt-2 border-t border-gray-50">
+                    <KycDocImage
+                      label="Cancelled Cheque"
+                      src={bankAccount.cancelledChequeUrl || partner?.bankCancelledChequeUrl}
+                    />
+                  </div>
+                )}
+                {bankAccount.id && (
+                  <div className="pt-1">
+                    <Link
+                      to={`/bank-accounts/${bankAccount.id}`}
+                      className="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1"
+                    >
+                      View in Bank Approvals &rarr;
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Partner has not submitted bank account details yet.</p>
+            )}
+          </div>
 
           {/* Categories (multi-category support) */}
           {allCategories.length > 0 && (

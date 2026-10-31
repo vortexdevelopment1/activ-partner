@@ -2,7 +2,7 @@ export type EmailData = {
   /** Stable business-event identity; never rendered in the email. */
   deliveryKey?: string;
   partnerName?: string; venueName?: string; activityName?: string; reason?: string;
-  reference?: string; bankName?: string; accountLast4?: string; subject?: string;
+  reference?: string; bankName?: string; accountLast4?: string; subject?: string; city?: string;
   signedAt?: string; callbackDate?: string; callbackTime?: string;
   code?: string; password?: string; role?: string; email?: string; phone?: string; message?: string;
 };
@@ -12,6 +12,10 @@ type Definition = {
 };
 
 export const EMAIL_TEMPLATES = {
+  callback_request: {
+    subject: '[Partner Callback] New callback request', heading: 'New Partner', highlight: 'Callback Request', status: 'New request', tone: 'purple',
+    paragraphs: ['A partner has requested a callback. Review their contact details and preferred callback date and time below.'],
+  },
   venue_under_review: {
     subject: 'Your ACTIV Venue Application Is Under Review', heading: 'Your Venue Application', highlight: 'Is Under Review', status: 'Under review', tone: 'amber',
     paragraphs: ["Thank you for registering your venue with ACTIV. We’ve received your submission, and our team is currently reviewing your details and documents.", "We’ll email you as soon as there’s an update. If any additional information is required, our team will contact you using the details provided during registration."],
@@ -142,15 +146,17 @@ export function renderPartnerEmail(id: EmailTemplateId, data: EmailData = {}, br
   const color = { green: '#13c83f', amber: '#b67813', red: '#df4747', purple: '#9e35e9' }[template.tone];
   const badgeBackground = { green: '#e4faeb', amber: '#fff0c9', red: '#ffe8e8', purple: '#f1e6ff' }[template.tone];
   const rows: [string, string | undefined][] = [
+    ['Partner Name', id === 'callback_request' ? data.partnerName : undefined],
     ['Venue', data.venueName], ['Activity', data.activityName],
-    ['Application Status', template.status], ['Reference', data.reference],
+    [id === 'callback_request' ? 'Request Status' : 'Application Status', template.status], ['Reference', data.reference],
+    ['City', data.city],
     ['Bank', data.bankName], ['Account', data.accountLast4 ? `Ending in ${data.accountLast4.replace(/\D/g, '').slice(-4)}` : undefined],
     ['Signed On', data.signedAt], ['Callback Date', data.callbackDate], ['Callback Time', data.callbackTime],
     ['Subject', data.subject], ['Role', data.role], ['Email', data.email],
     ['Verification Code', data.code], ['Temporary Password', data.password], ['Mobile Number', data.phone],
   ];
   const paragraph = (text: string) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#30363b;">${escapeHtml(text).replace(/\n/g, '<br>')}</p>`;
-  const detailRows = rows.filter(([, value]) => value).map(([label, value]) => `<tr><td width="35%" style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:12px;color:#424b48;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:13px;font-weight:600;color:#17231d;word-break:break-word;">${label === 'Application Status' ? `<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:${badgeBackground};color:${color};font-size:12px;">${escapeHtml(value)}</span>` : escapeHtml(value)}</td></tr>`).join('');
+  const detailRows = rows.filter(([, value]) => value).map(([label, value]) => `<tr><td width="35%" style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:12px;color:#424b48;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:12px 14px;border-bottom:1px solid #e6e9e7;font-size:13px;font-weight:600;color:#17231d;word-break:break-word;">${['Application Status', 'Request Status'].includes(label) ? `<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:${badgeBackground};color:${color};font-size:12px;">${escapeHtml(value)}</span>` : escapeHtml(value)}</td></tr>`).join('');
   const store = (name: string, subtitle: string, url?: string) => `<a href="${escapeHtml(safeUrl(url, project))}" style="display:inline-block;background:#080c0a;border-radius:5px;color:#fff;text-decoration:none;padding:6px 10px;margin:5px 5px 0 0;line-height:1.15;"><span style="font-size:8px;">${subtitle}</span><br><span style="font-size:15px;font-weight:600;">${name}</span></a>`;
   const social = [['Instagram', 'IG', brand.instagramUrl, '#d84782'], ['LinkedIn', 'in', brand.linkedinUrl, '#087db3'], ['YouTube', '▶', brand.youtubeUrl, '#e82222'], ['X', 'X', brand.xUrl, '#111111']].map(([label, glyph, url, background]) => `<a aria-label="${label}" href="${escapeHtml(safeUrl(url, project))}" style="display:inline-block;margin:8px 5px 0 0;width:25px;height:25px;line-height:25px;text-align:center;border-radius:50%;background:${background};color:#fff;text-decoration:none;font-size:12px;font-weight:700;">${glyph}</a>`).join('');
   const logo = brand.logoUrl?.startsWith('cid:') ? brand.logoUrl : safeUrl(brand.logoUrl, 'cid:activ-partner-logo');
@@ -158,18 +164,19 @@ export function renderPartnerEmail(id: EmailTemplateId, data: EmailData = {}, br
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(template.heading)} ${escapeHtml(template.highlight)}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f7fa;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#fff;border:1px solid #edf1f3;"><tr><td style="padding:32px 28px 22px;">
 <table role="presentation" width="100%"><tr><td align="center" style="padding:0 0 28px;"><img src="${escapeHtml(logo)}" alt="ACTIV Partner" width="136" style="display:block;width:136px;max-width:100%;height:auto;border:0;"></td></tr></table>
-${paragraph(`Hi ${data.partnerName?.trim() || 'Partner'},`)}
+${paragraph(`Hi ${id === 'callback_request' ? 'ACTIV Support' : data.partnerName?.trim() || 'Partner'},`)}
 <h1 style="font-size:25px;line-height:1.18;margin:0 0 22px;font-weight:700;letter-spacing:-.5px;color:#101714;">${escapeHtml(template.heading)}<br><span style="color:${template.tone === 'amber' ? '#13c83f' : color};">${escapeHtml(template.highlight)}</span></h1>
 ${template.paragraphs.map(paragraph).join('')}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f5f7f5;border-radius:8px;overflow:hidden;">${detailRows}</table>
 ${data.reason ? `<div style="padding:14px 16px;margin-bottom:18px;border-left:3px solid ${color};background:#fafaf8;"><strong style="font-size:13px;">${template.tone === 'red' ? 'Reason / review notes' : 'Requested changes / notes'}</strong>${paragraph(data.reason)}</div>` : ''}
-${data.message ? paragraph(data.message) : ''}
+${data.message ? `${id === 'callback_request' ? '<h2 style="font-size:16px;margin:20px 0 10px;color:#17231d;">Partner query</h2>' : ''}${paragraph(data.message)}` : ''}
 ${paragraph('Regards,')}<p style="font-size:14px;margin:-10px 0 22px;font-weight:700;color:#17231d;">Team ACTIV</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e6ebea;padding-top:16px;"><tr><td width="60%" style="vertical-align:top;padding-right:8px;"><p style="font-size:11px;margin:0 0 3px;color:#374740;">Download ACTIV Partner App</p>${store('App Store', 'Download on the', brand.appStoreUrl)}${store('Google Play', 'GET IT ON', brand.playStoreUrl)}</td><td style="vertical-align:top;border-left:1px solid #edf0ee;padding-left:14px;"><p style="font-size:11px;margin:0;color:#374740;">Follow us on</p>${social}</td></tr></table>
 <p style="text-align:center;font-size:10px;line-height:1.6;color:#727d76;margin:22px 0 0;">Questions? Contact <a href="mailto:${escapeHtml(support)}" style="color:#467dba;">${escapeHtml(support)}</a> &nbsp; | &nbsp; Official website: <a href="${escapeHtml(website)}" style="color:#467dba;">${escapeHtml(website.replace(/\/$/, ''))}</a></p>
 </td></tr></table></td></tr></table></body></html>`;
-  const text = [`Hi ${data.partnerName?.trim() || 'Partner'},`, `${template.heading} ${template.highlight}`, ...template.paragraphs,
-    ...rows.filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`), data.reason ? `Reason / notes: ${data.reason}` : '', data.message,
+  const text = [`Hi ${id === 'callback_request' ? 'ACTIV Support' : data.partnerName?.trim() || 'Partner'},`, `${template.heading} ${template.highlight}`, ...template.paragraphs,
+    ...rows.filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`), data.reason ? `Reason / notes: ${data.reason}` : '', data.message ? (id === 'callback_request' ? `Partner query:
+${data.message}` : data.message) : '',
     'Regards,\nTeam ACTIV', `Questions? Contact ${support}`, `ACTIV Partner: ${project}`, `Official website: ${website}`].filter(Boolean).join('\n\n');
   return { subject: template.subject, html, text };
 }

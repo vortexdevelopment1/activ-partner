@@ -167,10 +167,10 @@ export class MailService extends LegacyMailService implements OnModuleInit {
       case 'rejection': id = 'venue_rejected'; data.partnerName = p.firstName; data.reference = p.venueId; data.reason = p.rejectionReason; break;
       case 'support': return { recipientEmail: job.recipient, recipientName: 'ACTIV Support',
         subject: `[Partner Support] ${p.subject}`, text: `Partner: ${p.partnerName}\nEmail: ${p.partnerEmail || 'Not provided'}\n\n${p.message}` };
-      case 'callback': return { recipientEmail: job.recipient, recipientName: 'ACTIV Support', subject: '[Partner Callback] New callback request',
-        text: ['partnerName', 'partnerEmail', 'phone', 'venueName', 'city', 'callbackDate', 'callbackTime', 'query'].map(key => `${key}: ${p[key] || ''}`).join('\n') };
+      case 'callback': id = 'callback_request'; data.email = p.partnerEmail; data.message = p.query; break;
     }
-    return { ...this.brandedEmail(id, data), recipientEmail: job.recipient, recipientName: data.partnerName,
+    return { ...this.brandedEmail(id, data), recipientEmail: job.recipient,
+      recipientName: job.method === 'callback' ? 'ACTIV Support' : data.partnerName,
       inlineImages: [this.logoAttachment()],
       ...(job.method === 'agreement' ? { pdfBuffer: p.pdfBuffer, filename: p.filename } : {}),
       ...(job.method === 'smtpAgreement' ? { pdfBuffer: Buffer.from(p.agreement.base64, 'base64'), filename: p.agreement.filename } : {}) };

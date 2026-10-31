@@ -124,7 +124,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Step 1 — Request a password reset code via email',
-    description: 'Sends a 4-digit reset code to the partner\'s registered email address, valid for 10 minutes.',
+    description: 'Validates an active partner account before sending a 4-digit reset code, valid for 10 minutes. Unregistered or inactive accounts receive a validation error.',
   })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const data = await this.authService.forgotPassword(dto);
