@@ -5,7 +5,8 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import type { PartnerRecord as Partner } from '../../common/domain-types';
 import { GstVerificationRequestRecord as GstVerificationRequest, GstVerificationStatus } from '../../common/domain-types';
 import { SubmitGstVerificationDto } from './dto/submit-gst-verification.dto';
@@ -62,12 +63,16 @@ export class PartnersService {
           }
         }
 
+        const temporaryPassword = !userWithPhone?.password_hash ? this.generatePassword() : undefined;
+        const passwordHash = temporaryPassword ? await bcrypt.hash(temporaryPassword, 10) : undefined;
+
         const user = userWithPhone
           ? await tx.users.update({
               where: { id: userWithPhone.id },
               data: {
                 name: fullName || userWithPhone.name,
                 email: email || userWithPhone.email,
+                ...(passwordHash ? { password_hash: passwordHash } : {}),
                 status: UserStatus.ACTIVE,
                 updated_at: now,
               },
@@ -78,6 +83,7 @@ export class PartnersService {
                 phone_e164: phone,
                 name: fullName || null,
                 email,
+                ...(passwordHash ? { password_hash: passwordHash } : {}),
                 status: UserStatus.ACTIVE,
                 updated_at: now,
               },
@@ -128,6 +134,7 @@ export class PartnersService {
           businessName: createPartnerDto.businessName?.trim() || partner.legal_name,
           status: partner.status.toLowerCase(),
           isActive: partner.status === PartnerStatus.ACTIVE,
+          temporaryPassword,
           createdAt: partner.created_at,
           updatedAt: partner.updated_at,
         };
@@ -138,6 +145,22 @@ export class PartnersService {
         `${created.businessName || 'A partner'} was added to ACTIV.`,
         { partnerId: created.id },
       );
+
+      if (created.email?.trim()) {
+        try {
+          await this.mailService?.sendPartnerInvitationEmail({
+            toEmail: created.email.trim(),
+            partnerName: fullName || created.businessName || 'Partner',
+            businessName: created.businessName,
+            phone: created.phone,
+            password: created.temporaryPassword,
+            deliveryKey: `partner-invite:${created.id}`,
+          });
+        } catch {
+          // Email dispatch error should not fail partner creation
+        }
+      }
+
       return created;
     } catch (error: any) {
       if (error instanceof ConflictException || error instanceof BadRequestException) throw error;
@@ -146,6 +169,18 @@ export class PartnersService {
       }
       throw error;
     }
+  }
+
+  private generatePassword(): string {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    const special = '@#$!';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(randomInt(chars.length));
+    }
+    password += special.charAt(randomInt(special.length));
+    password += randomInt(10, 100);
+    return password;
   }
 
   private normalizePhone(phone: string): string {

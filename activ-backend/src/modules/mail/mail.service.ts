@@ -53,6 +53,24 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     return this.notice('template', { toEmail, id, data }, toEmail, data.deliveryKey);
   }
 
+  async sendPartnerInvitationEmail(params: {
+    toEmail: string;
+    partnerName: string;
+    businessName?: string;
+    phone?: string;
+    password?: string;
+    deliveryKey?: string;
+  }): Promise<boolean> {
+    return this.sendTemplateEmail(params.toEmail, 'partner_invitation', {
+      partnerName: params.partnerName,
+      businessName: params.businessName,
+      email: params.toEmail,
+      phone: params.phone,
+      password: params.password,
+      deliveryKey: params.deliveryKey,
+    });
+  }
+
   async sendSignedAgreementEmailViaGmail(params: Params<'sendSignedAgreementEmailViaGmail'> & { deliveryKey?: string }): Promise<string> {
     const result = await this.dispatch(this.job('agreement', params, params.toEmail,
       params.deliveryKey || `agreement:${params.toEmail}:${new Date(params.signedAt).toISOString()}:${params.venueName}`));
@@ -153,7 +171,16 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     let id: EmailTemplateId;
     let data: EmailData = { ...p };
     switch (job.method) {
-      case 'template': id = p.id; data = p.data; break;
+      case 'template':
+        id = p.id;
+        data = { ...p.data };
+        if (id === 'partner_invitation') {
+          if (!data.email) data.email = p.toEmail;
+          if (!data.password && !data.message) {
+            data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';
+          }
+        }
+        break;
       case 'agreement': case 'smtpAgreement': id = 'agreement_signed'; data.signedAt = new Date(p.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short' }); break;
       case 'suspension': id = p.venueName ? 'venue_suspended' : 'partner_suspended'; break;
       case 'changes': id = 'venue_changes_requested'; break;

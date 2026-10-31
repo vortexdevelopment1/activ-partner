@@ -1,7 +1,7 @@
 export type EmailData = {
   /** Stable business-event identity; never rendered in the email. */
   deliveryKey?: string;
-  partnerName?: string; venueName?: string; activityName?: string; reason?: string;
+  partnerName?: string; businessName?: string; venueName?: string; activityName?: string; reason?: string;
   reference?: string; bankName?: string; accountLast4?: string; subject?: string; city?: string;
   signedAt?: string; callbackDate?: string; callbackTime?: string;
   code?: string; password?: string; role?: string; email?: string; phone?: string; message?: string;
@@ -124,6 +124,13 @@ export const EMAIL_TEMPLATES = {
     subject: 'You’re Invited to ACTIV Partner', heading: 'You’ve Been Invited', highlight: 'To Your Venue Team', status: 'Invited', tone: 'green',
     paragraphs: ['Your venue administrator has created an ACTIV Partner team account for you.', 'Use the account details below to sign in. If a temporary password is provided, change it after your first login.'],
   },
+  partner_invitation: {
+    subject: 'Congratulations! You’ve Been Invited to ACTIV Partner', heading: 'Congratulations!', highlight: 'You’ve Been Invited', status: 'Invited', tone: 'green',
+    paragraphs: [
+      'Congratulations! An ACTIV Partner account has been created for you by the administrator. Welcome to the ACTIV partner community!',
+      'Use your registered email and temporary password below to sign in to the ACTIV Partner portal or app. For security, please change your temporary password after your first login.',
+    ],
+  },
 } satisfies Record<string, Definition>;
 
 export type EmailTemplateId = keyof typeof EMAIL_TEMPLATES;
@@ -146,9 +153,10 @@ export function renderPartnerEmail(id: EmailTemplateId, data: EmailData = {}, br
   const color = { green: '#13c83f', amber: '#b67813', red: '#df4747', purple: '#9e35e9' }[template.tone];
   const badgeBackground = { green: '#e4faeb', amber: '#fff0c9', red: '#ffe8e8', purple: '#f1e6ff' }[template.tone];
   const rows: [string, string | undefined][] = [
-    ['Partner Name', id === 'callback_request' ? data.partnerName : undefined],
+    ['Partner Name', ['callback_request', 'partner_invitation'].includes(id) ? data.partnerName : undefined],
+    ['Business Name', data.businessName],
     ['Venue', data.venueName], ['Activity', data.activityName],
-    [id === 'callback_request' ? 'Request Status' : 'Application Status', template.status], ['Reference', data.reference],
+    [id === 'callback_request' ? 'Request Status' : ['partner_invitation', 'team_invitation'].includes(id) ? 'Account Status' : 'Application Status', template.status], ['Reference', data.reference],
     ['City', data.city],
     ['Bank', data.bankName], ['Account', data.accountLast4 ? `Ending in ${data.accountLast4.replace(/\D/g, '').slice(-4)}` : undefined],
     ['Signed On', data.signedAt], ['Callback Date', data.callbackDate], ['Callback Time', data.callbackTime],
