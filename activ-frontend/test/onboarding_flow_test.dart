@@ -2368,7 +2368,7 @@ void main() {
     expect(answers['environment'], ['Outdoor']);
   });
 
-  testWidgets('activity questions match step eight and hide equipment and sub-step', (tester) async {
+  testWidgets('activity questions use the shared reference layout and hide equipment and sub-step', (tester) async {
     Map<String, dynamic>? submitted;
     final routes = _Routes();
     final client = MockClient((request) async {
@@ -2411,7 +2411,8 @@ void main() {
         routes: routes);
     expect(find.text('Court Surface'), findsNothing);
     expect(find.byType(DropdownButton<String>), findsOneWidget);
-    expect(find.text('8/10'), findsOneWidget);
+    expect(find.text('8/10'), findsNothing);
+    expect(find.text('Squash (Court booking)'), findsOneWidget);
     expect(find.text('Equipment Available'), findsNothing);
     expect(find.text('Configuring Activity 2 of 3 \u2014 Step 3/4'), findsNothing);
     await capture(tester, 'activity-questions-step3-430x932');

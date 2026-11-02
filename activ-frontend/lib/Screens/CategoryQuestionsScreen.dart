@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../Style/app_size.dart';
@@ -13,10 +12,9 @@ import '../Utills/activity_question_visibility.dart';
 import '../Utills/browser_session.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
-import 'CommonCode.dart';
 import 'ActivityReviewScreen.dart';
 import 'VenuePhotoUploadScreen.dart';
-import 'onboarding_widgets.dart';
+import 'activity_details_form.dart';
 
 // ─── Question model ───────────────────────────────────────────────────────────
 
@@ -186,6 +184,7 @@ class _State extends State<CategoryQuestionsScreen> {
   // each get their own independent controller/answer slot.
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, dynamic> _answers = {};
+  final Map<String, String> _selectedUnits = {};
 
   int currentStep = onboardingQuestionsStep;
   final int totalSteps = totalSetup;
@@ -198,8 +197,10 @@ class _State extends State<CategoryQuestionsScreen> {
   void _saveSessionAnswers() {
     if (_managedMode || !isBrowserSession || _isLoading || _errorMessage.isNotEmpty) return;
     writeBrowserSession(_sessionKey, jsonEncode({
-      ..._answers,
-      for (final entry in _textControllers.entries) entry.key: entry.value.text,
+      for (final section in _sections)
+        for (final question in section.questions)
+          _key(section.categoryId, question.id): _getAnswer(section.categoryId, question),
+      for (final question in _globalQuestions) _key('global', question.id): _getAnswer('global', question),
     }));
   }
 
@@ -405,6 +406,18 @@ class _State extends State<CategoryQuestionsScreen> {
           controller.addListener(_saveSessionAnswers);
         }
       }
+      void initializeDefaults(String categoryId, _Question q) {
+        final key = _key(categoryId, q.id);
+        if (q.questionType == 'number_stepper') {
+          _answers.putIfAbsent(key, () => q.questionText.toLowerCase().contains('batch') || q.questionText.toLowerCase().contains('capacity') ? 25 : 1);
+        } else if (q.questionType == 'radio' && q.options.isNotEmpty) {
+          _answers.putIfAbsent(key, () => q.options.first);
+        }
+      }
+      for (final section in filteredSections) {
+        for (final question in section.questions) { initializeDefaults(section.categoryId, question); }
+      }
+      for (final question in globals) { initializeDefaults('global', question); }
       setState(() {
         _globalQuestions = globals;
         _sections = filteredSections;
@@ -468,7 +481,13 @@ class _State extends State<CategoryQuestionsScreen> {
   dynamic _getAnswer(String categoryId, _Question q) {
     final k = _key(categoryId, q.id);
     if (_textControllers.containsKey(k)) {
-      return _textControllers[k]!.text.trim();
+      final text = _textControllers[k]!.text.trim();
+      final value = num.tryParse(text);
+      final selectedUnit = _selectedUnits[k] ?? q.unit;
+      if (q.questionType == 'number' && q.unit.isNotEmpty && selectedUnit != q.unit && value != null) {
+        return activityConvertUnit(value, selectedUnit, q.unit).toString();
+      }
+      return text;
     }
     return _answers[k];
   }
@@ -479,6 +498,11 @@ class _State extends State<CategoryQuestionsScreen> {
       final isEmpty = answer == null || (answer is String && answer.isEmpty) || (answer is List && answer.isEmpty);
       if (q.isRequired && isEmpty) {
         CommonUtilities.createSnackBar(context, 'Please fill in: ${q.questionText}');
+        return false;
+      }
+      if (!isEmpty && q.questionType == 'number' &&
+          (num.tryParse(answer.toString()) == null || num.parse(answer.toString()) < 0)) {
+        CommonUtilities.createSnackBar(context, 'Enter a valid number for ${q.questionText}.');
         return false;
       }
       if (!isEmpty && answer is String && q.minLength != null && answer.length < q.minLength!) {
@@ -632,517 +656,34 @@ class _State extends State<CategoryQuestionsScreen> {
   // is always available when reading/writing answers.
 
   Widget _buildQuestionWidget(String categoryId, _Question q) {
-    switch (q.questionType) {
-      case 'textarea':
-        return _buildTextField(categoryId, q, maxLines: 3);
-      case 'number_stepper':
-        return _buildStepper(categoryId, q);
-      case 'number':
-        return q.unit.isNotEmpty ? _buildNumberWithUnit(categoryId, q) : _buildTextField(categoryId, q, isNumber: true);
-      case 'radio':
-        return _buildRadioGroup(categoryId, q);
-      case 'select':
-        return _buildDropdown(categoryId, q);
-      case 'multiselect':
-      case 'checkbox':
-        return _buildCheckboxGroup(categoryId, q);
-      case 'date':
-        return _buildDatePicker(categoryId, q);
-      default:
-        return _buildTextField(categoryId, q);
-    }
-  }
-
-  Widget _buildLabel(_Question q) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 20, 0, 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            q.questionText,
-            style: const TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'Satoshi',
-              color: AppColors.black1,
-              height: 1.3,
-            ),
-          ),
-          if (q.isRequired)
-            const Text(
-              ' *',
-              style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.red,
-                height: 1,
-              ),
-            ),
-        ],
-      ),
+    if (q.questionType == 'date') return _buildDatePicker(categoryId, q);
+    final key = _key(categoryId, q.id);
+    return ActivityQuestionInput(
+      label: q.questionText, type: q.questionType,
+      inputKey: ValueKey('question-$categoryId-${q.id}'),
+      controller: _textControllers[key], answer: _answers[key],
+      required: q.isRequired, options: q.options,
+      placeholder: activityQuestionPlaceholder(widget.currentCategory['title']?.toString() ?? '', q.questionText, q.placeholder), helper: q.helperText,
+      maxLength: q.maxLength, minLength: q.minLength,
+      unit: q.unit, selectedUnit: _selectedUnits[key],
+      onChanged: (value) {
+        setState(() => _answers[key] = value);
+        _saveSessionAnswers();
+      },
+      onUnitChanged: (next) {
+        final controller = _textControllers[key]!;
+        final value = num.tryParse(controller.text);
+        if (value != null) {
+          final converted = activityConvertUnit(value, _selectedUnits[key] ?? q.unit, next);
+          controller.text = converted.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
+        }
+        setState(() => _selectedUnits[key] = next);
+        _saveSessionAnswers();
+      },
     );
   }
 
-  Widget _buildStepper(String categoryId, _Question q) {
-    final k = _key(categoryId, q.id);
-    int currentVal = 1;
-    final ans = _answers[k];
-    if (ans is int) {
-      currentVal = ans;
-    } else if (ans != null) {
-      currentVal = int.tryParse(ans.toString()) ?? 1;
-    } else {
-      final qLower = q.questionText.toLowerCase();
-      if (qLower.contains('batch') || qLower.contains('capacity')) {
-        currentVal = 25;
-      }
-    }
-
-    String suffix = '';
-    final qLower = q.questionText.toLowerCase();
-    if (qLower.contains('batch') || qLower.contains('class')) suffix = 'per batch';
-    else if (qLower.contains('capacity') || qLower.contains('people')) suffix = 'people';
-    else if (qLower.contains('court')) suffix = 'courts';
-    else if (qLower.contains('turf')) suffix = 'turfs';
-    else if (qLower.contains('table')) suffix = 'tables';
-    else if (qLower.contains('net')) suffix = 'nets';
-    else if (qLower.contains('lane')) suffix = 'lanes';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.gray),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () {
-                      if (currentVal > 1) {
-                        setState(() => _answers[k] = currentVal - 1);
-                        _saveSessionAnswers();
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3EAFF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.remove, color: Color(0xFF9D38EB), size: 18),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 46),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$currentVal',
-                      style: const TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.darkBlack,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _answers[k] = currentVal + 1);
-                      _saveSessionAnswers();
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3EAFF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.add, color: Color(0xFF9D38EB), size: 18),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (suffix.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              Text(
-                suffix,
-                style: const TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontSize: 14,
-                  color: AppColors.hintColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRadioGroup(String categoryId, _Question q) {
-    final k = _key(categoryId, q.id);
-    final selected = _answers[k]?.toString() ?? (q.options.isNotEmpty ? q.options.first : '');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        Row(
-          children: [
-            for (final opt in q.options) ...[
-              Expanded(
-                child: InkWell(
-                  onTap: () {
-                    setState(() => _answers[k] = opt);
-                    _saveSessionAnswers();
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: selected == opt ? const Color(0xFFF3EAFF) : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: selected == opt ? const Color(0xFFC792EA) : AppColors.gray,
-                        width: selected == opt ? 1.4 : 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 18,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected == opt ? const Color(0xFF9D38EB) : AppColors.lightGray,
-                              width: 2,
-                            ),
-                          ),
-                          child: selected == opt
-                              ? Center(
-                                  child: Container(
-                                    width: 9,
-                                    height: 9,
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Color(0xFF9D38EB),
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            opt,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'Satoshi',
-                              fontSize: 14,
-                              fontWeight: selected == opt ? FontWeight.w700 : FontWeight.w500,
-                              color: AppColors.darkBlack,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNumberWithUnit(String categoryId, _Question q) {
-    final k = _key(categoryId, q.id);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.gray),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: TextFormField(
-                  key: ValueKey('question-$categoryId-${q.id}'),
-                  controller: _textControllers[k],
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: const TextStyle(
-                    fontSize: AppSize.size_14,
-                    fontFamily: 'Satoshi',
-                    color: AppColors.darkBlack,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: q.placeholder.isNotEmpty ? q.placeholder : 'e.g. 1200',
-                    hintStyle: const TextStyle(
-                      fontSize: AppSize.size_14,
-                      fontFamily: 'Satoshi',
-                      color: AppColors.hintColor,
-                    ),
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 3,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.gray),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      q.unit,
-                      style: const TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.darkBlack,
-                      ),
-                    ),
-                    const Icon(Icons.keyboard_arrow_down, size: 20, color: AppColors.darkBlack),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(String categoryId, _Question q, {int maxLines = 1, bool isNumber = false}) {
-    final k = _key(categoryId, q.id);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.gray, width: 1),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: TextFormField(
-            key: ValueKey('question-$categoryId-${q.id}'),
-            controller: _textControllers[k],
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.sentences,
-            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-            inputFormatters: [
-              if (isNumber) FilteringTextInputFormatter.digitsOnly,
-              if (q.maxLength != null) LengthLimitingTextInputFormatter(q.maxLength),
-            ],
-            cursorColor: AppColors.cursorBlack,
-            maxLines: maxLines,
-            style: const TextStyle(
-              fontSize: AppSize.size_14,
-              fontFamily: 'Satoshi',
-              color: AppColors.darkBlack,
-            ),
-            decoration: InputDecoration(
-              hintText: q.placeholder.isNotEmpty
-                  ? q.placeholder
-                  : q.questionText.trim().toLowerCase() == 'activity description'
-                      ? 'Describe this activity...'
-                      : 'Enter ${q.questionText.toLowerCase()}',
-              hintStyle: const TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.hintColor,
-              ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-          ),
-        ),
-        if (q.helperText.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            child: Text(
-              q.helperText,
-              style: const TextStyle(
-                fontSize: AppSize.size_12,
-                fontFamily: 'Satoshi',
-                color: AppColors.hintColor,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDropdown(String categoryId, _Question q) {
-    final k = _key(categoryId, q.id);
-    final rawSelected = _answers[k] as String?;
-    final selected = q.options.contains(rawSelected) ? rawSelected : null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.gray, width: 1),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              key: ValueKey('question-$categoryId-${q.id}'),
-              isExpanded: true,
-              value: selected,
-              hint: Text(
-                q.placeholder.isNotEmpty ? q.placeholder : 'Select an option',
-                style: const TextStyle(
-                  fontSize: AppSize.size_14,
-                  fontFamily: 'Satoshi',
-                  color: AppColors.hintColor,
-                ),
-              ),
-              style: const TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.darkBlack,
-              ),
-              items: q.options
-                  .map((opt) => DropdownMenuItem<String>(
-                        value: opt,
-                        child: Text(opt),
-                      ))
-                  .toList(),
-              onChanged: q.options.isEmpty ? null : (val) => setState(() => _answers[k] = val),
-            ),
-          ),
-        ),
-        if (q.helperText.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            child: Text(
-              q.helperText,
-              style: const TextStyle(
-                fontSize: AppSize.size_12,
-                fontFamily: 'Satoshi',
-                color: AppColors.hintColor,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildCheckboxGroup(String categoryId, _Question q) {
-    final k = _key(categoryId, q.id);
-    final selected = (_answers[k] as List<String>?) ?? [];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(q),
-        ...q.options.map((opt) {
-          final isChecked = selected.contains(opt);
-          return InkWell(
-            onTap: () {
-              setState(() {
-                final list = List<String>.from(selected);
-                if (isChecked) {
-                  list.remove(opt);
-                } else {
-                  list.add(opt);
-                }
-                _answers[k] = list;
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: isChecked,
-                    activeColor: AppColors.darkBlack,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    onChanged: (val) {
-                      setState(() {
-                        final list = List<String>.from(selected);
-                        if (val == true) {
-                          list.add(opt);
-                        } else {
-                          list.remove(opt);
-                        }
-                        _answers[k] = list;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      opt,
-                      style: const TextStyle(
-                        fontSize: AppSize.size_14,
-                        fontFamily: 'Satoshi',
-                        color: AppColors.darkBlack,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-        if (q.helperText.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            child: Text(
-              q.helperText,
-              style: const TextStyle(
-                fontSize: AppSize.size_12,
-                fontFamily: 'Satoshi',
-                color: AppColors.hintColor,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget _buildLabel(_Question q) => ActivityDetailsLabel(label: q.questionText, required: q.isRequired);
 
   Widget _buildDatePicker(String categoryId, _Question q) {
     final k = _key(categoryId, q.id);
@@ -1207,338 +748,37 @@ class _State extends State<CategoryQuestionsScreen> {
 
   // ─── Build ────────────────────────────────────────────────────────────────
 
-  Widget _buildManagedLayout(bool hasNoQuestions) {
-    final categoryTitle = widget.currentCategory['title']?.toString() ?? 'Activity';
-    return Scaffold(
-      backgroundColor: const Color(0xFFF0F6D2),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Material(
-                            color: Colors.white,
-                            shape: const CircleBorder(),
-                            elevation: 2,
-                            child: IconButton(
-                              tooltip: 'Back',
-                              constraints: const BoxConstraints.tightFor(
-                                width: 36,
-                                height: 36,
-                              ),
-                              padding: EdgeInsets.zero,
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                size: 20,
-                                color: AppColors.darkBlack,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 18),
-                          const Expanded(
-                            child: Text(
-                              'Update Activity Details',
-                              style: TextStyle(
-                                fontFamily: 'Satoshi',
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.darkBlack,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        categoryTitle,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontFamily: 'Satoshi',
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.darkBlack,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Provide Activity Specific Details',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontFamily: 'Satoshi',
-                          color: AppColors.black1,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ListView(
-                      children: [
-                        const SizedBox(height: 16),
-                        if (_isLoading)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Column(children: [
-                              AppSkeleton(height: 58),
-                              SizedBox(height: 14),
-                              AppSkeleton(height: 58),
-                              SizedBox(height: 14),
-                              AppSkeleton(height: 58),
-                            ]),
-                          )
-                        else if (_errorMessage.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
-                            child: Center(
-                              child: Text(
-                                _errorMessage,
-                                style: const TextStyle(
-                                  fontSize: AppSize.size_14,
-                                  fontFamily: 'Satoshi',
-                                  color: AppColors.black1,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          )
-                        else if (hasNoQuestions)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: Center(
-                              child: Text(
-                                'No additional questions for the selected categories.',
-                                style: TextStyle(
-                                  fontSize: AppSize.size_14,
-                                  fontFamily: 'Satoshi',
-                                  color: AppColors.black1,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          )
-                        else ...[
-                          ..._sections.where((s) => s.questions.isNotEmpty).expand((section) =>
-                            section.questions.map((q) => _buildQuestionWidget(section.categoryId, q))
-                          ),
-                          ..._globalQuestions.map((q) => _buildQuestionWidget('global', q)),
-                        ],
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                ),
-                Column(
-                  children: [
-                    bottomBarShadow(),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              if (_isLoading || _savingManaged || _errorMessage.isNotEmpty) return;
-                              if (hasNoQuestions || _validate()) { _saveManagedAnswers(); }
-                            },
-                            child: getButtonBlack(context, _savingManaged ? 'Saving...' : 'Save Changes', 'categoryQuestions_managed'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final double progress = currentStep / totalSteps;
-    final bool hasNoQuestions = !_isLoading && _errorMessage.isEmpty && _globalQuestions.isEmpty && _sections.every((s) => s.questions.isEmpty);
-    // Show "General" header for global questions only when there are also
-    // category-specific questions to distinguish them from.
-    final bool hasCategorySpecific = _sections.any((s) => s.questions.isNotEmpty);
-    final bool showCategoryHeaders = _sections.length > 1 || hasCategorySpecific;
-
-    if (_managedMode) return _buildManagedLayout(hasNoQuestions);
-
-    return Stack(
-      children: [
-        Align(
-          alignment: Alignment.topCenter,
-          child: Container(height: 100, color: AppColors.yellowTop),
-        ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(height: 100, color: AppColors.white),
-        ),
-        SafeArea(
-          top: true,
-          bottom: true,
-          left: false,
-          right: false,
-          child: Scaffold(
-            body: Container(
-              decoration: context.getYellowGradient,
-              child: Column(
-                children: [
-                  const OnboardingHeader(),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        getStepBarCount(progress, currentStep, totalSteps),
-                        Container(
-                          margin: const EdgeInsets.only(top: 25),
-                          alignment: Alignment.centerLeft,
-                          child: const Text(
-                            "Tell us about your venue!",
-                            style: TextStyle(
-                              fontSize: AppSize.size_25,
-                              fontFamily: 'Satoshi',
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.darkBlack,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
-                          child: const Text(
-                            "Please answer the questions for each selected category",
-                            style: TextStyle(
-                              fontSize: AppSize.size_16,
-                              fontFamily: 'Satoshi',
-                              color: AppColors.black1,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.fromLTRB(15, 0, 15, 0),
-                      child: ListView(
-                        children: [
-                          // Content
-                          if (_isLoading)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Column(children: [
-                                AppSkeleton(height: 58),
-                                SizedBox(height: 14),
-                                AppSkeleton(height: 58),
-                                SizedBox(height: 14),
-                                AppSkeleton(height: 58),
-                              ]),
-                            )
-                          else if (_errorMessage.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 40),
-                              child: Center(
-                                child: Text(
-                                  _errorMessage,
-                                  style: const TextStyle(
-                                    fontSize: AppSize.size_14,
-                                    fontFamily: 'Satoshi',
-                                    color: AppColors.black1,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          else if (hasNoQuestions)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: Center(
-                                child: Text(
-                                  "No additional questions for the selected categories.",
-                                  style: TextStyle(
-                                    fontSize: AppSize.size_14,
-                                    fontFamily: 'Satoshi',
-                                    color: AppColors.black1,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          else ...[
-                            // Category-specific questions
-                            ..._sections.where((s) => s.questions.isNotEmpty).expand((section) => [
-                                  _buildSectionHeader(section.categoryTitle),
-                                  ...section.questions.map(
-                                    (q) => _buildQuestionWidget(section.categoryId, q),
-                                  ),
-                                ]),
-                            // Global questions — shown once, at the bottom
-                            if (_globalQuestions.isNotEmpty) ...[
-                              if (showCategoryHeaders) _buildSectionHeader('General'),
-                              ..._globalQuestions.map(
-                                (q) => _buildQuestionWidget('global', q),
-                              ),
-                            ],
-                          ],
-
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Bottom bar
-                  Column(
-                    children: [
-                      bottomBarShadow(),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: InkWell(
-                              onTap: _savingManaged ? null : () => Navigator.pop(context),
-                              child: getBackButton(context, "Back", "categoryQuestions"),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 7,
-                            child: InkWell(
-                              onTap: () {
-                                if (_isLoading || _savingManaged || _errorMessage.isNotEmpty) return;
-                                if (hasNoQuestions || _validate()) {
-                                  if (_managedMode) { _saveManagedAnswers(); }
-                                  else { _submitAnswers(); }
-                                }
-                              },
-                              child: getButtonBlack(context, _savingManaged ? 'Saving...' : 'Next', "categoryQuestions"),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
+    final empty = !_isLoading && _errorMessage.isEmpty && _globalQuestions.isEmpty && _sections.every((section) => section.questions.isEmpty);
+    final name = widget.currentCategory['title']?.toString() ?? 'Activity';
+    return ActivityDetailsLayout(
+      buttonLabel: _managedMode ? 'Save Changes' : 'Next',
+      saving: _savingManaged,
+      onContinue: _isLoading || _savingManaged || _errorMessage.isNotEmpty ? null : () {
+        if (empty || _validate()) {
+          if (_managedMode) { _saveManagedAnswers(); } else { _submitAnswers(); }
+        }
+      },
+      child: ListView(padding: EdgeInsets.symmetric(horizontal: activityDetailsGutter(context)), children: [
+        ActivityDetailsHeading(name: name, bookingType: widget.currentCategory['type']?.toString()),
+        if (_isLoading) const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
+        else if (_errorMessage.isNotEmpty) Padding(padding: const EdgeInsets.all(20), child: Column(children: [
+          Text(_errorMessage, textAlign: TextAlign.center),
+          TextButton(onPressed: _fetchAllQuestions, child: const Text('Retry')),
+        ]))
+        else if (empty) const Padding(padding: EdgeInsets.symmetric(vertical: 30), child: Text('No additional questions for the selected categories.'))
+        else ...[
+          for (final section in _sections.where((section) => section.questions.isNotEmpty)) ...[
+            if (_sections.length > 1) _buildSectionHeader(section.categoryTitle),
+            for (final question in section.questions) _buildQuestionWidget(section.categoryId, question),
+          ],
+          if (_globalQuestions.isNotEmpty) ...[
+            if (_sections.any((section) => section.questions.isNotEmpty)) _buildSectionHeader('General'),
+            for (final question in _globalQuestions) _buildQuestionWidget('global', question),
+          ],
+        ],
+      ]),
     );
   }
 

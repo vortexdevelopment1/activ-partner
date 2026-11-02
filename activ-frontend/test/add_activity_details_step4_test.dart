@@ -23,7 +23,7 @@ void main() {
   testWidgets('renders the step 4 activity description screen matching ss1 and saves description', (tester) async {
     final writes = <Map<String, dynamic>>[];
     final client = MockClient((request) async {
-      expect(request.headers['Authorization'], 'Bearer session_token');
+      expectSync(request.headers['Authorization'], 'Bearer session_token');
       if (request.url.path == '/api/v1/venues/activities/activity_123') {
         return http.Response(jsonEncode({
           'data': {
@@ -72,48 +72,23 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Verify step bar indicator 4/6
-    expect(find.text('4/6'), findsOneWidget);
-
-    // Verify Title & Subtitle
-    expect(find.text('Badminton'), findsOneWidget);
-    expect(find.text('Tell us about your activity'), findsOneWidget);
-
-    // Verify Activity Description label & info tooltip
+    expect(find.text('Update Activity Details'), findsOneWidget);
+    expect(find.text('Badminton (Court booking)'), findsOneWidget);
+    expect(find.text('Provide Activity Specific Details'), findsOneWidget);
     expect(find.textContaining('Activity Description'), findsOneWidget);
-    expect(find.byIcon(Icons.info_outline), findsOneWidget);
-    expect(
-      find.text("Share the details you want players to know. We'll help convert your description into clear English."),
-      findsOneWidget,
-    );
-
-    // Verify "Need an idea?" card
-    expect(find.text('Need an idea?'), findsOneWidget);
-    expect(
-      find.text('Write in Hindi , Hinglish, or English. Mention your facilities, equipment, coaching, who can join, and what makes your venue special.'),
-      findsOneWidget,
-    );
-
-    // Verify "See an example for Badminton" card
-    expect(find.text('See an example for Badminton'), findsOneWidget);
-    expect(
-      find.textContaining('We have 3 indoor badminton courts with synthetic flooring'),
-      findsWidgets, // in example box and hint
-    );
-
-    // Verify Back and Next buttons
-    expect(find.text('Back'), findsOneWidget);
+    expect(find.text('0/150'), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
     expect(find.text('Next'), findsOneWidget);
 
     // Validate empty submission
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
-    expect(find.text('Please enter an activity description'), findsOneWidget);
+    expect(find.text('Please answer this question'), findsOneWidget);
     expect(writes, isEmpty);
 
     // Enter description
     await tester.enterText(
-      find.byKey(const ValueKey('activity-description-field')),
+      find.byKey(const ValueKey('activity-question-description')),
       '3 premier wooden badminton courts with Yonex mats and AC.',
     );
     await tester.pumpAndSettle();

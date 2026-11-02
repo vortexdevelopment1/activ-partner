@@ -75,7 +75,7 @@ void main() {
     final writes = await openEditor(tester);
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
     expect(find.text('Update Activity Details'), findsOneWidget);
-    expect(find.text('Basketball'), findsOneWidget);
+    expect(find.text('Basketball (Court booking)'), findsOneWidget);
     expect(find.text('Provide Activity Specific Details'), findsOneWidget);
     expect(find.text('Save Changes'), findsOneWidget);
     expect(find.text('Tell us about your venue!'), findsNothing);

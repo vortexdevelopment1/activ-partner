@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../Utills/common_utilities.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
+import 'bank_account_input.dart';
 
 const _background = Color(0xFFF7FBE3);
 const _purple = Color(0xFFA536E5);
@@ -797,7 +798,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   Widget _accountMatchIcon() => AnimatedBuilder(
         animation: Listenable.merge([_number, _confirm]),
         builder: (_, __) {
-          final matches = _number.text.trim().isNotEmpty &&
+          final matches = RegExp(r'^[0-9]{6,20}$').hasMatch(_number.text) &&
               _number.text.trim() == _confirm.text.trim();
           return matches
               ? Padding(
@@ -1070,6 +1071,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
   Widget _field(String label, String hint, TextEditingController controller,
           {bool required = true,
           bool numeric = false,
+          bool readOnly = false,
           String? Function(String?)? validator,
           bool ifsc = false,
           Widget? suffixIcon,
@@ -1080,30 +1082,56 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _label(label, required: required),
-            TextFormField(
-                key: ValueKey(label),
-                controller: controller,
-                enabled: !_saving,
-                style: _text(14),
-                decoration: _input(hint).copyWith(
-                  suffixIcon: suffixIcon,
-                  errorText: ifsc && _ifscError != null ? _ifscError : null,
-                ),
-                keyboardType:
-                    numeric ? TextInputType.number : TextInputType.text,
-                textCapitalization: ifsc
-                    ? TextCapitalization.characters
-                    : TextCapitalization.words,
-                inputFormatters: numeric
-                    ? [FilteringTextInputFormatter.digitsOnly]
-                    : ifsc
-                        ? [LengthLimitingTextInputFormatter(11)]
-                        : null,
-                onChanged: ifsc ? _ifscChanged : (_) => _validateLive(),
-                validator: validator ??
-                    (value) => required && (value ?? '').trim().isEmpty
-                        ? 'Enter $label.'
-                        : null),
+            Actions(
+              actions: <Type, Action<Intent>>{
+                CopySelectionTextIntent: DoNothingAction(),
+                PasteTextIntent: DoNothingAction(),
+              },
+              child: TextFormField(
+                  key: ValueKey(label),
+                  controller: controller,
+                  enabled: !_saving,
+                  readOnly: readOnly,
+                  enableInteractiveSelection: false,
+                  contextMenuBuilder: (_, __) => const SizedBox.shrink(),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: const <String>[],
+                  style: _text(14),
+                  decoration: _input(hint).copyWith(
+                    suffixIcon: suffixIcon,
+                    errorText: ifsc && _ifscError != null ? _ifscError : null,
+                  ),
+                  keyboardType:
+                      numeric ? TextInputType.number : TextInputType.text,
+                  textCapitalization: ifsc
+                      ? TextCapitalization.characters
+                      : TextCapitalization.words,
+                  inputFormatters: numeric
+                      ? [
+                          BankAccountInputFormatter(
+                              allowed: bankAccountDigits, maxLength: 20)
+                        ]
+                      : ifsc
+                          ? [
+                              BankAccountInputFormatter(
+                                  allowed: bankIfscPrefix,
+                                  maxLength: 11,
+                                  uppercase: true)
+                            ]
+                          : controller == _holder
+                              ? [
+                                  BankAccountInputFormatter(
+                                      allowed: bankHolderCharacters,
+                                      maxLength: 100)
+                                ]
+                              : null,
+                  onChanged: ifsc ? _ifscChanged : (_) => _validateLive(),
+                  validator: validator ??
+                      (value) => required && (value ?? '').trim().isEmpty
+                          ? 'Enter $label.'
+                          : null),
+            ),
             if (helperText != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -1117,7 +1145,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       canPop: !_saving,
       child: _shell(
         context,
-      widget.isUpdate ? 'Update Bank Details' : 'Add Bank Account',
+        widget.isUpdate ? 'Update Bank Details' : 'Add Bank Account',
         SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Form(
@@ -1130,20 +1158,24 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                   children: [
                     Text('Bank Details', style: _text(18, bold: true)),
                     const SizedBox(height: 20),
-                    _field('Account Holder Name', 'Rahul sharma', _holder),
-                    _field('Bank Name', 'HDFC Bank', _bank),
+                    _field('Account Holder Name', 'Rahul sharma', _holder,
+                        validator: (value) => isValidBankHolder(value ?? '')
+                            ? null
+                            : 'Enter a valid account holder name.'),
+                    _field('Bank Name', 'Auto-filled after IFSC verification',
+                        _bank,
+                        readOnly: true),
                     _field('Account Number', '1234567890', _number,
                         numeric: true,
-                        validator: (value) =>
-                            RegExp(r'^[0-9]{6,20}$')
-                                    .hasMatch((value ?? '').trim())
-                                ? null
-                                : 'Enter a valid account number.'),
+                        validator: (value) => RegExp(r'^[0-9]{6,20}$')
+                                .hasMatch((value ?? '').trim())
+                            ? null
+                            : 'Enter a valid account number.'),
                     _field('Confirm Account Number', '1234567890', _confirm,
                         numeric: true,
                         suffixIcon: _accountMatchIcon(),
                         validator: (value) =>
-                            (value ?? '').trim().isEmpty ||
+                            !RegExp(r'^[0-9]{6,20}$').hasMatch(value ?? '') ||
                                     value?.trim() != _number.text.trim()
                                 ? 'Account numbers do not match.'
                                 : null),
@@ -1155,7 +1187,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 child: SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               )
                             : _ifscValid
@@ -1182,8 +1215,9 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 : null,
                         helperColor: _ifscValid ? Colors.green : Colors.red,
                         validator: (value) => RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$')
-                                .hasMatch((value ?? '').trim().toUpperCase())
-                            && _ifscValid
+                                    .hasMatch(
+                                        (value ?? '').trim().toUpperCase()) &&
+                                _ifscValid
                             ? null
                             : 'Enter a valid IFSC code.'),
                     _label('Account Type'),
@@ -1200,22 +1234,27 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                     onTap: _saving
                                         ? null
                                         : () async {
-                                            final box = fieldContext
-                                                .findRenderObject() as RenderBox;
+                                            final box =
+                                                fieldContext.findRenderObject()
+                                                    as RenderBox;
                                             final overlay = Overlay.of(context)
-                                                .context
-                                                .findRenderObject() as RenderBox;
+                                                    .context
+                                                    .findRenderObject()
+                                                as RenderBox;
                                             final topLeft = box.localToGlobal(
                                                 Offset(0, box.size.height),
                                                 ancestor: overlay);
-                                            final bottomRight = box.localToGlobal(
-                                                Offset(box.size.width,
-                                                    box.size.height),
-                                                ancestor: overlay);
-                                            final selected = await showMenu<String>(
+                                            final bottomRight =
+                                                box.localToGlobal(
+                                                    Offset(box.size.width,
+                                                        box.size.height),
+                                                    ancestor: overlay);
+                                            final selected =
+                                                await showMenu<String>(
                                               context: context,
                                               position: RelativeRect.fromRect(
-                                                Rect.fromPoints(topLeft, bottomRight),
+                                                Rect.fromPoints(
+                                                    topLeft, bottomRight),
                                                 Offset.zero & overlay.size,
                                               ),
                                               color: Colors.white,
@@ -1227,15 +1266,21 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                               shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(8)),
-                                              items: ['Saving Account',
-                                                      'Current Account']
-                                                  .map((type) => PopupMenuItem<String>(
+                                              items: [
+                                                'Saving Account',
+                                                'Current Account'
+                                              ]
+                                                  .map((type) =>
+                                                      PopupMenuItem<String>(
                                                         value: type,
                                                         height: 48,
                                                         child: SizedBox(
-                                                            width: box.size.width - 32,
+                                                            width:
+                                                                box.size.width -
+                                                                    32,
                                                             child: Text(type,
-                                                                style: _text(14))),
+                                                                style:
+                                                                    _text(14))),
                                                       ))
                                                   .toList(),
                                             );
@@ -1247,8 +1292,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                           },
                                     child: InputDecorator(
                                       decoration: _input('Select account type')
-                                          .copyWith(
-                                              errorText: field.errorText),
+                                          .copyWith(errorText: field.errorText),
                                       child: Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
@@ -1271,7 +1315,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                             )),
                     const SizedBox(height: 14),
                     _field('Branch Name', 'Kormangala, Bengaluru', _branch,
-                        required: false),
+                        required: false, readOnly: true),
                     Text(
                         _lookingUp
                             ? 'Looking up IFSC...'
