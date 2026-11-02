@@ -15,6 +15,7 @@ import 'ForgotPasswordScreen.dart';
 import 'Home/HomeScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'MobileNumberScreen.dart';
+import 'VenueApprovedCongratsScreen.dart';
 import '../Database/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -341,6 +342,36 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(MY_APPROVED_VENUES_URL),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final list = (body['data'] is List) ? body['data'] as List : [];
+        for (final item in list) {
+          if (item is Map) {
+            final venueMap = Map<String, dynamic>.from(item);
+            final venueId = venueMap['id']?.toString() ?? '';
+            final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
+            final seenLocally = await SharedPreference.readStr('venue_approved_seen_$venueId');
+            if (!hasSeenBackend && seenLocally != 'true' && venueId.isNotEmpty) {
+              return venueMap;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      CommonUtilities.showLog('Error checking approved venues: $e');
+    }
+    return null;
+  }
+
   void _showMessage(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
@@ -350,27 +381,32 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<bool> _syncFirebasePartnerMapping(Map<String, dynamic> data) async {
     final rawPhone = data['partner']?['phone']?.toString() ?? '';
     final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 10) return false;
+    if (digits.length < 10) return widget.client != null;
     final nationalNumber = digits.length == 12 && digits.startsWith('91')
         ? digits.substring(2)
         : digits.substring(digits.length - 10);
-    final firebaseUser = FirebaseAuth.instance.currentUser ??
-        (await FirebaseAuth.instance.signInAnonymously()).user;
-    if (firebaseUser == null) return false;
-    await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
-    await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
-    final synced = await AuthService().registerWithNumber(
-      'IND (+91)',
-      nationalNumber,
-      'unknown',
-      'unknown',
-      'unknown',
-      'unknown',
-      'unknown',
-      DateTime.now().toIso8601String(),
-      'PartnerLogin',
-    );
-    return synced;
+    try {
+      final firebaseUser = FirebaseAuth.instance.currentUser ??
+          (await FirebaseAuth.instance.signInAnonymously()).user;
+      if (firebaseUser == null) return widget.client != null;
+      await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
+      await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
+      final synced = await AuthService().registerWithNumber(
+        'IND (+91)',
+        nationalNumber,
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        DateTime.now().toIso8601String(),
+        'PartnerLogin',
+      );
+      return synced;
+    } catch (_) {
+      if (widget.client != null) return true;
+      return false;
+    }
   }
 
   Future<void> handleLogin() async {
@@ -451,8 +487,28 @@ class _LoginScreenState extends State<LoginScreen> {
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");
           if (!mounted) return;
-          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, HomeScreen());
+
+          final unseenVenue = await _checkUnseenApprovedVenue(token);
+          if (!mounted) return;
+
+          if (unseenVenue != null) {
+            final venueId = unseenVenue['id']?.toString() ?? '';
+            final venueRef = unseenVenue['publicReference']?.toString() ??
+                unseenVenue['venueReference']?.toString() ??
+                (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
+            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+              context,
+              VenueApprovedCongratsScreen(
+                venueId: venueId,
+                venueReference: venueRef,
+                venueName: unseenVenue['name']?.toString(),
+                client: widget.client,
+              ),
+            );
+          } else {
+            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                context, HomeScreen(client: widget.client));
+          }
         } else {
           await SharedPreference.addStringToSF("is_active", "false");
           if (!mounted) return;

@@ -133,6 +133,8 @@ String get VENUE_ANSWERS_URL => "$BASE_URL/venues";
 String get COMMISSION_BY_CITY_URL => "$BASE_URL/commissions/city";
 String get MY_VENUES_URL => "$BASE_URL/venues/my-venues";
 String get MY_APPROVED_VENUES_URL => "$BASE_URL/venues/my-approved-venues";
+String MARK_WELCOME_SEEN_URL(String venueId) =>
+    "$BASE_URL/venues/$venueId/mark-welcome-seen";
 String get PAUSE_BOOKINGS_URL => "$BASE_URL/venues";
 String get MANAGE_SLOTS_URL => "$BASE_URL/venues/slots";
 String get AUTH_PROFILE_URL => "$BASE_URL/auth/partner/auth-profile";
