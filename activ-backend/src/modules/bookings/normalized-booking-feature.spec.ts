@@ -1,4 +1,4 @@
-import { normalizedBookingRoutesEnabled, prismaLegacyPaymentWritesEnabled, assertPrismaPaymentWriteCompatibility } from './normalized-booking-feature';
+import { assertNormalizedBookingWriteEnabled, normalizedBookingRoutesEnabled, prismaLegacyPaymentWritesEnabled, assertPrismaPaymentWriteCompatibility } from './normalized-booking-feature';
 
 describe('normalized booking rollout guard', () => {
   it('is disabled by default', () => {
@@ -28,7 +28,10 @@ describe('Prisma legacy payment writer rollout guard', () => {
     expect(prismaLegacyPaymentWritesEnabled(config)).toBe(true);
   });
 
-  it('rejects payment writes when normalized booking routes are disabled', () => {
+  it('rejects payment writes when either payment writer flag is disabled', () => {
+    const disabled = { get: jest.fn((_key: string, fallback?: unknown) => fallback) } as any;
+    expect(() => assertPrismaPaymentWriteCompatibility(disabled)).toThrow('NORMALIZED_BOOKING_ROUTES_ENABLED=true');
+
     const config = { get: jest.fn((key: string, fallback?: unknown) => key === 'PRISMA_LEGACY_PAYMENT_WRITES_ENABLED' ? 'true' : fallback) } as any;
     expect(() => assertPrismaPaymentWriteCompatibility(config)).toThrow(
       'require NORMALIZED_BOOKING_ROUTES_ENABLED=true',
@@ -42,5 +45,12 @@ describe('Prisma legacy payment writer rollout guard', () => {
       return fallback;
     }) } as any;
     expect(() => assertPrismaPaymentWriteCompatibility(config)).not.toThrow();
+  });
+});
+
+describe('normalized booking write guard', () => {
+  it('fails closed when normalized booking routes are disabled', () => {
+    const config = { get: jest.fn((_key: string, fallback?: unknown) => fallback) } as any;
+    expect(() => assertNormalizedBookingWriteEnabled(config)).toThrow('Normalized booking writes are disabled');
   });
 });

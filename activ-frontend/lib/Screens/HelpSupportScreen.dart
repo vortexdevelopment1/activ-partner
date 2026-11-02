@@ -142,7 +142,8 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
           ),
         );
       }
-      final streamed = await request.send().timeout(const Duration(seconds: 30));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 30));
       final response = await http.Response.fromStream(streamed);
       if (!mounted) return;
       if (response.statusCode != 200 && response.statusCode != 201) {
@@ -385,7 +386,7 @@ class _EmailSentScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                    fontSize: 16,
+                      fontSize: 16,
                       height: 1.35,
                       color: AppColors.darkBlack,
                     ),
@@ -413,7 +414,8 @@ class _EmailSentScreen extends StatelessWidget {
                           child: Text.rich(
                             TextSpan(
                               children: [
-                                const TextSpan(text: 'Expected response within '),
+                                const TextSpan(
+                                    text: 'Expected response within '),
                                 TextSpan(
                                   text: '24-48 hrs',
                                   style: TextStyle(fontWeight: FontWeight.w700),
@@ -487,19 +489,63 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
   Future<void> _loadSavedDetails() async {
     final name = checkString(await SharedPreference.readStr('owner_full_name'));
     final email = checkString(await SharedPreference.readStr('owner_email'));
-    final phone = checkString(await SharedPreference.readStr('userMobileNumber'));
+    final phone =
+        checkString(await SharedPreference.readStr('userMobileNumber'));
     final code = checkString(await SharedPreference.readStr('phoneCode'));
-    final rawVenue = checkString(await SharedPreference.readStr('venue_details'));
+    final rawVenue =
+        checkString(await SharedPreference.readStr('venue_details'));
+    final savedVenueName =
+        checkString(await SharedPreference.readStr('venue_name'));
     try {
       final venue = rawVenue.isEmpty ? {} : jsonDecode(rawVenue);
-      _venue.text = checkString(venue['venue_name']);
-      _city.text = checkString(venue['venue_city']);
+      if (venue is Map) {
+        final venueName = checkString(venue['venue_name']);
+        final city = checkString(venue['venue_city']);
+        _venue.text = venueName.isEmpty ? savedVenueName : venueName;
+        _city.text = city.isEmpty ? checkString(venue['city']) : city;
+      }
     } catch (_) {}
+    if (_venue.text.trim().isEmpty) _venue.text = savedVenueName;
     _partner.text = name;
     _email.text = email;
     _phone.text = phone.replaceAll('-', '');
     if (code.isNotEmpty) _phoneCode = code;
+    await _loadVenueIdentityFromApi();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadVenueIdentityFromApi() async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    if (token.isEmpty) return;
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(MY_VENUES_URL),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final body = jsonDecode(response.body);
+      final data = body is Map ? body['data'] : null;
+      final items = data is Map ? data['items'] : data;
+      if (items is! List || items.isEmpty || items.last is! Map) return;
+      final venue = Map<String, dynamic>.from(items.last as Map);
+      final venueName = checkString(venue['name']).isEmpty
+          ? checkString(venue['venue_name'])
+          : checkString(venue['name']);
+      final city = checkString(venue['city']).isEmpty
+          ? checkString(venue['venue_city'])
+          : checkString(venue['city']);
+      if (venueName.isNotEmpty) _venue.text = venueName;
+      if (city.isNotEmpty) _city.text = city;
+      if (venueName.isNotEmpty || city.isNotEmpty) {
+        await SharedPreference.addStringToSF('venue_name', venueName);
+        await SharedPreference.addStringToSF(
+            'venue_details',
+            jsonEncode({
+              'venue_name': venueName,
+              'venue_city': city,
+            }));
+      }
+    } catch (_) {}
   }
 
   @override
@@ -554,7 +600,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
       _time,
     ]) {
       if (field.text.trim().isEmpty) {
-        CommonUtilities.createSnackBar(context, 'Please fill all required fields');
+        CommonUtilities.createSnackBar(
+            context, 'Please fill all required fields');
         return;
       }
     }
@@ -607,11 +654,26 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Input(label: 'Venue Partner Name', required: true, controller: _partner),
+            _Input(
+              label: 'Venue Partner Name',
+              required: true,
+              controller: _partner,
+              readOnly: true,
+            ),
             const SizedBox(height: 8),
-            _Input(label: 'Venue Name', required: true, controller: _venue),
+            _Input(
+              label: 'Venue Name',
+              required: true,
+              controller: _venue,
+              readOnly: true,
+            ),
             const SizedBox(height: 8),
-            _Input(label: 'City', required: true, controller: _city),
+            _Input(
+              label: 'City',
+              required: true,
+              controller: _city,
+              readOnly: true,
+            ),
             const SizedBox(height: 8),
             _PhoneInput(
               label: 'Phone Number',
@@ -674,22 +736,34 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
 
   Future<void> _loadFaqs() async {
     final version = ++_loadVersion;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final response = await (widget.client?.get ?? http.get)(Uri.parse(FAQ_PUBLIC_URL))
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) throw const FormatException('FAQ request failed');
+      final response =
+          await (widget.client?.get ?? http.get)(Uri.parse(FAQ_PUBLIC_URL))
+              .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200)
+        throw const FormatException('FAQ request failed');
       final body = jsonDecode(response.body);
-      if (body is! Map || body['data'] is! List) throw const FormatException('Invalid FAQ response');
+      if (body is! Map || body['data'] is! List)
+        throw const FormatException('Invalid FAQ response');
       final items = <_FaqData>[];
       for (final entry in body['data']) {
-        if (entry is! Map || entry['question'] is! String || entry['answer'] is! String) {
+        if (entry is! Map ||
+            entry['question'] is! String ||
+            entry['answer'] is! String) {
           throw const FormatException('Invalid FAQ entry');
         }
-        if (entry['isActive'] != false) items.add(_FaqData(entry['question'], entry['answer']));
+        if (entry['isActive'] != false)
+          items.add(_FaqData(entry['question'], entry['answer']));
       }
       if (!mounted || version != _loadVersion) return;
-      setState(() { _faqs = items; _open = items.isEmpty ? -1 : 0; });
+      setState(() {
+        _faqs = items;
+        _open = items.isEmpty ? -1 : 0;
+      });
     } catch (_) {
       if (mounted && version == _loadVersion) {
         setState(() => _error = 'Unable to load FAQs.');
@@ -713,9 +787,13 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              ? Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Text(_error!),
-                  TextButton.icon(onPressed: _loadFaqs, icon: const Icon(Icons.refresh), label: const Text('Retry loading FAQs')),
+                  TextButton.icon(
+                      onPressed: _loadFaqs,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry loading FAQs')),
                 ]))
               : RefreshIndicator(
                   onRefresh: _loadFaqs,
@@ -723,18 +801,21 @@ class _FaqSupportScreenState extends State<FaqSupportScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(28, 30, 28, 20),
                     children: [
-            if (_faqs.isEmpty) const Padding(
-              padding: EdgeInsets.only(top: 30), child: Center(child: Text('No FAQs available yet.')),
-            ),
-            for (var i = 0; i < _faqs.length; i++) ...[
-              _FaqTile(
-                question: _faqs[i].question,
-                answer: _faqs[i].answer,
-                open: _open == i,
-                onTap: () => setState(() => _open = _open == i ? -1 : i),
-              ),
-              if (i != _faqs.length - 1) const SizedBox(height: 14),
-            ],
+                      if (_faqs.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 30),
+                          child: Center(child: Text('No FAQs available yet.')),
+                        ),
+                      for (var i = 0; i < _faqs.length; i++) ...[
+                        _FaqTile(
+                          question: _faqs[i].question,
+                          answer: _faqs[i].answer,
+                          open: _open == i,
+                          onTap: () =>
+                              setState(() => _open = _open == i ? -1 : i),
+                        ),
+                        if (i != _faqs.length - 1) const SizedBox(height: 14),
+                      ],
                     ],
                   ),
                 ),
@@ -959,6 +1040,7 @@ class _Input extends StatelessWidget {
     this.required = false,
     this.hint = '',
     this.maxLines = 1,
+    this.readOnly = false,
   });
 
   final String label;
@@ -966,6 +1048,7 @@ class _Input extends StatelessWidget {
   final bool required;
   final String hint;
   final int maxLines;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -977,6 +1060,7 @@ class _Input extends StatelessWidget {
         TextField(
           controller: controller,
           maxLines: maxLines,
+          readOnly: readOnly,
           style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15),
           decoration: InputDecoration(
             hintText: hint,
@@ -985,7 +1069,7 @@ class _Input extends StatelessWidget {
               color: AppColors.hintColor,
             ),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: readOnly ? AppColors.gray2 : Colors.white,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             border: OutlineInputBorder(
@@ -1208,7 +1292,8 @@ class _PrimaryButton extends StatelessWidget {
           foregroundColor: const Color(0xFFD8F34A),
           disabledBackgroundColor: Colors.black54,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         child: Text(
           text,

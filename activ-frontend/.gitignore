@@ -77,3 +77,17 @@ logs/
 !.env.example
 
 # Web
+
+# Old TypeORM backup
+typeorm-archive-20261029/
+
+# Logs
+*.log
+hs_err_pid*
+replay_pid*
+
+# macOS
+.DS_Store
+
+# Old performance reports
+ACTIV_PARTNER_*PERFORMANCE*.md

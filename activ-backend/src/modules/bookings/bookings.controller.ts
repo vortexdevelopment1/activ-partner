@@ -32,7 +32,7 @@ import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import type { UserRecord as User } from '../../common/domain-types';
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
-import { normalizedBookingRoutesEnabled } from './normalized-booking-feature';
+import { assertNormalizedBookingWriteEnabled } from './normalized-booking-feature';
 
 @ApiTags("Bookings")
 @ApiBearerAuth()
@@ -52,9 +52,8 @@ export class BookingsController {
     @CurrentUser() user: User,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    const data = normalizedBookingRoutesEnabled(this.config)
-      ? await this.bookingsService.createNormalizedFromLegacy(createBookingDto, user.id, idempotencyKey)
-      : await this.bookingsService.create(createBookingDto, user.id);
+    assertNormalizedBookingWriteEnabled(this.config);
+    const data = await this.bookingsService.createNormalizedFromLegacy(createBookingDto, user.id, idempotencyKey);
     return { message: "Booking created successfully", data };
   }
 

@@ -226,7 +226,11 @@ class OnboardingButton extends StatelessWidget {
 }
 
 class AppSkeleton extends StatelessWidget {
-  const AppSkeleton({super.key, this.width = double.infinity, this.height = 18, this.radius = 8});
+  const AppSkeleton(
+      {super.key,
+      this.width = double.infinity,
+      this.height = 18,
+      this.radius = 8});
 
   final double width;
   final double height;
@@ -470,10 +474,15 @@ class _OnboardingSupportMenuState extends State<OnboardingSupportMenu> {
           final availableAbove =
               math.max(0.0, anchorRect.top - padding.top - edgePadding - gap);
           final availableBelow = math.max(
-              0.0, screenSize.height - padding.bottom - edgePadding - gap - anchorRect.bottom);
+              0.0,
+              screenSize.height -
+                  padding.bottom -
+                  edgePadding -
+                  gap -
+                  anchorRect.bottom);
           final showBelow = availableBelow > availableAbove;
-          final height = math.max(
-              0.0, showBelow ? availableBelow : availableAbove);
+          final height =
+              math.max(0.0, showBelow ? availableBelow : availableAbove);
           final left = (anchorRect.right - width)
               .clamp(edgePadding, screenSize.width - width - edgePadding)
               .toDouble();
@@ -567,9 +576,8 @@ class _LoginFaqDialogState extends State<_LoginFaqDialog> {
       }
 
       final decoded = jsonDecode(response.body);
-      final records = decoded is Map<String, dynamic>
-          ? decoded['data']
-          : decoded;
+      final records =
+          decoded is Map<String, dynamic> ? decoded['data'] : decoded;
       final faqs = records is List
           ? records
               .whereType<Map>()
@@ -698,8 +706,8 @@ class _LoginFaqDialogState extends State<_LoginFaqDialog> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(_error!,
-                                      style: OnboardingStyles.body.copyWith(
-                                          fontSize: 16)),
+                                      style: OnboardingStyles.body
+                                          .copyWith(fontSize: 16)),
                                   TextButton(
                                     onPressed: _loadFaqs,
                                     child: const Text('Retry'),
@@ -767,17 +775,51 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
   }
 
   Future<void> _loadSavedDetails() async {
-    _partner.text = checkString(await SharedPreference.readStr('owner_full_name'));
+    _partner.text =
+        checkString(await SharedPreference.readStr('owner_full_name'));
     _email.text = checkString(await SharedPreference.readStr('owner_email'));
-    _phone.text = checkString(await SharedPreference.readStr('userMobileNumber'))
-        .replaceAll(RegExp(r'\D'), '');
-    final rawVenue = checkString(await SharedPreference.readStr('venue_details'));
+    _phone.text =
+        checkString(await SharedPreference.readStr('userMobileNumber'))
+            .replaceAll(RegExp(r'\D'), '');
+    final rawVenue =
+        checkString(await SharedPreference.readStr('venue_details'));
+    final savedVenueName =
+        checkString(await SharedPreference.readStr('venue_name'));
     try {
       final venue = rawVenue.isEmpty ? {} : jsonDecode(rawVenue);
-      _venue.text = checkString(venue['venue_name']);
-      _city.text = checkString(venue['venue_city']);
+      final venueName = checkString(venue['venue_name']);
+      final city = checkString(venue['venue_city']);
+      _venue.text = venueName.isEmpty ? savedVenueName : venueName;
+      _city.text = city.isEmpty ? checkString(venue['city']) : city;
     } catch (_) {}
+    if (_venue.text.trim().isEmpty) _venue.text = savedVenueName;
+    await _loadVenueIdentityFromApi();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadVenueIdentityFromApi() async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    if (token.isEmpty) return;
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(MY_VENUES_URL),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200 && response.statusCode != 201) return;
+      final body = jsonDecode(response.body);
+      final data = body is Map ? body['data'] : null;
+      final items = data is Map ? data['items'] : data;
+      if (items is! List || items.isEmpty || items.last is! Map) return;
+      final venue = Map<String, dynamic>.from(items.last as Map);
+      final venueName = checkString(venue['name']).isEmpty
+          ? checkString(venue['venue_name'])
+          : checkString(venue['name']);
+      final city = checkString(venue['city']).isEmpty
+          ? checkString(venue['venue_city'])
+          : checkString(venue['city']);
+      if (venueName.isNotEmpty) _venue.text = venueName;
+      if (city.isNotEmpty) _city.text = city;
+    } catch (_) {}
   }
 
   @override
@@ -800,7 +842,8 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
     if (_submitting) return;
     final required = [_partner, _venue, _city, _phone, _email, _query];
     if (required.any((field) => field.text.trim().isEmpty)) {
-      CommonUtilities.createSnackBar(context, 'Please fill all required fields');
+      CommonUtilities.createSnackBar(
+          context, 'Please fill all required fields');
       return;
     }
     setState(() => _submitting = true);
@@ -820,8 +863,7 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
           'query': _query.text.trim(),
           'callbackDate':
               _callbackDate.isEmpty ? _defaultCallbackDate : _callbackDate,
-          'callbackTime':
-              _callbackTime.isEmpty ? '10:00 AM' : _callbackTime,
+          'callbackTime': _callbackTime.isEmpty ? '10:00 AM' : _callbackTime,
         }),
       );
       if (!mounted) return;
@@ -890,9 +932,10 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _dialogInput('Venue Partner Name', _partner),
-                          _dialogInput('Venue Name', _venue),
-                          _dialogInput('City', _city),
+                          _dialogInput('Venue Partner Name', _partner,
+                              readOnly: true),
+                          _dialogInput('Venue Name', _venue, readOnly: true),
+                          _dialogInput('City', _city, readOnly: true),
                           _dialogPhoneInput(),
                           _dialogInput('Email', _email,
                               keyboardType: TextInputType.emailAddress),
@@ -1028,6 +1071,7 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
     TextEditingController controller, {
     int maxLines = 1,
     TextInputType? keyboardType,
+    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -1040,6 +1084,7 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
+            readOnly: readOnly,
             enabled: !_submitting,
             style: OnboardingStyles.body.copyWith(fontSize: 15),
             decoration: _dialogDecoration(),

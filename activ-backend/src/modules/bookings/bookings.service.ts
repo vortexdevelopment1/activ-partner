@@ -22,6 +22,9 @@ import { LegacySlotResolver } from './legacy-slot-resolver';
 import { NormalizedBookingHoldService } from './normalized-booking-hold.service';
 import { buildLegacyIdempotencyContext } from './legacy-idempotency';
 import { lockSlotsForCapacity } from './slot-capacity-coordinator';
+import { extractLegacyIdempotencyKey } from './legacy-idempotency';
+import { assertNormalizedBookingWriteEnabled } from './normalized-booking-feature';
+import { ConfigService } from '@nestjs/config';
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
@@ -31,6 +34,7 @@ export class BookingsService {
   private readonly normalizedHoldService = new NormalizedBookingHoldService();
   constructor(
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   private calculateDuration(startTime: string, endTime: string): number {
@@ -47,10 +51,8 @@ export class BookingsService {
   }
 
   /**
-   * Inactive replacement for POST /bookings. The controller deliberately does
-   * not call this until all competing writers are cut over. A stable key is
-   * mandatory for this normalized path; legacy requests without one remain on
-   * the existing implementation and are not advertised as retry-idempotent.
+   * Rollout-gated normalized writer for POST /bookings. A validated key is
+   * mandatory; requests without one are rejected before slot resolution.
    */
   async createNormalizedFromLegacy(
     createBookingDto: CreateBookingDto,
@@ -58,10 +60,12 @@ export class BookingsService {
     idempotencyKey: string | undefined,
     timezone = 'Asia/Kolkata',
   ) {
+    assertNormalizedBookingWriteEnabled(this.config);
+    const validatedIdempotencyKey = extractLegacyIdempotencyKey({ 'idempotency-key': idempotencyKey });
+    if (!validatedIdempotencyKey) throw new ConflictException('Normalized booking requires a valid Idempotency-Key header');
     const resolver = new LegacySlotResolver(this.prisma);
     const resolved = await resolver.resolve(createBookingDto, timezone);
-    const identity = buildLegacyIdempotencyContext(createBookingDto, userId, resolved.slotId, { 'idempotency-key': idempotencyKey });
-    if (!identity.key) throw new ConflictException('Normalized booking requires an Idempotency-Key header');
+    const identity = buildLegacyIdempotencyContext(createBookingDto, userId, resolved.slotId, { 'idempotency-key': validatedIdempotencyKey });
 
     const pending = await this.prisma.$transaction(async tx => {
       const hold = await this.normalizedHoldService.createHold(
@@ -233,12 +237,9 @@ export class BookingsService {
   async create(
     createBookingDto: CreateBookingDto,
     userId: string,
+    idempotencyKey?: string,
   ): Promise<any> {
-    return this.createNormalizedFromLegacy(
-      createBookingDto,
-      userId,
-      `legacy:${userId}:${createBookingDto.venueId}:${createBookingDto.serviceId}:${createBookingDto.bookingDate}:${createBookingDto.startTime}`,
-    );
+    return this.createNormalizedFromLegacy(createBookingDto, userId, idempotencyKey);
   }
 
   async findAll(pagination: PaginationDto, status?: BookingStatus) {
