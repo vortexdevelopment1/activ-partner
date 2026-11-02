@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { partnersApi } from '../../api/partners.api';
+import { PartnerDocumentUpload } from './PartnerDocumentUpload';
+import { partnersApi, type PartnerDocumentKind } from '../../api/partners.api';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../hooks/useToast';
 
@@ -14,6 +15,9 @@ const bankFields = [['accountHolderName', 'Account holder'], ['bankName', 'Bank 
 
 export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ id, onClose }) => {
   const submitting = useRef(false);
+  const uploadingRef = useRef(false);
+  const [uploading, setUploading] = useState(false);
+  const onUploadBusyChange = (busy: boolean) => { uploadingRef.current = busy; setUploading(busy); };
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [changes, setChanges] = useState<Record<string, string>>({});
@@ -42,17 +46,24 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
   const updateBank = (index: number, field: string, value: string | boolean) => {
     setBanks(accounts.map((bank, i) => ({ ...bank, ...(i === index ? { [field]: value } : field === 'isPrimary' && value ? { isPrimary: false } : {}) })));
   };
-  const close = () => { if (!mutation.isPending) onClose(); };
+  const close = () => { if (!mutation.isPending && !uploadingRef.current) onClose(); };
+  const documentFields: Record<string, { kind: PartnerDocumentKind; label: string }> = {
+    avatarUrl: { kind: 'avatar', label: 'profile photo' },
+    panCardUrl: { kind: 'pan', label: 'PAN document' },
+    gstinDocUrl: { kind: 'gst', label: 'GST document' },
+  };
   return <Modal open onClose={close} title="Partner details" size="xl" subtitle={id}>
     {query.isLoading ? <p role="status">Loading partner details...</p> : query.isError ? <div role="alert">Could not load partner details. <button className="btn-secondary" onClick={() => query.refetch()}>Retry</button></div> : partner ?
-      <form className="space-y-6" onSubmit={event => { event.preventDefault(); if (submitting.current) return; submitting.current = true; mutation.mutate(); }}>
-        <fieldset disabled={mutation.isPending} className="space-y-6">
+      <form className="space-y-6" onSubmit={event => { event.preventDefault(); if (submitting.current || uploadingRef.current) return; submitting.current = true; mutation.mutate(); }}>
+        <fieldset disabled={mutation.isPending || uploading} className="space-y-6">
           <p className="text-xs text-gray-500">Created: {new Date(partner.createdAt).toLocaleString()} | Updated: {new Date(partner.updatedAt).toLocaleString()} | Venues: {partner.venueCount ?? 0}</p>
           {groups.map(group => <section key={group.title} className="space-y-3">
             <h4 className="font-semibold text-gray-900">{group.title}</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{group.fields.map(([key, label]) => <label key={key} className="text-sm text-gray-600 space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{group.fields.map(([key, label]) => <div key={key}><label className="block text-sm text-gray-600 space-y-1">
               <span>{label}</span><input className="input w-full" value={value(key)} required={key === 'phone' || key === 'legalName'} type={key.toLowerCase().includes('email') ? 'email' : 'text'} onChange={event => setChanges(previous => ({ ...previous, [key]: event.target.value }))} />
-            </label>)}</div>
+            </label>
+              {documentFields[key] && <PartnerDocumentUpload partnerId={id} {...documentFields[key]} onBusyChange={onUploadBusyChange} onUploaded={url => setChanges(previous => ({ ...previous, [key]: url }))} />}
+            </div>)}</div>
           </section>)}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[['status', 'Account status', ['PENDING', 'ACTIVE', 'SUSPENDED']], ['kycStatus', 'Verification status', ['PENDING', 'APPROVED', 'REJECTED']]].map(([key, label, options]) => <label key={key as string} className="text-sm text-gray-600 space-y-1"><span>{label}</span>
@@ -64,13 +75,14 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
             {accounts.map((bank, index) => <div key={bank.id ?? index} className="border rounded-lg p-3 space-y-3">
               <h5 className="text-sm font-medium">Account {index + 1}</h5>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{bankFields.map(([key, label]) => <label key={key} className="text-sm text-gray-600 space-y-1"><span>{label}</span><input className="input w-full" required={['accountHolderName', 'bankName', 'accountNumber', 'ifscCode'].includes(key)} value={bank[key] ?? ''} onChange={event => updateBank(index, key, event.target.value)} /></label>)}</div>
+              <PartnerDocumentUpload partnerId={id} kind="cancelled-cheque" label={`cancelled cheque for account ${index + 1}`} onBusyChange={onUploadBusyChange} onUploaded={url => updateBank(index, 'cancelledChequeUrl', url)} />
               <label className="block text-sm">Status<select className="input w-full" value={bank.status} onChange={event => updateBank(index, 'status', event.target.value)}>{['UNDER_REVIEW', 'APPROVED', 'REJECTED'].map(status => <option key={status}>{status}</option>)}</select></label>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={bank.isPrimary} onChange={event => updateBank(index, 'isPrimary', event.target.checked)} />Primary account</label>
             </div>)}
             <button type="button" className="btn-secondary" onClick={() => setBanks([...accounts, { accountHolderName: '', bankName: '', accountNumber: '', ifscCode: '', accountType: '', branchName: '', cancelledChequeUrl: '', upiId: '', status: 'UNDER_REVIEW', isPrimary: false, rejectionReason: '' }])}>Add bank account</button>
           </section>
         </fieldset>
-        <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" disabled={mutation.isPending} onClick={close}>Cancel</button><button type="submit" className="btn-primary" disabled={mutation.isPending || (!Object.keys(changes).length && !banks)}>{mutation.isPending ? 'Saving...' : 'Save changes'}</button></div>
+        <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" disabled={mutation.isPending || uploading} onClick={close}>Cancel</button><button type="submit" className="btn-primary" disabled={mutation.isPending || uploading || (!Object.keys(changes).length && !banks)}>{mutation.isPending ? 'Saving...' : 'Save changes'}</button></div>
       </form> : <p>Partner not found.</p>}
   </Modal>;
 };

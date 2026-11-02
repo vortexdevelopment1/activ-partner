@@ -1,3 +1,4 @@
+export type PartnerDocumentKind = 'avatar' | 'pan' | 'gst' | 'cancelled-cheque';
 import api from './axios';
 
 export const partnersApi = {
@@ -9,6 +10,13 @@ export const partnersApi = {
     lastName?: string;
     email?: string;
   }) => api.post('/partners', data),
+  uploadDocument: (id: string, kind: PartnerDocumentKind, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/partners/${id}/documents/${kind}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
   getById: (id: string) => api.get(`/partners/${id}`),
   update: (id: string, data: object) => api.patch(`/partners/${id}`, data),
   toggleStatus: (id: string) => api.patch(`/partners/${id}/toggle-status`),
