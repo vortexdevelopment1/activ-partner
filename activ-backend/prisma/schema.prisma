@@ -564,6 +564,7 @@ model partner_service_questions {
   question                   String
   type                       PartnerServiceQuestionType
   options                    Json                        @default("[]")
+  unit                       String?
   is_required                Boolean                     @default(false)
   sort_order                 Int                         @default(0)
   created_at                 DateTime                    @default(now())
@@ -1028,6 +1029,7 @@ enum PartnerServiceQuestionType {
   TEXT
   TEXTAREA
   NUMBER
+  NUMBER_STEPPER
   SELECT
   MULTISELECT
   RADIO

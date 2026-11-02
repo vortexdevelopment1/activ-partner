@@ -31,6 +31,7 @@ export class QuestionsService {
       isRequired: question.is_required,
       isActive: true,
       order: question.sort_order,
+      unit: question.unit ?? null,
       placeholder: null,
       helperText: null,
       minLength: null,

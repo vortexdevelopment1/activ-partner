@@ -8,6 +8,7 @@ import { seedAdmin } from './admin.seed';
 import { seedPartner } from './partner.seed';
 import { seedCategories } from './categories.seed';
 import { seedQuestions } from './questions.seed';
+import { seedActivityDetailFields } from './activity-detail-fields.seed';
 
 const envFile = config({ path: '.env' }).parsed ?? {};
 const localEnvFile = config({ path: '.env.local' }).parsed ?? {};
@@ -29,7 +30,8 @@ async function runSeeds() {
         await seedPartner(prisma);
       }
       await seedCategories(prisma);
-      await seedQuestions(prisma);
+      // await seedQuestions(prisma); // Replaced by seedActivityDetailFields
+      await seedActivityDetailFields(prisma);
     }
 
     console.log('All seeds completed successfully.');
