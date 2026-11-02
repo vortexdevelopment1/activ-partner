@@ -48,7 +48,8 @@ describe('partner password recovery on the current Prisma schema', () => {
     challenge = null;
     await service.forgotPassword({ email: ' Partner@Example.com ' });
     expect(prisma.users.findFirst).toHaveBeenCalledWith({
-      where: { email: { equals: 'Partner@Example.com', mode: 'insensitive' }, partner_users: { some: {} } },
+      where: { email: { equals: 'Partner@Example.com', mode: 'insensitive' }, status: 'ACTIVE',
+        partner_users: { some: { partners: { status: 'ACTIVE' } } } },
     });
     const code = mail.sendPasswordResetEmail.mock.calls[0][0].code;
     expect(code).toMatch(/^\d{4}$/);
@@ -57,11 +58,13 @@ describe('partner password recovery on the current Prisma schema', () => {
     expect(challenge.code_hash).not.toBe(code);
   });
 
-  it('returns generic success without email delivery for an unknown account', async () => {
+  it('rejects an unregistered email before creating or sending a reset OTP', async () => {
     prisma.users.findFirst.mockResolvedValue(null);
-    await expect(service.forgotPassword({ email: 'unknown@example.com' })).resolves.toHaveProperty('message');
+    await expect(service.forgotPassword({ email: 'unknown@example.com' }))
+      .rejects.toThrow('This email is not registered for an active ACTIV Partner account.');
     expect(mail.sendPasswordResetEmail).not.toHaveBeenCalled();
     expect(prisma.otp_challenges.create).not.toHaveBeenCalled();
+    expect(prisma.otp_challenges.findFirst).not.toHaveBeenCalled();
   });
 
   it('verifies a code without consuming it or changing the password', async () => {

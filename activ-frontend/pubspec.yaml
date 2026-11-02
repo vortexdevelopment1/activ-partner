@@ -122,6 +122,8 @@ flutter:
     - assets/password_reset_success.png
     - assets/password_reset_confetti.png
     - assets/logo.png
+    - assets/activ_partner_logo.png
+    - assets/venue_approved_celebration.png
     - assets/activ_tm.svg
     - assets/ic_activ.svg
     - assets/ic_hour.png

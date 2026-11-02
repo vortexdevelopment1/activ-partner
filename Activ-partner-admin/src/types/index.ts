@@ -50,6 +50,11 @@ export interface Partner {
   bankAccountNumber?: string;
   bankIfscCode?: string;
   bankAccountHolderName?: string;
+  bankName?: string;
+  bankAccountType?: string;
+  bankBranchName?: string;
+  bankCancelledChequeUrl?: string;
+  bankStatus?: string;
   isVerified: boolean;
   isActive: boolean;
   logoUrl?: string;
@@ -171,6 +176,7 @@ export interface Venue {
   venueReference?: string;
   partnerId: string;
   partner: User;
+  bankAccount?: BankAccount | null;
   categoryId: string;
   category: Category;
   categories?: Category[];

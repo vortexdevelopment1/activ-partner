@@ -54,6 +54,7 @@ class _BookingItem {
   final String persons;
   final String status;
   final DateTime? startsAt;
+  final Map<String, dynamic> booking;
 
   const _BookingItem({
     required this.name,
@@ -63,6 +64,7 @@ class _BookingItem {
     required this.amount,
     required this.persons,
     required this.status,
+    required this.booking,
     this.startsAt,
   });
 }
@@ -81,8 +83,6 @@ class _State extends State<HomeScreen> {
   String venueName = '';
   String _venueId = '';
   String _avatar = '';
-  bool _isBookingsPaused = false;
-  bool _pausing = false;
   bool _isPartner = true;
   bool _permBooking = true;
   bool _permPricing = true;
@@ -96,17 +96,65 @@ class _State extends State<HomeScreen> {
 
   // ── Dummy stats ──────────────────────────────────────────────────────────────
   List<_StatItem> _approvedStats = const [
-    _StatItem(label: 'Bookings', value: '0', change: '0 vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
-    _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
-    _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
-    _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
+    _StatItem(
+        label: 'Bookings',
+        value: '0',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.calendar_today_outlined,
+        iconColor: Color(0xFF9E9E9E)),
+    _StatItem(
+        label: 'Revenue',
+        value: '\u20b90',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.currency_rupee,
+        iconColor: Color(0xFF7C3AED)),
+    _StatItem(
+        label: 'Availability',
+        value: '0%',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.access_time,
+        iconColor: Color(0xFF16A34A)),
+    _StatItem(
+        label: 'Avg Rating',
+        value: '0.0',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.star_border,
+        iconColor: Color(0xFFF59E0B)),
   ];
 
   final List<_StatItem> _newVenueStats = const [
-    _StatItem(label: 'Bookings', value: '0', change: '0% vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
-    _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
-    _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
-    _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
+    _StatItem(
+        label: 'Bookings',
+        value: '0',
+        change: '0% vs last month',
+        positive: true,
+        icon: Icons.calendar_today_outlined,
+        iconColor: Color(0xFF9E9E9E)),
+    _StatItem(
+        label: 'Revenue',
+        value: '\u20b90',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.currency_rupee,
+        iconColor: Color(0xFF7C3AED)),
+    _StatItem(
+        label: 'Availability',
+        value: '0%',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.access_time,
+        iconColor: Color(0xFF16A34A)),
+    _StatItem(
+        label: 'Avg Rating',
+        value: '0.0',
+        change: '0 vs last month',
+        positive: true,
+        icon: Icons.star_border,
+        iconColor: Color(0xFFF59E0B)),
   ];
 
   List<_BookingItem> _bookings = const [];
@@ -145,7 +193,9 @@ class _State extends State<HomeScreen> {
     if (!mounted) return;
     if (userType == 'team_member') {
       Map perms = {};
-      try { perms = jsonDecode(permsStr); } catch (_) {}
+      try {
+        perms = jsonDecode(permsStr);
+      } catch (_) {}
       setState(() {
         _isPartner = false;
         _permBooking = perms['bookingManagement'] == true;
@@ -181,16 +231,17 @@ class _State extends State<HomeScreen> {
           final venue = items.last;
           final name = venue['name']?.toString() ?? '';
           final id = venue['id']?.toString() ?? '';
-          final paused = venue['bookingAccept'] == false;
           if (mounted) {
             setState(() {
-            if (name.isNotEmpty) { venueName = name; }
-            _venueId = id;
-            _isBookingsPaused = paused;
-            _isApproved = true;
-            _needsPricing = dashboardNeedsPricing(Map<String, dynamic>.from(venue));
-            _setupError = null;
-          });
+              if (name.isNotEmpty) {
+                venueName = name;
+              }
+              _venueId = id;
+              _isApproved = true;
+              _needsPricing =
+                  dashboardNeedsPricing(Map<String, dynamic>.from(venue));
+              _setupError = null;
+            });
           }
           if (venue is Map) {
             await _loadDashboardData(Map<String, dynamic>.from(venue), token);
@@ -206,21 +257,31 @@ class _State extends State<HomeScreen> {
             _bookings = const [];
           });
         }
-        if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
-          final team = await (widget.client?.get ?? http.get)(Uri.parse(TEAM_URL),
-            headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 15));
-          if (team.statusCode != 200) throw Exception('Unable to check team setup.');
+        if (items.isNotEmpty &&
+            checkString(await SharedPreference.readStr('user_type')) !=
+                'team_member') {
+          final team = await (widget.client?.get ?? http.get)(
+                  Uri.parse(TEAM_URL),
+                  headers: {'Authorization': 'Bearer $token'})
+              .timeout(const Duration(seconds: 15));
+          if (team.statusCode != 200)
+            throw Exception('Unable to check team setup.');
           final data = jsonDecode(team.body)['data'] as List;
           if (mounted) setState(() => _needsTeam = data.isEmpty);
         }
-        if (items.isNotEmpty && checkString(await SharedPreference.readStr('user_type')) != 'team_member') {
+        if (items.isNotEmpty &&
+            checkString(await SharedPreference.readStr('user_type')) !=
+                'team_member') {
           final accounts = await (widget.client?.get ?? http.get)(
             Uri.parse('$BASE_URL/bank-accounts/my'),
             headers: {'Authorization': 'Bearer $token'},
           ).timeout(const Duration(seconds: 15));
-          if (accounts.statusCode != 200) throw Exception('Unable to check bank account setup.');
+          if (accounts.statusCode != 200)
+            throw Exception('Unable to check bank account setup.');
           final accountData = jsonDecode(accounts.body)['data'];
-          if (mounted) setState(() => _needsBankAccount = accountData is List && accountData.isEmpty);
+          if (mounted)
+            setState(() =>
+                _needsBankAccount = accountData is List && accountData.isEmpty);
         }
       } else {
         PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
@@ -229,7 +290,11 @@ class _State extends State<HomeScreen> {
         throw Exception('Unable to check venue setup.');
       }
     } catch (e) {
-      PerformanceLogger.apiEnd(requestId, 'GET', MY_APPROVED_VENUES_URL, 1,
+      PerformanceLogger.apiEnd(
+          requestId,
+          'GET',
+          MY_APPROVED_VENUES_URL,
+          1,
           DateTime.now().difference(started).inMilliseconds,
           e is TimeoutException ? 'timeout' : 'network_error');
       CommonUtilities.showLog('_fetchVenueName error: $e');
@@ -238,10 +303,34 @@ class _State extends State<HomeScreen> {
   }
 
   List<_StatItem> _emptyStats() => const [
-        _StatItem(label: 'Bookings', value: '0', change: '0 vs last month', positive: true, icon: Icons.calendar_today_outlined, iconColor: Color(0xFF9E9E9E)),
-        _StatItem(label: 'Revenue', value: '\u20b90', change: '0 vs last month', positive: true, icon: Icons.currency_rupee, iconColor: Color(0xFF7C3AED)),
-        _StatItem(label: 'Availability', value: '0%', change: '0 vs last month', positive: true, icon: Icons.access_time, iconColor: Color(0xFF16A34A)),
-        _StatItem(label: 'Avg Rating', value: '0.0', change: '0 vs last month', positive: true, icon: Icons.star_border, iconColor: Color(0xFFF59E0B)),
+        _StatItem(
+            label: 'Bookings',
+            value: '0',
+            change: '0 vs last month',
+            positive: true,
+            icon: Icons.calendar_today_outlined,
+            iconColor: Color(0xFF9E9E9E)),
+        _StatItem(
+            label: 'Revenue',
+            value: '\u20b90',
+            change: '0 vs last month',
+            positive: true,
+            icon: Icons.currency_rupee,
+            iconColor: Color(0xFF7C3AED)),
+        _StatItem(
+            label: 'Availability',
+            value: '0%',
+            change: '0 vs last month',
+            positive: true,
+            icon: Icons.access_time,
+            iconColor: Color(0xFF16A34A)),
+        _StatItem(
+            label: 'Avg Rating',
+            value: '0.0',
+            change: '0 vs last month',
+            positive: true,
+            icon: Icons.star_border,
+            iconColor: Color(0xFFF59E0B)),
       ];
 
   Future<void> _loadDashboardData(
@@ -249,7 +338,8 @@ class _State extends State<HomeScreen> {
     if (_dashboardLoading) return;
     if (mounted) setState(() => _dashboardLoading = true);
     try {
-      final services = venue['services'] is List ? venue['services'] as List : const [];
+      final services =
+          venue['services'] is List ? venue['services'] as List : const [];
       final recent = <_BookingItem>[];
       final occupancies = <num>[];
       final ratings = <num>[];
@@ -257,10 +347,9 @@ class _State extends State<HomeScreen> {
       num revenue = 0;
 
       for (final service in services.whereType<Map>()) {
-        final serviceId = (service['id'] ??
-                service['activityId'] ??
-                service['activity_id'])
-            ?.toString();
+        final serviceId =
+            (service['id'] ?? service['activityId'] ?? service['activity_id'])
+                ?.toString();
         if (serviceId == null || serviceId.isEmpty) continue;
         final response = await (widget.client?.get ?? http.get)(
           Uri.parse('$BASE_URL/venues/activities/$serviceId/management'),
@@ -281,13 +370,15 @@ class _State extends State<HomeScreen> {
         final occupancy = _asNullableNum(data['occupancy']);
         if (occupancy != null) occupancies.add(occupancy);
 
-        final reviews = data['reviews'] is List ? data['reviews'] as List : const [];
+        final reviews =
+            data['reviews'] is List ? data['reviews'] as List : const [];
         for (final review in reviews.whereType<Map>()) {
           final rating = _asNullableNum(review['rating']);
           if (rating != null) ratings.add(rating);
         }
 
-        final bookings = data['bookings'] is List ? data['bookings'] as List : const [];
+        final bookings =
+            data['bookings'] is List ? data['bookings'] as List : const [];
         for (final booking in bookings.whereType<Map>()) {
           recent.add(_bookingFromManagement(
             Map<String, dynamic>.from(booking),
@@ -312,10 +403,34 @@ class _State extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _approvedStats = [
-          _StatItem(label: 'Bookings', value: '$bookingCount', change: 'Live data', positive: true, icon: Icons.calendar_today_outlined, iconColor: const Color(0xFF9E9E9E)),
-          _StatItem(label: 'Revenue', value: _formatMoney(revenue), change: 'Live data', positive: true, icon: Icons.currency_rupee, iconColor: const Color(0xFF7C3AED)),
-          _StatItem(label: 'Availability', value: '$avgOccupancy%', change: 'Next 7 days', positive: true, icon: Icons.access_time, iconColor: const Color(0xFF16A34A)),
-          _StatItem(label: 'Avg Rating', value: avgRating.toStringAsFixed(1), change: '${ratings.length} reviews', positive: true, icon: Icons.star_border, iconColor: const Color(0xFFF59E0B)),
+          _StatItem(
+              label: 'Bookings',
+              value: '$bookingCount',
+              change: 'Live data',
+              positive: true,
+              icon: Icons.calendar_today_outlined,
+              iconColor: const Color(0xFF9E9E9E)),
+          _StatItem(
+              label: 'Revenue',
+              value: _formatMoney(revenue),
+              change: 'Live data',
+              positive: true,
+              icon: Icons.currency_rupee,
+              iconColor: const Color(0xFF7C3AED)),
+          _StatItem(
+              label: 'Availability',
+              value: '$avgOccupancy%',
+              change: 'Next 7 days',
+              positive: true,
+              icon: Icons.access_time,
+              iconColor: const Color(0xFF16A34A)),
+          _StatItem(
+              label: 'Avg Rating',
+              value: avgRating.toStringAsFixed(1),
+              change: '${ratings.length} reviews',
+              positive: true,
+              icon: Icons.star_border,
+              iconColor: const Color(0xFFF59E0B)),
         ];
         _bookings = recent.take(3).toList();
       });
@@ -333,6 +448,7 @@ class _State extends State<HomeScreen> {
     final local = startsAt?.toLocal();
     final participants = _asInt(json['participants']);
     return _BookingItem(
+      booking: Map<String, dynamic>.from(json),
       name: json['customerName']?.toString() ?? 'Customer',
       service: json['activity']?.toString() ?? fallbackActivity,
       date: local == null ? '' : DateFormat('dd MMM yyyy').format(local),
@@ -346,7 +462,8 @@ class _State extends State<HomeScreen> {
 
   String _displayStatus(String? value) {
     final normalized = (value ?? '').trim().toLowerCase();
-    if (normalized == 'cancelled' || normalized == 'canceled') return 'Cancelled';
+    if (normalized == 'cancelled' || normalized == 'canceled')
+      return 'Cancelled';
     if (normalized == 'no_show' || normalized == 'no show') return 'No Show';
     if (normalized.isEmpty) return 'Upcoming';
     return normalized
@@ -435,9 +552,8 @@ class _State extends State<HomeScreen> {
       if (listRes.statusCode == 200) {
         final raw = jsonDecode(listRes.body)['data'];
         if (raw is List) {
-          final unread = raw
-              .where((item) => item is Map && item['isRead'] != true)
-              .length;
+          final unread =
+              raw.where((item) => item is Map && item['isRead'] != true).length;
           if (mounted) setState(() => _unreadNotificationCount = unread);
         }
       }
@@ -445,37 +561,13 @@ class _State extends State<HomeScreen> {
   }
 
   Future<void> _openSetup(Widget screen) async {
-    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => screen));
+    await Navigator.push(
+        context, MaterialPageRoute<void>(builder: (_) => screen));
     if (mounted) await _fetchVenueName();
   }
 
   void _noAccess() => CommonUtilities.createSnackBar(
       context, "You don't have access to this feature.");
-
-  Future<void> _pauseBookings() async {
-    if (_venueId.isEmpty || _pausing) return;
-    setState(() => _pausing = true);
-    try {
-      final token = checkString(await SharedPreference.readStr('jwt_token'));
-      final res = await http.patch(
-        Uri.parse('$PAUSE_BOOKINGS_URL/$_venueId/pause-bookings'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'bookingAccept': _isBookingsPaused}),
-      );
-      CommonUtilities.showLog('pause-bookings: ${res.statusCode} ${res.body}');
-      if (!mounted) return;
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        setState(() => _isBookingsPaused = !_isBookingsPaused);
-      } else {
-        final msg = jsonDecode(res.body)['message'] ?? 'Failed to update booking status';
-        CommonUtilities.createSnackBar(context, msg is List ? msg.first : msg.toString());
-      }
-    } catch (e) {
-      CommonUtilities.showLog('_pauseBookings error: $e');
-    } finally {
-      if (mounted) setState(() => _pausing = false);
-    }
-  }
 
   void _showThankYouDialog() {
     showDialog(
@@ -562,24 +654,28 @@ class _State extends State<HomeScreen> {
                     children: [
                       _buildGreeting(),
                       const SizedBox(height: 16),
-                      if (_isPartner && _isApproved) DashboardSetupCards(
-                        pricingRequired: _needsPricing, teamRequired: _needsTeam,
-                        bankAccountRequired: _needsBankAccount,
-                        onPricing: () => _openSetup(ManagePricingScreen(client: widget.client)),
-                        onTeam: () => _openSetup(ManageTeamScreen(client: widget.client)),
-                        onBankAccount: () => _openSetup(BankAccountScreen(client: widget.client)),
-                      ),
-                      if (_isPartner && _setupError != null) TextButton.icon(
-                        onPressed: _fetchVenueName, icon: const Icon(Icons.refresh), label: Text('$_setupError Retry')),
+                      if (_isPartner && _isApproved)
+                        DashboardSetupCards(
+                          pricingRequired: _needsPricing,
+                          teamRequired: _needsTeam,
+                          bankAccountRequired: _needsBankAccount,
+                          onPricing: () => _openSetup(
+                              ManagePricingScreen(client: widget.client)),
+                          onTeam: () => _openSetup(
+                              ManageTeamScreen(client: widget.client)),
+                          onBankAccount: () => _openSetup(
+                              BankAccountScreen(client: widget.client)),
+                        ),
+                      if (_isPartner && _setupError != null)
+                        TextButton.icon(
+                            onPressed: _fetchVenueName,
+                            icon: const Icon(Icons.refresh),
+                            label: Text('$_setupError Retry')),
                       _buildStatsGrid(),
                       const SizedBox(height: 20),
                       _buildSectionLabel('Quick Actions'),
                       const SizedBox(height: 10),
                       _buildQuickActionsGrid(),
-                      if (_isApproved) ...[
-                        const SizedBox(height: 16),
-                        _buildVenueStatusCard(),
-                      ],
                       const SizedBox(height: 20),
                       _buildRecentBookingsHeader(),
                       const SizedBox(height: 10),
@@ -639,7 +735,8 @@ class _State extends State<HomeScreen> {
             child: _buildHomeAvatar(),
           ),
           const Spacer(),
-          Image.asset('assets/logo.png', width: 105, height: 60, fit: BoxFit.contain),
+          Image.asset('assets/logo.png',
+              width: 105, height: 60, fit: BoxFit.contain),
           const Spacer(),
           InkWell(
             onTap: () async {
@@ -933,15 +1030,21 @@ class _State extends State<HomeScreen> {
       mainAxisSpacing: 10,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisExtent: 150 + (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 32).toDouble() * 5,
+      mainAxisExtent: 150 +
+          (MediaQuery.textScalerOf(context).scale(16) - 16)
+                  .clamp(0, 32)
+                  .toDouble() *
+              5,
       children: [
         _actionCard(
           title: 'Manage Bookings',
           subtitle: 'Manage venue bookings',
           image: 'assets/ic_manage_booking.png',
           onTap: _permBooking
-              ? () => CommonUtilities.NavigateWithPush(context,
-                  ManageBookingsScreen(venueId: _venueId, client: widget.client))
+              ? () => CommonUtilities.NavigateWithPush(
+                  context,
+                  ManageBookingsScreen(
+                      venueId: _venueId, client: widget.client))
               : _noAccess,
         ),
         _actionCard(
@@ -1027,108 +1130,6 @@ class _State extends State<HomeScreen> {
     );
   }
 
-  // ── Venue Status ──────────────────────────────────────────────────────────────
-
-  Widget _buildVenueStatusCard() {
-    const base = TextStyle(
-      fontSize: 12,
-      fontFamily: 'Satoshi',
-      height: 1.333, // 16px / 12px
-      letterSpacing: 0,
-      color: Color(0xFF3F3F3F),
-    );
-    const medium = TextStyle(fontWeight: FontWeight.w500);
-    const bold = TextStyle(fontWeight: FontWeight.w700);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 16,
-        children: [
-          Row(
-            children: [
-              const Text('Venue Status',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w700,
-                      height: 1.429, // 20px / 14px
-                      letterSpacing: 0,
-                      color: Color(0xFF1F1F1F))),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _isBookingsPaused
-                      ? const Color(0xFFFDECEC)
-                      : const Color(0xFFE8F7EC),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(_isBookingsPaused ? 'InACTIV' : 'ACTIV',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontFamily: 'Satoshi',
-                        fontWeight: FontWeight.w700,
-                        height: 1.333, // 16px / 12px
-                        letterSpacing: 0,
-                        color: _isBookingsPaused
-                            ? const Color(0xFFE53935)
-                            : const Color(0xFF16A34A))),
-              ),
-            ],
-          ),
-          Text.rich(TextSpan(style: base.merge(medium), children: [
-            const TextSpan(text: 'Your venue is '),
-            TextSpan(text: _isBookingsPaused ? 'InACTIV' : 'ACTIV', style: bold),
-            TextSpan(text: _isBookingsPaused
-                ? ' and is not accepting new bookings.'
-                : ' and is accepting bookings.'),
-          ])),
-          Text.rich(TextSpan(style: base.merge(medium), children: [
-            const TextSpan(text: 'Go '),
-            const TextSpan(text: 'InACTIV', style: bold),
-            const TextSpan(text: ' and temporarily stop accepting bookings?'),
-          ])),
-          OutlinedButton.icon(
-            onPressed: _pausing ? null : () {
-            if (!_isPartner) {
-              CommonUtilities.createSnackBar(context, 'Only the venue partner can pause or resume bookings.');
-              return;
-            }
-            _pauseBookings();
-          },
-            icon: _pausing
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFE6B6B)))
-                : Icon(_isBookingsPaused ? Icons.play_arrow : Icons.pause, color: const Color(0xFFFE6B6B), size: 16),
-            label: Text(_isBookingsPaused ? 'Resume Bookings' : 'Pause Bookings',
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontFamily: 'Satoshi',
-                    color: Color(0xFFFE6B6B))),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.white,
-              side: const BorderSide(color: Color(0xFFFE6B6B), width: 1),
-              minimumSize: const Size(double.infinity, 38),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Recent Bookings ───────────────────────────────────────────────────────────
-
   Widget _buildRecentBookingsHeader() {
     return Row(
       children: [
@@ -1143,8 +1144,10 @@ class _State extends State<HomeScreen> {
         const Spacer(),
         InkWell(
           onTap: _permBooking
-              ? () => CommonUtilities.NavigateWithPush(context,
-                  ManageBookingsScreen(venueId: _venueId, client: widget.client))
+              ? () => CommonUtilities.NavigateWithPush(
+                  context,
+                  ManageBookingsScreen(
+                      venueId: _venueId, client: widget.client))
               : _noAccess,
           child: const Text('View all →',
               style: TextStyle(
@@ -1160,71 +1163,88 @@ class _State extends State<HomeScreen> {
   }
 
   Widget _buildBookingCard(_BookingItem b) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 12,
-        children: [
-          // Title + description block (gap 4)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
-            children: [
-                Row(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () async {
+            final changed = await ManageBookingsScreen.showBookingDetails(
+                context,
+                booking: b.booking,
+                activity: b.service,
+                client: widget.client);
+            if (changed == true && mounted) await _fetchVenueName();
+          },
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 12,
+              children: [
+                // Title + description block (gap 4)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 4,
                   children: [
-                    Expanded(
-                      child: Text(b.name,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontFamily: 'Satoshi',
-                              color: AppColors.darkBlack)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(b.name,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontFamily: 'Satoshi',
+                                  color: AppColors.darkBlack)),
+                        ),
+                        _statusBadge(b.status),
+                      ],
                     ),
-                    _statusBadge(b.status),
+                    Text(
+                      '${b.service}  |  ${b.date}  |  ${b.time}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'Satoshi',
+                          color: AppColors.black1),
+                    ),
                   ],
                 ),
-                Text(
-                  '${b.service}  |  ${b.date}  |  ${b.time}',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'Satoshi',
-                      color: AppColors.black1),
-                ),
-            ],
-          ),
-          // Price row (height 22, gap 8)
-          SizedBox(
-            height: 22,
-            child: Row(
-              spacing: 8,
-              children: [
-                Text(
-                  b.amount,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'Satoshi',
-                      color: AppColors.darkBlack),
-                ),
-                const Text('|',
-                    style: TextStyle(
-                        fontSize: 13, color: AppColors.black1)),
-                Text(
-                  b.persons,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'Satoshi',
-                      color: AppColors.darkBlack),
+                // Price row (height 22, gap 8)
+                SizedBox(
+                  height: 22,
+                  child: Row(
+                    spacing: 8,
+                    children: [
+                      Text(
+                        b.amount,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontFamily: 'Satoshi',
+                            color: AppColors.darkBlack),
+                      ),
+                      const Text('|',
+                          style:
+                              TextStyle(fontSize: 13, color: AppColors.black1)),
+                      Text(
+                        b.persons,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontFamily: 'Satoshi',
+                            color: AppColors.darkBlack),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1304,7 +1324,8 @@ class _State extends State<HomeScreen> {
           const SizedBox(height: 16),
           GestureDetector(
             onTap: _permPricing
-                ? () => CommonUtilities.NavigateWithPush(context, const ManagePricingScreen())
+                ? () => CommonUtilities.NavigateWithPush(
+                    context, const ManagePricingScreen())
                 : _noAccess,
             child: Container(
               width: 350,

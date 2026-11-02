@@ -53,6 +53,24 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     return this.notice('template', { toEmail, id, data }, toEmail, data.deliveryKey);
   }
 
+  async sendPartnerInvitationEmail(params: {
+    toEmail: string;
+    partnerName: string;
+    businessName?: string;
+    phone?: string;
+    password?: string;
+    deliveryKey?: string;
+  }): Promise<boolean> {
+    return this.sendTemplateEmail(params.toEmail, 'partner_invitation', {
+      partnerName: params.partnerName,
+      businessName: params.businessName,
+      email: params.toEmail,
+      phone: params.phone,
+      password: params.password,
+      deliveryKey: params.deliveryKey,
+    });
+  }
+
   async sendSignedAgreementEmailViaGmail(params: Params<'sendSignedAgreementEmailViaGmail'> & { deliveryKey?: string }): Promise<string> {
     const result = await this.dispatch(this.job('agreement', params, params.toEmail,
       params.deliveryKey || `agreement:${params.toEmail}:${new Date(params.signedAt).toISOString()}:${params.venueName}`));
@@ -71,6 +89,13 @@ export class MailService extends LegacyMailService implements OnModuleInit {
   async findPartnerApprovalEmail(venueId: string, tx: any) {
     if (!this.deliveries) throw new Error('Durable approval email delivery is required');
     return this.deliveries.findApproval(venueId, tx);
+  }
+
+  async prepareTeamMemberInviteEmail(
+    params: Params<'sendTeamMemberInviteEmail'> & { deliveryKey: string }, tx: any,
+  ): Promise<string> {
+    if (!this.deliveries) throw new Error('Durable invitation delivery is required');
+    return (await this.deliveries.enqueue(this.job('invitation', params, params.toEmail), tx)).id;
   }
 
   /** Approval always requires an outbox, including migration-compatible legacy mode. */
@@ -146,22 +171,33 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     let id: EmailTemplateId;
     let data: EmailData = { ...p };
     switch (job.method) {
-      case 'template': id = p.id; data = p.data; break;
+      case 'template':
+        id = p.id;
+        data = { ...p.data };
+        if (id === 'partner_invitation') {
+          if (!data.email) data.email = p.toEmail;
+          if (!data.password && !data.message) {
+            data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';
+          }
+        }
+        break;
       case 'agreement': case 'smtpAgreement': id = 'agreement_signed'; data.signedAt = new Date(p.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short' }); break;
       case 'suspension': id = p.venueName ? 'venue_suspended' : 'partner_suspended'; break;
       case 'changes': id = 'venue_changes_requested'; break;
       case 'approval': id = 'venue_approved'; data.email = p.toEmail;
         if (!p.password) data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';
         break;
-      case 'invitation': id = 'team_invitation'; data.partnerName = p.fullName; data.email = p.toEmail; break;
+      case 'invitation': id = 'team_invitation'; data.partnerName = p.fullName; data.email = p.toEmail;
+        data.message = 'Sign in using your invited phone number and phone OTP, or your existing password.';
+        break;
       case 'reset': id = 'password_reset'; data.partnerName = p.firstName; break;
       case 'rejection': id = 'venue_rejected'; data.partnerName = p.firstName; data.reference = p.venueId; data.reason = p.rejectionReason; break;
       case 'support': return { recipientEmail: job.recipient, recipientName: 'ACTIV Support',
         subject: `[Partner Support] ${p.subject}`, text: `Partner: ${p.partnerName}\nEmail: ${p.partnerEmail || 'Not provided'}\n\n${p.message}` };
-      case 'callback': return { recipientEmail: job.recipient, recipientName: 'ACTIV Support', subject: '[Partner Callback] New callback request',
-        text: ['partnerName', 'partnerEmail', 'phone', 'venueName', 'city', 'callbackDate', 'callbackTime', 'query'].map(key => `${key}: ${p[key] || ''}`).join('\n') };
+      case 'callback': id = 'callback_request'; data.email = p.partnerEmail; data.message = p.query; break;
     }
-    return { ...this.brandedEmail(id, data), recipientEmail: job.recipient, recipientName: data.partnerName,
+    return { ...this.brandedEmail(id, data), recipientEmail: job.recipient,
+      recipientName: job.method === 'callback' ? 'ACTIV Support' : data.partnerName,
       inlineImages: [this.logoAttachment()],
       ...(job.method === 'agreement' ? { pdfBuffer: p.pdfBuffer, filename: p.filename } : {}),
       ...(job.method === 'smtpAgreement' ? { pdfBuffer: Buffer.from(p.agreement.base64, 'base64'), filename: p.agreement.filename } : {}) };

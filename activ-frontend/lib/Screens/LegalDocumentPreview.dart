@@ -18,6 +18,8 @@ class LegalDocumentPreview extends StatefulWidget {
       context: context,
       builder: (context) => Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        clipBehavior: Clip.antiAlias,
         child: Column(children: [
           Row(children: [
             const SizedBox(width: 16),

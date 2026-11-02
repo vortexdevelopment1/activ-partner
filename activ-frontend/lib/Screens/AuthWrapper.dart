@@ -12,6 +12,7 @@ import '../api_calling/api_request.dart';
 import 'ContactSupportScreen.dart';
 import 'GetStartedScreen.dart';
 import 'Home/HomeScreen.dart' show HomeScreen;
+import 'VenueApprovedCongratsScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'LegalInformationScreen.dart';
 import 'TellUsAboutScreen.dart';
@@ -20,6 +21,7 @@ import 'LoginScreen.dart';
 import 'session_navigation.dart';
 import '../Utills/browser_session.dart';
 import '../Utills/venue_onboarding_draft.dart';
+import '../Utills/venue_session_ownership.dart';
 
 /*
 class AuthWrapper extends StatelessWidget {
@@ -160,13 +162,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final pendingLegalCameraDocument =
           await SharedPreference.readStr(_pendingLegalCameraDocumentTypeKey);
 
-      if (userType != "team_member" &&
-          pendingLegalCameraDocument != null &&
-          pendingLegalCameraDocument.isNotEmpty) {
-        _finish(const LegalInformationScreen());
-        return;
-      }
-
       // Team members can only manage bookings; keep them out of partner screens.
       if (userType == "team_member") {
         final response = await (widget.client?.get ?? http.get)(
@@ -214,6 +209,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _finish(ManagerHomeScreen(client: widget.client));
         return;
       }
+      if (!await validateSavedVenueOwnership(client: widget.client)) {
+        _finish(profileData?['isProfileComplete'] == true
+            ? VenueScreen(client: widget.client)
+            : const TellUsAboutScreen());
+        return;
+      }
+      if (pendingLegalCameraDocument != null &&
+          pendingLegalCameraDocument.isNotEmpty) {
+        _finish(const LegalInformationScreen());
+        return;
+      }
       final bool apiIsProfileComplete =
           body['data']?['isProfileComplete'] == true;
       final bool apiIsActive = body['data']?['partner']?['isActive'] == true;
@@ -234,7 +240,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
 
       if (apiIsActive) {
-        _finish(HomeScreen());
+        final unseenVenue = await _checkUnseenApprovedVenue(token);
+        if (unseenVenue != null) {
+          final venueId = unseenVenue['id']?.toString() ?? '';
+          final venueRef = unseenVenue['publicReference']?.toString() ??
+              unseenVenue['venueReference']?.toString() ??
+              (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
+          _finish(VenueApprovedCongratsScreen(
+            venueId: venueId,
+            venueReference: venueRef,
+            venueName: unseenVenue['name']?.toString(),
+            client: widget.client,
+          ));
+          return;
+        }
+        _finish(HomeScreen(client: widget.client));
         return;
       }
 
@@ -244,6 +264,36 @@ class _AuthWrapperState extends State<AuthWrapper> {
       CommonUtilities.showLog("AuthWrapper init error: $e");
       _finish(const LoginScreen());
     }
+  }
+
+  Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(MY_APPROVED_VENUES_URL),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final list = (body['data'] is List) ? body['data'] as List : [];
+        for (final item in list) {
+          if (item is Map) {
+            final venueMap = Map<String, dynamic>.from(item);
+            final venueId = venueMap['id']?.toString() ?? '';
+            final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
+            final seenLocally = await SharedPreference.readStr('venue_approved_seen_$venueId');
+            if (!hasSeenBackend && seenLocally != 'true' && venueId.isNotEmpty) {
+              return venueMap;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      CommonUtilities.showLog('AuthWrapper approved venues check error: $e');
+    }
+    return null;
   }
 
   Future<void> _checkVenueStatus(String token) async {

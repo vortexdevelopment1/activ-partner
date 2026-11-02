@@ -678,6 +678,9 @@ void main() {
     final requests = <http.Request>[];
     final client = MockClient((request) async {
       requests.add(request);
+      if (request.url.path.endsWith('/my-venues')) {
+        return http.Response('{"data":{"items":[{"id":"venue-1"}],"totalPages":1}}', 200);
+      }
       if (request.method == 'GET') return agreementResponse();
       if (request.method == 'PATCH') return http.Response('{}', 200);
       return http.Response('{"message":"Please complete venue details"}', 400);
@@ -708,9 +711,9 @@ void main() {
     await capture(tester, 'agreement-signature-360x800');
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    expect(requests.map((r) => r.method), ['GET', 'PATCH', 'POST']);
-    expect(jsonDecode(requests[1].body), {'electronicSignature': 'Virat Kohli', 'termsAccepted': true});
-    expect(requests[1].headers['Authorization'], 'Bearer token');
+    expect(requests.map((r) => r.method), ['GET', 'GET', 'PATCH', 'POST']);
+    expect(jsonDecode(requests[2].body), {'electronicSignature': 'Virat Kohli', 'termsAccepted': true});
+    expect(requests[2].headers['Authorization'], 'Bearer token');
     expect(find.text('Please complete venue details'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

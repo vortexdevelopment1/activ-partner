@@ -176,7 +176,10 @@ class _State extends State<ReviewVenueDetailsScreen> {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return '-';
     if (trimmed.startsWith('+')) return trimmed;
-    final prefix = phoneCode.startsWith('+') ? phoneCode : '+$phoneCode';
+    final country = phoneCode.trim();
+    final prefix = RegExp(r'[A-Za-z]').hasMatch(country)
+        ? country.replaceFirst(RegExp(r'^\+'), '')
+        : country.startsWith('+') ? country : '+$country';
     return '$prefix $trimmed';
   }
 

@@ -30,7 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         include: { partner_users: { include: { users: true, partners: true } } } });
       if (!staff) throw new UnauthorizedException('Team member not found');
       const settings = staff.permissions as Record<string, any>;
-      if (settings.isActive === false || staff.partner_users.users.status !== 'ACTIVE' || staff.partner_users.partners.status === 'SUSPENDED') {
+      if (settings.isActive === false || staff.partner_users.role !== 'PARTNER_USER' || staff.partner_users.users.status !== 'ACTIVE' || staff.partner_users.partners.status !== 'ACTIVE') {
         throw new UnauthorizedException('Account has been deactivated');
       }
       return { id: staff.id, userId: staff.partner_users.user_id,

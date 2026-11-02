@@ -131,9 +131,9 @@ describe('durable encrypted email delivery', () => {
     expect(sender).not.toHaveBeenCalled();
   });
 
-  it('requires a strong encryption key before enabling delivery', () => {
+  it.each([true, false])('requires a strong encryption key at startup (delivery enabled: %s)', enabled => {
     const invalid = new EmailDeliveryService({} as any, new ConfigService({}));
-    expect(() => invalid.configure(sender, true)).toThrow('EMAIL_DELIVERY_STORAGE_KEY');
+    expect(() => invalid.configure(sender, enabled)).toThrow('EMAIL_DELIVERY_STORAGE_KEY');
   });
 
   it('stops automatic retries after five known rejections', async () => {

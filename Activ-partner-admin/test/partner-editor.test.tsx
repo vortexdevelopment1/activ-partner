@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PartnerEditor } from '../src/pages/partners/PartnerEditor';
+import { partnersApi } from '../src/api/partners.api';
+
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('../src/hooks/useToast', () => ({ useToast: () => toast }));
+vi.mock('../src/api/partners.api', () => ({ partnersApi: { getById: vi.fn(), update: vi.fn(), uploadDocument: vi.fn() } }));
+let client: QueryClient;
+const close = vi.fn();
+beforeEach(() => {
+  vi.clearAllMocks();
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  vi.mocked(partnersApi.getById).mockResolvedValue({ data: { data: {
+    id: 'partner', legalName: 'Business', firstName: 'Old', phone: '+919876543210', status: 'active', kycStatus: 'PENDING',
+    panNumber: 'OLD-PAN', createdAt: '2026-01-01', updatedAt: '2026-01-01', bankAccounts: [{ id: 'bank', accountHolderName: 'Owner', bankName: 'Bank', accountNumber: '123456', ifscCode: 'ABCD0123456', status: 'UNDER_REVIEW', isPrimary: false }],
+  } } } as any);
+  vi.mocked(partnersApi.update).mockResolvedValue({ data: {} } as any);
+});
+afterEach(() => { cleanup(); client.clear(); });
+const show = () => render(<QueryClientProvider client={client}><PartnerEditor id="partner" onClose={close} /></QueryClientProvider>);
+
+it('loads full details and sends only edited profile fields', async () => {
+  show();
+  const pan = await screen.findByLabelText('PAN number');
+  expect((pan as HTMLInputElement).value).toBe('OLD-PAN');
+  fireEvent.change(pan, { target: { value: 'NEW-PAN' } });
+  fireEvent.change(screen.getByLabelText('Account status'), { target: { value: 'SUSPENDED' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { panNumber: 'NEW-PAN', status: 'SUSPENDED' }));
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+});
+
+it('keeps the form open with edits after a failed save', async () => {
+  vi.mocked(partnersApi.update).mockRejectedValueOnce({ response: { data: { message: ['Email is already registered'] } } });
+  show();
+  fireEvent.change(await screen.findByLabelText('Login email'), { target: { value: 'used@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Email is already registered'));
+  expect(close).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Login email') as HTMLInputElement).value).toBe('used@example.com');
+});
+
+it('saves bank edits with their existing account ID', async () => {
+  show();
+  fireEvent.change(await screen.findByLabelText('Account number'), { target: { value: '987654' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { bankAccounts: [expect.objectContaining({ id: 'bank', accountNumber: '987654' })] }));
+});
+
+it('prevents duplicate submissions while saving', async () => {
+  vi.mocked(partnersApi.update).mockImplementation(() => new Promise(() => {}));
+  show();
+  fireEvent.change(await screen.findByLabelText('First name'), { target: { value: 'New' } });
+  const form = screen.getByRole('button', { name: 'Save changes' }).closest('form')!;
+  fireEvent.submit(form); fireEvent.submit(form);
+  await waitFor(() => expect(partnersApi.update).toHaveBeenCalledTimes(1));
+});
+
+for (const [label, kind, field] of [['PAN document', 'pan', 'panCardUrl'], ['GST document', 'gst', 'gstinDocUrl'], ['profile photo', 'avatar', 'avatarUrl']]) {
+  it('uploads and saves ' + label, async () => {
+    vi.mocked(partnersApi.uploadDocument).mockResolvedValueOnce({ data: { data: { url: 'https://example.com/uploaded.png' } } } as any);
+    show();
+    const file = new File(['image'], 'document.png', { type: 'image/png' });
+    fireEvent.change(await screen.findByLabelText('Upload ' + label), { target: { files: [file] } });
+    await waitFor(() => expect(partnersApi.uploadDocument).toHaveBeenCalledWith('partner', kind, file));
+    await screen.findByText('document.png uploaded. Save changes to apply it.');
+    expect(partnersApi.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { [field]: 'https://example.com/uploaded.png' }));
+  });
+}
+
+it('uploads a cancelled cheque into the correct bank account', async () => {
+  vi.mocked(partnersApi.uploadDocument).mockResolvedValueOnce({ data: { data: { url: 'https://example.com/cheque.pdf' } } } as any);
+  show();
+  const file = new File(['%PDF-1.7'], 'cheque.pdf', { type: 'application/pdf' });
+  fireEvent.change(await screen.findByLabelText('Upload cancelled cheque for account 1'), { target: { files: [file] } });
+  await screen.findByText('cheque.pdf uploaded. Save changes to apply it.');
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { bankAccounts: [expect.objectContaining({ id: 'bank', cancelledChequeUrl: 'https://example.com/cheque.pdf' })] }));
+});
+
+it('preserves the current document on upload failure and allows retry', async () => {
+  vi.mocked(partnersApi.uploadDocument).mockRejectedValueOnce({ response: { data: { message: 'Upload unavailable' } } });
+  show();
+  fireEvent.change(await screen.findByLabelText('PAN document URL'), { target: { value: 'https://example.com/original.pdf' } });
+  const file = new File(['%PDF-1.7'], 'pan.pdf', { type: 'application/pdf' });
+  fireEvent.change(screen.getByLabelText('Upload PAN document'), { target: { files: [file] } });
+  await screen.findByText('Upload unavailable');
+  expect((screen.getByLabelText('PAN document URL') as HTMLInputElement).value).toBe('https://example.com/original.pdf');
+  vi.mocked(partnersApi.uploadDocument).mockResolvedValueOnce({ data: { data: { url: 'https://example.com/new.pdf' } } } as any);
+  fireEvent.change(screen.getByLabelText('Upload PAN document'), { target: { files: [file] } });
+  await screen.findByText('pan.pdf uploaded. Save changes to apply it.');
+  expect((screen.getByLabelText('PAN document URL') as HTMLInputElement).value).toBe('https://example.com/new.pdf');
+});
+
+it('blocks saving and closing while an upload is in progress', async () => {
+  let finish!: (value: any) => void;
+  vi.mocked(partnersApi.uploadDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  show();
+  fireEvent.change(await screen.findByLabelText('Upload GST document'), { target: { files: [new File(['pdf'], 'gst.pdf', { type: 'application/pdf' })] } });
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+  fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form')!);
+  expect(close).not.toHaveBeenCalled(); expect(partnersApi.update).not.toHaveBeenCalled();
+  finish({ data: { data: { url: 'https://example.com/gst.pdf' } } });
+  await screen.findByText('gst.pdf uploaded. Save changes to apply it.');
+});
+
+it('rejects unsupported files before uploading', async () => {
+  show();
+  fireEvent.change(await screen.findByLabelText('Upload PAN document'), { target: { files: [new File(['html'], 'document.html', { type: 'text/html' })] } });
+  await screen.findByText('Choose a JPG, PNG, WebP image or PDF.');
+  expect(partnersApi.uploadDocument).not.toHaveBeenCalled();
+});

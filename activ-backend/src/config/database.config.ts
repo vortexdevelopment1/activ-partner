@@ -13,11 +13,14 @@ export const getDatabaseUrlFromEnv = (env: Env): string => {
   return url.toString();
 };
 
+<<<<<<< HEAD
 /**
  * Resolve the direct connection used by Prisma migrations and catalog checks.
  * Callers should pass the result of migrationEnvironment so production
  * credentials cannot inherit local-file overrides.
  */
+=======
+>>>>>>> origin/main
 export const getMigrationDatabaseUrlFromEnv = (env: Env): string =>
   env.DIRECT_URL ? String(env.DIRECT_URL) : getDatabaseUrlFromEnv(env);
 

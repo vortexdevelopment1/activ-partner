@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  ParseEnumPipe,
   HttpCode,
   HttpStatus,
   UploadedFile,
@@ -19,8 +20,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { PartnerDocumentKind, PARTNER_DOCUMENT_MAX_BYTES, validatePartnerDocument } from './partner-document-upload';
 import { PartnersService } from './partners.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { AdminUpdatePartnerDto } from './dto/admin-update-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -122,14 +125,42 @@ export class PartnersController {
     return { message: 'Partner profile updated successfully', data };
   }
 
+  @Post(':id/documents/:kind')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Upload a partner document (Admin only); save its URL with partner details' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: PARTNER_DOCUMENT_MAX_BYTES, files: 1 },
+    fileFilter: (_request, file, callback) => {
+      if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mimetype)
+        || !['.jpg', '.jpeg', '.png', '.webp', '.pdf'].includes(extname(file.originalname).toLowerCase())) {
+        return callback(new BadRequestException('Only JPG, PNG, WebP and PDF files are allowed'), false);
+      }
+      callback(null, true);
+    },
+  }))
+  async uploadDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('kind', new ParseEnumPipe(PartnerDocumentKind)) kind: PartnerDocumentKind,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    validatePartnerDocument(file, kind);
+    await this.partnersService.findOne(id);
+    const url = await this.cloudinaryService.uploadFile(file, `activ/partners/${id}/${kind}`, kind === PartnerDocumentKind.AVATAR ? 'image' : 'auto');
+    return { message: 'Document uploaded. Save partner details to apply it.', data: { url } };
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Update partner (Admin only)' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updatePartnerDto: UpdatePartnerDto,
+    @Body() updatePartnerDto: AdminUpdatePartnerDto,
+    @CurrentUser() admin: any,
   ) {
-    const data = await this.partnersService.update(id, updatePartnerDto);
+    const data = await this.partnersService.update(id, updatePartnerDto, admin.id);
     return { message: 'Partner updated successfully', data };
   }
 

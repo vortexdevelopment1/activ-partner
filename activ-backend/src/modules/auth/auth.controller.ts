@@ -124,7 +124,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Step 1 — Request a password reset code via email',
-    description: 'Sends a 4-digit reset code to the partner\'s registered email address, valid for 10 minutes.',
+    description: 'Validates an active partner account before sending a 4-digit reset code, valid for 10 minutes. Unregistered or inactive accounts receive a validation error.',
   })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const data = await this.authService.forgotPassword(dto);
@@ -254,11 +254,11 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.PARTNER)
+  @Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
   @Patch('partner/change-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Change password — venue partner',
+    summary: 'Change password — venue partner or team member',
     description:
       'Allows a venue partner to update their own account password using their JWT. ' +
       'Validates the current password before applying the new one.',
@@ -268,7 +268,7 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     const data = await this.authService.changePartnerPassword(
-      partner.id,
+      partner.role === 'team_member' ? partner.partnerId : partner.id,
       dto,
       partner.userId,
     );

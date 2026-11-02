@@ -75,7 +75,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, title, children, si
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`relative min-w-0 flex flex-col overflow-hidden bg-white rounded-xl shadow-[0_24px_70px_rgb(8_20_17/0.24)] ring-1 ring-black/5 w-full ${sizes[size]} max-h-full outline-none`}>
         <div className="flex shrink-0 items-center justify-between gap-2 p-4 sm:p-5 border-b border-gray-100">
           <div className="min-w-0"><h3 id={titleId} className="text-lg font-semibold text-gray-900 [overflow-wrap:anywhere]">{title}</h3>{subtitle && <p className="mt-1 text-xs text-gray-500 [overflow-wrap:anywhere]">{subtitle}</p>}</div>
-          <button type="button" onClick={onClose} aria-label="Close dialog" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+          <button type="button" onClick={onClose} aria-label="Close dialog" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
             <X size={18} className="text-gray-500" />
           </button>
         </div>

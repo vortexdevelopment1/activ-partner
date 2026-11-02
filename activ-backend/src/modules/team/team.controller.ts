@@ -66,10 +66,18 @@ export class TeamController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Add a new team member — creates account and sends invite email (Partner only)' })
+  @ApiOperation({ summary: 'Add a team member and attempt SMS/email invitation (Partner only)' })
   async create(@CurrentUser() user: any, @Body() dto: CreateTeamMemberDto) {
     const data = await this.teamService.create(user.id, dto);
-    return { message: 'Team member added and invite sent successfully', data };
+    return { message: 'Team member added; check invitation delivery status', data };
+  }
+
+  @Post(':id/invite')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend an invitation for an owned team member (Partner only)' })
+  async resendInvitation(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const data = await this.teamService.resendInvitation(id, user.id);
+    return { message: 'Invitation processed; check delivery status', data };
   }
 
   @Patch(':id')

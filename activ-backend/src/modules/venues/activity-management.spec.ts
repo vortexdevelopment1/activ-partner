@@ -14,7 +14,8 @@ describe('activity management on the current schema', () => {
       venues: { partner_id: 'partner', name: 'Arena', public_reference: 'VEN-000016' } };
     prisma = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
-      venues: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      venues: { updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ booking_accept: true }) },
       partner_venue_services: { findUnique: jest.fn(async () => record),
         findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data), count: jest.fn().mockResolvedValue(0) },
       partner_venue_answers: { findMany: jest.fn(async () => []) },

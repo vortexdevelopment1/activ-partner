@@ -22,14 +22,18 @@ export class EmailDeliveryService implements OnModuleDestroy {
 
   private key(): Buffer {
     const value = this.config.get<string>('EMAIL_DELIVERY_STORAGE_KEY')?.trim();
-    if (!value || value.length < 32) throw new Error('EMAIL_DELIVERY_STORAGE_KEY must contain at least 32 characters');
+    if (!value || value.length < 32) {
+      throw new Error('EMAIL_DELIVERY_STORAGE_KEY must contain at least 32 characters. Set a stable key in .env.local for local development or inject it into the production environment, then restart the backend.');
+    }
     return createHash('sha256').update(value).digest();
   }
 
   configure(sender: (job: EmailJob) => Promise<string>, enabled: boolean) {
     this.sender = sender;
-    if (!enabled) return;
+    // Venue approvals always use the encrypted outbox, including legacy mode.
+    // Validate at startup so a missing key cannot first surface during approval.
     this.key();
+    if (!enabled) return;
     if (this.config.get<string>('EMAIL_RETRY_WORKER_ENABLED') === 'true') {
       this.timer = setInterval(() => void this.tick(), 30000);
       this.timer.unref();

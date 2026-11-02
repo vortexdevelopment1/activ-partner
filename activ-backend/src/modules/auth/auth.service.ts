@@ -162,6 +162,7 @@ export class AuthService {
       if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
 
       await this.teamService.markActive(member.id);
+      member.status = TeamMemberStatus.ACTIVE;
 
       const accessToken = this.jwtService.sign(
         { sub: member.id, role: 'team_member', type: 'team_member', partnerId: member.partnerId, permissions: member.permissions },
@@ -443,7 +444,8 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
-    if (intent === 'login') {
+    const staffMember = await this.teamService.findByPhone(phone);
+    if (intent === 'login' && !staffMember) {
       const user = await this.prisma.users.findUnique({
         where: { phone_e164: phone },
         include: { partner_users: { include: { partners: true } } },
@@ -459,7 +461,6 @@ export class AuthService {
       }
     }
 
-    const staffMember = await this.teamService.findByPhone(phone);
     if (staffMember) {
       const claimed = await this.prisma.otp_challenges.updateMany({
         where: {
@@ -501,7 +502,7 @@ export class AuthService {
 
       let isNewPartner = false;
       let link = await tx.partner_users.findFirst({
-        where: { user_id: user.id },
+        where: { user_id: user.id, role: PartnerRole.PARTNER_ADMIN },
         include: { partners: { include: { partner_business_profiles: true } } },
       });
 
@@ -550,11 +551,12 @@ export class AuthService {
         { partnerId: account.link.partners.id },
       );
     }
-    return this.buildPartnerAuthResponse(
+    const response = await this.buildPartnerAuthResponse(
       account.link.partners,
       account.user,
       account.link.role,
     );
+    return account.isNewPartner ? { ...response, isNewPartner: true } : response;
   }
 
   private async canResumeVenueCorrections(partner: { id: string; status: string }): Promise<boolean> {
@@ -744,9 +746,8 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.findPasswordResetUser(dto.email);
 
-    // Always return a generic success response so this endpoint can't be used to enumerate registered emails
     if (!user) {
-      return { message: 'If an account exists for this email, a reset code has been sent.' };
+      throw new BadRequestException('This email is not registered for an active ACTIV Partner account.');
     }
 
     // Namespace email recovery challenges so they cannot be used for phone OTP login.
@@ -784,14 +785,15 @@ export class AuthService {
       throw error;
     }
 
-    return { message: 'If an account exists for this email, a reset code has been sent.' };
+    return { message: 'A reset code has been sent to your registered email.' };
   }
 
   private findPasswordResetUser(email: string) {
     return this.prisma.users.findFirst({
       where: {
         email: { equals: email.trim(), mode: 'insensitive' },
-        partner_users: { some: {} },
+        status: UserStatus.ACTIVE,
+        partner_users: { some: { partners: { status: PartnerStatus.ACTIVE } } },
       },
     });
   }

@@ -29,6 +29,11 @@ export class CreateQuestionDto {
   @IsEnum(QuestionType)
   questionType: QuestionType;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  unit?: string;
+
   @ApiPropertyOptional({ example: ['Wooden', 'Synthetic', 'Concrete'], type: [String] })
   @IsOptional()
   @IsArray()

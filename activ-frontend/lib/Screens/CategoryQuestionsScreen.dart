@@ -33,6 +33,7 @@ class _Question {
   final bool isGlobal;
   final int? minLength;
   final int? maxLength;
+  final String unit;
 
   _Question({
     required this.id,
@@ -47,6 +48,7 @@ class _Question {
     this.isGlobal = false,
     this.minLength,
     this.maxLength,
+    this.unit = '',
   });
 
   static String _normalizedType(dynamic rawType) {
@@ -56,6 +58,7 @@ class _Question {
       'multi_select' || 'multi-select' => 'multiselect',
       'long_text' || 'long-text' => 'textarea',
       'integer' || 'numeric' => 'number',
+      'number_stepper' || 'stepper' => 'number_stepper',
       _ => type.isEmpty ? 'text' : type,
     };
   }
@@ -116,6 +119,7 @@ class _Question {
       isGlobal: json['isGlobal'] as bool? ?? false,
       minLength: (json['minLength'] as num?)?.toInt(),
       maxLength: (json['maxLength'] as num?)?.toInt(),
+      unit: json['unit']?.toString() ?? '',
     );
   }
 }
@@ -497,26 +501,32 @@ class _State extends State<CategoryQuestionsScreen> {
 
   // ─── Submit all answers ───────────────────────────────────────────────────
 
-  Future<void> _persistAnswers({
-    required String jwtToken,
-    required List<Map<String, dynamic>> answersPayload,
+  Future<void> _cacheAnswers({
     required List<Map<String, dynamic>> displayList,
     required String categoryId,
   }) async {
-    try {
-      List<dynamic> existingList = [];
-      final existingRaw = checkString(
-          await SharedPreference.readStr('activity_questions_display'));
-      if (existingRaw.isNotEmpty) {
-        existingList = jsonDecode(existingRaw) as List<dynamic>;
-      }
-      final titles = displayList.map((q) => q['categoryTitle']).toSet();
-      existingList.removeWhere((q) =>
-          isPlaceholderActivityQuestion(q['questionText']) ||
-          q['categoryId'] == categoryId ||
-          (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
-      existingList.addAll(displayList);
+    List<dynamic> existingList = [];
+    final existingRaw = checkString(
+        await SharedPreference.readStr('activity_questions_display'));
+    if (existingRaw.isNotEmpty) {
+      existingList = jsonDecode(existingRaw) as List<dynamic>;
+    }
+    final titles = displayList.map((q) => q['categoryTitle']).toSet();
+    existingList.removeWhere((q) =>
+        isPlaceholderActivityQuestion(q['questionText']) ||
+        q['categoryId'] == categoryId ||
+        (q['categoryId'] == null && titles.contains(q['categoryTitle'])));
+    existingList.addAll(displayList);
 
+    await SharedPreference.addStringToSF(
+        'activity_questions_display', jsonEncode(existingList));
+  }
+
+  Future<void> _persistAnswers({
+    required String jwtToken,
+    required List<Map<String, dynamic>> answersPayload,
+  }) async {
+    try {
       final response = await (widget.client?.post ?? http.post)(
         Uri.parse('$VENUE_ANSWERS_URL/${widget.venueId}/answers'),
         headers: {
@@ -527,10 +537,7 @@ class _State extends State<CategoryQuestionsScreen> {
         body: jsonEncode({'answers': answersPayload}),
       );
       CommonUtilities.showLog('Submit answers status: ${response.statusCode}');
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await SharedPreference.addStringToSF(
-            'activity_questions_display', jsonEncode(existingList));
-      } else {
+      if (response.statusCode != 200 && response.statusCode != 201) {
         CommonUtilities.showLog('Submit answers failed: ${response.body}');
       }
     } catch (e) {
@@ -577,11 +584,13 @@ class _State extends State<CategoryQuestionsScreen> {
     }
 
     final categoryId = widget.currentCategory['id']?.toString() ?? '';
+    // The review screen reads this cache once on entry. Commit the display
+    // data before navigating, independently of the background API response.
+    await _cacheAnswers(displayList: displayList, categoryId: categoryId);
+    if (!mounted) return;
     unawaited(_persistAnswers(
       jwtToken: jwtToken,
       answersPayload: answersPayload,
-      displayList: displayList,
-      categoryId: categoryId,
     ));
 
     if (widget.reviewMode) {
@@ -626,10 +635,13 @@ class _State extends State<CategoryQuestionsScreen> {
     switch (q.questionType) {
       case 'textarea':
         return _buildTextField(categoryId, q, maxLines: 3);
+      case 'number_stepper':
+        return _buildStepper(categoryId, q);
       case 'number':
-        return _buildTextField(categoryId, q, isNumber: true);
-      case 'select':
+        return q.unit.isNotEmpty ? _buildNumberWithUnit(categoryId, q) : _buildTextField(categoryId, q, isNumber: true);
       case 'radio':
+        return _buildRadioGroup(categoryId, q);
+      case 'select':
         return _buildDropdown(categoryId, q);
       case 'multiselect':
       case 'checkbox':
@@ -668,6 +680,271 @@ class _State extends State<CategoryQuestionsScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStepper(String categoryId, _Question q) {
+    final k = _key(categoryId, q.id);
+    int currentVal = 1;
+    final ans = _answers[k];
+    if (ans is int) {
+      currentVal = ans;
+    } else if (ans != null) {
+      currentVal = int.tryParse(ans.toString()) ?? 1;
+    } else {
+      final qLower = q.questionText.toLowerCase();
+      if (qLower.contains('batch') || qLower.contains('capacity')) {
+        currentVal = 25;
+      }
+    }
+
+    String suffix = '';
+    final qLower = q.questionText.toLowerCase();
+    if (qLower.contains('batch') || qLower.contains('class')) suffix = 'per batch';
+    else if (qLower.contains('capacity') || qLower.contains('people')) suffix = 'people';
+    else if (qLower.contains('court')) suffix = 'courts';
+    else if (qLower.contains('turf')) suffix = 'turfs';
+    else if (qLower.contains('table')) suffix = 'tables';
+    else if (qLower.contains('net')) suffix = 'nets';
+    else if (qLower.contains('lane')) suffix = 'lanes';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(q),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.gray),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () {
+                      if (currentVal > 1) {
+                        setState(() => _answers[k] = currentVal - 1);
+                        _saveSessionAnswers();
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3EAFF),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.remove, color: Color(0xFF9D38EB), size: 18),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 46),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$currentVal',
+                      style: const TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkBlack,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() => _answers[k] = currentVal + 1);
+                      _saveSessionAnswers();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3EAFF),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.add, color: Color(0xFF9D38EB), size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (suffix.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Text(
+                suffix,
+                style: const TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 14,
+                  color: AppColors.hintColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRadioGroup(String categoryId, _Question q) {
+    final k = _key(categoryId, q.id);
+    final selected = _answers[k]?.toString() ?? (q.options.isNotEmpty ? q.options.first : '');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(q),
+        Row(
+          children: [
+            for (final opt in q.options) ...[
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    setState(() => _answers[k] = opt);
+                    _saveSessionAnswers();
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: selected == opt ? const Color(0xFFF3EAFF) : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected == opt ? const Color(0xFFC792EA) : AppColors.gray,
+                        width: selected == opt ? 1.4 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selected == opt ? const Color(0xFF9D38EB) : AppColors.lightGray,
+                              width: 2,
+                            ),
+                          ),
+                          child: selected == opt
+                              ? Center(
+                                  child: Container(
+                                    width: 9,
+                                    height: 9,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFF9D38EB),
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            opt,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontSize: 14,
+                              fontWeight: selected == opt ? FontWeight.w700 : FontWeight.w500,
+                              color: AppColors.darkBlack,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNumberWithUnit(String categoryId, _Question q) {
+    final k = _key(categoryId, q.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(q),
+        Row(
+          children: [
+            Expanded(
+              flex: 5,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.gray),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: TextFormField(
+                  key: ValueKey('question-$categoryId-${q.id}'),
+                  controller: _textControllers[k],
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(
+                    fontSize: AppSize.size_14,
+                    fontFamily: 'Satoshi',
+                    color: AppColors.darkBlack,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: q.placeholder.isNotEmpty ? q.placeholder : 'e.g. 1200',
+                    hintStyle: const TextStyle(
+                      fontSize: AppSize.size_14,
+                      fontFamily: 'Satoshi',
+                      color: AppColors.hintColor,
+                    ),
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 3,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.gray),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      q.unit,
+                      style: const TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkBlack,
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down, size: 20, color: AppColors.darkBlack),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

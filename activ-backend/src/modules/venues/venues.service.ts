@@ -12,7 +12,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { randomUUID, randomInt } from "crypto";
 import type * as runtime from "@prisma/client/runtime/client";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import { fillAgreementAcceptance } from './agreement-pdf-layout';
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { UpdateVenueDto } from "./dto/update-venue.dto";
 import { VenueApprovalDto } from "./dto/venue-approval.dto";
@@ -597,8 +598,12 @@ export class VenuesService {
     const signature = signatureOverride !== undefined
       ? signatureOverride.trim()
       : venue.electronicSignature?.trim() ?? '';
-    const acceptanceDate = hasSignature ? venue.termsAcceptedAt : null;
-    const isAccepted = hasSignature && Boolean(venue.termsAcceptedAt);
+    const acceptanceDate = hasSignature
+      ? (venue.termsAcceptedAt && !isNaN(new Date(venue.termsAcceptedAt).getTime())
+          ? new Date(venue.termsAcceptedAt)
+          : new Date())
+      : null;
+    const isAccepted = hasSignature;
     const acceptedAt = acceptanceDate
       ? new Date(acceptanceDate).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
@@ -610,41 +615,15 @@ export class VenuesService {
         })
       : "";
 
-    // Row top-Y positions (PDF points, bottom-up) measured from the
-    // template's Agreement Acceptance table on page 3.
-    const rows: Array<{ top: number; value: string }> = [
-      { top: 603.14, value: partnerName }, // Partner Name
-      { top: 564.88, value: venue.name || "" }, // Venue Name
-      { top: 526.63, value: venue.partner?.email || "" }, // Registered Email
-      { top: 488.38, value: venue.partner?.phone || "" }, // Registered Mobile
-      { top: 450.06, value: acceptedAt }, // Date & Time of Acceptance
-      {
-        top: 411.72,
-        value: isAccepted
-            ? "Electronic Acceptance via ACTIV Venue Partner App"
-            : "",
-      }, // Acceptance Method
-      { top: 357.33, value: signature }, // Electronic Signature
-    ];
-
-    for (const row of rows) {
-      // Cover the {{placeholder}} text with white, then draw the real value
-      // in roughly the same spot — keeps the table borders/graphics intact.
-      page3.drawRectangle({
-        x: 328,
-        y: row.top - 16,
-        width: 405,
-        height: 32,
-        color: rgb(1, 1, 1),
-      });
-      page3.drawText(row.value, {
-        x: 333,
-        y: row.top - 10,
-        size: 11,
-        font,
-        color: rgb(0.12, 0.12, 0.12),
-      });
-    }
+    fillAgreementAcceptance(page3, font, [
+      partnerName,
+      venue.name || '',
+      venue.partner?.email || '',
+      venue.partner?.phone || '',
+      acceptedAt,
+      isAccepted ? 'Electronic Acceptance via ACTIV Venue Partner App' : '',
+      signature,
+    ]);
 
     const pdfBytes = await outDoc.save();
     return {
@@ -954,6 +933,31 @@ export class VenuesService {
         })
       : null;
     const legal = review.partner_venue_legal_documents;
+    const partnerId = venue.partnerId || venue.partner?.id;
+    const bankAccount = partnerId && this.prisma.partner_bank_accounts
+      ? await this.prisma.partner_bank_accounts.findFirst({
+          where: { partner_id: partnerId },
+          orderBy: [{ is_primary: 'desc' }, { created_at: 'desc' }],
+        })
+      : null;
+    const mappedBankAccount = bankAccount
+      ? {
+          id: bankAccount.id,
+          partnerId: bankAccount.partner_id,
+          accountHolderName: bankAccount.account_holder_name,
+          bankName: bankAccount.bank_name,
+          accountNumber: bankAccount.account_number,
+          ifscCode: bankAccount.ifsc_code,
+          accountType: bankAccount.account_type,
+          branchName: bankAccount.branch_name,
+          cancelledChequeUrl: bankAccount.cancelled_cheque_url,
+          status: bankAccount.status ? String(bankAccount.status).toLowerCase() : 'under_review',
+          isPrimary: bankAccount.is_primary,
+          rejectionReason: bankAccount.rejection_reason,
+          createdAt: bankAccount.created_at,
+          updatedAt: bankAccount.updated_at,
+        }
+      : null;
     return {
       ...venue,
       status:
@@ -979,7 +983,16 @@ export class VenuesService {
         gstNumber: legal?.gst_number ?? null,
         gstName: legal?.gst_name ?? null,
         gstinDocUrl: legal?.gstin_doc_url ?? null,
+        bankAccountNumber: bankAccount?.account_number ?? null,
+        bankIfscCode: bankAccount?.ifsc_code ?? null,
+        bankAccountHolderName: bankAccount?.account_holder_name ?? null,
+        bankName: bankAccount?.bank_name ?? null,
+        bankAccountType: bankAccount?.account_type ?? null,
+        bankBranchName: bankAccount?.branch_name ?? null,
+        bankCancelledChequeUrl: bankAccount?.cancelled_cheque_url ?? null,
+        bankStatus: bankAccount?.status ? String(bankAccount.status).toLowerCase() : null,
       },
+      bankAccount: mappedBankAccount,
     };
   }
 
@@ -1160,6 +1173,8 @@ export class VenuesService {
       isActive: venue.status === "PUBLISHED",
       bookingAccept: venue.booking_accept,
       hasSeenWelcome: venue.has_seen_welcome,
+      venueReference: venue.public_reference ?? null,
+      publicReference: venue.public_reference ?? null,
       commission: Number(venue.commission_percent ?? 10),
       images: venue.partner_venue_images.map((image) => ({
         id: image.id,
@@ -2936,6 +2951,38 @@ export class VenuesService {
       }
       if (service.status === "ARCHIVED")
         throw new BadRequestException("This activity has been deleted");
+      if (dto.isActive !== undefined) {
+        const venue = await tx.venues.findUniqueOrThrow({
+          where: { id: managed.venue_id }, select: { booking_accept: true },
+        });
+        if (!venue.booking_accept) {
+          // Convert the old venue-wide pause to activity pauses under the
+          // venue lock. Resuming one service must never reopen its siblings.
+          const siblings = await tx.partner_venue_services.findMany({
+            where: { venue_id: managed.venue_id, status: 'APPROVED', is_active: true },
+          });
+          for (const sibling of siblings) {
+            if (!sibling.facility_id) continue;
+            const slots = await tx.slots.findMany({ where: {
+              facility_id: sibling.facility_id, status: 'AVAILABLE', starts_at: { gt: new Date() },
+            }, select: { id: true } });
+            if (slots.length) {
+              await tx.partner_service_paused_slots.createMany({
+                data: slots.map(slot => ({ venue_service_id: sibling.id, slot_id: slot.id })),
+                skipDuplicates: true,
+              });
+              await tx.slots.updateMany({ where: {
+                id: { in: slots.map(slot => slot.id) }, status: 'AVAILABLE',
+              }, data: { status: 'BLOCKED' } });
+            }
+          }
+          await tx.partner_venue_services.updateMany({
+            where: { venue_id: managed.venue_id, status: 'APPROVED', is_active: true },
+            data: { is_active: false, pause_reason: 'Previously paused for the whole venue' },
+          });
+          await tx.venues.update({ where: { id: managed.venue_id }, data: { booking_accept: true } });
+        }
+      }
       // The management editor uses the onboarding question form. Persist all
       // category answers and legacy summary fields in this same transaction.
       if (dto.answers !== undefined) {

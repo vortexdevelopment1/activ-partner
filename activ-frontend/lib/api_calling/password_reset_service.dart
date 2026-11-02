@@ -5,9 +5,11 @@ import 'package:http/http.dart' as http;
 import 'api_constant.dart';
 
 class PasswordResetException implements Exception {
-  const PasswordResetException(this.message, {this.invalidCode = false});
+  const PasswordResetException(this.message,
+      {this.invalidCode = false, this.statusCode});
   final String message;
   final bool invalidCode;
+  final int? statusCode;
 }
 
 class PasswordResetService {
@@ -42,6 +44,7 @@ class PasswordResetService {
           : message?.toString() ??
               'Unable to complete this request. Please try again.';
       throw PasswordResetException(text,
+          statusCode: response.statusCode,
           invalidCode:
               text.toLowerCase().contains('invalid or expired reset code'));
     } on PasswordResetException {

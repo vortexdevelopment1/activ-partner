@@ -12,6 +12,7 @@ import '../../Style/app_size.dart';
 import '../../api_calling/api_constant.dart';
 import '../Beans/venue_type_model.dart';
 import '../api_calling/api_request.dart';
+import '../Utills/venue_session_ownership.dart';
 import 'CategoryQuestionsScreen.dart';
 import 'CommonCode.dart';
 import 'VenuePhotoUploadScreen.dart';
@@ -203,6 +204,7 @@ class _State extends State<ListActivityTypeScreen> {
         totalCategories: selectedCategories.length,
         accumulatedTimings: const [],
         venueReady: venueReady,
+        client: widget.client,
       ),
     );
   }
@@ -225,7 +227,7 @@ class _State extends State<ListActivityTypeScreen> {
     ]);
 
     final jwtToken = checkString(storedValues[0]);
-    final existingVenueId = checkString(storedValues[1]);
+    var existingVenueId = checkString(storedValues[1]);
 
     // Read venue details saved from VenueScreen
     final venueDetailsStr = checkString(storedValues[2]);
@@ -282,6 +284,10 @@ class _State extends State<ListActivityTypeScreen> {
     }
 
     try {
+      if (existingVenueId.isNotEmpty &&
+          !await validateSavedVenueOwnership(client: widget.client)) {
+        existingVenueId = '';
+      }
       final payload = {
         "categoryIds": categoryIds,
         "name": venueDetails["venue_name"] ?? "",

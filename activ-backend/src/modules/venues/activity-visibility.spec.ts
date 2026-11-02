@@ -9,11 +9,17 @@ describe('partner activity visibility in the consumer catalogue', () => {
     const links = [{ venue_id: 'venue', activity_id: 'sport', status: 'APPROVED' }];
     const tx: any = {
       $queryRaw: jest.fn(), $queryRawUnsafe: jest.fn(),
-      venues: { findUnique: jest.fn(async () => venue), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      venues: { findUnique: jest.fn(async () => venue), findUniqueOrThrow: jest.fn(async () => venue),
+        update: jest.fn(async ({ data }) => Object.assign(venue, data)),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       partner_venue_services: {
         findUniqueOrThrow: jest.fn(async () => rows[0]),
         findMany: jest.fn(async ({ where }) => rows.filter(row => row.status === where.status && row.is_active === where.is_active)),
         update: jest.fn(async ({ data }) => Object.assign(rows[0], data)),
+        updateMany: jest.fn(async ({ data }) => {
+          for (const row of rows) if (row.status === 'APPROVED' && row.is_active) Object.assign(row, data);
+          return { count: rows.length };
+        }),
         count: jest.fn(async ({ where }) => rows.filter(row =>
           row.venue_id === where.venue_id && (!where.facilities || row.activity_id === where.facilities.activity_id) &&
           (!where.status || (typeof where.status === 'object' ? row.status !== where.status.not : row.status === where.status)) &&
@@ -67,6 +73,26 @@ describe('partner activity visibility in the consumer catalogue', () => {
     venue.booking_accept = false;
     await syncLegacyActivityVisibility(tx, 'venue');
     expect(links[0].status).toBe('ARCHIVED');
+  });
+
+  it('resumes only the selected activity when converting an old venue-wide pause', async () => {
+    const { venue, rows, links, tx, service } = setup();
+    venue.booking_accept = false;
+    rows.push({ ...rows[0], id: 'other-court', facility_id: 'other-facility', activity_id: 'other-sport' });
+    links.push({ venue_id: 'venue', activity_id: 'other-sport', status: 'ARCHIVED' });
+    await service.updateActivityManagement('service', 'partner', { isActive: true });
+    expect(venue.booking_accept).toBe(true);
+    expect(rows[0].is_active).toBe(true);
+    expect(rows[1].is_active).toBe(false);
+    expect(links[0].status).toBe('APPROVED');
+    expect(links[1].status).toBe('ARCHIVED');
+    expect(tx.partner_service_paused_slots.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [{ venue_service_id: 'other-court', slot_id: 'slot' }],
+    }));
+    expect(tx.slots.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ facility_id: 'facility', status: 'BLOCKED' }),
+      data: { status: 'AVAILABLE' },
+    }));
   });
 
   it('schedule generation excludes inactive services and repairs their stale approved links', async () => {

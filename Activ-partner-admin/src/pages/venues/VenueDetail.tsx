@@ -19,7 +19,10 @@ import {
   Trash2,
   RefreshCw,
   FileText,
+  Landmark,
+  Pencil,
 } from 'lucide-react';
+import { PartnerEditor } from '../partners/PartnerEditor';
 import { venuesApi } from '../../api/venues.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
 import { Badge } from '../../components/ui/Badge';
@@ -28,7 +31,7 @@ import { RejectModal } from './RejectModal';
 import { RequestChangesModal } from './RequestChangesModal';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import type { Venue, VenueAnswer } from '../../types';
+import type { Venue, VenueAnswer, BankAccount } from '../../types';
 import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
 
 const assetUrl = resolveAssetUrl;
@@ -90,6 +93,7 @@ export const VenueDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
 
+  const [partnerEditorOpen, setPartnerEditorOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
@@ -191,6 +195,21 @@ export const VenueDetail: React.FC = () => {
 
   // venue.partner is a flat merged user+partner object from the API
   const partner = typeof venue.partner === 'object' ? (venue.partner as any) : null;
+  const partnerId = venue.partnerId || partner?.id;
+  const bankAccount: BankAccount | null | undefined = venue.bankAccount ?? (partner?.bankAccountNumber ? {
+    id: '',
+    partnerId: venue.partnerId,
+    accountHolderName: partner.bankAccountHolderName || '',
+    bankName: partner.bankName || '',
+    accountNumber: partner.bankAccountNumber,
+    ifscCode: partner.bankIfscCode || '',
+    accountType: partner.bankAccountType || '',
+    branchName: partner.bankBranchName,
+    cancelledChequeUrl: partner.bankCancelledChequeUrl,
+    status: (partner.bankStatus as any) || 'under_review',
+    createdAt: '',
+    updatedAt: '',
+  } : null);
   const partnerName = [partner?.firstName, partner?.lastName]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .join(' ')
@@ -564,9 +583,11 @@ export const VenueDetail: React.FC = () => {
           {/* Partner */}
           {partner && (
             <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <User size={16} className="text-gray-400" /> Partner Information
-              </h3>
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <User size={16} className="text-gray-400" /> Partner Information
+                </h3>
+              </div>
               <div className="space-y-2.5">
                 <InfoRow label="Name" value={partnerName || 'Profile not completed'} />
                 <InfoRow label="Email" value={partner.email?.trim() || 'Not provided'} />
@@ -577,10 +598,16 @@ export const VenueDetail: React.FC = () => {
                 <InfoRow label="City / State" value={partner.city && partner.state ? `${partner.city}, ${partner.state}` : (partner.city ?? partner.state ?? null)} />
                 <InfoRow label="GST No." value={partner.gstNumber} />
                 <InfoRow label="PAN No." value={partner.panNumber} />
-                <InfoRow label="Bank Account" value={partner.bankAccountNumber} />
-                <InfoRow label="IFSC" value={partner.bankIfscCode} />
-                <InfoRow label="Account Holder" value={partner.bankAccountHolderName} />
+                <InfoRow label="Bank Name" value={partner.bankName || bankAccount?.bankName} />
+                <InfoRow label="Bank Account" value={partner.bankAccountNumber || bankAccount?.accountNumber} />
+                <InfoRow label="IFSC" value={partner.bankIfscCode || bankAccount?.ifscCode} />
+                <InfoRow label="Account Holder" value={partner.bankAccountHolderName || bankAccount?.accountHolderName} />
               </div>
+              {partnerId && <div className="mt-4 flex justify-end border-t border-gray-100 pt-4">
+                <button type="button" onClick={() => setPartnerEditorOpen(true)} className="btn-secondary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
+                  <Pencil size={14} /> Edit partner
+                </button>
+              </div>}
             </div>
           )}
 
@@ -608,6 +635,55 @@ export const VenueDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          
+          {/* Bank Details */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Landmark size={16} className="text-gray-400" /> Bank Details
+              </h3>
+              {bankAccount?.status ? (
+                <Badge status={bankAccount.status} />
+              ) : (
+                <span className="text-xs text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full font-medium">
+                  Not Submitted
+                </span>
+              )}
+            </div>
+            {bankAccount ? (
+              <div className="space-y-3">
+                <div className="space-y-2.5">
+                  <InfoRow label="Bank Name" value={bankAccount.bankName || partner?.bankName} />
+                  <InfoRow label="Account Holder" value={bankAccount.accountHolderName || partner?.bankAccountHolderName} />
+                  <InfoRow label="Account No." value={bankAccount.accountNumber || partner?.bankAccountNumber} />
+                  <InfoRow label="IFSC Code" value={bankAccount.ifscCode || partner?.bankIfscCode} />
+                  <InfoRow label="Account Type" value={bankAccount.accountType || partner?.bankAccountType} />
+                  <InfoRow label="Branch" value={bankAccount.branchName || partner?.bankBranchName} />
+                </div>
+                {(bankAccount.cancelledChequeUrl || partner?.bankCancelledChequeUrl) && (
+                  <div className="pt-2 border-t border-gray-50">
+                    <KycDocImage
+                      label="Cancelled Cheque"
+                      src={bankAccount.cancelledChequeUrl || partner?.bankCancelledChequeUrl}
+                    />
+                  </div>
+                )}
+                {bankAccount.id && (
+                  <div className="pt-1">
+                    <Link
+                      to={`/bank-accounts/${bankAccount.id}`}
+                      className="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1"
+                    >
+                      View in Bank Approvals &rarr;
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Partner has not submitted bank account details yet.</p>
+            )}
+          </div>
 
           {/* Categories (multi-category support) */}
           {allCategories.length > 0 && (
@@ -736,6 +812,7 @@ export const VenueDetail: React.FC = () => {
       </div>
 
       {/* Modals */}
+      {partnerEditorOpen && partnerId && <PartnerEditor key={partnerId} id={partnerId} onClose={() => setPartnerEditorOpen(false)} />}
       <ApproveModal
         open={approveOpen}
         venueName={venue.name}

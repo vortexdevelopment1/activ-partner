@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../../../Utills/performance_logger.dart';
+import '../../../Utills/slot_expiry.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -24,6 +26,7 @@ class DirectBookSlotScreen extends StatefulWidget {
     required this.venueId,
     required this.venueName,
     this.client,
+    this.now,
   });
 
   final ActivityModel activity;
@@ -31,12 +34,16 @@ class DirectBookSlotScreen extends StatefulWidget {
   final String venueId;
   final String venueName;
   final http.Client? client;
+  final DateTime Function()? now;
 
   @override
   State<DirectBookSlotScreen> createState() => _DirectBookSlotScreenState();
 }
 
-class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
+class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with WidgetsBindingObserver {
+  Timer? _expiryTimer;
+  DateTime _now() => widget.now?.call() ?? DateTime.now();
+  bool _hasEnded(_BookableSlot slot) => slotHasEnded(_selectedDate, slot.startTime, slot.endTime, _now());
   late DateTime _selectedDate;
   late String _selectedCourt;
   final List<_BookableSlot> _selectedSlots = [];
@@ -68,7 +75,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   List<_BookableSlot> get _slots {
-    if (_serverSlots != null) return _serverSlots!;
+    if (_serverSlots != null) return _serverSlots!.where((slot) => !_hasEnded(slot)).toList();
     final day = DateFormat('EEEE').format(_selectedDate).toLowerCase();
     final raw = _readTimingForSelectedActivity();
     final matches = <_BookableSlot>[];
@@ -83,7 +90,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       }
     }
 
-    return matches;
+    return matches.where((slot) => !_hasEnded(slot)).toList();
   }
 
   List<_BookableSlot> _slotsFromDayMap(Map value, String day) {
@@ -102,9 +109,36 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
+    _selectedDate = venueCalendarDate(_now());
     _selectedCourt = _courts.first;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSlots());
+  }
+
+  void _scheduleSlotExpiry() {
+    _expiryTimer?.cancel();
+    final ends = _slots.map((slot) => slotEndInstant(_selectedDate, slot.startTime, slot.endTime))
+        .whereType<DateTime>().where((end) => end.isAfter(_now())).toList()..sort();
+    if (ends.isEmpty) return;
+    _expiryTimer = Timer(ends.first.difference(_now()), _refreshExpiredSlots);
+  }
+
+  void _refreshExpiredSlots() {
+    if (!mounted) return;
+    setState(() => _selectedSlots.removeWhere(_hasEnded));
+    _scheduleSlotExpiry();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshExpiredSlots();
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -193,6 +227,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
             .toList();
         _selectedSlots.clear();
       });
+      _scheduleSlotExpiry();
     } catch (error) {
       if (!mounted || generation != _slotLoadGeneration) return;
       setState(() {
@@ -410,11 +445,12 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
   }
 
   Future<void> _pickDate() async {
+    final today = venueCalendarDate(_now());
     final date = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 120)),
+      initialDate: _selectedDate.isBefore(today) ? today : _selectedDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 120)),
     );
     if (date == null || !mounted) return;
     setState(() {
@@ -448,6 +484,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       _message('Please select at least one slot.');
       return;
     }
+    final chosenSlots = List<_BookableSlot>.of(_selectedSlots);
 
     final details = await Navigator.push<Map<String, String>>(
       context,
@@ -458,6 +495,10 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       ),
     );
     if (details == null || !mounted) return;
+    if (_selectedSlots.isEmpty || chosenSlots.any(_hasEnded)) {
+      _message('The selected slot has ended. Please choose another slot.');
+      return;
+    }
     final participant = <String, String>{
       'participantName': details['participantName']!,
       'participantPhone': details['participantPhone']!,
@@ -500,6 +541,9 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
           participant: participant,
           payment: payment,
           onConfirm: () async {
+            if (chosenSlots.any(_hasEnded)) {
+              throw Exception('The selected slot has ended. Please choose another slot.');
+            }
             final token = await SharedPreference.readStr('jwt_token');
             if (token == null || token.isEmpty) {
               throw Exception('Please sign in again.');
@@ -632,7 +676,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
       _message('No slots are available for this date.');
       return;
     }
-    final selected = await Navigator.push<List<_BookableSlot>>(
+    final selected = await Navigator.push<_SlotSelection>(
       context,
       MaterialPageRoute(
         builder: (_) => _WalkInSlotSelectionScreen(
@@ -640,15 +684,19 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> {
           slots: _slots,
           selectedSlots: _selectedSlots,
           loadSlots: _loadSlotsForDate,
+          now: _now,
         ),
       ),
     );
     if (selected == null || !mounted) return;
     setState(() {
+      _selectedDate = selected.date;
+      _serverSlots = selected.slots;
       _selectedSlots
         ..clear()
-        ..addAll(selected);
+        ..addAll(selected.selectedSlots);
     });
+    _scheduleSlotExpiry();
     if (_selectedSlots.isNotEmpty) await _reserve();
   }
 
@@ -1190,18 +1238,27 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
       );
 }
 
+class _SlotSelection {
+  const _SlotSelection(this.date, this.slots, this.selectedSlots);
+  final DateTime date;
+  final List<_BookableSlot> slots;
+  final List<_BookableSlot> selectedSlots;
+}
+
 class _WalkInSlotSelectionScreen extends StatefulWidget {
   const _WalkInSlotSelectionScreen({
     required this.date,
     required this.slots,
     required this.selectedSlots,
     required this.loadSlots,
+    required this.now,
   });
 
   final DateTime date;
   final List<_BookableSlot> slots;
   final List<_BookableSlot> selectedSlots;
   final Future<List<_BookableSlot>> Function(DateTime date) loadSlots;
+  final DateTime Function() now;
 
   @override
   State<_WalkInSlotSelectionScreen> createState() =>
@@ -1209,16 +1266,52 @@ class _WalkInSlotSelectionScreen extends StatefulWidget {
 }
 
 class _WalkInSlotSelectionScreenState
-    extends State<_WalkInSlotSelectionScreen> {
+    extends State<_WalkInSlotSelectionScreen> with WidgetsBindingObserver {
+  Timer? _expiryTimer;
   late DateTime _date = widget.date;
   late List<_BookableSlot> _slots = [...widget.slots];
   late final List<_BookableSlot> _selectedSlots = [...widget.selectedSlots];
   bool _loadingDate = false;
 
+  bool _hasEnded(_BookableSlot slot) => slotHasEnded(_date, slot.startTime, slot.endTime, widget.now());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _selectedSlots.removeWhere(_hasEnded);
+    _scheduleExpiry();
+  }
+
+  void _scheduleExpiry() {
+    _expiryTimer?.cancel();
+    final ends = _slots.map((slot) => slotEndInstant(_date, slot.startTime, slot.endTime))
+        .whereType<DateTime>().where((end) => end.isAfter(widget.now())).toList()..sort();
+    if (ends.isEmpty) return;
+    _expiryTimer = Timer(ends.first.difference(widget.now()), _refreshExpired);
+  }
+
+  void _refreshExpired() {
+    if (!mounted) return;
+    setState(() => _selectedSlots.removeWhere(_hasEnded));
+    _scheduleExpiry();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshExpired();
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   Future<void> _changeDate(int days) async {
     final next = DateTime(_date.year, _date.month, _date.day + days);
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
+    final todayOnly = venueCalendarDate(widget.now());
     if (next.isBefore(todayOnly) || _loadingDate) return;
     setState(() => _loadingDate = true);
     try {
@@ -1229,6 +1322,7 @@ class _WalkInSlotSelectionScreenState
         _slots = slots;
         _selectedSlots.clear();
       });
+      _scheduleExpiry();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1254,7 +1348,7 @@ class _WalkInSlotSelectionScreenState
   }
 
   void _toggle(_BookableSlot slot) {
-    if (!slot.isAvailable) return;
+    if (!slot.isAvailable || _hasEnded(slot)) return;
     setState(() {
       final index = _selectedSlots.indexWhere((item) =>
           item.startTime == slot.startTime && item.endTime == slot.endTime);
@@ -1270,7 +1364,7 @@ class _WalkInSlotSelectionScreenState
   Widget build(BuildContext context) {
     const sections = ['Morning', 'Afternoon', 'Evening', 'Night'];
     final visibleSlots = _slots
-        .where((slot) => slot.status != 'not_operational')
+        .where((slot) => slot.status != 'not_operational' && !_hasEnded(slot))
         .toList();
     return Scaffold(
       backgroundColor: _background,
@@ -1381,7 +1475,8 @@ class _WalkInSlotSelectionScreenState
                   child: ElevatedButton(
                     onPressed: _selectedSlots.isEmpty
                         ? null
-                        : () => Navigator.pop(context, _selectedSlots),
+                        : () => Navigator.pop(context, _SlotSelection(
+                            _date, List.of(_slots), List.of(_selectedSlots))),
                     style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(54),
                         backgroundColor: const Color(0xFF1F1F1F),

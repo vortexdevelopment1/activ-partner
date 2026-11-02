@@ -40,6 +40,7 @@ describe('admin venue detail access', () => {
       prisma: {
         venues: { findUnique: jest.fn(async ({ where }) => reviews[where.id] ?? null) },
         users: { findUnique: jest.fn(async () => ({ name: 'Test Admin' })) },
+        partner_bank_accounts: { findFirst: jest.fn(async () => ({ id: 'bank-1', partner_id: 'partner', account_holder_name: 'Test Holder', bank_name: 'HDFC Bank', account_number: '1234567890', ifsc_code: 'HDFC0001234', account_type: 'SAVINGS', branch_name: 'Indore', cancelled_cheque_url: '/cheque.jpg', status: 'APPROVED', is_primary: true })) },
       },
       findOne: jest.fn(async (id: string) => {
         const review = reviews[id];
@@ -86,7 +87,7 @@ describe('admin venue detail access', () => {
     const body = await response.json();
     expect(body.data).toMatchObject({ id: pendingId, status: 'pending', submittedAt: submitted.toISOString(),
       electronicSignature: 'private-signature', termsAccepted: true,
-      partner: { email: 'owner@example.com', aadhaarNumber: 'test-aadhaar', panCardUrl: '/pan.jpg', gstinDocUrl: '/gst.jpg' } });
+      partner: { email: 'owner@example.com', aadhaarNumber: 'test-aadhaar', panCardUrl: '/pan.jpg', gstinDocUrl: '/gst.jpg', bankAccountNumber: '1234567890', bankName: 'HDFC Bank' }, bankAccount: { accountNumber: '1234567890', bankName: 'HDFC Bank', status: 'approved' } });
     expect(reviews[pendingId].status).toBe('DRAFT');
   });
 

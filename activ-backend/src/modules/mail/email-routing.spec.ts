@@ -45,6 +45,33 @@ describe('explicit Gmail-only email routing', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it.each(['gmail', 'smtp'])('renders callback requests with the shared ACTIV template through %s', async provider => {
+    const sendMail = jest.fn().mockResolvedValue({ messageId: 'smtp-1' });
+    (nodemailer.createTransport as jest.Mock).mockReturnValue({ sendMail, close: jest.fn() });
+    service = new MailService(new ConfigService({ EMAIL_PROVIDER: provider,
+      GOOGLE_SENDER_EMAIL: 'support@activ.live', SUPPORT_EMAIL: 'support@example.com',
+      MAIL_USER: 'sender@example.com', MAIL_PASS: 'test' }), gmail, delivery);
+    service.onModuleInit();
+    await service.sendCallbackRequestEmail({ partnerName: 'Owner & Partner', partnerEmail: 'owner@example.com',
+      venueName: 'Arena', phone: '9876543210', city: 'Delhi', callbackDate: '2026-11-01',
+      callbackTime: '10:00', query: 'Please call me.\n<script>unsafe</script>' });
+    const message = provider === 'gmail' ? gmail.sendEmail.mock.calls[0][0] : sendMail.mock.calls[0][0];
+    expect(provider === 'gmail' ? message.recipientEmail : message.to).toBe('support@example.com');
+    expect(message.subject).toBe('[Partner Callback] New callback request');
+    for (const text of ['Hi ACTIV Support,', 'Partner Name', 'Owner &amp; Partner', 'owner@example.com',
+      'Arena', '9876543210', 'City', 'Delhi', '2026-11-01', '10:00', 'Request Status',
+      'Partner query', 'Please call me.<br>&lt;script&gt;unsafe&lt;/script&gt;', 'Team ACTIV', 'cid:activ-partner-logo']) {
+      expect(message.html).toContain(text);
+    }
+    expect(message.html).not.toContain('<script>');
+    expect(message.html).not.toContain('Application Status');
+    expect(message.text).toContain('Partner Name: Owner & Partner');
+    expect(message.text).not.toContain('partnerName:');
+    const images = provider === 'gmail' ? message.inlineImages : message.attachments;
+    expect(images).toEqual([expect.objectContaining({ cid: 'activ-partner-logo' })]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('rejects unknown providers and the wrong Gmail sender at startup', () => {
     expect(() => new MailService(new ConfigService({ EMAIL_PROVIDER: 'typo' }), gmail, delivery).onModuleInit()).toThrow('EMAIL_PROVIDER');
     expect(() => new MailService(new ConfigService({ EMAIL_PROVIDER: 'gmail', GOOGLE_SENDER_EMAIL: 'someone@example.com' }), gmail, delivery).onModuleInit()).toThrow('support@activ.live');
