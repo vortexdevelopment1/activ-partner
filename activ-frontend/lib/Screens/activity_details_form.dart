@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'CommonCode.dart';
+import 'onboarding_widgets.dart';
 
-const activityDetailsBackground = Color(0xFFF1F7D9);
 const _purple = Color(0xFF850FC6);
 const _border = Color(0xFFDDDFDA);
 const activityInputStyle = TextStyle(
     fontFamily: 'Satoshi', fontSize: 16, color: Colors.black, height: 1.25);
 
 double activityDetailsGutter(BuildContext context) =>
-    (MediaQuery.sizeOf(context).width.clamp(0, 600) * .054)
-        .clamp(20, 32)
-        .toDouble();
+    15;
 
 String activityQuestionPlaceholder(
     String activity, String label, String configured) {
@@ -108,83 +107,39 @@ class ActivityDetailsLayout extends StatelessWidget {
       required this.onContinue,
       required this.buttonLabel,
       this.saving = false,
+      this.currentStep,
+      this.totalSteps,
       this.onBack});
   final Widget child;
   final VoidCallback? onContinue;
   final VoidCallback? onBack;
   final String buttonLabel;
   final bool saving;
+  final int? currentStep;
+  final int? totalSteps;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: activityDetailsBackground,
-        body: SafeArea(
-            child: Center(
-                child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Column(children: [
-            Padding(
-                padding: EdgeInsets.fromLTRB(activityDetailsGutter(context), 20,
-                    activityDetailsGutter(context), 24),
-                child: Row(children: [
-                  Material(
-                      color: Colors.white,
-                      shape: const CircleBorder(),
-                      elevation: 3,
-                      shadowColor: Colors.black26,
-                      child: IconButton(
-                          style: IconButton.styleFrom(
-                              side: BorderSide.none,
-                              backgroundColor: Colors.white),
-                          tooltip: 'Back',
-                          onPressed: saving
-                              ? null
-                              : onBack ?? () => Navigator.maybePop(context),
-                          constraints: const BoxConstraints.tightFor(
-                              width: 48, height: 48),
-                          icon: const Icon(Icons.arrow_back, size: 26))),
-                  const SizedBox(width: 20),
-                  const Expanded(
-                      child: Text('Update Activity Details',
-                          style: TextStyle(
-                              fontFamily: 'Satoshi',
-                              fontSize: 26,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black,
-                              height: 1.2))),
-                ])),
-            Expanded(child: child),
-            Padding(
-                padding: EdgeInsets.fromLTRB(activityDetailsGutter(context), 10,
-                    activityDetailsGutter(context), 16),
-                child: SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: saving ? null : onContinue,
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: const Color(0xFFD8F34A),
-                          disabledBackgroundColor: Colors.black54,
-                          disabledForegroundColor: const Color(0xFFD8F34A),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(11))),
-                      child: saving
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Color(0xFFD8F34A)))
-                          : Text(buttonLabel,
-                              style: const TextStyle(
-                                  fontFamily: 'Satoshi',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600)),
-                    ))),
-          ]),
+  Widget build(BuildContext context) => OnboardingScaffold(
+    child: Column(children: [
+      if (currentStep != null && totalSteps != null) Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        child: getStepBarCount(currentStep! / totalSteps!, currentStep!, totalSteps!),
+      ),
+      const SizedBox(height: 24),
+      Expanded(child: child),
+      bottomBarShadow(),
+      Row(children: [
+        Expanded(flex: 3, child: Tooltip(message: 'Back', child: InkWell(
+          onTap: saving ? null : onBack ?? () => Navigator.maybePop(context),
+          child: getBackButton(context, 'Back', 'activityDetails'),
         ))),
-      );
+        Expanded(flex: 7, child: Semantics(button: true, enabled: !saving && onContinue != null,
+          child: InkWell(onTap: saving ? null : onContinue,
+            child: Opacity(opacity: onContinue == null && !saving ? .5 : 1,
+              child: getButtonBlack(context, saving ? 'Saving...' : buttonLabel, 'activityDetails'))))),
+      ]),
+    ]),
+  );
 }
 
 class ActivityDetailsHeading extends StatelessWidget {

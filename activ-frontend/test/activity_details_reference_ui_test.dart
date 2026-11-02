@@ -94,7 +94,7 @@ void main() {
         '${onboarding ? 'onboarding' : 'add activity'} uses the reference controls and preserves canonical units',
         (tester) async {
       tester.view.devicePixelRatio = 1;
-          tester.view.physicalSize = const Size(600, 900);
+          tester.view.physicalSize = const Size(430, 932);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final key = GlobalKey();
@@ -127,6 +127,11 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: RepaintBoundary(key: key, child: screen)));
       await tester.pumpAndSettle();
+      expect(find.text(onboarding ? '8/10' : '4/6'), findsOneWidget);
+      expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, onboarding ? .8 : 4 / 6);
+      expect(find.bySemanticsLabel('ACTIV Partner'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_back), findsNothing);
+      expect(find.text('Back').hitTestable(), findsOneWidget);
       expect(find.text('Yoga Studio (Single booking)'), findsOneWidget);
       expect(find.text('Provide Activity Specific Details'), findsOneWidget);
       expect(find.text('25'), findsOneWidget);
@@ -137,6 +142,7 @@ void main() {
       await tester.tap(find.byTooltip('Increase Max Batch Size'));
       await tester.pumpAndSettle();
       expect(find.text('26'), findsOneWidget);
+      await tester.ensureVisible(find.text('Outdoor'));
       await tester.tap(find.text('Outdoor'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('sq ft'));

@@ -74,7 +74,8 @@ void main() {
   testWidgets('management displays update activity details layout and saves all real category fields', (tester) async {
     final writes = await openEditor(tester);
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
-    expect(find.text('Update Activity Details'), findsOneWidget);
+    expect(find.text('Update Activity Details'), findsNothing);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
     expect(find.text('Basketball (Court booking)'), findsOneWidget);
     expect(find.text('Provide Activity Specific Details'), findsOneWidget);
     expect(find.text('Save Changes'), findsOneWidget);

@@ -753,6 +753,8 @@ class _State extends State<CategoryQuestionsScreen> {
     final empty = !_isLoading && _errorMessage.isEmpty && _globalQuestions.isEmpty && _sections.every((section) => section.questions.isEmpty);
     final name = widget.currentCategory['title']?.toString() ?? 'Activity';
     return ActivityDetailsLayout(
+      currentStep: _managedMode ? null : currentStep,
+      totalSteps: _managedMode ? null : totalSteps,
       buttonLabel: _managedMode ? 'Save Changes' : 'Next',
       saving: _savingManaged,
       onContinue: _isLoading || _savingManaged || _errorMessage.isNotEmpty ? null : () {
