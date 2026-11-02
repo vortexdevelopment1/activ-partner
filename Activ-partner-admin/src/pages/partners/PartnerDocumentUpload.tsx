@@ -16,7 +16,7 @@ export const PartnerDocumentUpload: React.FC<{
   return <div className="mt-2 space-y-1">
     <label className="block text-xs font-medium text-primary-700">
       Upload {label}
-      <input type="file" className="block w-full mt-1 text-xs text-gray-600 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-primary-700" disabled={uploading}
+      <input type="file" className="block w-full mt-1 cursor-pointer text-xs text-gray-600 file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-primary-700 disabled:cursor-not-allowed disabled:file:cursor-not-allowed" disabled={uploading}
         accept={imageOnly ? '.jpg,.jpeg,.png,.webp' : '.jpg,.jpeg,.png,.webp,.pdf'}
         onChange={async event => {
           const file = event.target.files?.[0];

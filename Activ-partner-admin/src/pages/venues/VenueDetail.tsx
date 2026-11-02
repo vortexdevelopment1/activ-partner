@@ -583,13 +583,10 @@ export const VenueDetail: React.FC = () => {
           {/* Partner */}
           {partner && (
             <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+              <div className="mb-4">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <User size={16} className="text-gray-400" /> Partner Information
                 </h3>
-                {partnerId && <button type="button" onClick={() => setPartnerEditorOpen(true)} className="btn-secondary inline-flex items-center gap-2">
-                  <Pencil size={14} /> Edit partner
-                </button>}
               </div>
               <div className="space-y-2.5">
                 <InfoRow label="Name" value={partnerName || 'Profile not completed'} />
@@ -606,6 +603,11 @@ export const VenueDetail: React.FC = () => {
                 <InfoRow label="IFSC" value={partner.bankIfscCode || bankAccount?.ifscCode} />
                 <InfoRow label="Account Holder" value={partner.bankAccountHolderName || bankAccount?.accountHolderName} />
               </div>
+              {partnerId && <div className="mt-4 flex justify-end border-t border-gray-100 pt-4">
+                <button type="button" onClick={() => setPartnerEditorOpen(true)} className="btn-secondary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
+                  <Pencil size={14} /> Edit partner
+                </button>
+              </div>}
             </div>
           )}
 

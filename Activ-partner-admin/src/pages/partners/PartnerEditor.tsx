@@ -67,7 +67,7 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
           </section>)}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[['status', 'Account status', ['PENDING', 'ACTIVE', 'SUSPENDED']], ['kycStatus', 'Verification status', ['PENDING', 'APPROVED', 'REJECTED']]].map(([key, label, options]) => <label key={key as string} className="text-sm text-gray-600 space-y-1"><span>{label}</span>
-              <select className="input w-full" value={value(key as string)} onChange={event => setChanges(previous => ({ ...previous, [key as string]: event.target.value }))}>{(options as string[]).map(option => <option key={option}>{option}</option>)}</select>
+              <select className="input w-full cursor-pointer disabled:cursor-not-allowed" value={value(key as string)} onChange={event => setChanges(previous => ({ ...previous, [key as string]: event.target.value }))}>{(options as string[]).map(option => <option key={option}>{option}</option>)}</select>
             </label>)}
           </div>
           <section className="space-y-3"><h4 className="font-semibold text-gray-900">Bank accounts</h4>
@@ -76,8 +76,8 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
               <h5 className="text-sm font-medium">Account {index + 1}</h5>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{bankFields.map(([key, label]) => <label key={key} className="text-sm text-gray-600 space-y-1"><span>{label}</span><input className="input w-full" required={['accountHolderName', 'bankName', 'accountNumber', 'ifscCode'].includes(key)} value={bank[key] ?? ''} onChange={event => updateBank(index, key, event.target.value)} /></label>)}</div>
               <PartnerDocumentUpload partnerId={id} kind="cancelled-cheque" label={`cancelled cheque for account ${index + 1}`} onBusyChange={onUploadBusyChange} onUploaded={url => updateBank(index, 'cancelledChequeUrl', url)} />
-              <label className="block text-sm">Status<select className="input w-full" value={bank.status} onChange={event => updateBank(index, 'status', event.target.value)}>{['UNDER_REVIEW', 'APPROVED', 'REJECTED'].map(status => <option key={status}>{status}</option>)}</select></label>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={bank.isPrimary} onChange={event => updateBank(index, 'isPrimary', event.target.checked)} />Primary account</label>
+              <label className="block text-sm">Status<select className="input w-full cursor-pointer disabled:cursor-not-allowed" value={bank.status} onChange={event => updateBank(index, 'status', event.target.value)}>{['UNDER_REVIEW', 'APPROVED', 'REJECTED'].map(status => <option key={status}>{status}</option>)}</select></label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="cursor-pointer disabled:cursor-not-allowed" checked={bank.isPrimary} onChange={event => updateBank(index, 'isPrimary', event.target.checked)} />Primary account</label>
             </div>)}
             <button type="button" className="btn-secondary" onClick={() => setBanks([...accounts, { accountHolderName: '', bankName: '', accountNumber: '', ifscCode: '', accountType: '', branchName: '', cancelledChequeUrl: '', upiId: '', status: 'UNDER_REVIEW', isPrimary: false, rejectionReason: '' }])}>Add bank account</button>
           </section>
