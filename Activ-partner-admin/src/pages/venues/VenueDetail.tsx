@@ -20,7 +20,9 @@ import {
   RefreshCw,
   FileText,
   Landmark,
+  Pencil,
 } from 'lucide-react';
+import { PartnerEditor } from '../partners/PartnerEditor';
 import { venuesApi } from '../../api/venues.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
 import { Badge } from '../../components/ui/Badge';
@@ -91,6 +93,7 @@ export const VenueDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
 
+  const [partnerEditorOpen, setPartnerEditorOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
@@ -192,6 +195,7 @@ export const VenueDetail: React.FC = () => {
 
   // venue.partner is a flat merged user+partner object from the API
   const partner = typeof venue.partner === 'object' ? (venue.partner as any) : null;
+  const partnerId = venue.partnerId || partner?.id;
   const bankAccount: BankAccount | null | undefined = venue.bankAccount ?? (partner?.bankAccountNumber ? {
     id: '',
     partnerId: venue.partnerId,
@@ -579,9 +583,14 @@ export const VenueDetail: React.FC = () => {
           {/* Partner */}
           {partner && (
             <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <User size={16} className="text-gray-400" /> Partner Information
-              </h3>
+              <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <User size={16} className="text-gray-400" /> Partner Information
+                </h3>
+                {partnerId && <button type="button" onClick={() => setPartnerEditorOpen(true)} className="btn-secondary inline-flex items-center gap-2">
+                  <Pencil size={14} /> Edit partner
+                </button>}
+              </div>
               <div className="space-y-2.5">
                 <InfoRow label="Name" value={partnerName || 'Profile not completed'} />
                 <InfoRow label="Email" value={partner.email?.trim() || 'Not provided'} />
@@ -801,6 +810,7 @@ export const VenueDetail: React.FC = () => {
       </div>
 
       {/* Modals */}
+      {partnerEditorOpen && partnerId && <PartnerEditor key={partnerId} id={partnerId} onClose={() => setPartnerEditorOpen(false)} />}
       <ApproveModal
         open={approveOpen}
         venueName={venue.name}

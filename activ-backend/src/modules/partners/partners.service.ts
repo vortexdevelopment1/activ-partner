@@ -13,6 +13,7 @@ import { SubmitGstVerificationDto } from './dto/submit-gst-verification.dto';
 import { ReviewGstVerificationDto } from './dto/review-gst-verification.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { AdminUpdatePartnerDto } from './dto/admin-update-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../../common/domain-types';
@@ -218,7 +219,7 @@ export class PartnersService {
         where,
         include: {
           partner_business_profiles: true,
-          partner_users: { include: { users: true } },
+          partner_users: { where: { role: PartnerRole.PARTNER_ADMIN }, include: { users: true } },
           _count: { select: { venues: true } },
         },
         skip: pagination.skip,
@@ -263,6 +264,7 @@ export class PartnersService {
       where: { id },
       include: {
         partner_business_profiles: true,
+        partner_bank_accounts: { orderBy: { created_at: 'desc' } },
         partner_users: {
           where: { role: PartnerRole.PARTNER_ADMIN },
           include: { users: true },
@@ -280,6 +282,19 @@ export class PartnersService {
     const names = (owner?.name || '').trim().split(/\s+/);
     return {
       id: partner.id,
+      legalName: partner.legal_name,
+      avatarUrl: owner?.profile_photo ?? null,
+      ownerName: profile?.owner_name ?? null,
+      businessEmail: profile?.email ?? null,
+      addressLine2: profile?.address_line_2 ?? null,
+      kycStatus: profile?.kyc_status ?? PartnerKycStatus.PENDING,
+      rejectionReason: profile?.rejection_reason ?? null,
+      bankAccounts: (partner.partner_bank_accounts ?? []).map((bank: any) => ({
+        id: bank.id, accountHolderName: bank.account_holder_name, bankName: bank.bank_name,
+        accountNumber: bank.account_number, ifscCode: bank.ifsc_code, accountType: bank.account_type,
+        branchName: bank.branch_name, cancelledChequeUrl: bank.cancelled_cheque_url, upiId: bank.upi_id,
+        status: bank.status, isPrimary: bank.is_primary, rejectionReason: bank.rejection_reason,
+      })),
       userId: owner?.id ?? null,
       firstName: names[0] || null,
       lastName: names.slice(1).join(' ') || null,
@@ -330,8 +345,8 @@ export class PartnersService {
     } as GstVerificationRequest;
   }
 
-  async update(id: string, updatePartnerDto: UpdatePartnerDto): Promise<any> {
-    if (updatePartnerDto.isActive !== undefined) {
+  async update(id: string, updatePartnerDto: AdminUpdatePartnerDto, reviewerId?: string): Promise<any> {
+    if (updatePartnerDto.isActive !== undefined && Object.keys(updatePartnerDto).length === 1) {
       const previous = updatePartnerDto.isActive === false
         ? await this.prisma.partners.findUnique({ where: { id }, select: { status: true } })
         : null;
@@ -362,14 +377,20 @@ export class PartnersService {
     }
 
     const unsupported = [
-      'businessDescription', 'country', 'gstinDocUrl', 'panCardUrl',
+      'businessDescription', 'country',
       'aadhaarName', 'aadhaarNumber', 'aadhaarCardUrl', 'bankAccountNumber',
-      'bankIfscCode', 'bankAccountHolderName', 'isVerified',
+      'bankIfscCode', 'bankAccountHolderName',
     ].filter((field) => (updatePartnerDto as any)[field] !== undefined);
     if (unsupported.length > 0) {
       throw new BadRequestException(`Unsupported partner profile fields: ${unsupported.join(', ')}`);
     }
 
+    if (updatePartnerDto.phone !== undefined && !updatePartnerDto.phone?.trim()) {
+      throw new BadRequestException('Partner phone number is required');
+    }
+    if (updatePartnerDto.legalName !== undefined && !updatePartnerDto.legalName?.trim()) {
+      throw new BadRequestException('Legal name is required');
+    }
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await tx.partners.findUnique({
         where: { id },
@@ -386,7 +407,7 @@ export class PartnersService {
       const firstName = updatePartnerDto.firstName?.trim() ?? currentName[0] ?? '';
       const lastName = updatePartnerDto.lastName?.trim() ?? currentName.slice(1).join(' ');
       const nextName = [firstName, lastName].filter(Boolean).join(' ') || null;
-      const nextEmail = updatePartnerDto.email?.trim().toLowerCase();
+      const nextEmail = updatePartnerDto.email === undefined ? undefined : updatePartnerDto.email?.trim().toLowerCase() || null;
       const nextPhone = updatePartnerDto.phone ? this.normalizePhone(updatePartnerDto.phone) : undefined;
 
       if (nextEmail && nextEmail !== (ownerLink.users.email || '').toLowerCase()) {
@@ -401,10 +422,25 @@ export class PartnersService {
         if (phoneOwner && phoneOwner.id !== ownerLink.user_id) throw new ConflictException('Phone number is already registered');
       }
 
+      const profileFields: Record<string, any> = {};
+      const fields = {
+        gstNumber: 'gst_number', panNumber: 'pan_number', gstinDocUrl: 'gst_document_url',
+        panCardUrl: 'pan_document_url', addressLine2: 'address_line_2', ownerName: 'owner_name',
+        contactPhone: 'phone_e164', businessEmail: 'email', rejectionReason: 'rejection_reason',
+      };
+      for (const [key, column] of Object.entries(fields)) {
+        if (updatePartnerDto[key] !== undefined) profileFields[column] = updatePartnerDto[key]?.trim() || null;
+      }
+      const kycStatus = updatePartnerDto.kycStatus ?? (updatePartnerDto.isVerified === undefined
+        ? undefined : updatePartnerDto.isVerified ? PartnerKycStatus.APPROVED : PartnerKycStatus.PENDING);
+      if (kycStatus !== undefined) {
+        Object.assign(profileFields, { kyc_status: kycStatus, reviewed_by: reviewerId ?? null, reviewed_at: new Date() });
+      }
       const user = await tx.users.update({
         where: { id: ownerLink.user_id },
         data: {
-          ...(nextName !== null ? { name: nextName } : {}),
+          name: nextName,
+          ...(updatePartnerDto.avatarUrl !== undefined ? { profile_photo: updatePartnerDto.avatarUrl?.trim() || null } : {}),
           ...(nextEmail !== undefined ? { email: nextEmail } : {}),
           ...(nextPhone !== undefined ? { phone_e164: nextPhone } : {}),
           updated_at: new Date(),
@@ -418,39 +454,77 @@ export class PartnersService {
           owner_name: nextName, email: nextEmail ?? user.email, phone_e164: nextPhone ?? user.phone_e164,
           address_line_1: updatePartnerDto.businessAddress?.trim() || null,
           city: updatePartnerDto.city?.trim() || null, state: updatePartnerDto.state?.trim() || null,
-          postal_code: updatePartnerDto.zipCode?.trim() || null, updated_at: new Date(),
+          postal_code: updatePartnerDto.zipCode?.trim() || null, ...profileFields, updated_at: new Date(),
         },
         update: {
           ...(updatePartnerDto.businessName !== undefined ? { business_name: updatePartnerDto.businessName.trim() } : {}),
-          owner_name: nextName,
+          ...(updatePartnerDto.firstName !== undefined || updatePartnerDto.lastName !== undefined ? { owner_name: nextName } : {}),
           ...(nextEmail !== undefined ? { email: nextEmail } : {}),
           ...(nextPhone !== undefined ? { phone_e164: nextPhone } : {}),
           ...(updatePartnerDto.businessAddress !== undefined ? { address_line_1: updatePartnerDto.businessAddress.trim() } : {}),
           ...(updatePartnerDto.city !== undefined ? { city: updatePartnerDto.city.trim() } : {}),
           ...(updatePartnerDto.state !== undefined ? { state: updatePartnerDto.state.trim() } : {}),
           ...(updatePartnerDto.zipCode !== undefined ? { postal_code: updatePartnerDto.zipCode.trim() } : {}),
+          ...profileFields,
           updated_at: new Date(),
         },
       });
       const partner = await tx.partners.update({
         where: { id },
         data: {
-          ...(updatePartnerDto.businessName !== undefined ? { legal_name: updatePartnerDto.businessName.trim() } : {}),
+          ...(updatePartnerDto.legalName !== undefined ? { legal_name: updatePartnerDto.legalName.trim() }
+            : !reviewerId && updatePartnerDto.businessName?.trim() ? { legal_name: updatePartnerDto.businessName.trim() } : {}),
+          ...(updatePartnerDto.status !== undefined ? { status: updatePartnerDto.status }
+            : updatePartnerDto.isActive !== undefined ? { status: updatePartnerDto.isActive ? PartnerStatus.ACTIVE : PartnerStatus.SUSPENDED } : {}),
           updated_at: new Date(),
         },
       });
-      return { partner, user, profile };
+      if (updatePartnerDto.bankAccounts) {
+        if (updatePartnerDto.bankAccounts.filter(bank => bank.isPrimary).length > 1) {
+          throw new BadRequestException('Only one bank account can be primary');
+        }
+        if (new Set(updatePartnerDto.bankAccounts.filter(b => b.id).map(b => b.id)).size !== updatePartnerDto.bankAccounts.filter(b => b.id).length) {
+          throw new BadRequestException('Duplicate bank account IDs');
+        }
+        for (const bank of updatePartnerDto.bankAccounts) {
+          if (![bank.accountHolderName, bank.bankName, bank.accountNumber, bank.ifscCode].every(value => value?.trim())) {
+            throw new BadRequestException('Bank account holder, bank name, account number and IFSC are required');
+          }
+          const existing = bank.id ? await tx.partner_bank_accounts.findFirst({ where: { id: bank.id, partner_id: id } }) : null;
+          if (bank.id && !existing) {
+            throw new BadRequestException('Bank account does not belong to this partner');
+          }
+          const data = {
+            account_holder_name: bank.accountHolderName.trim(), bank_name: bank.bankName.trim(),
+            account_number: bank.accountNumber.trim(), ifsc_code: bank.ifscCode.trim().toUpperCase(),
+            account_type: bank.accountType?.trim() || null, branch_name: bank.branchName?.trim() || null,
+            cancelled_cheque_url: bank.cancelledChequeUrl?.trim() || null, upi_id: bank.upiId?.trim() || null,
+            status: bank.status, is_primary: bank.isPrimary, rejection_reason: bank.rejectionReason?.trim() || null,
+            ...(existing?.status !== bank.status ? { reviewed_by: reviewerId ?? null, reviewed_at: new Date(), has_seen_verified_screen: false } : {}),
+            updated_at: new Date(),
+          };
+          if (bank.isPrimary) await tx.partner_bank_accounts.updateMany({ where: { partner_id: id }, data: { is_primary: false } });
+          if (bank.id) await tx.partner_bank_accounts.update({ where: { id: bank.id }, data });
+          else await tx.partner_bank_accounts.create({ data: { ...data, id: randomUUID(), partner_id: id } });
+        }
+      }
+      return { partner, user, profile, previousStatus: current.status };
     });
 
-    return this.mapPrismaPartner({
-      ...result.partner,
-      partner_business_profiles: result.profile,
-      partner_users: [{ users: result.user }],
-      _count: { venues: 0 },
-    });
+    const saved = await this.findOne(id);
+    if (saved.status === 'suspended' && result.previousStatus !== PartnerStatus.SUSPENDED) {
+      await this.mailService.sendSuspensionEmail({
+        deliveryKey: `partner-suspended:${id}:${result.partner.updated_at.toISOString()}`,
+        toEmail: saved.email, partnerName: [saved.firstName, saved.lastName].filter(Boolean).join(' ') || saved.businessName,
+      });
+    }
+    return saved;
   }
 
   async updateOwnProfile(id: string, updatePartnerDto: UpdatePartnerDto): Promise<Partner> {
+    if (['isActive', 'isVerified', 'status', 'kycStatus', 'bankAccounts', 'legalName', 'rejectionReason', 'avatarUrl', 'ownerName', 'contactPhone', 'businessEmail', 'addressLine2', 'gstinDocUrl', 'panCardUrl'].some(key => (updatePartnerDto as any)[key] !== undefined)) {
+      throw new BadRequestException('Only admins can change partner status or verification');
+    }
     const saved = await this.update(id, updatePartnerDto);
 
     await this.adminNotificationsService.notify(

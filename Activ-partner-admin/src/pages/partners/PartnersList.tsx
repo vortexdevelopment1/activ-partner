@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Briefcase, ToggleLeft, ToggleRight, ExternalLink, Trash2 } from 'lucide-react';
+import { Search, Briefcase, ToggleLeft, ToggleRight, ExternalLink, Trash2, Pencil } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { partnersApi } from '../../api/partners.api';
 import { Pagination } from '../../components/ui/Pagination';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
+import { PartnerEditor } from './PartnerEditor';
 import type { Partner } from '../../types';
 
 export const PartnersList: React.FC = () => {
@@ -18,6 +19,7 @@ export const PartnersList: React.FC = () => {
 
   useEffect(() => { setSearch(searchFromUrl); setPage(1); }, [searchFromUrl]);
   const [page, setPage] = useState(1);
+  const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteLabel, setDeleteLabel] = useState('');
   const limit = 20;
@@ -171,6 +173,7 @@ export const PartnersList: React.FC = () => {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1">
+                        <button onClick={() => setEditId(partner.id)} className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium text-primary-600 hover:bg-primary-50" title="View and edit partner" aria-label="View and edit partner"><Pencil size={16} /> Edit</button>
                         <button
                           onClick={() =>
                             toggleMutation.mutate({
@@ -218,6 +221,8 @@ export const PartnersList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {editId && <PartnerEditor key={editId} id={editId} onClose={() => setEditId(null)} />}
 
       <ConfirmDialog
         open={!!deleteId}

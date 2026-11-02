@@ -21,6 +21,7 @@ import { extname } from 'path';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { PartnersService } from './partners.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { AdminUpdatePartnerDto } from './dto/admin-update-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -127,9 +128,10 @@ export class PartnersController {
   @ApiOperation({ summary: 'Update partner (Admin only)' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updatePartnerDto: UpdatePartnerDto,
+    @Body() updatePartnerDto: AdminUpdatePartnerDto,
+    @CurrentUser() admin: any,
   ) {
-    const data = await this.partnersService.update(id, updatePartnerDto);
+    const data = await this.partnersService.update(id, updatePartnerDto, admin.id);
     return { message: 'Partner updated successfully', data };
   }
 
