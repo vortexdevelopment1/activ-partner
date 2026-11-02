@@ -682,7 +682,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _number = TextEditingController(),
       _confirm = TextEditingController(),
       _ifsc = TextEditingController(),
-      _branch = TextEditingController();
+      _branch = TextEditingController(),
+      _typeController = TextEditingController();
   String? _type;
   PlatformFile? _cheque;
   bool _saving = false,
@@ -706,7 +707,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _confirm.text = _number.text;
       _ifsc.text = (account['ifscCode'] ?? '').toString();
       final type = (account['accountType'] ?? '').toString();
-      _type = ['Saving Account', 'Current Account'].contains(type) ? type : null;
+      _type = type.trim().isEmpty ? null : type;
+      _typeController.text = type;
       _branch.text = (account['branchName'] ?? '').toString();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _ifsc.text.isNotEmpty) _ifscChanged(_ifsc.text);
@@ -755,7 +757,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _number,
       _confirm,
       _ifsc,
-      _branch
+      _branch,
+      _typeController
     ]) {
       controller.dispose();
     }
@@ -1076,7 +1079,8 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
           bool ifsc = false,
           Widget? suffixIcon,
           String? helperText,
-          Color? helperColor}) =>
+          Color? helperColor,
+          ValueChanged<String>? onChanged}) =>
       Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child:
@@ -1126,7 +1130,9 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                       maxLength: 100)
                                 ]
                               : null,
-                  onChanged: ifsc ? _ifscChanged : (_) => _validateLive(),
+                  onChanged: ifsc
+                      ? _ifscChanged
+                      : onChanged ?? (_) => _validateLive(),
                   validator: validator ??
                       (value) => required && (value ?? '').trim().isEmpty
                           ? 'Enter $label.'
@@ -1220,99 +1226,15 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 _ifscValid
                             ? null
                             : 'Enter a valid IFSC code.'),
-                    _label('Account Type'),
-                    FormField<String>(
-                        key: const ValueKey('Account Type'),
-                        initialValue: _type,
-                        validator: (value) =>
-                            value == null ? 'Select an account type.' : null,
-                        builder: (field) => Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Builder(
-                                  builder: (fieldContext) => GestureDetector(
-                                    onTap: _saving
-                                        ? null
-                                        : () async {
-                                            final box =
-                                                fieldContext.findRenderObject()
-                                                    as RenderBox;
-                                            final overlay = Overlay.of(context)
-                                                    .context
-                                                    .findRenderObject()
-                                                as RenderBox;
-                                            final topLeft = box.localToGlobal(
-                                                Offset(0, box.size.height),
-                                                ancestor: overlay);
-                                            final bottomRight =
-                                                box.localToGlobal(
-                                                    Offset(box.size.width,
-                                                        box.size.height),
-                                                    ancestor: overlay);
-                                            final selected =
-                                                await showMenu<String>(
-                                              context: context,
-                                              position: RelativeRect.fromRect(
-                                                Rect.fromPoints(
-                                                    topLeft, bottomRight),
-                                                Offset.zero & overlay.size,
-                                              ),
-                                              color: Colors.white,
-                                              elevation: 3,
-                                              constraints: BoxConstraints(
-                                                minWidth: box.size.width,
-                                                maxWidth: box.size.width,
-                                              ),
-                                              shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8)),
-                                              items: [
-                                                'Saving Account',
-                                                'Current Account'
-                                              ]
-                                                  .map((type) =>
-                                                      PopupMenuItem<String>(
-                                                        value: type,
-                                                        height: 48,
-                                                        child: SizedBox(
-                                                            width:
-                                                                box.size.width -
-                                                                    32,
-                                                            child: Text(type,
-                                                                style:
-                                                                    _text(14))),
-                                                      ))
-                                                  .toList(),
-                                            );
-                                            if (selected != null && mounted) {
-                                              setState(() => _type = selected);
-                                              field.didChange(selected);
-                                              _validateLive();
-                                            }
-                                          },
-                                    child: InputDecorator(
-                                      decoration: _input('Select account type')
-                                          .copyWith(errorText: field.errorText),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            _type ?? 'Select account type',
-                                            style: _type == null
-                                                ? _text(14,
-                                                    color: Colors.grey.shade500)
-                                                : _text(14),
-                                          ),
-                                          const Icon(Icons.keyboard_arrow_down,
-                                              size: 22, color: Colors.grey),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )),
+                    _field('Account Type', 'e.g. Savings or Current',
+                        _typeController,
+                        onChanged: (value) {
+                          _type = value.trim().isEmpty ? null : value;
+                          _validateLive();
+                        },
+                        validator: (value) => (value ?? '').trim().isEmpty
+                            ? 'Enter account type.'
+                            : null),
                     const SizedBox(height: 14),
                     _field('Branch Name', 'Kormangala, Bengaluru', _branch,
                         required: false, readOnly: true),

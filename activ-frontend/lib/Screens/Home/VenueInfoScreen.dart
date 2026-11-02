@@ -682,7 +682,10 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
       );
 
   Widget _notice(IconData icon, Widget content,
-          {Color borderColor = _accent, Color? iconColor, bool centerIcon = false}) =>
+          {Color borderColor = _accent,
+          Color? iconColor,
+          bool centerIcon = false,
+          double iconTopPadding = 0}) =>
       Container(
         margin: const EdgeInsets.only(top: 24),
         padding: const EdgeInsets.all(18),
@@ -695,7 +698,9 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                 ? CrossAxisAlignment.center
                 : CrossAxisAlignment.start,
             children: [
-          Icon(icon, size: 34, color: iconColor ?? borderColor),
+          Padding(
+              padding: EdgeInsets.only(top: iconTopPadding),
+              child: Icon(icon, size: 34, color: iconColor ?? borderColor)),
           const SizedBox(width: 18),
           Expanded(child: content),
         ]),
@@ -708,21 +713,26 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Align(
                   alignment: Alignment.centerRight,
-                  child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFE09A00),
-                          borderRadius: BorderRadius.circular(8)),
-                      child: const Text('Pending Approval',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontFamily: 'Satoshi')))),
+                  child: Transform.translate(
+                      offset: const Offset(8, 0),
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFE09A00),
+                              borderRadius: BorderRadius.circular(7)),
+                          child: const Text('Pending Approval',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontFamily: 'Satoshi'),
+                              maxLines: 1,
+                              softWrap: false)))),
               const SizedBox(height: 2),
               const Text('Status: Under Review',
                   style: TextStyle(
                       fontFamily: 'Satoshi',
+                      fontWeight: FontWeight.w700,
                       fontSize: 18,
                       height: 1.3)),
               const SizedBox(height: 10),
@@ -731,7 +741,8 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                   style: TextStyle(fontSize: 14, height: 1.4)),
             ]),
             borderColor: const Color(0xFF999E93),
-            iconColor: const Color(0xFF77BB17)),
+            iconColor: const Color(0xFF77BB17),
+            iconTopPadding: 20),
         _notice(
             Icons.info_outline,
             const Text(
@@ -821,33 +832,33 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                 key: _formKey,
                 child: SingleChildScrollView(
                     controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SizedBox(
-                              height: 50,
-                              child: Stack(alignment: Alignment.center, children: [
-                                Align(
-                                    alignment: Alignment.centerLeft,
+                              height: 64,
+                              child: Row(children: [
+                                Material(
+                                    color: Colors.white,
+                                    shape: const CircleBorder(),
+                                    elevation: 4,
+                                    shadowColor: Colors.black12,
                                     child: IconButton(
                                         onPressed: () => Navigator.pop(context),
                                         tooltip: 'Back',
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                            minWidth: 44, minHeight: 44),
-                                        icon: const Icon(Icons.arrow_back))),
-                                const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 48),
+                                        icon: const Icon(Icons.arrow_back,
+                                            size: 28))),
+                                const SizedBox(width: 20),
+                                const Expanded(
                                     child: Text('Update Venue Details',
-                                        textAlign: TextAlign.center,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                             fontFamily: 'Satoshi',
-                                            fontSize: 20,
-                                            height: 1.25))),
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 24,
+                                            height: 1.2))),
                               ])),
                           if (_loading)
                             const Padding(

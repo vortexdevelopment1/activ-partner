@@ -153,10 +153,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 obscure: _hideConfirm,
                 onToggle: () => setState(() => _hideConfirm = !_hideConfirm),
                 validator: (value) {
-                  if (checkString(value).isEmpty) {
+                  final password = checkString(value);
+                  if (password.isEmpty) {
                     return 'Please confirm your new password';
                   }
-                  if (value != _next.text) return 'Passwords do not match';
+                  if (!_hasValidPasswordCharacters(password)) {
+                    return 'Password cannot contain spaces or emojis';
+                  }
+                  if (password != _next.text) return 'Passwords do not match';
                   return null;
                 },
               ),
@@ -182,17 +186,29 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
-  String? _requiredPassword(String? value) =>
-      checkString(value).isEmpty ? 'Please enter your password' : null;
+  String? _requiredPassword(String? value) {
+    final password = checkString(value);
+    if (password.isEmpty) return 'Please enter your password';
+    if (!_hasValidPasswordCharacters(password)) {
+      return 'Password cannot contain spaces or emojis';
+    }
+    return null;
+  }
 
   String? _strongPassword(String? value) {
     final password = checkString(value);
     if (password.isEmpty) return 'Please enter a new password';
+    if (!_hasValidPasswordCharacters(password)) {
+      return 'Password cannot contain spaces or emojis';
+    }
     if (!CommonUtilities.passwordVaidatation(password)) {
       return 'Use uppercase, lowercase, number and special character';
     }
     return null;
   }
+
+  bool _hasValidPasswordCharacters(String password) =>
+      RegExp(r'^[!-~]+$').hasMatch(password);
 }
 
 class NotificationPreferencesScreen extends StatefulWidget {
@@ -641,6 +657,9 @@ class _PasswordField extends StatelessWidget {
         TextFormField(
           controller: controller,
           obscureText: obscure,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[!-~]')),
+          ],
           validator: validator,
           decoration: InputDecoration(
             filled: true,
@@ -858,34 +877,48 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFFF0F7D2),
+        color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 34),
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 16),
       child: SafeArea(
         top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 70,
+              width: 86,
               height: 8,
               decoration: BoxDecoration(
-                color: const Color(0xFFD8F34A),
+                color: const Color(0xFFD9D9D9),
                 borderRadius: BorderRadius.circular(20),
               ),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 28),
+            Container(
+              width: 104,
+              height: 104,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFEEF0),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.red,
+                size: 50,
+              ),
+            ),
+            const SizedBox(height: 28),
             const Text(
-              'Delete Account',
+              'Delete Account?',
               style: TextStyle(
                 fontFamily: 'Satoshi',
                 fontWeight: FontWeight.w700,
-                fontSize: 22,
-                color: AppColors.darkBlack,
+                fontSize: 23,
+                color: AppColors.red,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             const Text(
               'Are you sure you want to permanently delete your account?\nThis action cannot be undone.',
               textAlign: TextAlign.center,
@@ -894,56 +927,66 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                 fontWeight: FontWeight.w500,
                 fontSize: 16,
                 height: 1.35,
-                color: AppColors.darkBlack,
+                color: Color(0xFF777777),
               ),
             ),
             const SizedBox(height: 28),
-            SizedBox(
-              height: 58,
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _deleting ? null : _delete,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.red,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.red.withValues(alpha: .6),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 56,
+                    child: OutlinedButton(
+                      onPressed:
+                          _deleting ? null : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.darkBlack,
+                        backgroundColor: const Color(0xFFFFF7C9),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                child: Text(
-                  _deleting ? 'Deleting...' : 'Delete',
-                  style: const TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _deleting ? null : _delete,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF222222),
+                        foregroundColor: const Color(0xFFD8F34A),
+                        disabledBackgroundColor:
+                            const Color(0xFF222222).withValues(alpha: .6),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        _deleting ? 'Deleting...' : 'Delete Account',
+                        style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 58,
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _deleting ? null : () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.darkBlack,
-                  side: const BorderSide(color: AppColors.darkBlack),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
+              ],
             ),
           ],
         ),

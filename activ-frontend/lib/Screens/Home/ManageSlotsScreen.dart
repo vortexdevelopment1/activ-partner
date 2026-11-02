@@ -678,6 +678,59 @@ class _State extends State<ManageSlotsScreen> {
                     const SizedBox(height: 14),
                     _input(slot.discount, Key('slot-discount-$day-$index'),
                         money: true, hint: '0'),
+                    const SizedBox(height: 14),
+                    AnimatedBuilder(
+                        animation: Listenable.merge([slot.price, slot.discount]),
+                        builder: (_, __) {
+                      final price = double.tryParse(slot.price.text);
+                      final discounted = double.tryParse(slot.discount.text);
+                      final hasDiscount = price != null &&
+                          price > 0 &&
+                          discounted != null &&
+                          discounted > 0 &&
+                          discounted < price;
+                      final percent = hasDiscount
+                          ? ((price - discounted) / price * 100).round()
+                          : 0;
+                      if (!hasDiscount) return const SizedBox.shrink();
+                          return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9EEFF),
+                          border: Border.all(
+                              color: const Color(0xFF9D38EB), width: 1.4),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.local_offer_outlined,
+                                color: Color(0xFF9D38EB), size: 25),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(children: [
+                                  const TextSpan(
+                                      text: 'User will see ',
+                                      style: TextStyle(
+                                          color: Color(0xFFA45BDB),
+                                          fontSize: 16)),
+                                  TextSpan(
+                                      text: 'Flat $percent% OFF',
+                                      style: const TextStyle(
+                                          color: Color(0xFFA45BDB),
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w700)),
+                                ]),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                          );
+                        }),
                   ])),
         ]));
   }
