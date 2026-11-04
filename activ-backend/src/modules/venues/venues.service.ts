@@ -6,14 +6,22 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
-import type { CategoryRecord as Category, VenueRecord as Venue, VenueImageRecord as VenueImage, VenueServiceRecord as VenueService, VenueAnswerRecord as VenueAnswer, PartnerRecord as Partner, VenueUpdateRequestRecord as VenueUpdateRequest } from '../../common/domain-types';
+import type {
+  CategoryRecord as Category,
+  VenueRecord as Venue,
+  VenueImageRecord as VenueImage,
+  VenueServiceRecord as VenueService,
+  VenueAnswerRecord as VenueAnswer,
+  PartnerRecord as Partner,
+  VenueUpdateRequestRecord as VenueUpdateRequest,
+} from "../../common/domain-types";
 import * as bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import { randomUUID, randomInt } from "crypto";
 import type * as runtime from "@prisma/client/runtime/client";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { fillAgreementAcceptance } from './agreement-pdf-layout';
+import { fillAgreementAcceptance } from "./agreement-pdf-layout";
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { UpdateVenueDto } from "./dto/update-venue.dto";
 import { VenueApprovalDto } from "./dto/venue-approval.dto";
@@ -27,14 +35,14 @@ import { UserRole } from "../../common/enums/user-role.enum";
 import { BookingStatus } from "../../common/enums/booking-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import { MailService } from "../mail/mail.service";
-import { PartnerEmailService } from '../mail/partner-email.service';
+import { PartnerEmailService } from "../mail/partner-email.service";
 import { QuestionsService } from "../questions/questions.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { NotificationType } from '../../common/domain-types';
+import { NotificationType } from "../../common/domain-types";
 import { AdminNotificationsService } from "../admin-notifications/admin-notifications.service";
-import { AdminNotificationType } from '../../common/domain-types';
+import { AdminNotificationType } from "../../common/domain-types";
 import { PushNotificationsService } from "../push-notifications/push-notifications.service";
-import { VenueUpdateRequestStatus } from '../../common/domain-types';
+import { VenueUpdateRequestStatus } from "../../common/domain-types";
 import { SubmitVenueUpdateDto } from "./dto/submit-venue-update.dto";
 import { ReviewVenueUpdateDto } from "./dto/review-venue-update.dto";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
@@ -43,11 +51,11 @@ import { ManageActivityDto } from "./dto/manage-activity.dto";
 import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 import { CommissionService } from "../commission/commission.service";
 import { deleteVenue } from "./delete-venue";
-import { syncLegacyActivityVisibility } from './activity-visibility';
-import { attendanceStatus, INDIA_OFFSET_MS } from '../bookings/booking-expiry';
-import { paymentMethodLabel } from '../payments/payment-method';
-import { lockSlotsForCapacity } from '../bookings/slot-capacity-coordinator';
-import { effectiveSlotOccupancy } from '../bookings/slot-capacity';
+import { syncLegacyActivityVisibility } from "./activity-visibility";
+import { attendanceStatus, INDIA_OFFSET_MS } from "../bookings/booking-expiry";
+import { paymentMethodLabel } from "../payments/payment-method";
+import { lockSlotsForCapacity } from "../bookings/slot-capacity-coordinator";
+import { effectiveSlotOccupancy } from "../bookings/slot-capacity";
 
 @Injectable()
 export class VenuesService {
@@ -120,7 +128,10 @@ export class VenuesService {
         where: {
           partner_id: partnerId,
           name: { equals: venueData.name.trim(), mode: "insensitive" },
-          city_code: { equals: venueData.city?.trim() || "UNKNOWN", mode: "insensitive" },
+          city_code: {
+            equals: venueData.city?.trim() || "UNKNOWN",
+            mode: "insensitive",
+          },
           partner_venue_profiles: {
             address_line_1: venueData.venueAddress || venueData.address || null,
           },
@@ -128,8 +139,11 @@ export class VenuesService {
         select: { id: true, status: true },
         orderBy: { submitted_at: { sort: "desc", nulls: "last" } },
       });
-      const existing = matches.find((venue) => venue.status === "PUBLISHED")
-        ?? matches.find((venue) => venue.status === "DRAFT") ?? matches[0] ?? null;
+      const existing =
+        matches.find((venue) => venue.status === "PUBLISHED") ??
+        matches.find((venue) => venue.status === "DRAFT") ??
+        matches[0] ??
+        null;
       if (existing) return existing;
       await tx.venues.create({
         data: {
@@ -250,15 +264,29 @@ export class VenuesService {
     if (existingVenue) {
       const existing = existingVenue;
       if (existing.status === "PUBLISHED") return this.findOne(existing.id);
-      const saved = await this.update(existing.id, createVenueDto as UpdateVenueDto,
-        { id: partnerId, role: UserRole.PARTNER });
+      const saved = await this.update(
+        existing.id,
+        createVenueDto as UpdateVenueDto,
+        { id: partnerId, role: UserRole.PARTNER },
+      );
       if (existing.status === "ARCHIVED") {
         await this.prisma.$transaction([
-          this.prisma.venues.update({ where: { id: existing.id },
-            data: { status: "DRAFT", review_status: null, rejection_reason: null, submitted_at: null } }),
+          this.prisma.venues.update({
+            where: { id: existing.id },
+            data: {
+              status: "DRAFT",
+              review_status: null,
+              rejection_reason: null,
+              submitted_at: null,
+            },
+          }),
           this.prisma.partner_venue_services.updateMany({
             where: { venue_id: existing.id, status: "REJECTED" },
-            data: { status: "DRAFT", rejection_reason: null, updated_at: new Date() },
+            data: {
+              status: "DRAFT",
+              rejection_reason: null,
+              updated_at: new Date(),
+            },
           }),
         ]);
         return this.findOne(existing.id);
@@ -294,11 +322,20 @@ export class VenuesService {
     }
 
     const signedVenue = await this.findOne(venueId);
-    if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
-      throw new BadRequestException("Please sign the partnership agreement before finishing");
+    if (
+      !signedVenue.termsAcceptedAt ||
+      !signedVenue.electronicSignature?.trim()
+    ) {
+      throw new BadRequestException(
+        "Please sign the partnership agreement before finishing",
+      );
     }
     if (venue.submitted_at) {
-      const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
+      const emailResult = await this.sendSignedAgreementIfNeeded(
+        venueId,
+        partnerId,
+        signedVenue,
+      );
       return {
         ...signedVenue,
         agreementEmailSent: emailResult.sent,
@@ -306,9 +343,15 @@ export class VenuesService {
       };
     }
     if (venue.status !== "DRAFT") {
-      throw new BadRequestException("Only draft venues can be submitted for review");
+      throw new BadRequestException(
+        "Only draft venues can be submitted for review",
+      );
     }
-    const emailResult = await this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
+    const emailResult = await this.sendSignedAgreementIfNeeded(
+      venueId,
+      partnerId,
+      signedVenue,
+    );
 
     const [submission] = await this.prisma.$transaction([
       this.prisma.venues.updateMany({
@@ -326,10 +369,14 @@ export class VenuesService {
     ]);
 
     if (submission.count > 0) {
-      await this.partnerEmailService?.send(partnerId, 'venue_under_review', { venueName: venue.name, reference: venueId, deliveryKey: `venue-submitted:${venueId}:${signedVenue.termsAcceptedAt}` });
+      await this.partnerEmailService?.send(partnerId, "venue_under_review", {
+        venueName: venue.name,
+        reference: venueId,
+        deliveryKey: `venue-submitted:${venueId}:${signedVenue.termsAcceptedAt}`,
+      });
       await this.adminNotificationsService.notify(
         AdminNotificationType.VENUE_SUBMITTED,
-        'Venue submitted for review',
+        "Venue submitted for review",
         `${venue.name} is ready for admin review.`,
         { partnerId, venueId },
       );
@@ -348,60 +395,86 @@ export class VenuesService {
   ): Promise<{ sent: boolean; error?: string }> {
     const recipient = signedVenue.partner?.email?.trim();
     if (!recipient) {
-      return { sent: false, error: 'Registration succeeded, but no registered email address is available.' };
+      return {
+        sent: false,
+        error:
+          "Registration succeeded, but no registered email address is available.",
+      };
     }
     const signedAt = new Date(signedVenue.termsAcceptedAt);
     const signedAtIso = signedAt.toISOString();
     const receipt = await this.prisma.audit_events.findFirst({
       where: {
-        action: 'partner_agreement.emailed', entity_type: 'venues', entity_id: venueId,
-        after_json: { path: ['signedAt'], equals: signedAtIso },
+        action: "partner_agreement.emailed",
+        entity_type: "venues",
+        entity_id: venueId,
+        after_json: { path: ["signedAt"], equals: signedAtIso },
       },
     });
     if (receipt) return { sent: true };
 
     const agreement = await this.generatePartnerAgreementPdf(venueId, {
-      id: partnerId, role: UserRole.PARTNER,
+      id: partnerId,
+      role: UserRole.PARTNER,
     });
-    const partnerName = [signedVenue.partner?.firstName, signedVenue.partner?.lastName]
-      .filter(Boolean)
-      .join(' ')
-      .trim() || signedVenue.electronicSignature.trim();
+    const partnerName =
+      [signedVenue.partner?.firstName, signedVenue.partner?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || signedVenue.electronicSignature.trim();
     try {
       await this.mailService.sendSignedAgreementEmailViaGmail({
         toEmail: recipient,
         partnerName,
         venueName: signedVenue.name,
         signedAt,
-        pdfBuffer: Buffer.from(agreement.base64, 'base64'),
+        pdfBuffer: Buffer.from(agreement.base64, "base64"),
         filename: agreement.filename,
         deliveryKey: `agreement:${venueId}:${signedAtIso}`,
       });
     } catch (error) {
       this.logger.error(
-        `Signed agreement email failed: code=${error?.code || 'UNKNOWN'} status=${error?.responseCode || 'unknown'}`,
+        `Signed agreement email failed: code=${error?.code || "UNKNOWN"} status=${error?.responseCode || "unknown"}`,
       );
       return {
         sent: false,
-        error: 'Registration succeeded, but the agreement email could not be sent. You can retry it from this screen.',
+        error:
+          "Registration succeeded, but the agreement email could not be sent. You can retry it from this screen.",
       };
     }
 
-    await this.prisma.audit_events.create({ data: {
-      id: randomUUID(),
-      action: 'partner_agreement.emailed', entity_type: 'venues', entity_id: venueId,
-      after_json: { email: recipient, signedAt: signedAtIso },
-    } });
+    await this.prisma.audit_events.create({
+      data: {
+        id: randomUUID(),
+        action: "partner_agreement.emailed",
+        entity_type: "venues",
+        entity_id: venueId,
+        after_json: { email: recipient, signedAt: signedAtIso },
+      },
+    });
     return { sent: true };
   }
 
-  async retrySignedAgreementEmail(venueId: string, partnerId: string): Promise<{ sent: boolean; error?: string }> {
+  async retrySignedAgreementEmail(
+    venueId: string,
+    partnerId: string,
+  ): Promise<{ sent: boolean; error?: string }> {
     const signedVenue = await this.findOne(venueId);
-    if (signedVenue.partnerId !== partnerId && signedVenue.partner?.id !== partnerId) {
-      throw new ForbiddenException('You can only retry your own agreement email');
+    if (
+      signedVenue.partnerId !== partnerId &&
+      signedVenue.partner?.id !== partnerId
+    ) {
+      throw new ForbiddenException(
+        "You can only retry your own agreement email",
+      );
     }
-    if (!signedVenue.termsAcceptedAt || !signedVenue.electronicSignature?.trim()) {
-      throw new BadRequestException('Please sign the partnership agreement before retrying the email');
+    if (
+      !signedVenue.termsAcceptedAt ||
+      !signedVenue.electronicSignature?.trim()
+    ) {
+      throw new BadRequestException(
+        "Please sign the partnership agreement before retrying the email",
+      );
     }
     return this.sendSignedAgreementIfNeeded(venueId, partnerId, signedVenue);
   }
@@ -413,8 +486,10 @@ export class VenuesService {
       select: { partner_id: true, partner_venue_legal_documents: true },
     });
 
-    if (!venue) throw new NotFoundException(`Venue with id ${venueId} not found`);
-    if (venue.partner_id !== callerId) throw new ForbiddenException('Access denied');
+    if (!venue)
+      throw new NotFoundException(`Venue with id ${venueId} not found`);
+    if (venue.partner_id !== callerId)
+      throw new ForbiddenException("Access denied");
 
     const legal = venue.partner_venue_legal_documents;
     return {
@@ -532,8 +607,11 @@ export class VenuesService {
     if (!electronicSignature?.trim()) {
       throw new BadRequestException("Electronic signature is required");
     }
-    if (venue.partner_venue_profiles?.terms_accepted_at &&
-        venue.partner_venue_profiles.electronic_signature === electronicSignature.trim()) {
+    if (
+      venue.partner_venue_profiles?.terms_accepted_at &&
+      venue.partner_venue_profiles.electronic_signature ===
+        electronicSignature.trim()
+    ) {
       return this.findOne(venueId);
     }
 
@@ -592,16 +670,19 @@ export class VenuesService {
     const partnerName = venue.partner
       ? `${venue.partner.firstName || ""} ${venue.partner.lastName || ""}`.trim()
       : "";
-    const hasSignature = signatureOverride !== undefined
-      ? signatureOverride.trim().length > 0
-      : Boolean(venue.electronicSignature?.trim());
-    const signature = signatureOverride !== undefined
-      ? signatureOverride.trim()
-      : venue.electronicSignature?.trim() ?? '';
+    const hasSignature =
+      signatureOverride !== undefined
+        ? signatureOverride.trim().length > 0
+        : Boolean(venue.electronicSignature?.trim());
+    const signature =
+      signatureOverride !== undefined
+        ? signatureOverride.trim()
+        : (venue.electronicSignature?.trim() ?? "");
     const acceptanceDate = hasSignature
-      ? (venue.termsAcceptedAt && !isNaN(new Date(venue.termsAcceptedAt).getTime())
-          ? new Date(venue.termsAcceptedAt)
-          : new Date())
+      ? venue.termsAcceptedAt &&
+        !isNaN(new Date(venue.termsAcceptedAt).getTime())
+        ? new Date(venue.termsAcceptedAt)
+        : new Date()
       : null;
     const isAccepted = hasSignature;
     const acceptedAt = acceptanceDate
@@ -617,11 +698,11 @@ export class VenuesService {
 
     fillAgreementAcceptance(page3, font, [
       partnerName,
-      venue.name || '',
-      venue.partner?.email || '',
-      venue.partner?.phone || '',
+      venue.name || "",
+      venue.partner?.email || "",
+      venue.partner?.phone || "",
       acceptedAt,
-      isAccepted ? 'Electronic Acceptance via ACTIV Venue Partner App' : '',
+      isAccepted ? "Electronic Acceptance via ACTIV Venue Partner App" : "",
       signature,
     ]);
 
@@ -638,7 +719,11 @@ export class VenuesService {
     status?: VenueStatus,
     categoryId?: string,
     partnerId?: string,
-    filters: { city?: string; state?: string; sort?: 'newest' | 'oldest' | 'updated' } = {},
+    filters: {
+      city?: string;
+      state?: string;
+      sort?: "newest" | "oldest" | "updated";
+    } = {},
   ) {
     const statusMap: Record<string, "DRAFT" | "PUBLISHED" | "ARCHIVED"> = {
       draft: "DRAFT",
@@ -651,17 +736,32 @@ export class VenuesService {
     if (status) where.status = statusMap[status] || undefined;
     if (partnerId) where.partner_id = partnerId;
     const conditions: any[] = [];
-    if (status === VenueStatus.SUSPENDED) where.review_status = VenueStatus.SUSPENDED;
-    if (status === VenueStatus.REJECTED) conditions.push({
-      OR: [{ review_status: null }, { review_status: { not: VenueStatus.SUSPENDED } }],
-    });
-    if (filters.city?.trim()) conditions.push({ OR: [
-      { city_code: { contains: filters.city.trim(), mode: 'insensitive' } },
-      { partner_venue_profiles: { city: { contains: filters.city.trim(), mode: 'insensitive' } } },
-    ] });
-    if (filters.state?.trim()) conditions.push({
-      partner_venue_profiles: { state: { contains: filters.state.trim(), mode: 'insensitive' } },
-    });
+    if (status === VenueStatus.SUSPENDED)
+      where.review_status = VenueStatus.SUSPENDED;
+    if (status === VenueStatus.REJECTED)
+      conditions.push({
+        OR: [
+          { review_status: null },
+          { review_status: { not: VenueStatus.SUSPENDED } },
+        ],
+      });
+    if (filters.city?.trim())
+      conditions.push({
+        OR: [
+          { city_code: { contains: filters.city.trim(), mode: "insensitive" } },
+          {
+            partner_venue_profiles: {
+              city: { contains: filters.city.trim(), mode: "insensitive" },
+            },
+          },
+        ],
+      });
+    if (filters.state?.trim())
+      conditions.push({
+        partner_venue_profiles: {
+          state: { contains: filters.state.trim(), mode: "insensitive" },
+        },
+      });
     if (conditions.length) where.AND = conditions;
     if (pagination.search) {
       where.OR = [
@@ -695,9 +795,13 @@ export class VenuesService {
         skip: pagination.skip,
         take: pagination.limit,
         orderBy: [
-          { partner_venue_profiles: filters.sort === 'updated'
-            ? { updated_at: 'desc' } : { created_at: filters.sort === 'oldest' ? 'asc' : 'desc' } },
-          { id: filters.sort === 'oldest' ? 'asc' : 'desc' },
+          {
+            partner_venue_profiles:
+              filters.sort === "updated"
+                ? { updated_at: "desc" }
+                : { created_at: filters.sort === "oldest" ? "asc" : "desc" },
+          },
+          { id: filters.sort === "oldest" ? "asc" : "desc" },
         ],
       }),
       this.prisma.venues.count({ where }),
@@ -713,7 +817,9 @@ export class VenuesService {
         venue.status === "PUBLISHED"
           ? "approved"
           : venue.status === "ARCHIVED"
-            ? venue.review_status === VenueStatus.SUSPENDED ? "suspended" : "rejected"
+            ? venue.review_status === VenueStatus.SUSPENDED
+              ? "suspended"
+              : "rejected"
             : "pending";
       return {
         id: venue.id,
@@ -791,7 +897,10 @@ export class VenuesService {
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
-      await tx.venues.update({ where: { id }, data: { booking_accept: bookingAccept } });
+      await tx.venues.update({
+        where: { id },
+        data: { booking_accept: bookingAccept },
+      });
       await syncLegacyActivityVisibility(tx, id);
     });
     const saved = await this.findOne(id);
@@ -934,12 +1043,13 @@ export class VenuesService {
       : null;
     const legal = review.partner_venue_legal_documents;
     const partnerId = venue.partnerId || venue.partner?.id;
-    const bankAccount = partnerId && this.prisma.partner_bank_accounts
-      ? await this.prisma.partner_bank_accounts.findFirst({
-          where: { partner_id: partnerId },
-          orderBy: [{ is_primary: 'desc' }, { created_at: 'desc' }],
-        })
-      : null;
+    const bankAccount =
+      partnerId && this.prisma.partner_bank_accounts
+        ? await this.prisma.partner_bank_accounts.findFirst({
+            where: { partner_id: partnerId },
+            orderBy: [{ is_primary: "desc" }, { created_at: "desc" }],
+          })
+        : null;
     const mappedBankAccount = bankAccount
       ? {
           id: bankAccount.id,
@@ -951,7 +1061,9 @@ export class VenuesService {
           accountType: bankAccount.account_type,
           branchName: bankAccount.branch_name,
           cancelledChequeUrl: bankAccount.cancelled_cheque_url,
-          status: bankAccount.status ? String(bankAccount.status).toLowerCase() : 'under_review',
+          status: bankAccount.status
+            ? String(bankAccount.status).toLowerCase()
+            : "under_review",
           isPrimary: bankAccount.is_primary,
           rejectionReason: bankAccount.rejection_reason,
           createdAt: bankAccount.created_at,
@@ -972,7 +1084,11 @@ export class VenuesService {
       approvedBy: review.approved_by,
       approvedByName: approver?.name?.trim() || null,
       rejectionReason: review.rejection_reason,
-      changesRequested: review.status === 'DRAFT' && !review.submitted_at && review.review_status === VenueStatus.PENDING && !!review.rejection_reason,
+      changesRequested:
+        review.status === "DRAFT" &&
+        !review.submitted_at &&
+        review.review_status === VenueStatus.PENDING &&
+        !!review.rejection_reason,
       partner: {
         ...venue.partner,
         aadhaarName: legal?.aadhaar_name ?? null,
@@ -990,7 +1106,9 @@ export class VenuesService {
         bankAccountType: bankAccount?.account_type ?? null,
         bankBranchName: bankAccount?.branch_name ?? null,
         bankCancelledChequeUrl: bankAccount?.cancelled_cheque_url ?? null,
-        bankStatus: bankAccount?.status ? String(bankAccount.status).toLowerCase() : null,
+        bankStatus: bankAccount?.status
+          ? String(bankAccount.status).toLowerCase()
+          : null,
       },
       bankAccount: mappedBankAccount,
     };
@@ -1135,11 +1253,13 @@ export class VenuesService {
         businessName:
           businessProfile?.business_name ?? venue.partners.legal_name,
       } as Partner,
-      categories: venue.partner_venue_services.filter((service) => service.status !== "ARCHIVED").map((service) => ({
-        id: service.partner_service_categories.id,
-        name: service.partner_service_categories.name,
-        description: service.partner_service_categories.description,
-      })) as Category[],
+      categories: venue.partner_venue_services
+        .filter((service) => service.status !== "ARCHIVED")
+        .map((service) => ({
+          id: service.partner_service_categories.id,
+          name: service.partner_service_categories.name,
+          description: service.partner_service_categories.description,
+        })) as Category[],
       name: profile?.display_name || venue.name,
       description: profile?.description ?? null,
       address: profile?.address_line_1 ?? null,
@@ -1167,9 +1287,15 @@ export class VenuesService {
           ? VenueStatus.APPROVED
           : venue.status === "ARCHIVED"
             ? VenueStatus.REJECTED
-            : venue.submitted_at ? VenueStatus.PENDING : VenueStatus.DRAFT,
+            : venue.submitted_at
+              ? VenueStatus.PENDING
+              : VenueStatus.DRAFT,
       rejectionReason: venue.rejection_reason,
-      changesRequested: venue.status === 'DRAFT' && !venue.submitted_at && venue.review_status === VenueStatus.PENDING && !!venue.rejection_reason,
+      changesRequested:
+        venue.status === "DRAFT" &&
+        !venue.submitted_at &&
+        venue.review_status === VenueStatus.PENDING &&
+        !!venue.rejection_reason,
       isActive: venue.status === "PUBLISHED",
       bookingAccept: venue.booking_accept,
       hasSeenWelcome: venue.has_seen_welcome,
@@ -1202,7 +1328,8 @@ export class VenuesService {
           name: service.title,
           createdAt: service.created_at,
           updatedAt: service.updated_at,
-          submittedAt: service.submitted_at ?? service.updated_at ?? service.created_at,
+          submittedAt:
+            service.submitted_at ?? service.updated_at ?? service.created_at,
           approvedAt: service.approved_at,
           rejectionReason: service.rejection_reason,
           description: service.description,
@@ -1284,17 +1411,22 @@ export class VenuesService {
     const prisma = this.prisma as any;
     if (!prisma.facilities || !prisma.slots || !prisma.activities) return;
 
-    await this.prisma.$transaction(async (tx) => {
-      // Serialize generation with pause/resume so a concurrent schedule save
-      // cannot recreate bookable slots or re-publish a paused activity.
-      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venueId}::uuid FOR UPDATE`;
-      await this.syncLegacyActivitySlotsInTransaction(tx, venueId);
-      await syncLegacyActivityVisibility(tx, venueId);
-    }, { maxWait: 10000, timeout: 60000 });
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Serialize generation with pause/resume so a concurrent schedule save
+        // cannot recreate bookable slots or re-publish a paused activity.
+        await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venueId}::uuid FOR UPDATE`;
+        await this.syncLegacyActivitySlotsInTransaction(tx, venueId);
+        await syncLegacyActivityVisibility(tx, venueId);
+      },
+      { maxWait: 10000, timeout: 60000 },
+    );
   }
 
-  private async syncLegacyActivitySlotsInTransaction(prisma: any, venueId: string): Promise<void> {
-
+  private async syncLegacyActivitySlotsInTransaction(
+    prisma: any,
+    venueId: string,
+  ): Promise<void> {
     const services = await prisma.partner_venue_services.findMany({
       where: { venue_id: venueId, status: "APPROVED", is_active: true },
       include: { partner_service_categories: true },
@@ -1320,13 +1452,21 @@ export class VenuesService {
       }
 
       await prisma.venue_activities.upsert({
-        where: { venue_id_activity_id: { venue_id: venueId, activity_id: activity.id } },
-        create: { venue_id: venueId, activity_id: activity.id, status: "APPROVED" },
+        where: {
+          venue_id_activity_id: { venue_id: venueId, activity_id: activity.id },
+        },
+        create: {
+          venue_id: venueId,
+          activity_id: activity.id,
+          status: "APPROVED",
+        },
         update: { status: "APPROVED" },
       });
 
       let facility = service.facility_id
-        ? await prisma.facilities.findUnique({ where: { id: service.facility_id } })
+        ? await prisma.facilities.findUnique({
+            where: { id: service.facility_id },
+          })
         : await prisma.facilities.findFirst({
             where: { venue_id: venueId, activity_id: activity.id },
           });
@@ -1349,7 +1489,10 @@ export class VenuesService {
       }
 
       const windows = await prisma.partner_venue_availability.findMany({
-        where: { venue_id: venueId, service_category_id: service.service_category_id },
+        where: {
+          venue_id: venueId,
+          service_category_id: service.service_category_id,
+        },
         orderBy: [{ day: "asc" }, { sort_order: "asc" }],
       });
       if (!windows.length) continue;
@@ -1363,19 +1506,39 @@ export class VenuesService {
       const existing = await prisma.slots.findMany({
         where: {
           facility_id: facility.id,
-          starts_at: { gte: this.istWallTimeToUtc(horizonStart, 0), lt: this.istWallTimeToUtc(horizonEnd, 0) },
+          starts_at: {
+            gte: this.istWallTimeToUtc(horizonStart, 0),
+            lt: this.istWallTimeToUtc(horizonEnd, 0),
+          },
         },
       });
       const existingKeys = new Set(
-        existing.map((slot: any) => `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`),
+        existing.map(
+          (slot: any) =>
+            `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`,
+        ),
       );
       const data: any[] = [];
-      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const dayNames = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ];
       const duration = Math.max(30, service.min_duration_minutes ?? 60);
 
-      for (let date = new Date(horizonStart); date < horizonEnd; date.setUTCDate(date.getUTCDate() + 1)) {
+      for (
+        let date = new Date(horizonStart);
+        date < horizonEnd;
+        date.setUTCDate(date.getUTCDate() + 1)
+      ) {
         const day = dayNames[date.getUTCDay()];
-        for (const window of windows.filter((entry: any) => entry.day.toLowerCase() === day)) {
+        for (const window of windows.filter(
+          (entry: any) => entry.day.toLowerCase() === day,
+        )) {
           const open = this.timeToMinutes(window.open_time);
           const close = this.timeToMinutes(window.close_time);
           for (let start = open; start + duration <= close; start += duration) {
@@ -1392,7 +1555,13 @@ export class VenuesService {
               ends_at: endsAt,
               capacity: Number(window.capacity || service.capacity || 1),
               status: "AVAILABLE",
-              price_paise: BigInt(discounted > 0 ? discounted : Number(window.price_paise ?? service.price_per_hour_paise ?? 0)),
+              price_paise: BigInt(
+                discounted > 0
+                  ? discounted
+                  : Number(
+                      window.price_paise ?? service.price_per_hour_paise ?? 0,
+                    ),
+              ),
             });
           }
         }
@@ -1405,20 +1574,31 @@ export class VenuesService {
       // no longer part of the desired schedule; booked/protected slots remain
       // untouched for reconciliation and audit purposes.
       const desiredKeys = new Set<string>();
-      for (let date = new Date(horizonStart); date < horizonEnd; date.setUTCDate(date.getUTCDate() + 1)) {
+      for (
+        let date = new Date(horizonStart);
+        date < horizonEnd;
+        date.setUTCDate(date.getUTCDate() + 1)
+      ) {
         const day = dayNames[date.getUTCDay()];
-        for (const window of windows.filter((entry: any) => entry.day.toLowerCase() === day)) {
+        for (const window of windows.filter(
+          (entry: any) => entry.day.toLowerCase() === day,
+        )) {
           const open = this.timeToMinutes(window.open_time);
           const close = this.timeToMinutes(window.close_time);
           for (let start = open; start + duration <= close; start += duration) {
             const startsAt = this.istWallTimeToUtc(date, start);
             const endsAt = new Date(startsAt.getTime() + duration * 60_000);
-            desiredKeys.add(`${startsAt.toISOString()}|${endsAt.toISOString()}`);
+            desiredKeys.add(
+              `${startsAt.toISOString()}|${endsAt.toISOString()}`,
+            );
           }
         }
       }
       const existingFuture = await prisma.slots.findMany({
-        where: { facility_id: facility.id, starts_at: { gte: horizonStart, lt: horizonEnd } },
+        where: {
+          facility_id: facility.id,
+          starts_at: { gte: horizonStart, lt: horizonEnd },
+        },
         select: {
           id: true,
           starts_at: true,
@@ -1426,22 +1606,32 @@ export class VenuesService {
           booked_quantity: true,
           status: true,
           booking_attempts: {
-            where: { status: { in: ["HELD", "PAYMENT_PROCESSING"] }, expires_at: { gt: new Date() } },
+            where: {
+              status: { in: ["HELD", "PAYMENT_PROCESSING"] },
+              expires_at: { gt: new Date() },
+            },
             select: { id: true },
           },
         },
       });
       const staleIds = existingFuture
-        .filter((slot: any) =>
-          slot.status === "AVAILABLE" &&
-          slot.booked_quantity === 0 &&
-          slot.booking_attempts.length === 0 &&
-          !desiredKeys.has(`${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`),
+        .filter(
+          (slot: any) =>
+            slot.status === "AVAILABLE" &&
+            slot.booked_quantity === 0 &&
+            slot.booking_attempts.length === 0 &&
+            !desiredKeys.has(
+              `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`,
+            ),
         )
         .map((slot: any) => slot.id);
       if (staleIds.length) {
         await prisma.slots.updateMany({
-          where: { id: { in: staleIds }, status: "AVAILABLE", booked_quantity: 0 },
+          where: {
+            id: { in: staleIds },
+            status: "AVAILABLE",
+            booked_quantity: 0,
+          },
           data: { status: "BLOCKED" },
         });
       }
@@ -1450,21 +1640,25 @@ export class VenuesService {
 
   private istDateForOffset(now: Date, offset: number) {
     const istNow = new Date(now.getTime() + 330 * 60_000);
-    return new Date(Date.UTC(
-      istNow.getUTCFullYear(),
-      istNow.getUTCMonth(),
-      istNow.getUTCDate() + offset,
-    ));
+    return new Date(
+      Date.UTC(
+        istNow.getUTCFullYear(),
+        istNow.getUTCMonth(),
+        istNow.getUTCDate() + offset,
+      ),
+    );
   }
 
   private istWallTimeToUtc(day: Date, minutesFromMidnight: number) {
-    return new Date(Date.UTC(
-      day.getUTCFullYear(),
-      day.getUTCMonth(),
-      day.getUTCDate(),
-      Math.floor(minutesFromMidnight / 60) - 5,
-      minutesFromMidnight % 60 - 30,
-    ));
+    return new Date(
+      Date.UTC(
+        day.getUTCFullYear(),
+        day.getUTCMonth(),
+        day.getUTCDate(),
+        Math.floor(minutesFromMidnight / 60) - 5,
+        (minutesFromMidnight % 60) - 30,
+      ),
+    );
   }
 
   async setAvailability(
@@ -1514,24 +1708,48 @@ export class VenuesService {
         "Schedule category does not belong to this venue",
       );
     }
-    const rows = categories.flatMap((id) => availabilityRows(venueId, id, venueTiming[id]));
+    const rows = categories.flatMap((id) =>
+      availabilityRows(venueId, id, venueTiming[id]),
+    );
     const durations = categories.map((id) => {
-      const values = [...new Set(Object.values(venueTiming[id]).flat()
-        .filter((slot: any) => slot.open !== '-' && slot.close !== '-' && slot.slotDurationMinutes !== undefined)
-        .map((slot: any) => Number(slot.slotDurationMinutes)))];
-      if (values.length > 1) throw new BadRequestException('Use the same slot size for all time ranges of an activity');
+      const values = [
+        ...new Set(
+          Object.values(venueTiming[id])
+            .flat()
+            .filter(
+              (slot: any) =>
+                slot.open !== "-" &&
+                slot.close !== "-" &&
+                slot.slotDurationMinutes !== undefined,
+            )
+            .map((slot: any) => Number(slot.slotDurationMinutes)),
+        ),
+      ];
+      if (values.length > 1)
+        throw new BadRequestException(
+          "Use the same slot size for all time ranges of an activity",
+        );
       return { id, minutes: values[0] };
     });
     await this.prisma.$transaction(async (tx) => {
-      await tx.partner_venue_availability.deleteMany({ where: {
-        venue_id: venueId, service_category_id: { in: categories },
-      } });
-      if (rows.length) await tx.partner_venue_availability.createMany({ data: rows });
+      await tx.partner_venue_availability.deleteMany({
+        where: {
+          venue_id: venueId,
+          service_category_id: { in: categories },
+        },
+      });
+      if (rows.length)
+        await tx.partner_venue_availability.createMany({ data: rows });
       for (const duration of durations) {
-        if (duration.minutes !== undefined) await tx.partner_venue_services.updateMany({
-          where: { venue_id: venueId, service_category_id: duration.id, status: { not: 'ARCHIVED' } },
-          data: { min_duration_minutes: duration.minutes },
-        });
+        if (duration.minutes !== undefined)
+          await tx.partner_venue_services.updateMany({
+            where: {
+              venue_id: venueId,
+              service_category_id: duration.id,
+              status: { not: "ARCHIVED" },
+            },
+            data: { min_duration_minutes: duration.minutes },
+          });
       }
     });
     await this.syncLegacyActivitySlots(venueId);
@@ -1629,14 +1847,19 @@ export class VenuesService {
     }
 
     const { services, answers, categoryIds, ...venueData } = updateVenueDto;
-    const locationChanged = venueData.city !== undefined || venueData.state !== undefined;
-    const commission = currentUser.role === UserRole.PARTNER
-      ? (locationChanged || venueData.commission !== undefined)
-        ? (await this.commissionService.getCommissionByCity(
-            venueData.city ?? venue.city ?? '', venueData.state ?? venue.state,
-          )).commissionPercentage
-        : undefined
-      : venueData.commission;
+    const locationChanged =
+      venueData.city !== undefined || venueData.state !== undefined;
+    const commission =
+      currentUser.role === UserRole.PARTNER
+        ? locationChanged || venueData.commission !== undefined
+          ? (
+              await this.commissionService.getCommissionByCity(
+                venueData.city ?? venue.city ?? "",
+                venueData.state ?? venue.state,
+              )
+            ).commissionPercentage
+          : undefined
+        : venueData.commission;
     const columns: Record<string, string> = {
       name: "display_name",
       description: "description",
@@ -1714,7 +1937,11 @@ export class VenuesService {
             service_category_id: { notIn: categoryIds },
             status: { not: "ARCHIVED" },
           },
-          data: { status: "ARCHIVED", is_active: false, updated_at: new Date() },
+          data: {
+            status: "ARCHIVED",
+            is_active: false,
+            updated_at: new Date(),
+          },
         });
         for (const category of categories) {
           const existing = await tx.partner_venue_services.findFirst({
@@ -1775,7 +2002,8 @@ export class VenuesService {
     approvalDto: VenueApprovalDto,
     adminId: string,
   ): Promise<Venue> {
-    if (approvalDto.status === VenueStatus.APPROVED) return this.approveVenueAtomically(id, adminId);
+    if (approvalDto.status === VenueStatus.APPROVED)
+      return this.approveVenueAtomically(id, adminId);
     const venue = await this.prisma.venues.findUnique({ where: { id } });
     if (!venue) {
       throw new NotFoundException(`Venue with id ${id} not found`);
@@ -1783,25 +2011,56 @@ export class VenuesService {
 
     if (approvalDto.status === VenueStatus.PENDING) {
       const reason = approvalDto.reason?.trim();
-      if (!reason) throw new BadRequestException('A reason is required when requesting changes');
-      if (venue.status !== 'DRAFT') {
-        throw new BadRequestException('Changes can only be requested before venue approval');
+      if (!reason)
+        throw new BadRequestException(
+          "A reason is required when requesting changes",
+        );
+      if (venue.status !== "DRAFT") {
+        throw new BadRequestException(
+          "Changes can only be requested before venue approval",
+        );
       }
-      if (!venue.submitted_at && venue.review_status === VenueStatus.PENDING && venue.rejection_reason === reason) return this.findOne(id);
-      await this.commitVenueReview(venue, {
-        status: 'DRAFT', submitted_at: null, review_status: VenueStatus.PENDING,
-        rejection_reason: reason, approved_at: null, approved_by: null,
-      }, { status: 'DRAFT', submitted_at: null, updated_at: new Date() });
+      if (
+        !venue.submitted_at &&
+        venue.review_status === VenueStatus.PENDING &&
+        venue.rejection_reason === reason
+      )
+        return this.findOne(id);
+      await this.commitVenueReview(
+        venue,
+        {
+          status: "DRAFT",
+          submitted_at: null,
+          review_status: VenueStatus.PENDING,
+          rejection_reason: reason,
+          approved_at: null,
+          approved_by: null,
+        },
+        { status: "DRAFT", submitted_at: null, updated_at: new Date() },
+      );
       const updated = await this.findOne(id);
-      await this.notificationsService.notify(updated.partnerId, NotificationType.ADMIN_UPDATE,
-        'Changes requested for your venue', `${updated.name}: ${reason}`, { venueId: id });
-      await this.pushNotificationsService.sendToPartner(updated.partnerId,
-        'Changes requested for your venue', `${updated.name}: ${reason}`,
-        { type: 'venue_changes_requested', venueId: id });
+      await this.notificationsService.notify(
+        updated.partnerId,
+        NotificationType.ADMIN_UPDATE,
+        "Changes requested for your venue",
+        `${updated.name}: ${reason}`,
+        { venueId: id },
+      );
+      await this.pushNotificationsService.sendToPartner(
+        updated.partnerId,
+        "Changes requested for your venue",
+        `${updated.name}: ${reason}`,
+        { type: "venue_changes_requested", venueId: id },
+      );
       if (updated.partner?.email) {
         await this.mailService.sendVenueChangesRequestedEmail({
-          toEmail: updated.partner.email, venueName: updated.name, reason, partnerName: [updated.partner?.firstName, updated.partner?.lastName].filter(Boolean).join(' '),
-          deliveryKey: `venue-changes:${id}:${venue.submitted_at?.toISOString?.() || 'initial'}:${reason}`,
+          toEmail: updated.partner.email,
+          venueName: updated.name,
+          reason,
+          partnerName: [updated.partner?.firstName, updated.partner?.lastName]
+            .filter(Boolean)
+            .join(" "),
+          deliveryKey: `venue-changes:${id}:${venue.submitted_at?.toISOString?.() || "initial"}:${reason}`,
         });
       }
       return updated;
@@ -1821,19 +2080,44 @@ export class VenuesService {
     const now = new Date();
     const rejected = approvalDto.status === VenueStatus.REJECTED;
 
-    await this.commitVenueReview(venue, {
-      status: 'ARCHIVED', approved_at: null, approved_by: null,
-      rejection_reason: approvalDto.reason, review_status: approvalDto.status,
-    }, { status: 'REJECTED', rejection_reason: approvalDto.reason, updated_at: now });
+    await this.commitVenueReview(
+      venue,
+      {
+        status: "ARCHIVED",
+        approved_at: null,
+        approved_by: null,
+        rejection_reason: approvalDto.reason,
+        review_status: approvalDto.status,
+      },
+      {
+        status: "REJECTED",
+        rejection_reason: approvalDto.reason,
+        updated_at: now,
+      },
+    );
 
     const updatedVenue = await this.findOne(id);
     if (rejected) {
-      await this.handlePartnerRejection(updatedVenue, approvalDto.reason, `venue-rejected:${id}:${now.toISOString()}`);
-    } else if (approvalDto.status === VenueStatus.SUSPENDED &&
-        !(venue.status === 'ARCHIVED' && venue.review_status === VenueStatus.SUSPENDED)) {
+      await this.handlePartnerRejection(
+        updatedVenue,
+        approvalDto.reason,
+        `venue-rejected:${id}:${now.toISOString()}`,
+      );
+    } else if (
+      approvalDto.status === VenueStatus.SUSPENDED &&
+      !(
+        venue.status === "ARCHIVED" &&
+        venue.review_status === VenueStatus.SUSPENDED
+      )
+    ) {
       await this.mailService.sendSuspensionEmail({
         toEmail: updatedVenue.partner?.email,
-        partnerName: [updatedVenue.partner?.firstName, updatedVenue.partner?.lastName].filter(Boolean).join(' '),
+        partnerName: [
+          updatedVenue.partner?.firstName,
+          updatedVenue.partner?.lastName,
+        ]
+          .filter(Boolean)
+          .join(" "),
         venueName: updatedVenue.name,
         deliveryKey: `venue-suspended:${id}:${now.toISOString()}`,
         reason: approvalDto.reason,
@@ -1844,92 +2128,225 @@ export class VenuesService {
   }
 
   /** Serialize review decisions with publication and reject a stale admin action. */
-  private async commitVenueReview(venue: any, venueData: any, activityData: any): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venue.id}::uuid FOR UPDATE`;
-      const current = await tx.venues.findUnique({ where: { id: venue.id } });
-      if (!current) throw new NotFoundException('Venue not found');
-      const version = (row: any) => JSON.stringify([row.status, row.review_status ?? null,
-        row.submitted_at ?? null, row.approved_at ?? null, row.rejection_reason ?? null]);
-      if (version(current) !== version(venue)) throw new ConflictException('Venue review changed; refresh before submitting another decision');
-      await tx.venues.update({ where: { id: venue.id }, data: venueData });
-      await tx.partner_venue_services.updateMany({
-        where: { venue_id: venue.id, status: { in: ['DRAFT', 'PENDING'] } }, data: activityData,
-      });
-    }, { isolationLevel: 'ReadCommitted', maxWait: 10000, timeout: 60000 });
+  private async commitVenueReview(
+    venue: any,
+    venueData: any,
+    activityData: any,
+  ): Promise<void> {
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM venues WHERE id = ${venue.id}::uuid FOR UPDATE`;
+        const current = await tx.venues.findUnique({ where: { id: venue.id } });
+        if (!current) throw new NotFoundException("Venue not found");
+        const version = (row: any) =>
+          JSON.stringify([
+            row.status,
+            row.review_status ?? null,
+            row.submitted_at ?? null,
+            row.approved_at ?? null,
+            row.rejection_reason ?? null,
+          ]);
+        if (version(current) !== version(venue))
+          throw new ConflictException(
+            "Venue review changed; refresh before submitting another decision",
+          );
+        await tx.venues.update({ where: { id: venue.id }, data: venueData });
+        await tx.partner_venue_services.updateMany({
+          where: { venue_id: venue.id, status: { in: ["DRAFT", "PENDING"] } },
+          data: activityData,
+        });
+      },
+      { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 60000 },
+    );
   }
 
   /** All approval database effects commit together; no transport runs in this transaction. */
-  private async approveVenueAtomically(id: string, adminId: string): Promise<Venue> {
-    const outcome = await this.prisma.$transaction(async (tx) => {
-      const hint = await tx.venues.findUnique({ where: { id }, select: { partner_id: true } });
-      if (!hint) throw new NotFoundException('Venue not found');
-      // Shared partner lock serializes approvals for different venues of one owner.
-      await tx.$queryRaw`SELECT id FROM partners WHERE id = ${hint.partner_id}::uuid FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
-      const venue = await tx.venues.findUnique({ where: { id }, include: { partner_venue_profiles: true } });
-      if (!venue) throw new NotFoundException('Venue not found');
-      if (venue.partner_id !== hint.partner_id) throw new ConflictException('Venue ownership changed; refresh before approving');
-      const venueName = venue.partner_venue_profiles?.display_name || venue.name;
-      if (venue.status === 'PUBLISHED') return { changed: false, partnerId: venue.partner_id, venueName, deliveryId: null };
+  private async approveVenueAtomically(
+    id: string,
+    adminId: string,
+  ): Promise<Venue> {
+    const outcome = await this.prisma.$transaction(
+      async (tx) => {
+        const hint = await tx.venues.findUnique({
+          where: { id },
+          select: { partner_id: true },
+        });
+        if (!hint) throw new NotFoundException("Venue not found");
+        // Shared partner lock serializes approvals for different venues of one owner.
+        await tx.$queryRaw`SELECT id FROM partners WHERE id = ${hint.partner_id}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
+        const venue = await tx.venues.findUnique({
+          where: { id },
+          include: { partner_venue_profiles: true },
+        });
+        if (!venue) throw new NotFoundException("Venue not found");
+        if (venue.partner_id !== hint.partner_id)
+          throw new ConflictException(
+            "Venue ownership changed; refresh before approving",
+          );
+        const venueName =
+          venue.partner_venue_profiles?.display_name || venue.name;
+        if (venue.status === "PUBLISHED")
+          return {
+            changed: false,
+            partnerId: venue.partner_id,
+            venueName,
+            deliveryId: null,
+          };
 
-      const partner = await tx.partners.findUnique({ where: { id: venue.partner_id }, include: {
-        partner_business_profiles: true, partner_users: { where: { role: 'PARTNER_ADMIN' }, include: { users: true } },
-      } });
-      if (!partner) throw new NotFoundException('Partner not found');
-      if (partner.status === 'SUSPENDED') throw new BadRequestException('Reactivate the partner account before approving its venue');
-      const owner = partner.partner_users.find(link => link.role === 'PARTNER_ADMIN');
-      if (!owner) throw new BadRequestException('A registered partner owner is required before approval');
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${owner.user_id}::uuid FOR UPDATE`;
-      const account = await tx.users.findUnique({ where: { id: owner.user_id } });
-      if (!account || account.status === 'DELETED' || account.status === 'SUSPENDED') {
-        throw new BadRequestException('An available partner owner account is required before approval');
-      }
-      if (!/^\S+@\S+\.\S+$/.test(account.email?.trim() || '')) {
-        throw new BadRequestException('The partner owner must have a valid registered email before approval');
-      }
-      const previousDelivery = await this.mailService.findPartnerApprovalEmail(id, tx);
-      const historicalReceipt = await tx.audit_events.findFirst({ where: {
-        action: 'partner_approval.email_sent', entity_type: 'venues', entity_id: id,
-      } });
-      const password = !account.password_hash && !previousDelivery && !historicalReceipt ? this.generatePassword() : undefined;
-      const now = new Date();
-      await tx.users.update({ where: { id: account.id }, data: {
-        ...(password ? { password_hash: await bcrypt.hash(password, 10) } : {}), status: 'ACTIVE', updated_at: now,
-      } });
-      await tx.partners.update({ where: { id: partner.id }, data: { status: 'ACTIVE', updated_at: now } });
-      const deliveryId = await this.mailService.preparePartnerApprovalEmail({
-        toEmail: account.email.trim(), partnerName: account.name || partner.partner_business_profiles?.owner_name || partner.legal_name,
-        venueName, password, deliveryKey: `venue-approved:${id}`,
-      }, tx, !!historicalReceipt);
-      if (!deliveryId) throw new Error('Durable approval email preparation did not return a delivery record');
-      await tx.venues.update({ where: { id }, data: {
-        status: 'PUBLISHED', approved_at: now, approved_by: adminId, rejection_reason: null, review_status: VenueStatus.APPROVED,
-      } });
-      await tx.partner_venue_services.updateMany({ where: { venue_id: id, status: { in: ['DRAFT', 'PENDING'] } }, data: {
-        status: 'APPROVED', approved_at: now, approved_by: adminId, rejection_reason: null, updated_at: now,
-      } });
-      await this.syncLegacyActivitySlotsInTransaction(tx, id);
-      await syncLegacyActivityVisibility(tx, id);
-      await tx.audit_events.create({ data: {
-        id: randomUUID(), action: 'venue.approved', entity_type: 'venues', entity_id: id, actor_id: adminId,
-        after_json: { deliveryId },
-      } });
-      return { changed: true, partnerId: partner.id, venueName, deliveryId };
-    }, { isolationLevel: 'ReadCommitted', maxWait: 10000, timeout: 60000 });
+        const partner = await tx.partners.findUnique({
+          where: { id: venue.partner_id },
+          include: {
+            partner_business_profiles: true,
+            partner_users: {
+              where: { role: "PARTNER_ADMIN" },
+              include: { users: true },
+            },
+          },
+        });
+        if (!partner) throw new NotFoundException("Partner not found");
+        if (partner.status === "SUSPENDED")
+          throw new BadRequestException(
+            "Reactivate the partner account before approving its venue",
+          );
+        const owner = partner.partner_users.find(
+          (link) => link.role === "PARTNER_ADMIN",
+        );
+        if (!owner)
+          throw new BadRequestException(
+            "A registered partner owner is required before approval",
+          );
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${owner.user_id}::uuid FOR UPDATE`;
+        const account = await tx.users.findUnique({
+          where: { id: owner.user_id },
+        });
+        if (
+          !account ||
+          account.status === "DELETED" ||
+          account.status === "SUSPENDED"
+        ) {
+          throw new BadRequestException(
+            "An available partner owner account is required before approval",
+          );
+        }
+        if (!/^\S+@\S+\.\S+$/.test(account.email?.trim() || "")) {
+          throw new BadRequestException(
+            "The partner owner must have a valid registered email before approval",
+          );
+        }
+        const previousDelivery =
+          await this.mailService.findPartnerApprovalEmail(id, tx);
+        const historicalReceipt = await tx.audit_events.findFirst({
+          where: {
+            action: "partner_approval.email_sent",
+            entity_type: "venues",
+            entity_id: id,
+          },
+        });
+        const password =
+          !account.password_hash && !previousDelivery && !historicalReceipt
+            ? this.generatePassword()
+            : undefined;
+        const now = new Date();
+        await tx.users.update({
+          where: { id: account.id },
+          data: {
+            ...(password
+              ? { password_hash: await bcrypt.hash(password, 10) }
+              : {}),
+            status: "ACTIVE",
+            updated_at: now,
+          },
+        });
+        await tx.partners.update({
+          where: { id: partner.id },
+          data: { status: "ACTIVE", updated_at: now },
+        });
+        const deliveryId = await this.mailService.preparePartnerApprovalEmail(
+          {
+            toEmail: account.email.trim(),
+            partnerName:
+              account.name ||
+              partner.partner_business_profiles?.owner_name ||
+              partner.legal_name,
+            venueName,
+            password,
+            deliveryKey: `venue-approved:${id}`,
+          },
+          tx,
+          !!historicalReceipt,
+        );
+        if (!deliveryId)
+          throw new Error(
+            "Durable approval email preparation did not return a delivery record",
+          );
+        await tx.venues.update({
+          where: { id },
+          data: {
+            status: "PUBLISHED",
+            approved_at: now,
+            approved_by: adminId,
+            rejection_reason: null,
+            review_status: VenueStatus.APPROVED,
+          },
+        });
+        await tx.partner_venue_services.updateMany({
+          where: { venue_id: id, status: { in: ["DRAFT", "PENDING"] } },
+          data: {
+            status: "APPROVED",
+            approved_at: now,
+            approved_by: adminId,
+            rejection_reason: null,
+            updated_at: now,
+          },
+        });
+        await this.syncLegacyActivitySlotsInTransaction(tx, id);
+        await syncLegacyActivityVisibility(tx, id);
+        await tx.audit_events.create({
+          data: {
+            id: randomUUID(),
+            action: "venue.approved",
+            entity_type: "venues",
+            entity_id: id,
+            actor_id: adminId,
+            after_json: { deliveryId },
+          },
+        });
+        return { changed: true, partnerId: partner.id, venueName, deliveryId };
+      },
+      { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 60000 },
+    );
 
     if (outcome.changed) {
       // Transport/notification failures must not turn a committed approval into an API failure.
-      try { await this.mailService.deliverPreparedEmail(outcome.deliveryId); }
-      catch { this.logger.warn('Approval committed; email delivery is pending recovery'); }
       try {
-        await this.notificationsService.notify(outcome.partnerId, NotificationType.VENUE_APPROVED,
-          'Venue approved', `${outcome.venueName} has been approved and is now live on ACTIV`, { venueId: id });
-      } catch { this.logger.warn('Approval committed; in-app notification failed'); }
+        await this.mailService.deliverPreparedEmail(outcome.deliveryId);
+      } catch {
+        this.logger.warn(
+          "Approval committed; email delivery is pending recovery",
+        );
+      }
       try {
-        await this.pushNotificationsService.sendToPartner(outcome.partnerId, 'Venue approved',
-          `${outcome.venueName} has been approved and is now live on ACTIV`, { type: 'venue_approved', venueId: id });
-      } catch { this.logger.warn('Approval committed; push notification failed'); }
+        await this.notificationsService.notify(
+          outcome.partnerId,
+          NotificationType.VENUE_APPROVED,
+          "Venue approved",
+          `${outcome.venueName} has been approved and is now live on ACTIV`,
+          { venueId: id },
+        );
+      } catch {
+        this.logger.warn("Approval committed; in-app notification failed");
+      }
+      try {
+        await this.pushNotificationsService.sendToPartner(
+          outcome.partnerId,
+          "Venue approved",
+          `${outcome.venueName} has been approved and is now live on ACTIV`,
+          { type: "venue_approved", venueId: id },
+        );
+      } catch {
+        this.logger.warn("Approval committed; push notification failed");
+      }
     }
     return this.findOne(id);
   }
@@ -1961,7 +2378,8 @@ export class VenuesService {
     await this.mailService.sendPartnerRejectionEmail({
       toEmail: partnerUser.users.email,
       firstName,
-      venueId: venue.id, venueName: venue.name,
+      venueId: venue.id,
+      venueName: venue.name,
       deliveryKey: deliveryKey || `venue-rejected:${venue.id}:${reason}`,
       rejectionReason: reason,
     });
@@ -1984,25 +2402,49 @@ export class VenuesService {
     currentUser: { id: string; role: string },
   ): Promise<{ permanentlyDeleted: boolean }> {
     let notice: { partnerId: string; venueName: string } | undefined;
-    const result = await this.prisma.$transaction(async (tx) => {
-      const [venue] = await tx.$queryRawUnsafe<Array<{
-        id: string; name: string; partner_id: string; status: string; booking_accept: boolean;
-      }>>('SELECT id, name, partner_id, status, booking_accept FROM venues WHERE id = $1::uuid FOR UPDATE', id);
-      if (!venue) throw new NotFoundException(`Venue with id ${id} not found`);
-      if (currentUser.role !== UserRole.ADMIN &&
-          (currentUser.role !== UserRole.PARTNER || venue.partner_id !== currentUser.id)) {
-        throw new ForbiddenException("You can only delete your own venues");
-      }
-      if (currentUser.role === UserRole.ADMIN) {
-        await deleteVenue(tx, id);
-        notice = { partnerId: venue.partner_id, venueName: venue.name };
-        return { permanentlyDeleted: true };
-      }
-      await tx.venues.update({ where: { id }, data: { status: "ARCHIVED", booking_accept: false } });
-      if (venue.status !== 'ARCHIVED') notice = { partnerId: venue.partner_id, venueName: venue.name };
-      return { permanentlyDeleted: false };
-    }, { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' });
-    if (notice) await this.partnerEmailService?.send(notice.partnerId, 'venue_deleted', { venueName: notice.venueName, reference: id });
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const [venue] = await tx.$queryRawUnsafe<
+          Array<{
+            id: string;
+            name: string;
+            partner_id: string;
+            status: string;
+            booking_accept: boolean;
+          }>
+        >(
+          "SELECT id, name, partner_id, status, booking_accept FROM venues WHERE id = $1::uuid FOR UPDATE",
+          id,
+        );
+        if (!venue)
+          throw new NotFoundException(`Venue with id ${id} not found`);
+        if (
+          currentUser.role !== UserRole.ADMIN &&
+          (currentUser.role !== UserRole.PARTNER ||
+            venue.partner_id !== currentUser.id)
+        ) {
+          throw new ForbiddenException("You can only delete your own venues");
+        }
+        if (currentUser.role === UserRole.ADMIN) {
+          await deleteVenue(tx, id);
+          notice = { partnerId: venue.partner_id, venueName: venue.name };
+          return { permanentlyDeleted: true };
+        }
+        await tx.venues.update({
+          where: { id },
+          data: { status: "ARCHIVED", booking_accept: false },
+        });
+        if (venue.status !== "ARCHIVED")
+          notice = { partnerId: venue.partner_id, venueName: venue.name };
+        return { permanentlyDeleted: false };
+      },
+      { maxWait: 10000, timeout: 60000, isolationLevel: "Serializable" },
+    );
+    if (notice)
+      await this.partnerEmailService?.send(notice.partnerId, "venue_deleted", {
+        venueName: notice.venueName,
+        reference: id,
+      });
     return result;
   }
 
@@ -2418,11 +2860,15 @@ export class VenuesService {
     });
     await this.adminNotificationsService.notify(
       AdminNotificationType.VENUE_REQUEST_SUBMITTED,
-      'Venue change request submitted',
-      'A partner submitted venue changes for review.',
+      "Venue change request submitted",
+      "A partner submitted venue changes for review.",
       { partnerId, venueId, venueRequestId: request.id },
     );
-    await this.partnerEmailService?.send(partnerId, 'venue_update_submitted', { reference: request.id, venueName: (await this.findOne(venueId)).name, deliveryKey: `venue-update-submitted:${request.id}` });
+    await this.partnerEmailService?.send(partnerId, "venue_update_submitted", {
+      reference: request.id,
+      venueName: (await this.findOne(venueId)).name,
+      deliveryKey: `venue-update-submitted:${request.id}`,
+    });
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -2550,7 +2996,11 @@ export class VenuesService {
       `${venue.name}: your updated venue details are now live.`,
       { venueId, requestId: id },
     );
-    await this.partnerEmailService?.send(venue.partnerId, 'venue_update_approved', { venueName: venue.name, reference: id });
+    await this.partnerEmailService?.send(
+      venue.partnerId,
+      "venue_update_approved",
+      { venueName: venue.name, reference: id },
+    );
     return venue;
   }
 
@@ -2588,7 +3038,16 @@ export class VenuesService {
         "Your venue changes were not approved. Please review and submit again.",
       { venueId: request.venue_id, requestId: id },
     );
-    await this.partnerEmailService?.send(request.partner_id, 'venue_update_rejected', { reference: id, reason: dto.adminNotes, venueName: (await this.findOne(request.venue_id)).name, deliveryKey: `venue-update-rejected:${id}` });
+    await this.partnerEmailService?.send(
+      request.partner_id,
+      "venue_update_rejected",
+      {
+        reference: id,
+        reason: dto.adminNotes,
+        venueName: (await this.findOne(request.venue_id)).name,
+        deliveryKey: `venue-update-rejected:${id}`,
+      },
+    );
     return this.mapVenueUpdateRequest(request);
   }
 
@@ -2720,7 +3179,10 @@ export class VenuesService {
       ? await Promise.all([
           this.prisma.bookings.count({ where }),
           this.prisma.bookings.aggregate({
-            where: { ...where, status: { in: ["CONFIRMED", "COMPLETED", "NO_SHOW"] } },
+            where: {
+              ...where,
+              status: { in: ["CONFIRMED", "COMPLETED", "NO_SHOW"] },
+            },
             _sum: { total_paise: true },
           }),
           this.prisma.bookings.findMany({
@@ -2733,14 +3195,20 @@ export class VenuesService {
               booking_attempts: { select: { quantity: true } },
               booking_events: {
                 where: { to_status: { in: ["CHECKED_IN", "NO_SHOW"] } },
-                orderBy: { created_at: "desc" }, take: 1,
+                orderBy: { created_at: "desc" },
+                take: 1,
                 select: { to_status: true },
               },
               payments: {
                 where: { status: "CAPTURED" },
                 orderBy: { created_at: "desc" },
                 take: 1,
-                select: { provider: true, provider_payment_id: true, provider_order_id: true, amount_paise: true },
+                select: {
+                  provider: true,
+                  provider_payment_id: true,
+                  provider_order_id: true,
+                  amount_paise: true,
+                },
               },
             },
           }),
@@ -2764,11 +3232,11 @@ export class VenuesService {
       : ([0, null, [], [], null] as const);
     const [walkIns, walkInAvailability] = await Promise.all([
       this.prisma.partner_walk_in_reservations.findMany({
-      where: {
-        venue_service_id: service.id,
-        status: { not: "CANCELLED" },
-      },
-      orderBy: { starts_at: "desc" },
+        where: {
+          venue_service_id: service.id,
+          status: { not: "CANCELLED" },
+        },
+        orderBy: { starts_at: "desc" },
       }),
       this.prisma.partner_venue_availability.findMany({
         where: {
@@ -2781,13 +3249,26 @@ export class VenuesService {
       if (Number(reservation.amount_paise ?? 0) > 0) {
         return Number(reservation.amount_paise);
       }
-      const day = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][reservation.starts_at.getUTCDay()];
-      const start = reservation.starts_at.getUTCHours() * 60 + reservation.starts_at.getUTCMinutes();
-      const end = reservation.ends_at.getUTCHours() * 60 + reservation.ends_at.getUTCMinutes();
-      const window = walkInAvailability.find((candidate) =>
-        candidate.day === day &&
-        start >= this.timeToMinutes(candidate.open_time) &&
-        end <= this.timeToMinutes(candidate.close_time),
+      const day = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ][reservation.starts_at.getUTCDay()];
+      const start =
+        reservation.starts_at.getUTCHours() * 60 +
+        reservation.starts_at.getUTCMinutes();
+      const end =
+        reservation.ends_at.getUTCHours() * 60 +
+        reservation.ends_at.getUTCMinutes();
+      const window = walkInAvailability.find(
+        (candidate) =>
+          candidate.day === day &&
+          start >= this.timeToMinutes(candidate.open_time) &&
+          end <= this.timeToMinutes(candidate.close_time),
       );
       if (!window) return 0;
       const discounted = Number(window.discounted_price_paise ?? 0);
@@ -2797,14 +3278,24 @@ export class VenuesService {
       (sum, reservation) => sum + fallbackWalkInAmount(reservation),
       0,
     );
-    const paymentModes = await Promise.all(bookings.map(b => paymentMethodLabel(b.payments?.[0])));
+    const paymentModes = await Promise.all(
+      bookings.map((b) => paymentMethodLabel(b.payments?.[0])),
+    );
     const now = new Date();
-    const displayDate = (value: Date) => new Intl.DateTimeFormat('en-IN', {
-      timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
-    }).format(value);
-    const displayTime = (value: Date) => new Intl.DateTimeFormat('en-IN', {
-      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true,
-    }).format(value);
+    const displayDate = (value: Date) =>
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(value);
+    const displayTime = (value: Date) =>
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }).format(value);
     const walkInBookings = walkIns.map((reservation) => {
       const details = this.mapWalkInReservation(reservation);
       return {
@@ -2819,17 +3310,25 @@ export class VenuesService {
         activity: service.title,
         startsAt: new Date(reservation.starts_at.getTime() - INDIA_OFFSET_MS),
         endsAt: new Date(reservation.ends_at.getTime() - INDIA_OFFSET_MS),
-        status: attendanceStatus({ status: reservation.status, startsAt: reservation.starts_at,
-          endsAt: reservation.ends_at, walkIn: true,
-          checkedIn: /^Checked-in: /m.test(reservation.notes ?? '') }, now),
+        status: attendanceStatus(
+          {
+            status: reservation.status,
+            startsAt: reservation.starts_at,
+            endsAt: reservation.ends_at,
+            walkIn: true,
+            checkedIn: /^Checked-in: /m.test(reservation.notes ?? ""),
+          },
+          now,
+        ),
         amount: fallbackWalkInAmount(reservation) / 100,
         participants: reservation.participant_count ?? 1,
         source: "WALK_IN",
-        checkedIn: /^Checked-in: /m.test(reservation.notes ?? ''),
+        checkedIn: /^Checked-in: /m.test(reservation.notes ?? ""),
         phone: reservation.participant_phone_e164,
         email: details.participantEmail,
         bookedOn: reservation.created_at,
-        paymentMode: details.paymentMethod?.trim().toUpperCase() || "Not available",
+        paymentMode:
+          details.paymentMethod?.trim().toUpperCase() || "Not available",
         paymentStatus: details.paymentStatus,
       };
     });
@@ -2881,7 +3380,8 @@ export class VenuesService {
       ),
       bookingCount: (facilityId ? count : 0) + walkIns.length,
       earnings: facilityId
-        ? Number(revenue?._sum.total_paise ?? 0) / 100 + walkInRevenuePaise / 100
+        ? Number(revenue?._sum.total_paise ?? 0) / 100 +
+          walkInRevenuePaise / 100
         : walkInRevenuePaise / 100,
       occupancy: occupancy?._sum.capacity
         ? Math.round(
@@ -2892,26 +3392,39 @@ export class VenuesService {
         : null,
       bookings: [
         ...bookings.map((b, index) => ({
-        id: b.id,
-        bookingReference: b.booking_reference,
-        bookingDate: displayDate(b.starts_at),
-        bookingTime: displayTime(b.starts_at),
-        customerName: b.users.name ?? "Customer",
-        phone: b.users.phone_e164,
-        activity: service.title,
-        startsAt: b.starts_at,
-        endsAt: b.slots.ends_at,
-        status: attendanceStatus({ status: b.status, startsAt: b.starts_at, endsAt: b.slots.ends_at,
-          checkedIn: !!b.checked_in_at, attendance: b.booking_events?.[0]?.to_status }, now),
-        amount: Number(b.total_paise) / 100,
-        participants: b.booking_attempts?.quantity ?? 1,
-        bookedOn: b.created_at,
-        paymentMode: paymentModes[index],
-        source: "ACTIV",
-        checkedIn: !!b.checked_in_at || b.booking_events?.[0]?.to_status === 'CHECKED_IN',
-      })),
+          id: b.id,
+          bookingReference: b.booking_reference,
+          bookingDate: displayDate(b.starts_at),
+          bookingTime: displayTime(b.starts_at),
+          customerName: b.users.name ?? "Customer",
+          phone: b.users.phone_e164,
+          activity: service.title,
+          startsAt: b.starts_at,
+          endsAt: b.slots.ends_at,
+          status: attendanceStatus(
+            {
+              status: b.status,
+              startsAt: b.starts_at,
+              endsAt: b.slots.ends_at,
+              checkedIn: !!b.checked_in_at,
+              attendance: b.booking_events?.[0]?.to_status,
+            },
+            now,
+          ),
+          amount: Number(b.total_paise) / 100,
+          participants: b.booking_attempts?.quantity ?? 1,
+          bookedOn: b.created_at,
+          paymentMode: paymentModes[index],
+          source: "ACTIV",
+          checkedIn:
+            !!b.checked_in_at ||
+            b.booking_events?.[0]?.to_status === "CHECKED_IN",
+        })),
         ...walkInBookings,
-      ].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()),
+      ].sort(
+        (a, b) =>
+          new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
+      ),
       reviews: reviews.map((r) => ({
         id: r.id,
         name: r.users.name ?? "Customer",
@@ -2935,7 +3448,10 @@ export class VenuesService {
       throw new BadRequestException("Choose a reason to pause bookings");
     const result = await this.prisma.$transaction(async (tx) => {
       if (archive || dto.isActive !== undefined) {
-        await tx.$queryRawUnsafe('SELECT id FROM venues WHERE id = $1::uuid FOR UPDATE', managed.venue_id);
+        await tx.$queryRawUnsafe(
+          "SELECT id FROM venues WHERE id = $1::uuid FOR UPDATE",
+          managed.venue_id,
+        );
       }
       if (dto.answers !== undefined) {
         await tx.$queryRaw`SELECT id FROM partner_venue_services WHERE id = ${serviceId}::uuid FOR UPDATE`;
@@ -2953,97 +3469,203 @@ export class VenuesService {
         throw new BadRequestException("This activity has been deleted");
       if (dto.isActive !== undefined) {
         const venue = await tx.venues.findUniqueOrThrow({
-          where: { id: managed.venue_id }, select: { booking_accept: true },
+          where: { id: managed.venue_id },
+          select: { booking_accept: true },
         });
         if (!venue.booking_accept) {
           // Convert the old venue-wide pause to activity pauses under the
           // venue lock. Resuming one service must never reopen its siblings.
           const siblings = await tx.partner_venue_services.findMany({
-            where: { venue_id: managed.venue_id, status: 'APPROVED', is_active: true },
+            where: {
+              venue_id: managed.venue_id,
+              status: "APPROVED",
+              is_active: true,
+            },
           });
           for (const sibling of siblings) {
             if (!sibling.facility_id) continue;
-            const slots = await tx.slots.findMany({ where: {
-              facility_id: sibling.facility_id, status: 'AVAILABLE', starts_at: { gt: new Date() },
-            }, select: { id: true } });
+            const slots = await tx.slots.findMany({
+              where: {
+                facility_id: sibling.facility_id,
+                status: "AVAILABLE",
+                starts_at: { gt: new Date() },
+              },
+              select: { id: true },
+            });
             if (slots.length) {
               await tx.partner_service_paused_slots.createMany({
-                data: slots.map(slot => ({ venue_service_id: sibling.id, slot_id: slot.id })),
+                data: slots.map((slot) => ({
+                  venue_service_id: sibling.id,
+                  slot_id: slot.id,
+                })),
                 skipDuplicates: true,
               });
-              await tx.slots.updateMany({ where: {
-                id: { in: slots.map(slot => slot.id) }, status: 'AVAILABLE',
-              }, data: { status: 'BLOCKED' } });
+              await tx.slots.updateMany({
+                where: {
+                  id: { in: slots.map((slot) => slot.id) },
+                  status: "AVAILABLE",
+                },
+                data: { status: "BLOCKED" },
+              });
             }
           }
           await tx.partner_venue_services.updateMany({
-            where: { venue_id: managed.venue_id, status: 'APPROVED', is_active: true },
-            data: { is_active: false, pause_reason: 'Previously paused for the whole venue' },
+            where: {
+              venue_id: managed.venue_id,
+              status: "APPROVED",
+              is_active: true,
+            },
+            data: {
+              is_active: false,
+              pause_reason: "Previously paused for the whole venue",
+            },
           });
-          await tx.venues.update({ where: { id: managed.venue_id }, data: { booking_accept: true } });
+          await tx.venues.update({
+            where: { id: managed.venue_id },
+            data: { booking_accept: true },
+          });
         }
       }
       // The management editor uses the onboarding question form. Persist all
       // category answers and legacy summary fields in this same transaction.
       if (dto.answers !== undefined) {
-        const ids = dto.answers.map(answer => answer.questionId);
-        if (new Set(ids).size !== ids.length) throw new BadRequestException('Duplicate activity question');
-        const questions = ids.length ? await tx.partner_service_questions.findMany({ where: {
-          id: { in: ids },
-          AND: [
-            { OR: [{ service_category_id: service.service_category_id }, { service_category_id: null }] },
-            { OR: [{ venue_service_id: serviceId }, { venue_service_id: null }] },
-          ],
-        } }) : [];
-        if (questions.length !== ids.length) throw new BadRequestException('Questions must belong to this activity category');
-        const actor = ids.length ? await tx.partner_users.findFirst({ where: { partner_id: partnerId }, orderBy: { role: 'desc' } }) : null;
+        const ids = dto.answers.map((answer) => answer.questionId);
+        if (new Set(ids).size !== ids.length)
+          throw new BadRequestException("Duplicate activity question");
+        const questions = ids.length
+          ? await tx.partner_service_questions.findMany({
+              where: {
+                id: { in: ids },
+                AND: [
+                  {
+                    OR: [
+                      { service_category_id: service.service_category_id },
+                      { service_category_id: null },
+                    ],
+                  },
+                  {
+                    OR: [
+                      { venue_service_id: serviceId },
+                      { venue_service_id: null },
+                    ],
+                  },
+                ],
+              },
+            })
+          : [];
+        if (questions.length !== ids.length)
+          throw new BadRequestException(
+            "Questions must belong to this activity category",
+          );
+        const actor = ids.length
+          ? await tx.partner_users.findFirst({
+              where: { partner_id: partnerId },
+              orderBy: { role: "desc" },
+            })
+          : null;
         for (const item of dto.answers) {
-          const definition = questions.find(question => question.id === item.questionId)!;
-          if (definition.is_required && (item.answer == null ||
-              (typeof item.answer === 'string' && !item.answer.trim()) ||
-              (Array.isArray(item.answer) && !item.answer.length))) {
-            throw new BadRequestException(`Please answer: ${definition.question}`);
+          const definition = questions.find(
+            (question) => question.id === item.questionId,
+          )!;
+          if (
+            definition.is_required &&
+            (item.answer == null ||
+              (typeof item.answer === "string" && !item.answer.trim()) ||
+              (Array.isArray(item.answer) && !item.answer.length))
+          ) {
+            throw new BadRequestException(
+              `Please answer: ${definition.question}`,
+            );
           }
-          const where = { venue_id: service.venue_id, venue_service_id: serviceId, question_id: item.questionId };
+          const where = {
+            venue_id: service.venue_id,
+            venue_service_id: serviceId,
+            question_id: item.questionId,
+          };
           const existing = await tx.partner_venue_answers.findFirst({ where });
           const answer = item.answer as runtime.InputJsonValue;
           if (existing) {
-            await tx.partner_venue_answers.update({ where: { id: existing.id }, data: {
-              answer, answered_by_partner_user_id: actor?.id ?? null, updated_at: new Date(),
-            } });
+            await tx.partner_venue_answers.update({
+              where: { id: existing.id },
+              data: {
+                answer,
+                answered_by_partner_user_id: actor?.id ?? null,
+                updated_at: new Date(),
+              },
+            });
           } else {
-            await tx.partner_venue_answers.create({ data: {
-              id: randomUUID(), ...where, answer,
-              answered_by_partner_user_id: actor?.id ?? null, updated_at: new Date(),
-            } });
+            await tx.partner_venue_answers.create({
+              data: {
+                id: randomUUID(),
+                ...where,
+                answer,
+                answered_by_partner_user_id: actor?.id ?? null,
+                updated_at: new Date(),
+              },
+            });
           }
         }
-        const byLabel = new Map(questions.map(question => [
-          this.normalizeQuestionLabel(question.question),
-          dto.answers!.find(answer => answer.questionId === question.id)!.answer,
-        ]));
+        const byLabel = new Map(
+          questions.map((question) => [
+            this.normalizeQuestionLabel(question.question),
+            dto.answers!.find((answer) => answer.questionId === question.id)!
+              .answer,
+          ]),
+        );
         const labels = {
-          description: ['Activity Description'],
-          numberOfCourt: ['Total Courts', 'Total Turfs', 'Total Nets', 'Total Arenas', 'Total Tables', 'Total Fields', 'Number of Courts'],
-          courtType: ['Court Type', 'Court Surface', 'Pitch Type', 'Pitch Surface', 'Turf Type', 'Field Type', 'Table Type', 'Lane Type', 'Range Type', 'Arena Type', 'Activity Type'],
-          playingEnvironment: ['Playing Environment', 'Environment'],
-          coachingAvailable: ['Coaching Available', 'Coaching'],
-          recommendedFor: ['Recommended For'],
+          description: ["Activity Description"],
+          numberOfCourt: [
+            "Total Courts",
+            "Total Turfs",
+            "Total Nets",
+            "Total Arenas",
+            "Total Tables",
+            "Total Fields",
+            "Number of Courts",
+          ],
+          courtType: [
+            "Court Type",
+            "Court Surface",
+            "Pitch Type",
+            "Pitch Surface",
+            "Turf Type",
+            "Field Type",
+            "Table Type",
+            "Lane Type",
+            "Range Type",
+            "Arena Type",
+            "Activity Type",
+          ],
+          playingEnvironment: ["Playing Environment", "Environment"],
+          coachingAvailable: ["Coaching Available", "Coaching"],
+          recommendedFor: ["Recommended For"],
         };
         // Preserve older clients' flat payloads while keeping the management
         // summary consistent with the newly saved category answers.
         dto = { ...dto };
         for (const [field, candidates] of Object.entries(labels)) {
-          const label = candidates.map(value => this.normalizeQuestionLabel(value)).find(value => byLabel.has(value));
+          const label = candidates
+            .map((value) => this.normalizeQuestionLabel(value))
+            .find((value) => byLabel.has(value));
           if (label !== undefined) {
             const value = byLabel.get(label);
-            dto[field] = ['playingEnvironment', 'coachingAvailable', 'recommendedFor'].includes(field)
-              ? this.answerAsList(value) : this.answerAsText(value);
+            dto[field] = [
+              "playingEnvironment",
+              "coachingAvailable",
+              "recommendedFor",
+            ].includes(field)
+              ? this.answerAsList(value)
+              : this.answerAsText(value);
           }
         }
-        if ((dto.description?.length ?? 0) > 5000 ||
-            (dto.numberOfCourt?.length ?? 0) > 50 || (dto.courtType?.length ?? 0) > 200) {
-          throw new BadRequestException('Activity details exceed the allowed length');
+        if (
+          (dto.description?.length ?? 0) > 5000 ||
+          (dto.numberOfCourt?.length ?? 0) > 50 ||
+          (dto.courtType?.length ?? 0) > 200
+        ) {
+          throw new BadRequestException(
+            "Activity details exceed the allowed length",
+          );
         }
       }
       if (archive || dto.isActive === false) {
@@ -3151,7 +3773,7 @@ export class VenuesService {
       let autoDeactivated = false;
       if (archive) {
         const remaining = await tx.partner_venue_services.count({
-          where: { venue_id: managed.venue_id, status: { not: 'ARCHIVED' } },
+          where: { venue_id: managed.venue_id, status: { not: "ARCHIVED" } },
         });
         if (remaining === 0) {
           const changed = await tx.venues.updateMany({
@@ -3169,14 +3791,14 @@ export class VenuesService {
     if (archive) {
       await this.adminNotificationsService.notify(
         AdminNotificationType.ACTIVITY_REMOVED,
-        'Activity removed',
+        "Activity removed",
         `"${managed.title}" was removed from ${managed.venues.name}.`,
         { partnerId, venueId: managed.venue_id, serviceId },
       );
       if (result.autoDeactivated) {
         await this.adminNotificationsService.notify(
           AdminNotificationType.VENUE_AUTO_DEACTIVATED,
-          'Venue bookings automatically disabled',
+          "Venue bookings automatically disabled",
           `Bookings for ${managed.venues.name} were disabled because its last activity was removed.`,
           { partnerId, venueId: managed.venue_id },
         );
@@ -3306,17 +3928,24 @@ export class VenuesService {
         ? this.questionsService.findByCategoryId(service.categoryId)
         : Promise.resolve([]),
       this.prisma.partner_venue_answers.findMany({
-        where: { venue_id: service.venueId,
-          OR: [{ venue_service_id: serviceId }, { venue_service_id: null }] },
-        orderBy: { updated_at: 'asc' },
+        where: {
+          venue_id: service.venueId,
+          OR: [{ venue_service_id: serviceId }, { venue_service_id: null }],
+        },
+        orderBy: { updated_at: "asc" },
       }),
     ]);
 
     // Older venue onboarding stored category answers without a service id.
     // Restore those too, but an explicit activity answer always takes priority.
-    const answerMap = new Map(answers.filter(answer => !answer.venue_service_id)
-      .map(answer => [answer.question_id, answer.answer]));
-    for (const answer of answers.filter(answer => answer.venue_service_id === serviceId)) {
+    const answerMap = new Map(
+      answers
+        .filter((answer) => !answer.venue_service_id)
+        .map((answer) => [answer.question_id, answer.answer]),
+    );
+    for (const answer of answers.filter(
+      (answer) => answer.venue_service_id === serviceId,
+    )) {
       answerMap.set(answer.question_id, answer.answer);
     }
 
@@ -3333,27 +3962,132 @@ export class VenuesService {
     partnerId: string,
   ): Promise<any[]> {
     const service = await this.findManagedActivity(serviceId, partnerId);
-    const saved = await this.saveAnswers(service.venue_id, answers, partnerId, serviceId);
-    try {
-      const questionIds = answers.map((a) => a.questionId);
-      const questions = await this.prisma.partner_service_questions.findMany({
-        where: { id: { in: questionIds } },
-      });
-      for (const item of answers) {
-        const q = questions.find((quest) => quest.id === item.questionId);
-        const text = q?.question?.toLowerCase() ?? '';
-        if (text.includes('activity description') || text.includes('description')) {
-          if (typeof item.answer === 'string' && item.answer.trim()) {
-            await this.prisma.partner_venue_services.update({
-              where: { id: serviceId },
-              data: { description: item.answer.trim(), updated_at: new Date() },
-            });
-          }
-          break;
+    if (!Array.isArray(answers)) {
+      throw new BadRequestException("Activity answers must be an array");
+    }
+    const questionIds = answers.map((answer) => answer.questionId);
+    if (
+      questionIds.some((id) => typeof id !== "string" || !id) ||
+      new Set(questionIds).size !== questionIds.length
+    ) {
+      throw new BadRequestException(
+        "Each activity question can only be answered once",
+      );
+    }
+    const questions = questionIds.length
+      ? await this.prisma.partner_service_questions.findMany({
+          where: {
+            id: { in: questionIds },
+            AND: [
+              {
+                OR: [
+                  { service_category_id: service.service_category_id },
+                  { service_category_id: null },
+                ],
+              },
+              {
+                OR: [
+                  { venue_service_id: serviceId },
+                  { venue_service_id: null },
+                ],
+              },
+            ],
+          },
+        })
+      : [];
+    if (questions.length !== questionIds.length) {
+      throw new BadRequestException(
+        "Questions must belong to this activity category",
+      );
+    }
+    for (const item of answers) {
+      this.validateActivityAnswer(
+        questions.find((question) => question.id === item.questionId)!,
+        item.answer,
+      );
+    }
+    const saved = await this.saveAnswers(
+      service.venue_id,
+      answers,
+      partnerId,
+      serviceId,
+    );
+    for (const item of answers) {
+      const question = questions.find(
+        (current) => current.id === item.questionId,
+      )!;
+      const text = question.question.toLowerCase();
+      if (text.includes("activity description") || text === "description") {
+        if (typeof item.answer === "string" && item.answer.trim()) {
+          await this.prisma.partner_venue_services.update({
+            where: { id: serviceId },
+            data: { description: item.answer.trim(), updated_at: new Date() },
+          });
         }
+        break;
       }
-    } catch (_) {}
+    }
     return saved;
+  }
+
+  private validateActivityAnswer(question: any, answer: unknown): void {
+    const empty =
+      answer == null ||
+      (typeof answer === "string" && !answer.trim()) ||
+      (Array.isArray(answer) && answer.length === 0);
+    if (question.is_required && empty) {
+      throw new BadRequestException(`Please answer: ${question.question}`);
+    }
+    if (empty) return;
+
+    const type = String(question.type).toUpperCase();
+    const text = typeof answer === "string" ? answer.trim() : "";
+    const options = Array.isArray(question.options)
+      ? question.options.map(String)
+      : [];
+    if (type === "NUMBER" || type === "NUMBER_STEPPER") {
+      const value = typeof answer === "number" ? answer : Number(text);
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        (type === "NUMBER_STEPPER" && !Number.isInteger(value))
+      ) {
+        throw new BadRequestException(
+          `Enter a valid ${type === "NUMBER_STEPPER" ? "whole number" : "number"} for ${question.question}`,
+        );
+      }
+    } else if (
+      ["TEXT", "TEXTAREA", "SELECT", "RADIO", "FILE", "DATE"].includes(type) &&
+      typeof answer !== "string"
+    ) {
+      throw new BadRequestException(`${question.question} must be text`);
+    } else if (
+      ["CHECKBOX", "MULTISELECT"].includes(type) &&
+      !Array.isArray(answer)
+    ) {
+      throw new BadRequestException(
+        `${question.question} requires one or more selections`,
+      );
+    }
+
+    if (typeof answer === "string") {
+      if (question.min_length != null && text.length < question.min_length) {
+        throw new BadRequestException(`${question.question} is too short`);
+      }
+      if (question.max_length != null && text.length > question.max_length) {
+        throw new BadRequestException(`${question.question} is too long`);
+      }
+    }
+    if (options.length > 0) {
+      const selected = Array.isArray(answer)
+        ? answer.map(String)
+        : [String(answer)];
+      if (selected.some((value) => !options.includes(value))) {
+        throw new BadRequestException(
+          `Select a valid option for ${question.question}`,
+        );
+      }
+    }
   }
 
   async setActivityAmenities(
@@ -3448,7 +4182,7 @@ export class VenuesService {
 
     await this.adminNotificationsService.notify(
       AdminNotificationType.ACTIVITY_SUBMITTED,
-      'Activity submitted for review',
+      "Activity submitted for review",
       `${saved.name} is ready for admin review.`,
       { partnerId, venueId: saved.venueId, serviceId: saved.id },
     );
@@ -3459,7 +4193,12 @@ export class VenuesService {
       `${saved.name} has been submitted and is being reviewed by ACTIV`,
       { serviceId: saved.id },
     );
-    await this.partnerEmailService?.send(partnerId, 'activity_submitted', { activityName: saved.name, venueName: saved.venue?.name, reference: saved.id, deliveryKey: `activity-submitted:${saved.id}:${saved.submittedAt?.toISOString?.() || saved.updatedAt?.toISOString?.() || 'initial'}` });
+    await this.partnerEmailService?.send(partnerId, "activity_submitted", {
+      activityName: saved.name,
+      venueName: saved.venue?.name,
+      reference: saved.id,
+      deliveryKey: `activity-submitted:${saved.id}:${saved.submittedAt?.toISOString?.() || saved.updatedAt?.toISOString?.() || "initial"}`,
+    });
 
     return saved;
   }
@@ -3605,12 +4344,23 @@ export class VenuesService {
 
   async findPendingActivities(
     pagination: PaginationDto,
-    status: 'all' | 'pending' | 'approved' | 'rejected' = 'pending',
+    status: "all" | "pending" | "approved" | "rejected" = "pending",
   ): Promise<[VenueService[], number]> {
-    const reviewStatus = { pending: 'PENDING', approved: 'APPROVED', rejected: 'REJECTED' } as const;
-    const where = status === 'all'
-      ? { status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as Array<'PENDING' | 'APPROVED' | 'REJECTED'> } }
-      : { status: reviewStatus[status] };
+    const reviewStatus = {
+      pending: "PENDING",
+      approved: "APPROVED",
+      rejected: "REJECTED",
+    } as const;
+    const where =
+      status === "all"
+        ? {
+            status: {
+              in: ["PENDING", "APPROVED", "REJECTED"] as Array<
+                "PENDING" | "APPROVED" | "REJECTED"
+              >,
+            },
+          }
+        : { status: reviewStatus[status] };
     const [records, total] = await Promise.all([
       this.prisma.partner_venue_services.findMany({
         where,
@@ -3689,9 +4439,17 @@ export class VenuesService {
         : `${saved.name} was rejected: ${dto.reason}`,
       { serviceId, ...(!approved ? { reason: dto.reason } : {}) },
     );
-    await this.partnerEmailService?.send(record.venues.partner_id, approved ? 'activity_approved' : 'activity_rejected', {
-      activityName: saved.name, venueName: record.venues.name, reference: serviceId, reason: approved ? undefined : dto.reason, deliveryKey: `activity-review:${serviceId}:${saved.updatedAt?.toISOString?.() || dto.status}`,
-    });
+    await this.partnerEmailService?.send(
+      record.venues.partner_id,
+      approved ? "activity_approved" : "activity_rejected",
+      {
+        activityName: saved.name,
+        venueName: record.venues.name,
+        reference: serviceId,
+        reason: approved ? undefined : dto.reason,
+        deliveryKey: `activity-review:${serviceId}:${saved.updatedAt?.toISOString?.() || dto.status}`,
+      },
+    );
     return saved;
   }
 
@@ -3749,7 +4507,10 @@ export class VenuesService {
 
     // Get operational windows for the date's day of week
     const dayName = new Date(`${date}T00:00:00.000Z`)
-      .toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" })
+      .toLocaleDateString("en-US", {
+        weekday: "long",
+        timeZone: "Asia/Kolkata",
+      })
       .toLowerCase();
     const availability = await this.prisma.partner_venue_availability.findMany({
       where: {
@@ -3786,15 +4547,21 @@ export class VenuesService {
     const exactFacilitySlots = facilitySlots.filter((slot) => {
       const start = this.istDateTimeToMinutes(slot.starts_at);
       const end = this.istDateTimeToMinutes(slot.ends_at);
-      return end - start === slotDurationMinutes && operationalWindows.some((window) =>
-        start >= window.open && end <= window.close &&
-        (start - window.open) % slotDurationMinutes === 0,
+      return (
+        end - start === slotDurationMinutes &&
+        operationalWindows.some(
+          (window) =>
+            start >= window.open &&
+            end <= window.close &&
+            (start - window.open) % slotDurationMinutes === 0,
+        )
       );
     });
     // Use persisted facility slots only when the complete set matches the
     // configured one-hour grid. Otherwise regenerate from each open time so
     // stale half-hour/misaligned slots cannot leak into walk-in booking.
-    const useFacilitySlots = facilitySlots.length > 0 &&
+    const useFacilitySlots =
+      facilitySlots.length > 0 &&
       exactFacilitySlots.length === facilitySlots.length;
 
     // ACTIV bookings for this service+date
@@ -3834,23 +4601,26 @@ export class VenuesService {
       for (const slot of exactFacilitySlots) {
         const startMin = this.istDateTimeToMinutes(slot.starts_at);
         const endMin = this.istDateTimeToMinutes(slot.ends_at);
-        const hasActivBooking = activBookings.some((booking) =>
-          startMin < this.istDateTimeToMinutes(booking.slots.ends_at) &&
-          endMin > this.istDateTimeToMinutes(booking.slots.starts_at),
+        const hasActivBooking = activBookings.some(
+          (booking) =>
+            startMin < this.istDateTimeToMinutes(booking.slots.ends_at) &&
+            endMin > this.istDateTimeToMinutes(booking.slots.starts_at),
         );
-        const matchedWalkIn = walkIns.find((reservation) =>
-          startMin < this.istDateTimeToMinutes(reservation.ends_at) &&
-          endMin > this.istDateTimeToMinutes(reservation.starts_at),
+        const matchedWalkIn = walkIns.find(
+          (reservation) =>
+            startMin < this.istDateTimeToMinutes(reservation.ends_at) &&
+            endMin > this.istDateTimeToMinutes(reservation.starts_at),
         );
-        const status = slot.status === "BLOCKED"
-          ? "blocked"
-          : hasActivBooking
-            ? "activ_booking"
-            : matchedWalkIn
-              ? "walk_in_reserved"
-              : slot.booked_quantity >= slot.capacity
-                ? "fully_booked"
-                : "available";
+        const status =
+          slot.status === "BLOCKED"
+            ? "blocked"
+            : hasActivBooking
+              ? "activ_booking"
+              : matchedWalkIn
+                ? "walk_in_reserved"
+                : slot.booked_quantity >= slot.capacity
+                  ? "fully_booked"
+                  : "available";
         slots.push({
           startTime: this.minutesToTime(startMin),
           endTime: this.minutesToTime(endMin),
@@ -3862,16 +4632,21 @@ export class VenuesService {
       // No generated facility schedule exists: use only the configured
       // availability windows for this exact activity category.
       for (const window of operationalWindows) {
-        for (let startMin = window.open; startMin + slotDurationMinutes <= window.close; startMin += slotDurationMinutes) {
+        for (
+          let startMin = window.open;
+          startMin + slotDurationMinutes <= window.close;
+          startMin += slotDurationMinutes
+        ) {
           const endMin = startMin + slotDurationMinutes;
           const hasActivBooking = activBookings.some((b) => {
             const bStart = this.istDateTimeToMinutes(b.slots.starts_at);
             const bEnd = this.istDateTimeToMinutes(b.slots.ends_at);
             return startMin < bEnd && endMin > bStart;
           });
-          const matchedWalkIn = walkIns.find((w) =>
-            startMin < this.istDateTimeToMinutes(w.ends_at) &&
-            endMin > this.istDateTimeToMinutes(w.starts_at),
+          const matchedWalkIn = walkIns.find(
+            (w) =>
+              startMin < this.istDateTimeToMinutes(w.ends_at) &&
+              endMin > this.istDateTimeToMinutes(w.starts_at),
           );
           slots.push({
             startTime: this.minutesToTime(startMin),
@@ -3978,7 +4753,10 @@ export class VenuesService {
         }
       }
       const dayName = new Date(`${dto.date}T00:00:00Z`)
-        .toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" })
+        .toLocaleDateString("en-US", {
+          weekday: "long",
+          timeZone: "Asia/Kolkata",
+        })
         .toLowerCase();
       const windows = await tx.partner_venue_availability.findMany({
         where: {
@@ -3991,53 +4769,129 @@ export class VenuesService {
       // Production Prisma transactions always do; retain the legacy validation
       // path for those fixtures until the writer is fully cut over.
       if (service.facility_id && tx.slots?.findMany) {
-      const normalizedSlots = await tx.slots.findMany({
-        where: {
-          facility_id: service.facility_id,
-          OR: requestedSlots.map(slot => ({ starts_at: slot.startsAt, ends_at: slot.endsAt })),
-        },
-        select: { id: true, facility_id: true, capacity: true, status: true, starts_at: true, ends_at: true },
-      });
-      if (normalizedSlots.length !== requestedSlots.length) {
-        throw new ConflictException('One or more selected slots are not available in the normalized schedule');
-      }
-      await lockSlotsForCapacity(tx, normalizedSlots.map(slot => slot.id));
-      for (const normalizedSlot of normalizedSlots) {
-        const [slotBookings, slotAttempts, slotWalkIns] = await Promise.all([
-          tx.bookings.findMany({ where: { slot_id: normalizedSlot.id }, select: { id: true, attempt_id: true, status: true, starts_at: true, slots: { select: { ends_at: true } } } }),
-          tx.booking_attempts.findMany({ where: { slot_id: normalizedSlot.id, status: { in: ['HELD', 'PAYMENT_PROCESSING'] }, expires_at: { gt: new Date() } }, select: { status: true, quantity: true, expires_at: true, bookings: { select: { id: true } } } }),
-          tx.partner_walk_in_reservations.findMany({
-            where: {
-              facility_id: normalizedSlot.facility_id,
-              starts_at: { lt: normalizedSlot.ends_at },
-              ends_at: { gt: normalizedSlot.starts_at },
-            },
-            select: { status: true, participant_count: true, starts_at: true, ends_at: true },
-          }),
-        ]);
-        const occupancy = effectiveSlotOccupancy({
-          bookings: slotBookings.map(row => ({ id: row.id, attemptId: row.attempt_id, status: row.status, quantity: 1, startsAt: row.starts_at, endsAt: row.slots.ends_at })),
-          attempts: slotAttempts.map(row => ({ status: row.status, quantity: row.quantity, expiresAt: row.expires_at, bookingId: row.bookings?.id ?? null })),
-          walkIns: slotWalkIns.map(row => ({ status: row.status, participantCount: row.participant_count, startsAt: row.starts_at, endsAt: row.ends_at })),
+        const normalizedSlots = await tx.slots.findMany({
+          where: {
+            facility_id: service.facility_id,
+            OR: requestedSlots.map((slot) => ({
+              starts_at: slot.startsAt,
+              ends_at: slot.endsAt,
+            })),
+          },
+          select: {
+            id: true,
+            facility_id: true,
+            capacity: true,
+            status: true,
+            starts_at: true,
+            ends_at: true,
+          },
         });
-        if (normalizedSlot.status !== 'AVAILABLE' || occupancy + 1 > normalizedSlot.capacity) {
-          throw new ConflictException('One or more selected slots are unavailable');
+        if (normalizedSlots.length !== requestedSlots.length) {
+          throw new ConflictException(
+            "One or more selected slots are not available in the normalized schedule",
+          );
+        }
+        await lockSlotsForCapacity(
+          tx,
+          normalizedSlots.map((slot) => slot.id),
+        );
+        for (const normalizedSlot of normalizedSlots) {
+          const [slotBookings, slotAttempts, slotWalkIns] = await Promise.all([
+            tx.bookings.findMany({
+              where: { slot_id: normalizedSlot.id },
+              select: {
+                id: true,
+                attempt_id: true,
+                status: true,
+                starts_at: true,
+                slots: { select: { ends_at: true } },
+              },
+            }),
+            tx.booking_attempts.findMany({
+              where: {
+                slot_id: normalizedSlot.id,
+                status: { in: ["HELD", "PAYMENT_PROCESSING"] },
+                expires_at: { gt: new Date() },
+              },
+              select: {
+                status: true,
+                quantity: true,
+                expires_at: true,
+                bookings: { select: { id: true } },
+              },
+            }),
+            tx.partner_walk_in_reservations.findMany({
+              where: {
+                facility_id: normalizedSlot.facility_id,
+                starts_at: { lt: normalizedSlot.ends_at },
+                ends_at: { gt: normalizedSlot.starts_at },
+              },
+              select: {
+                status: true,
+                participant_count: true,
+                starts_at: true,
+                ends_at: true,
+              },
+            }),
+          ]);
+          const occupancy = effectiveSlotOccupancy({
+            bookings: slotBookings.map((row) => ({
+              id: row.id,
+              attemptId: row.attempt_id,
+              status: row.status,
+              quantity: 1,
+              startsAt: row.starts_at,
+              endsAt: row.slots.ends_at,
+            })),
+            attempts: slotAttempts.map((row) => ({
+              status: row.status,
+              quantity: row.quantity,
+              expiresAt: row.expires_at,
+              bookingId: row.bookings?.id ?? null,
+            })),
+            walkIns: slotWalkIns.map((row) => ({
+              status: row.status,
+              participantCount: row.participant_count,
+              startsAt: row.starts_at,
+              endsAt: row.ends_at,
+            })),
+          });
+          if (
+            normalizedSlot.status !== "AVAILABLE" ||
+            occupancy + 1 > normalizedSlot.capacity
+          ) {
+            throw new ConflictException(
+              "One or more selected slots are unavailable",
+            );
+          }
         }
       }
+      if (
+        !windows.length ||
+        requestedSlots.some((slot) => {
+          const start = this.timeToMinutes(slot.startTime);
+          const end = this.timeToMinutes(slot.endTime);
+          return !windows.some(
+            (window) =>
+              start >= this.timeToMinutes(window.open_time) &&
+              end <= this.timeToMinutes(window.close_time),
+          );
+        })
+      ) {
+        throw new BadRequestException(
+          "One or more selected slots are outside operating hours",
+        );
       }
-      if (!windows.length || requestedSlots.some((slot) => {
+      const configuredAmountFor = (slot: {
+        startTime: string;
+        endTime: string;
+      }) => {
         const start = this.timeToMinutes(slot.startTime);
         const end = this.timeToMinutes(slot.endTime);
-        return !windows.some((window) => start >= this.timeToMinutes(window.open_time) && end <= this.timeToMinutes(window.close_time));
-      })) {
-        throw new BadRequestException("One or more selected slots are outside operating hours");
-      }
-      const configuredAmountFor = (slot: { startTime: string; endTime: string }) => {
-        const start = this.timeToMinutes(slot.startTime);
-        const end = this.timeToMinutes(slot.endTime);
-        const window = windows.find((candidate) =>
-          start >= this.timeToMinutes(candidate.open_time) &&
-          end <= this.timeToMinutes(candidate.close_time),
+        const window = windows.find(
+          (candidate) =>
+            start >= this.timeToMinutes(candidate.open_time) &&
+            end <= this.timeToMinutes(candidate.close_time),
         );
         if (!window) return 0;
         const discounted = Number(window.discounted_price_paise ?? 0);
@@ -4055,10 +4909,24 @@ export class VenuesService {
           },
           include: { slots: true },
         });
-        if (activBookings.some((booking) => requestedSlots.some((slot) =>
-          this.istWallTimeToUtc(dayStart, this.timeToMinutes(slot.startTime)) < booking.slots.ends_at &&
-          this.istWallTimeToUtc(dayStart, this.timeToMinutes(slot.endTime)) > booking.slots.starts_at))) {
-          throw new ConflictException("One or more selected slots are already booked by ACTIV");
+        if (
+          activBookings.some((booking) =>
+            requestedSlots.some(
+              (slot) =>
+                this.istWallTimeToUtc(
+                  dayStart,
+                  this.timeToMinutes(slot.startTime),
+                ) < booking.slots.ends_at &&
+                this.istWallTimeToUtc(
+                  dayStart,
+                  this.timeToMinutes(slot.endTime),
+                ) > booking.slots.starts_at,
+            ),
+          )
+        ) {
+          throw new ConflictException(
+            "One or more selected slots are already booked by ACTIV",
+          );
         }
       }
       const existing = await tx.partner_walk_in_reservations.findMany({
@@ -4072,32 +4940,40 @@ export class VenuesService {
       });
       for (const res of existing) {
         for (const newSlot of requestedSlots) {
-          if (newSlot.startsAt < res.ends_at && newSlot.endsAt > res.starts_at) {
-            throw new ConflictException("One or more selected slots are already walk-in reserved");
+          if (
+            newSlot.startsAt < res.ends_at &&
+            newSlot.endsAt > res.starts_at
+          ) {
+            throw new ConflictException(
+              "One or more selected slots are already walk-in reserved",
+            );
           }
         }
       }
-      return Promise.all(requestedSlots.map((slot) =>
-        tx.partner_walk_in_reservations.create({
-          data: {
-            id: randomUUID(),
-            partner_id: partnerId,
-            venue_id: venueId,
-            facility_id: service.facility_id,
-            venue_service_id: serviceId,
-            participant_name: dto.participantName,
-            participant_phone_e164: dto.participantPhone,
-            starts_at: slot.startsAt,
-            ends_at: slot.endsAt,
-            status: "RESERVED",
-            amount_paise: dto.amountPaise == null
-              ? BigInt(configuredAmountFor(slot))
-              : BigInt(dto.amountPaise),
-            notes: notes.join("\n") || null,
-            updated_at: new Date(),
-          },
-        }),
-      ));
+      return Promise.all(
+        requestedSlots.map((slot) =>
+          tx.partner_walk_in_reservations.create({
+            data: {
+              id: randomUUID(),
+              partner_id: partnerId,
+              venue_id: venueId,
+              facility_id: service.facility_id,
+              venue_service_id: serviceId,
+              participant_name: dto.participantName,
+              participant_phone_e164: dto.participantPhone,
+              starts_at: slot.startsAt,
+              ends_at: slot.endsAt,
+              status: "RESERVED",
+              amount_paise:
+                dto.amountPaise == null
+                  ? BigInt(configuredAmountFor(slot))
+                  : BigInt(dto.amountPaise),
+              notes: notes.join("\n") || null,
+              updated_at: new Date(),
+            },
+          }),
+        ),
+      );
     });
 
     return {
@@ -4132,16 +5008,17 @@ export class VenuesService {
     await this.assertOwnedVenueService(venueId, serviceId, partnerId);
     const dayStart = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
     const dayEnd = date ? new Date(`${date}T23:59:59.999Z`) : undefined;
-    const reservations = await this.prisma.partner_walk_in_reservations.findMany({
-      where: {
-        venue_service_id: serviceId,
-        status: "RESERVED",
-        ...(dayStart && dayEnd
-          ? { starts_at: { lt: dayEnd }, ends_at: { gt: dayStart } }
-          : {}),
-      },
-      orderBy: [{ starts_at: "asc" }, { created_at: "asc" }],
-    });
+    const reservations =
+      await this.prisma.partner_walk_in_reservations.findMany({
+        where: {
+          venue_service_id: serviceId,
+          status: "RESERVED",
+          ...(dayStart && dayEnd
+            ? { starts_at: { lt: dayEnd }, ends_at: { gt: dayStart } }
+            : {}),
+        },
+        orderBy: [{ starts_at: "asc" }, { created_at: "asc" }],
+      });
     return reservations.map((reservation) =>
       this.mapWalkInReservation(reservation),
     );
@@ -4154,9 +5031,10 @@ export class VenuesService {
     partnerId: string,
   ): Promise<any> {
     await this.assertOwnedVenueService(venueId, serviceId, partnerId);
-    const reservation = await this.prisma.partner_walk_in_reservations.findFirst({
-      where: { id: reservationId, venue_service_id: serviceId },
-    });
+    const reservation =
+      await this.prisma.partner_walk_in_reservations.findFirst({
+        where: { id: reservationId, venue_service_id: serviceId },
+      });
     if (!reservation) throw new NotFoundException("Reservation not found");
     return this.mapWalkInReservation(reservation);
   }
@@ -4168,12 +5046,15 @@ export class VenuesService {
     partnerId: string,
   ): Promise<any> {
     await this.assertOwnedVenueService(venueId, serviceId, partnerId);
-    const reservation = await this.prisma.partner_walk_in_reservations.findFirst({
-      where: { id: reservationId, venue_service_id: serviceId },
-    });
+    const reservation =
+      await this.prisma.partner_walk_in_reservations.findFirst({
+        where: { id: reservationId, venue_service_id: serviceId },
+      });
     if (!reservation) throw new NotFoundException("Reservation not found");
-    if (reservation.status === "CANCELLED") return this.mapWalkInReservation(reservation);
-    if (reservation.status !== "RESERVED") throw new BadRequestException("Reservation is already released");
+    if (reservation.status === "CANCELLED")
+      return this.mapWalkInReservation(reservation);
+    if (reservation.status !== "RESERVED")
+      throw new BadRequestException("Reservation is already released");
 
     const released = await this.prisma.partner_walk_in_reservations.update({
       where: { id: reservation.id },
@@ -4216,8 +5097,12 @@ export class VenuesService {
       date: istStart.toISOString().slice(0, 10),
       slots: [
         {
-          startTime: this.minutesToTime(this.istDateTimeToMinutes(reservation.starts_at)),
-          endTime: this.minutesToTime(this.istDateTimeToMinutes(reservation.ends_at)),
+          startTime: this.minutesToTime(
+            this.istDateTimeToMinutes(reservation.starts_at),
+          ),
+          endTime: this.minutesToTime(
+            this.istDateTimeToMinutes(reservation.ends_at),
+          ),
         },
       ],
       participantName: reservation.participant_name,

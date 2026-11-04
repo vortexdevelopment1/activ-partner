@@ -565,6 +565,10 @@ model partner_service_questions {
   type                       PartnerServiceQuestionType
   options                    Json                        @default("[]")
   unit                       String?
+  placeholder                String?
+  helper_text                String?
+  min_length                 Int?
+  max_length                 Int?
   is_required                Boolean                     @default(false)
   sort_order                 Int                         @default(0)
   created_at                 DateTime                    @default(now())

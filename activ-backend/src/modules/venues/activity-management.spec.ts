@@ -1,328 +1,590 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { VenuesService } from './venues.service';
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { VenuesService } from "./venues.service";
 
-describe('activity management on the current schema', () => {
+describe("activity management on the current schema", () => {
   let service: VenuesService;
   let prisma: any;
   let record: any;
 
   beforeEach(() => {
-    record = { id: 'activity', venue_id: 'venue', service_category_id: 'badminton',
-      facility_id: 'facility', title: 'Badminton', status: 'APPROVED', description: 'Indoor',
-      onboarding_data: {}, is_active: true, partner_venue_images: [], partner_service_amenities: [],
-      public_reference: 'ACTV-000015',
-      venues: { partner_id: 'partner', name: 'Arena', public_reference: 'VEN-000016' } };
+    record = {
+      id: "activity",
+      venue_id: "venue",
+      service_category_id: "badminton",
+      facility_id: "facility",
+      title: "Badminton",
+      status: "APPROVED",
+      description: "Indoor",
+      onboarding_data: {},
+      is_active: true,
+      partner_venue_images: [],
+      partner_service_amenities: [],
+      public_reference: "ACTV-000015",
+      venues: {
+        partner_id: "partner",
+        name: "Arena",
+        public_reference: "VEN-000016",
+      },
+    };
     prisma = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
-      venues: { updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ booking_accept: true }) },
-      partner_venue_services: { findUnique: jest.fn(async () => record),
-        findUniqueOrThrow: jest.fn(async () => record), update: jest.fn(async (args) => args.data), count: jest.fn().mockResolvedValue(0) },
+      venues: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ booking_accept: true }),
+      },
+      partner_venue_services: {
+        findUnique: jest.fn(async () => record),
+        findUniqueOrThrow: jest.fn(async () => record),
+        update: jest.fn(async (args) => args.data),
+        count: jest.fn().mockResolvedValue(0),
+      },
       partner_venue_answers: { findMany: jest.fn(async () => []) },
       partner_walk_in_reservations: { findMany: jest.fn(async () => []) },
       partner_venue_availability: { findMany: jest.fn(async () => []) },
-      slots: { findMany: jest.fn(async () => [{ id: 'slot' }]), updateMany: jest.fn(),
-        aggregate: jest.fn(async () => ({ _sum: { capacity: 10, booked_quantity: 4 } })) },
-      bookings: { count: jest.fn(async () => 2),
+      slots: {
+        findMany: jest.fn(async () => [{ id: "slot" }]),
+        updateMany: jest.fn(),
+        aggregate: jest.fn(async () => ({
+          _sum: { capacity: 10, booked_quantity: 4 },
+        })),
+      },
+      bookings: {
+        count: jest.fn(async () => 2),
         aggregate: jest.fn(async () => ({ _sum: { total_paise: 125000n } })),
-        findMany: jest.fn(async () => [{ id: 'booking', starts_at: new Date('2030-01-01'),
-          total_paise: 125000n, status: 'CONFIRMED', users: { name: 'Customer' },
-          slots: { ends_at: new Date('2030-01-02') } }]) },
+        findMany: jest.fn(async () => [
+          {
+            id: "booking",
+            starts_at: new Date("2030-01-01"),
+            total_paise: 125000n,
+            status: "CONFIRMED",
+            users: { name: "Customer" },
+            slots: { ends_at: new Date("2030-01-02") },
+          },
+        ]),
+      },
       reviews: { findMany: jest.fn(async () => []) },
-      partner_service_paused_slots: { createMany: jest.fn(), findMany: jest.fn(async () => [{ slot_id: 'owned-slot' }]), deleteMany: jest.fn() },
+      partner_service_paused_slots: {
+        createMany: jest.fn(),
+        findMany: jest.fn(async () => [{ slot_id: "owned-slot" }]),
+        deleteMany: jest.fn(),
+      },
     };
     prisma.$transaction = jest.fn(async (callback) => callback(prisma));
-    service = Object.assign(Object.create(VenuesService.prototype), { prisma,
-      adminNotificationsService: { notify: jest.fn().mockResolvedValue(undefined) } });
+    service = Object.assign(Object.create(VenuesService.prototype), {
+      prisma,
+      adminNotificationsService: {
+        notify: jest.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
-  it('rejects another partner before accessing bookings or changing data', async () => {
-    await expect(service.getActivityManagement('activity', 'other')).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(service.updateActivityManagement('activity', 'other', { isActive: false, reason: 'Maintenance' }))
-      .rejects.toBeInstanceOf(ForbiddenException);
+  it("rejects another partner before accessing bookings or changing data", async () => {
+    await expect(
+      service.getActivityManagement("activity", "other"),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.updateActivityManagement("activity", "other", {
+        isActive: false,
+        reason: "Maintenance",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.bookings.count).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('keeps ACTIV no-show attendance visible after refreshing management', async () => {
-    prisma.bookings.findMany.mockResolvedValueOnce([{ id: 'booking', starts_at: new Date('2030-01-01'),
-      total_paise: 125000n, status: 'CONFIRMED', users: { name: 'Customer' },
-      slots: { ends_at: new Date('2030-01-02') }, booking_events: [{ to_status: 'NO_SHOW' }] }]);
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result.bookings[0].status).toBe('No Show');
+  it("keeps ACTIV no-show attendance visible after refreshing management", async () => {
+    prisma.bookings.findMany.mockResolvedValueOnce([
+      {
+        id: "booking",
+        starts_at: new Date("2030-01-01"),
+        total_paise: 125000n,
+        status: "CONFIRMED",
+        users: { name: "Customer" },
+        slots: { ends_at: new Date("2030-01-02") },
+        booking_events: [{ to_status: "NO_SHOW" }],
+      },
+    ]);
+    const result = await service.getActivityManagement("activity", "partner");
+    expect(result.bookings[0].status).toBe("No Show");
   });
 
-  it('returns an expired unchecked-in booking as no-show with its actual payment method', async () => {
-    prisma.bookings.findMany.mockResolvedValueOnce([{ id: 'booking', starts_at: new Date('2020-01-01'),
-      total_paise: 90000n, status: 'CONFIRMED', users: { name: 'Customer' },
-      slots: { ends_at: new Date('2020-01-02') }, payments: [{ provider: 'upi' }] }]);
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result.bookings[0]).toMatchObject({ status: 'No Show', checkedIn: false, paymentMode: 'UPI' });
-  });
-
-  it('keeps a checked-in walk-in ongoing after refreshing management', async () => {
-    prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([{
-      id: 'walk-in', participant_name: 'Customer', status: 'RESERVED', amount_paise: 50000n,
-      notes: 'Checked-in: 2026-10-26T08:00:00Z',
-      starts_at: new Date('2030-01-01'), ends_at: new Date('2030-01-02'),
-    }]);
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result.bookings.find((booking) => booking.id === 'walk-in').status).toBe('Ongoing');
-  });
-
-  it.each(['UPI', 'Cash', 'Card'])('includes %s walk-ins, their payment method, and their revenue', async method => {
-    prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([{
-      id: 'walk-in', participant_name: 'Walk-in Customer', status: 'RESERVED', amount_paise: 50000n,
-      notes: `Payment method: ${method}\nPayment status: PAID\nEmail: test@example.com`,
-      created_at: new Date('2026-10-26T08:00:00Z'),
-      starts_at: new Date('2030-01-01'), ends_at: new Date('2030-01-02'),
-    }]);
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result.bookings.find(booking => booking.id === 'walk-in')).toMatchObject({
-      paymentMode: method.toUpperCase(), paymentStatus: 'PAID', amount: 500,
-      email: 'test@example.com', bookedOn: new Date('2026-10-26T08:00:00Z'),
+  it("returns an expired unchecked-in booking as no-show with its actual payment method", async () => {
+    prisma.bookings.findMany.mockResolvedValueOnce([
+      {
+        id: "booking",
+        starts_at: new Date("2020-01-01"),
+        total_paise: 90000n,
+        status: "CONFIRMED",
+        users: { name: "Customer" },
+        slots: { ends_at: new Date("2020-01-02") },
+        payments: [{ provider: "upi" }],
+      },
+    ]);
+    const result = await service.getActivityManagement("activity", "partner");
+    expect(result.bookings[0]).toMatchObject({
+      status: "No Show",
+      checkedIn: false,
+      paymentMode: "UPI",
     });
-    expect(result.bookingCount).toBe(3);
-    expect(result.earnings).toBe(1750);
   });
+
+  it("keeps a checked-in walk-in ongoing after refreshing management", async () => {
+    prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([
+      {
+        id: "walk-in",
+        participant_name: "Customer",
+        status: "RESERVED",
+        amount_paise: 50000n,
+        notes: "Checked-in: 2026-10-26T08:00:00Z",
+        starts_at: new Date("2030-01-01"),
+        ends_at: new Date("2030-01-02"),
+      },
+    ]);
+    const result = await service.getActivityManagement("activity", "partner");
+    expect(
+      result.bookings.find((booking) => booking.id === "walk-in").status,
+    ).toBe("Ongoing");
+  });
+
+  it.each(["UPI", "Cash", "Card"])(
+    "includes %s walk-ins, their payment method, and their revenue",
+    async (method) => {
+      prisma.partner_walk_in_reservations.findMany.mockResolvedValueOnce([
+        {
+          id: "walk-in",
+          participant_name: "Walk-in Customer",
+          status: "RESERVED",
+          amount_paise: 50000n,
+          notes: `Payment method: ${method}\nPayment status: PAID\nEmail: test@example.com`,
+          created_at: new Date("2026-10-26T08:00:00Z"),
+          starts_at: new Date("2030-01-01"),
+          ends_at: new Date("2030-01-02"),
+        },
+      ]);
+      const result = await service.getActivityManagement("activity", "partner");
+      expect(
+        result.bookings.find((booking) => booking.id === "walk-in"),
+      ).toMatchObject({
+        paymentMode: method.toUpperCase(),
+        paymentStatus: "PAID",
+        amount: 500,
+        email: "test@example.com",
+        bookedOn: new Date("2026-10-26T08:00:00Z"),
+      });
+      expect(result.bookingCount).toBe(3);
+      expect(result.earnings).toBe(1750);
+    },
+  );
 
   it.each([
-    ['CONFIRMED', new Date('2026-10-26T08:00:00Z'), 'Ongoing'],
-    ['NO_SHOW', null, 'No Show'],
-    ['COMPLETED', new Date('2026-10-26T08:00:00Z'), 'Completed'],
-  ])('preserves incoming %s attendance fields on refresh', async (status, checkedInAt, expected) => {
-    prisma.bookings.findMany.mockResolvedValueOnce([{
-      id: 'booking', starts_at: new Date('2030-01-01'), total_paise: 50000n,
-      status, checked_in_at: checkedInAt, users: { name: 'Customer' },
-      slots: { ends_at: new Date('2030-01-02') }, booking_events: [],
-    }]);
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result.bookings[0].status).toBe(expected);
-    expect(prisma.bookings.aggregate.mock.calls[0][0].where.status.in).toContain('NO_SHOW');
-  });
+    ["CONFIRMED", new Date("2026-10-26T08:00:00Z"), "Ongoing"],
+    ["NO_SHOW", null, "No Show"],
+    ["COMPLETED", new Date("2026-10-26T08:00:00Z"), "Completed"],
+  ])(
+    "preserves incoming %s attendance fields on refresh",
+    async (status, checkedInAt, expected) => {
+      prisma.bookings.findMany.mockResolvedValueOnce([
+        {
+          id: "booking",
+          starts_at: new Date("2030-01-01"),
+          total_paise: 50000n,
+          status,
+          checked_in_at: checkedInAt,
+          users: { name: "Customer" },
+          slots: { ends_at: new Date("2030-01-02") },
+          booking_events: [],
+        },
+      ]);
+      const result = await service.getActivityManagement("activity", "partner");
+      expect(result.bookings[0].status).toBe(expected);
+      expect(
+        prisma.bookings.aggregate.mock.calls[0][0].where.status.in,
+      ).toContain("NO_SHOW");
+    },
+  );
 
-  it('returns stored public references without changing UUID identifiers', async () => {
-    record.id = '93a30fe8-9c79-4337-ae10-6fac5a047b94';
-    record.venue_id = '9618f0df-42eb-42f2-82c0-4e9a361c3086';
-    const result = await service.getActivityManagement(record.id, 'partner');
+  it("returns stored public references without changing UUID identifiers", async () => {
+    record.id = "93a30fe8-9c79-4337-ae10-6fac5a047b94";
+    record.venue_id = "9618f0df-42eb-42f2-82c0-4e9a361c3086";
+    const result = await service.getActivityManagement(record.id, "partner");
     expect(result).toMatchObject({
-      id: '93a30fe8-9c79-4337-ae10-6fac5a047b94',
-      activityReference: 'ACTV-000015',
-      venueId: '9618f0df-42eb-42f2-82c0-4e9a361c3086',
-      venueReference: 'VEN-000016',
+      id: "93a30fe8-9c79-4337-ae10-6fac5a047b94",
+      activityReference: "ACTV-000015",
+      venueId: "9618f0df-42eb-42f2-82c0-4e9a361c3086",
+      venueReference: "VEN-000016",
     });
   });
 
-  it('scopes bookings to the linked facility and serializes money without BigInt', async () => {
-    const result = await service.getActivityManagement('activity', 'partner');
+  it("scopes bookings to the linked facility and serializes money without BigInt", async () => {
+    const result = await service.getActivityManagement("activity", "partner");
     expect(result).toMatchObject({
-      activityReference: 'ACTV-000015',
-      venueReference: 'VEN-000016',
-      id: 'activity',
-      venueId: 'venue',
+      activityReference: "ACTV-000015",
+      venueReference: "VEN-000016",
+      id: "activity",
+      venueId: "venue",
     });
-    expect(prisma.bookings.count).toHaveBeenCalledWith({ where: { slots: { facility_id: 'facility' } } });
-    expect(result).toMatchObject({ bookingCount: 2, earnings: 1250, occupancy: 40 });
-    expect(result.bookings[0]).toMatchObject({ amount: 1250, customerName: 'Customer', status: 'Upcoming' });
+    expect(prisma.bookings.count).toHaveBeenCalledWith({
+      where: { slots: { facility_id: "facility" } },
+    });
+    expect(result).toMatchObject({
+      bookingCount: 2,
+      earnings: 1250,
+      occupancy: 40,
+    });
+    expect(result.bookings[0]).toMatchObject({
+      amount: 1250,
+      customerName: "Customer",
+      status: "Upcoming",
+    });
     expect(() => JSON.stringify(result)).not.toThrow();
   });
 
-  it('hydrates editable details from saved onboarding answers when activity data is empty', async () => {
-    record.service_category_id = 'cricket-turf';
-    record.description = 'Cricket turf bookings';
+  it("hydrates editable details from saved onboarding answers when activity data is empty", async () => {
+    record.service_category_id = "cricket-turf";
+    record.description = "Cricket turf bookings";
     prisma.partner_venue_answers.findMany.mockResolvedValueOnce([
-      { answer: 'This is activity description', partner_service_questions: { question: 'Activity Description' } },
-      { answer: '10', partner_service_questions: { question: 'Total Turfs' } },
-      { answer: 'Artificial Turf', partner_service_questions: { question: 'Pitch Type' } },
-      { answer: ['Indoor', 'Covered'], partner_service_questions: { question: 'Playing Environment' } },
+      {
+        answer: "This is activity description",
+        partner_service_questions: { question: "Activity Description" },
+      },
+      { answer: "10", partner_service_questions: { question: "Total Turfs" } },
+      {
+        answer: "Artificial Turf",
+        partner_service_questions: { question: "Pitch Type" },
+      },
+      {
+        answer: ["Indoor", "Covered"],
+        partner_service_questions: { question: "Playing Environment" },
+      },
     ]);
 
-    const result = await service.getActivityManagement('activity', 'partner');
+    const result = await service.getActivityManagement("activity", "partner");
 
     expect(prisma.partner_venue_answers.findMany).toHaveBeenCalledWith({
       where: {
-        venue_id: 'venue',
+        venue_id: "venue",
         OR: [
-          { venue_service_id: 'activity' },
+          { venue_service_id: "activity" },
           {
             venue_service_id: null,
-            partner_service_questions: { service_category_id: 'cricket-turf' },
+            partner_service_questions: { service_category_id: "cricket-turf" },
           },
         ],
       },
       include: { partner_service_questions: true },
-      orderBy: { updated_at: 'asc' },
+      orderBy: { updated_at: "asc" },
     });
     expect(result).toMatchObject({
-      description: 'This is activity description',
-      numberOfCourt: '10',
-      courtType: 'Artificial Turf',
-      playingEnvironment: ['Indoor', 'Covered'],
+      description: "This is activity description",
+      numberOfCourt: "10",
+      courtType: "Artificial Turf",
+      playingEnvironment: ["Indoor", "Covered"],
     });
   });
 
-  it('does not load unrelated bookings for activities without a facility', async () => {
+  it("does not load unrelated bookings for activities without a facility", async () => {
     record.facility_id = null;
-    const result = await service.getActivityManagement('activity', 'partner');
-    expect(result).toMatchObject({ bookingCount: 0, earnings: 0, occupancy: null, bookings: [] });
+    const result = await service.getActivityManagement("activity", "partner");
+    expect(result).toMatchObject({
+      bookingCount: 0,
+      earnings: 0,
+      occupancy: null,
+      bookings: [],
+    });
     expect(prisma.bookings.findMany).not.toHaveBeenCalled();
   });
 
-  it('pauses future available slots and preserves existing bookings and metadata', async () => {
-    record.onboarding_data = { imageUrls: ['photo'], amenities: ['Parking'] };
-    await service.updateActivityManagement('activity', 'partner', { isActive: false, reason: 'Maintenance' });
+  it("pauses future available slots and preserves existing bookings and metadata", async () => {
+    record.onboarding_data = { imageUrls: ["photo"], amenities: ["Parking"] };
+    await service.updateActivityManagement("activity", "partner", {
+      isActive: false,
+      reason: "Maintenance",
+    });
     expect(prisma.slots.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['slot'] }, status: 'AVAILABLE' }, data: { status: 'BLOCKED' },
+      where: { id: { in: ["slot"] }, status: "AVAILABLE" },
+      data: { status: "BLOCKED" },
     });
-    expect(prisma.partner_venue_services.update.mock.calls[0][0].data)
-      .toMatchObject({ is_active: false, pause_reason: 'Maintenance' });
-    expect(prisma.partner_venue_services.update.mock.calls[0][0].data.onboarding_data).toBeUndefined();
-    expect(prisma.partner_service_paused_slots.createMany).toHaveBeenCalledWith({
-      data: [{ venue_service_id: 'activity', slot_id: 'slot' }], skipDuplicates: true });
-  });
-
-  it('only resumes slots previously blocked by this activity', async () => {
-    record.onboarding_data = { isActive: false, pausedSlotIds: ['owned-slot'] };
-    await service.updateActivityManagement('activity', 'partner', { isActive: true });
-    expect(prisma.slots.updateMany.mock.calls[0][0].where)
-      .toMatchObject({ facility_id: 'facility', id: { in: ['owned-slot'] }, status: 'BLOCKED' });
-  });
-
-  it('requires a pause reason and rejects controls for draft activities', async () => {
-    await expect(service.updateActivityManagement('activity', 'partner', { isActive: false }))
-      .rejects.toBeInstanceOf(BadRequestException);
-    record.status = 'DRAFT';
-    await expect(service.updateActivityManagement('activity', 'partner', { isActive: false, reason: 'Repair' }))
-      .rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('archives the activity without deleting its records or bookings', async () => {
-    await service.updateActivityManagement('activity', 'partner', {}, true);
-    expect(prisma.partner_venue_services.update.mock.calls[0][0].data)
-      .toMatchObject({ status: 'ARCHIVED', is_active: false });
-    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
-      'activity_removed', expect.any(String), expect.any(String),
-      { partnerId: 'partner', venueId: 'venue', serviceId: 'activity' },
-    );
-    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledWith(
-      'venue_auto_deactivated', expect.any(String), expect.any(String), { partnerId: 'partner', venueId: 'venue' },
+    expect(
+      prisma.partner_venue_services.update.mock.calls[0][0].data,
+    ).toMatchObject({ is_active: false, pause_reason: "Maintenance" });
+    expect(
+      prisma.partner_venue_services.update.mock.calls[0][0].data
+        .onboarding_data,
+    ).toBeUndefined();
+    expect(prisma.partner_service_paused_slots.createMany).toHaveBeenCalledWith(
+      {
+        data: [{ venue_service_id: "activity", slot_id: "slot" }],
+        skipDuplicates: true,
+      },
     );
   });
 
-  it('allows an owned draft to be removed using the activity management endpoint', async () => {
-    record.status = 'DRAFT';
-    await service.updateActivityManagement('activity', 'partner', {}, true);
-    expect(prisma.partner_venue_services.update.mock.calls[0][0]).toMatchObject({
-      where: { id: 'activity' }, data: { status: 'ARCHIVED', is_active: false },
+  it("only resumes slots previously blocked by this activity", async () => {
+    record.onboarding_data = { isActive: false, pausedSlotIds: ["owned-slot"] };
+    await service.updateActivityManagement("activity", "partner", {
+      isActive: true,
+    });
+    expect(prisma.slots.updateMany.mock.calls[0][0].where).toMatchObject({
+      facility_id: "facility",
+      id: { in: ["owned-slot"] },
+      status: "BLOCKED",
     });
   });
 
-  it('does not announce automatic deactivation when activities remain', async () => {
+  it("requires a pause reason and rejects controls for draft activities", async () => {
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        isActive: false,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    record.status = "DRAFT";
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        isActive: false,
+        reason: "Repair",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("archives the activity without deleting its records or bookings", async () => {
+    await service.updateActivityManagement("activity", "partner", {}, true);
+    expect(
+      prisma.partner_venue_services.update.mock.calls[0][0].data,
+    ).toMatchObject({ status: "ARCHIVED", is_active: false });
+    expect(
+      (service as any).adminNotificationsService.notify,
+    ).toHaveBeenCalledWith(
+      "activity_removed",
+      expect.any(String),
+      expect.any(String),
+      { partnerId: "partner", venueId: "venue", serviceId: "activity" },
+    );
+    expect(
+      (service as any).adminNotificationsService.notify,
+    ).toHaveBeenCalledWith(
+      "venue_auto_deactivated",
+      expect.any(String),
+      expect.any(String),
+      { partnerId: "partner", venueId: "venue" },
+    );
+  });
+
+  it("allows an owned draft to be removed using the activity management endpoint", async () => {
+    record.status = "DRAFT";
+    await service.updateActivityManagement("activity", "partner", {}, true);
+    expect(prisma.partner_venue_services.update.mock.calls[0][0]).toMatchObject(
+      {
+        where: { id: "activity" },
+        data: { status: "ARCHIVED", is_active: false },
+      },
+    );
+  });
+
+  it("does not announce automatic deactivation when activities remain", async () => {
     prisma.partner_venue_services.count.mockResolvedValue(1);
-    await service.removeService('activity', 'partner');
+    await service.removeService("activity", "partner");
     expect(prisma.venues.updateMany).not.toHaveBeenCalled();
-    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledTimes(1);
+    expect(
+      (service as any).adminNotificationsService.notify,
+    ).toHaveBeenCalledTimes(1);
   });
 
-  it('does not announce deactivation again when bookings were already disabled', async () => {
+  it("does not announce deactivation again when bookings were already disabled", async () => {
     prisma.venues.updateMany.mockResolvedValue({ count: 0 });
-    await service.updateActivityManagement('activity', 'partner', {}, true);
-    expect((service as any).adminNotificationsService.notify).toHaveBeenCalledTimes(1);
+    await service.updateActivityManagement("activity", "partner", {}, true);
+    expect(
+      (service as any).adminNotificationsService.notify,
+    ).toHaveBeenCalledTimes(1);
   });
 
-  it('does not send removal alerts when the archive transaction fails', async () => {
-    prisma.partner_venue_services.update.mockRejectedValue(new Error('Update failed'));
-    await expect(service.updateActivityManagement('activity', 'partner', {}, true)).rejects.toThrow('Update failed');
-    expect((service as any).adminNotificationsService.notify).not.toHaveBeenCalled();
+  it("does not send removal alerts when the archive transaction fails", async () => {
+    prisma.partner_venue_services.update.mockRejectedValue(
+      new Error("Update failed"),
+    );
+    await expect(
+      service.updateActivityManagement("activity", "partner", {}, true),
+    ).rejects.toThrow("Update failed");
+    expect(
+      (service as any).adminNotificationsService.notify,
+    ).not.toHaveBeenCalled();
   });
 
   function prepareQuestions() {
     prisma.$queryRaw = jest.fn().mockResolvedValue([]);
-    prisma.partner_service_questions = { findMany: jest.fn().mockResolvedValue([
-      { id: 'description', question: 'Activity Description' },
-      { id: 'arenas', question: 'Total Arenas' },
-      { id: 'courts', question: 'Total Courts' },
-      { id: 'playing', question: 'Playing Environment' },
-    ]) };
-    prisma.partner_users = { findFirst: jest.fn().mockResolvedValue({ id: 'owner' }) };
+    prisma.partner_service_questions = {
+      findMany: jest.fn().mockResolvedValue([
+        { id: "description", question: "Activity Description" },
+        { id: "arenas", question: "Total Arenas" },
+        { id: "courts", question: "Total Courts" },
+        { id: "playing", question: "Playing Environment" },
+      ]),
+    };
+    prisma.partner_users = {
+      findFirst: jest.fn().mockResolvedValue({ id: "owner" }),
+    };
     prisma.partner_venue_answers.findFirst = jest.fn().mockResolvedValue(null);
     prisma.partner_venue_answers.create = jest.fn().mockResolvedValue({});
     prisma.partner_venue_answers.update = jest.fn().mockResolvedValue({});
   }
 
-  it('saves the real category questions and legacy summaries in one transaction', async () => {
+  it("saves the real category questions and legacy summaries in one transaction", async () => {
     prepareQuestions();
     record.onboarding_data = { preserved: true };
-    await service.updateActivityManagement('activity', 'partner', { answers: [
-      { questionId: 'description', answer: 'Updated description' },
-      { questionId: 'arenas', answer: '52' }, { questionId: 'courts', answer: '3' },
-      { questionId: 'playing', answer: [] },
-    ] });
+    await service.updateActivityManagement("activity", "partner", {
+      answers: [
+        { questionId: "description", answer: "Updated description" },
+        { questionId: "arenas", answer: "52" },
+        { questionId: "courts", answer: "3" },
+        { questionId: "playing", answer: [] },
+      ],
+    });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.partner_venue_answers.create).toHaveBeenCalledTimes(4);
-    expect(prisma.partner_venue_answers.create.mock.calls[1][0].data).toMatchObject({
-      venue_id: 'venue', venue_service_id: 'activity', question_id: 'arenas', answer: '52',
+    expect(
+      prisma.partner_venue_answers.create.mock.calls[1][0].data,
+    ).toMatchObject({
+      venue_id: "venue",
+      venue_service_id: "activity",
+      question_id: "arenas",
+      answer: "52",
     });
-    expect(prisma.partner_venue_services.update.mock.calls[0][0].data).toMatchObject({
-      description: 'Updated description', onboarding_data: { preserved: true, numberOfCourt: '3', playingEnvironment: [] },
+    expect(
+      prisma.partner_venue_services.update.mock.calls[0][0].data,
+    ).toMatchObject({
+      description: "Updated description",
+      onboarding_data: {
+        preserved: true,
+        numberOfCourt: "3",
+        playingEnvironment: [],
+      },
     });
-    expect(prisma.partner_service_questions.findMany.mock.calls[0][0].where.AND).toEqual([
-      { OR: [{ service_category_id: 'badminton' }, { service_category_id: null }] },
-      { OR: [{ venue_service_id: 'activity' }, { venue_service_id: null }] },
+    expect(
+      prisma.partner_service_questions.findMany.mock.calls[0][0].where.AND,
+    ).toEqual([
+      {
+        OR: [
+          { service_category_id: "badminton" },
+          { service_category_id: null },
+        ],
+      },
+      { OR: [{ venue_service_id: "activity" }, { venue_service_id: null }] },
     ]);
   });
 
-  it('rejects foreign or repeated question ids before writing any answers', async () => {
+  it("rejects foreign or repeated question ids before writing any answers", async () => {
     prepareQuestions();
     prisma.partner_service_questions.findMany.mockResolvedValue([]);
-    await expect(service.updateActivityManagement('activity', 'partner', {
-      answers: [{ questionId: 'foreign', answer: 'wrong category' }],
-    })).rejects.toThrow('Questions must belong');
-    await expect(service.updateActivityManagement('activity', 'partner', {
-      answers: [{ questionId: 'same', answer: 'one' }, { questionId: 'same', answer: 'two' }],
-    })).rejects.toThrow('Duplicate activity question');
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        answers: [{ questionId: "foreign", answer: "wrong category" }],
+      }),
+    ).rejects.toThrow("Questions must belong");
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        answers: [
+          { questionId: "same", answer: "one" },
+          { questionId: "same", answer: "two" },
+        ],
+      }),
+    ).rejects.toThrow("Duplicate activity question");
     expect(prisma.partner_venue_answers.create).not.toHaveBeenCalled();
     expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
   });
 
-  it('does not update summary fields after an answer write failure', async () => {
-    prepareQuestions();
-    prisma.partner_service_questions.findMany.mockResolvedValue([{ id: 'description', question: 'Activity Description' }]);
-    prisma.partner_venue_answers.create.mockRejectedValue(new Error('Write failed'));
-    await expect(service.updateActivityManagement('activity', 'partner', {
-      answers: [{ questionId: 'description', answer: 'New' }],
-    })).rejects.toThrow('Write failed');
-    expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
-  });
-
-  it('rejects empty required answers and oversized summary values from the question form', async () => {
+  it("does not update summary fields after an answer write failure", async () => {
     prepareQuestions();
     prisma.partner_service_questions.findMany.mockResolvedValue([
-      { id: 'description', question: 'Activity Description', is_required: true },
+      { id: "description", question: "Activity Description" },
     ]);
-    await expect(service.updateActivityManagement('activity', 'partner', {
-      answers: [{ questionId: 'description', answer: '   ' }],
-    })).rejects.toThrow('Please answer: Activity Description');
-    expect(prisma.partner_venue_answers.create).not.toHaveBeenCalled();
-    await expect(service.updateActivityManagement('activity', 'partner', {
-      answers: [{ questionId: 'description', answer: 'x'.repeat(5001) }],
-    })).rejects.toThrow('Activity details exceed the allowed length');
+    prisma.partner_venue_answers.create.mockRejectedValue(
+      new Error("Write failed"),
+    );
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        answers: [{ questionId: "description", answer: "New" }],
+      }),
+    ).rejects.toThrow("Write failed");
     expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
   });
 
-  it('restores venue onboarding answers but prioritizes the edited activity answers', async () => {
-    (service as any).findOwnedActivity = jest.fn().mockResolvedValue({ venueId: 'venue', categoryId: 'badminton' });
-    (service as any).questionsService = { findByCategoryId: jest.fn().mockResolvedValue([
-      { id: 'arenas' }, { id: 'courts' },
-    ]) };
+  it("rejects empty required answers and oversized summary values from the question form", async () => {
+    prepareQuestions();
+    prisma.partner_service_questions.findMany.mockResolvedValue([
+      {
+        id: "description",
+        question: "Activity Description",
+        is_required: true,
+      },
+    ]);
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        answers: [{ questionId: "description", answer: "   " }],
+      }),
+    ).rejects.toThrow("Please answer: Activity Description");
+    expect(prisma.partner_venue_answers.create).not.toHaveBeenCalled();
+    await expect(
+      service.updateActivityManagement("activity", "partner", {
+        answers: [{ questionId: "description", answer: "x".repeat(5001) }],
+      }),
+    ).rejects.toThrow("Activity details exceed the allowed length");
+    expect(prisma.partner_venue_services.update).not.toHaveBeenCalled();
+  });
+
+  it("restores venue onboarding answers but prioritizes the edited activity answers", async () => {
+    (service as any).findOwnedActivity = jest
+      .fn()
+      .mockResolvedValue({ venueId: "venue", categoryId: "badminton" });
+    (service as any).questionsService = {
+      findByCategoryId: jest
+        .fn()
+        .mockResolvedValue([{ id: "arenas" }, { id: "courts" }]),
+    };
     prisma.partner_venue_answers.findMany.mockResolvedValue([
-      { question_id: 'courts', answer: '3', venue_service_id: 'activity' },
-      { question_id: 'arenas', answer: '52', venue_service_id: null },
-      { question_id: 'courts', answer: 'old venue answer', venue_service_id: null },
+      { question_id: "courts", answer: "3", venue_service_id: "activity" },
+      { question_id: "arenas", answer: "52", venue_service_id: null },
+      {
+        question_id: "courts",
+        answer: "old venue answer",
+        venue_service_id: null,
+      },
     ]);
-    expect(await service.getActivityQuestions('activity', 'partner')).toEqual([
-      { id: 'arenas', answer: '52' }, { id: 'courts', answer: '3' },
+    expect(await service.getActivityQuestions("activity", "partner")).toEqual([
+      { id: "arenas", answer: "52" },
+      { id: "courts", answer: "3" },
     ]);
-    expect(prisma.partner_venue_answers.findMany.mock.calls[0][0].where.venue_id).toBe('venue');
+    expect(
+      prisma.partner_venue_answers.findMany.mock.calls[0][0].where.venue_id,
+    ).toBe("venue");
+  });
+
+  it("validates activity answers against the stored field definition before saving", async () => {
+    const definitions = [
+      { id: "capacity", question: "Max Capacity", type: "NUMBER_STEPPER", is_required: true, options: [] },
+      { id: "trainer", question: "Trainer Availability", type: "SELECT", is_required: false, options: ["Yes", "No"] },
+    ];
+    prisma.partner_service_questions = {
+      findMany: jest.fn(({ where }) => Promise.resolve(
+        definitions.filter((definition) => where.id.in.includes(definition.id)),
+      )),
+    };
+    (service as any).saveAnswers = jest.fn();
+
+    await expect(
+      service.saveActivityAnswers(
+        "activity",
+        [{ questionId: "capacity", answer: "2.5" }],
+        "partner",
+      ),
+    ).rejects.toThrow("whole number");
+    await expect(
+      service.saveActivityAnswers(
+        "activity",
+        [{ questionId: "trainer", answer: "Maybe" }],
+        "partner",
+      ),
+    ).rejects.toThrow("valid option");
+    expect((service as any).saveAnswers).not.toHaveBeenCalled();
   });
 });
