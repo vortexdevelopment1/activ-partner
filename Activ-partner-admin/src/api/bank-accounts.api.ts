@@ -25,6 +25,8 @@ export const bankAccountsApi = {
 
   getMy: () => api.get('/bank-accounts/my'),
 
+  lookupIfsc: (code: string) => api.get(`/bank-accounts/ifsc/${code}`),
+
   getAll: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/bank-accounts', { params }),
 

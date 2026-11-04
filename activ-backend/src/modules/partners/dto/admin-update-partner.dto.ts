@@ -13,6 +13,7 @@ export class AdminPartnerBankAccountDto {
   @ApiPropertyOptional()
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[\p{L}\p{M}\s.'-]+$/u, { message: 'Account holder name must contain only letters' })
   accountHolderName: string;
 
   @ApiPropertyOptional()
@@ -48,8 +49,8 @@ export class AdminPartnerBankAccountDto {
   cancelledChequeUrl?: string;
 
   @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
+  @ValidateIf((_o, v) => v !== undefined && v !== null && v !== '')
+  @Matches(/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/, { message: 'Invalid UPI ID format' })
   upiId?: string;
 
   @ApiPropertyOptional()

@@ -46,7 +46,7 @@ export class BankAccountsController {
   // ─── Partner ────────────────────────────────────────────────────────────────
 
   @Get('ifsc/:code')
-  @Roles(UserRole.PARTNER)
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
   @ApiOperation({ summary: 'Look up an IFSC code using Razorpay' })
   async lookupIfsc(@Param('code') code: string) {
     return { message: 'IFSC details fetched successfully', data: await this.bankAccountsService.lookupIfsc(code) };

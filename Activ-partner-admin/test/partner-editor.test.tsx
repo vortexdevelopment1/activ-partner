@@ -9,6 +9,11 @@ import { partnersApi } from '../src/api/partners.api';
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('../src/hooks/useToast', () => ({ useToast: () => toast }));
 vi.mock('../src/api/partners.api', () => ({ partnersApi: { getById: vi.fn(), update: vi.fn(), uploadDocument: vi.fn() } }));
+vi.mock('../src/api/bank-accounts.api', () => ({
+  bankAccountsApi: {
+    lookupIfsc: vi.fn().mockResolvedValue({ data: { data: { bank: 'HDFC Bank', branch: 'Kormangala' } } }),
+  },
+}));
 let client: QueryClient;
 const close = vi.fn();
 beforeEach(() => {
@@ -176,4 +181,46 @@ it('displays human-readable formatted status labels for bank status and account 
 
   fireEvent.click(screen.getByRole('option', { name: 'Approved' }));
   expect(bankStatusButton.textContent).toContain('Approved');
+});
+
+it('validates bank account fields, filters invalid characters, and prevents save on invalid format', async () => {
+  show();
+  const holderInput = (await screen.findByLabelText('Account holder')) as HTMLInputElement;
+  const numInput = (await screen.findByLabelText('Account number')) as HTMLInputElement;
+  const ifscInput = (await screen.findByLabelText('IFSC code')) as HTMLInputElement;
+
+  // Account holder: numbers stripped out
+  fireEvent.change(holderInput, { target: { value: 'uj68' } });
+  expect(holderInput.value).toBe('uj');
+
+  // Account number: non-digits stripped out, validation error for < 6 digits
+  fireEvent.change(numInput, { target: { value: 'iui87i98o' } });
+  expect(numInput.value).toBe('8798');
+  expect(await screen.findByText('Account number must be 6 to 20 digits')).toBeDefined();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+
+  // Fix account number to valid digits
+  fireEvent.change(numInput, { target: { value: '1234567890' } });
+  expect(screen.queryByText('Account number must be 6 to 20 digits')).toBeNull();
+
+  // IFSC code: auto-uppercased, non-alphanumeric filtered, max 11 chars
+  fireEvent.change(ifscInput, { target: { value: 'jyyj7f4y8u78jtjgtyhugt' } });
+  expect(ifscInput.value).toBe('JYYJ7F4Y8U7');
+  expect(await screen.findByText('IFSC code must be 11 characters (e.g. HDFC0001234)')).toBeDefined();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+
+  // Fix IFSC code to valid format
+  fireEvent.change(ifscInput, { target: { value: 'HDFC0001234' } });
+  expect(screen.queryByText('IFSC code must be 11 characters (e.g. HDFC0001234)')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(false);
+
+  // UPI ID validation
+  const upiInput = (await screen.findByLabelText('UPI ID')) as HTMLInputElement;
+  fireEvent.change(upiInput, { target: { value: 'invalid_upi' } });
+  expect(await screen.findByText('Enter a valid UPI ID (e.g. name@bank)')).toBeDefined();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+
+  fireEvent.change(upiInput, { target: { value: 'partner@okhdfcbank' } });
+  expect(screen.queryByText('Enter a valid UPI ID (e.g. name@bank)')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(false);
 });
