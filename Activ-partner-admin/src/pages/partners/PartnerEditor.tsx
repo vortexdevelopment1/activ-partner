@@ -27,6 +27,24 @@ const groups = [
 
 const bankFields = [['accountHolderName', 'Account holder'], ['bankName', 'Bank name'], ['accountNumber', 'Account number'], ['ifscCode', 'IFSC code'], ['accountType', 'Account type'], ['branchName', 'Branch'], ['cancelledChequeUrl', 'Cancelled cheque URL'], ['upiId', 'UPI ID'], ['rejectionReason', 'Rejection reason']] as const;
 
+const accountStatusOptions = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'SUSPENDED', label: 'Suspended' },
+];
+
+const kycStatusOptions = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
+const bankStatusOptions = [
+  { value: 'UNDER_REVIEW', label: 'Under Review' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
 export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 export const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
@@ -185,15 +203,18 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
             })}</div>
           </section>)}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[['status', 'Account status', ['PENDING', 'ACTIVE', 'SUSPENDED']], ['kycStatus', 'Verification status', ['PENDING', 'APPROVED', 'REJECTED']]].map(([key, label, options]) => (
-              <label key={key as string} className="text-sm text-gray-600 space-y-1 block">
+            {([
+              ['status', 'Account status', accountStatusOptions],
+              ['kycStatus', 'Verification status', kycStatusOptions],
+            ] as const).map(([key, label, options]) => (
+              <label key={key} className="text-sm text-gray-600 space-y-1 block">
                 <span>{label}</span>
                 <SelectMenu
-                  ariaLabel={label as string}
-                  value={value(key as string)}
-                  placeholder={`Select ${label.toString().toLowerCase()}`}
-                  options={(options as string[]).map(option => ({ value: option, label: option }))}
-                  onChange={val => setChanges(previous => ({ ...previous, [key as string]: val }))}
+                  ariaLabel={label}
+                  value={value(key)}
+                  placeholder={`Select ${label.toLowerCase()}`}
+                  options={options}
+                  onChange={val => setChanges(previous => ({ ...previous, [key]: val }))}
                   disabled={mutation.isPending || uploading}
                 />
               </label>
@@ -211,7 +232,7 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
                   ariaLabel="Status"
                   value={bank.status}
                   placeholder="Select status"
-                  options={['UNDER_REVIEW', 'APPROVED', 'REJECTED'].map(status => ({ value: status, label: status }))}
+                  options={bankStatusOptions}
                   onChange={val => updateBank(index, 'status', val)}
                   disabled={mutation.isPending || uploading}
                 />

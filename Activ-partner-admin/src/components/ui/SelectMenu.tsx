@@ -8,6 +8,15 @@ export interface SelectOption {
   label: string;
 }
 
+export const formatStatusLabel = (status: string): string => {
+  if (!status) return '';
+  return status
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 interface SelectMenuProps {
   value: string;
   options: SelectOption[];
@@ -26,7 +35,14 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<ReturnType<typeof floatingPanel> | null>(null);
-  const selected = options.find((option) => option.value === value);
+  const selected = options.find(
+    (option) =>
+      option.value === value ||
+      option.value.toUpperCase() === value?.toUpperCase() ||
+      option.label.toLowerCase() === value?.toLowerCase()
+  );
+  const displayLabel = selected?.label ?? (value ? formatStatusLabel(value) : placeholder);
+  const isPlaceholder = !selected && !value;
   const ready = open && position !== null;
 
   useEffect(() => {
@@ -78,8 +94,8 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
         onKeyDown={event => { if (!disabled && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { event.preventDefault(); setOpen(true); } }}
         onClick={() => { if (!disabled) setOpen((current) => !current); }}
         onChange={(event: any) => onChange(event?.target?.value ?? event)}
-        className={`input flex w-full items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
-        <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
+        className={`input flex w-full items-center justify-between gap-2 text-left text-sm font-normal disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 ${!isPlaceholder ? 'text-gray-900' : 'text-gray-500'}`}>
+        <span className="min-w-0 truncate text-sm font-normal leading-normal">{displayLabel}</span>
         <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && position && createPortal(

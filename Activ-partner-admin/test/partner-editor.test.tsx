@@ -29,7 +29,7 @@ it('loads full details and sends only edited profile fields', async () => {
   expect((pan as HTMLInputElement).value).toBe('ABCDE1234F');
   fireEvent.change(pan, { target: { value: 'BCDEF2345G' } });
   fireEvent.click(screen.getByRole('button', { name: 'Account status' }));
-  fireEvent.click(screen.getByRole('option', { name: 'SUSPENDED' }));
+  fireEvent.click(screen.getByRole('option', { name: /suspended/i }));
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { panNumber: 'BCDEF2345G', status: 'SUSPENDED' }));
   await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
@@ -162,4 +162,18 @@ it('displays and formats Aadhaar number, validates 12 digits, and sends unhyphen
 
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() => expect(partnersApi.update).toHaveBeenCalledWith('partner', { aadhaarNumber: '987654321098' }));
+});
+
+it('displays human-readable formatted status labels for bank status and account status', async () => {
+  show();
+  const bankStatusButton = await screen.findByRole('button', { name: 'Status' });
+  expect(bankStatusButton.textContent).toContain('Under Review');
+
+  fireEvent.click(bankStatusButton);
+  expect(screen.getByRole('option', { name: 'Under Review' })).toBeDefined();
+  expect(screen.getByRole('option', { name: 'Approved' })).toBeDefined();
+  expect(screen.getByRole('option', { name: 'Rejected' })).toBeDefined();
+
+  fireEvent.click(screen.getByRole('option', { name: 'Approved' }));
+  expect(bankStatusButton.textContent).toContain('Approved');
 });
