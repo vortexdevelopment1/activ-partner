@@ -1,4 +1,4 @@
-export type PartnerDocumentKind = 'avatar' | 'pan' | 'gst' | 'cancelled-cheque';
+export type PartnerDocumentKind = 'avatar' | 'pan' | 'gst' | 'cancelled-cheque' | 'aadhaar';
 import api from './axios';
 
 export const partnersApi = {

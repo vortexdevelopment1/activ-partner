@@ -15,10 +15,11 @@ interface SelectMenuProps {
   onChange: (value: string) => void;
   ariaLabel: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export const SelectMenu: React.FC<SelectMenuProps> = ({
-  value, options, placeholder, onChange, ariaLabel, className = '',
+  value, options, placeholder, onChange, ariaLabel, className = '', disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -27,6 +28,10 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
   const [position, setPosition] = useState<ReturnType<typeof floatingPanel> | null>(null);
   const selected = options.find((option) => option.value === value);
   const ready = open && position !== null;
+
+  useEffect(() => {
+    if (disabled && open) setOpen(false);
+  }, [disabled, open]);
   useEffect(() => {
     if (ready) {
       const option = panelRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
@@ -69,9 +74,11 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
       <button ref={buttonRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}
-        onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}
-        onClick={() => setOpen((current) => !current)}
-        className={`input flex w-full items-center justify-between gap-2 text-left ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
+        disabled={disabled}
+        onKeyDown={event => { if (!disabled && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { event.preventDefault(); setOpen(true); } }}
+        onClick={() => { if (!disabled) setOpen((current) => !current); }}
+        onChange={(event: any) => onChange(event?.target?.value ?? event)}
+        className={`input flex w-full items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
         <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
         <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

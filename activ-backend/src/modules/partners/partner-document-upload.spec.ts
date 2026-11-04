@@ -10,6 +10,7 @@ describe('admin partner document upload', () => {
     expect(() => validatePartnerDocument(pdf, PartnerDocumentKind.PAN)).not.toThrow();
     expect(() => validatePartnerDocument(pdf, PartnerDocumentKind.GST)).not.toThrow();
     expect(() => validatePartnerDocument(pdf, PartnerDocumentKind.CANCELLED_CHEQUE)).not.toThrow();
+    expect(() => validatePartnerDocument(pdf, PartnerDocumentKind.AADHAAR)).not.toThrow();
     expect(() => validatePartnerDocument(png, PartnerDocumentKind.AVATAR)).not.toThrow();
   });
 

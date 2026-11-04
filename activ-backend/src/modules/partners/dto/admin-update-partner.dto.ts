@@ -95,6 +95,30 @@ export class AdminUpdatePartnerDto extends OmitType(UpdatePartnerDto, ['email'] 
   addressLine2?: string;
 
   @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined && value !== null && value !== '')
+  @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, { message: 'Invalid PAN number format (e.g. ABCDE1234F)' })
+  panNumber?: string;
+
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined && value !== null && value !== '')
+  @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, {
+    message: 'Invalid GST number format (e.g. 27AAPFU0939F1ZV)',
+  })
+  gstNumber?: string;
+
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined && value !== null && value !== '')
+  @Matches(/^(\d{12}|\d{4}[-\s]\d{4}[-\s]\d{4})$/, {
+    message: 'Invalid Aadhaar number format (must be 12 digits)',
+  })
+  aadhaarNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  aadhaarCardUrl?: string;
+
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   gstinDocUrl?: string;

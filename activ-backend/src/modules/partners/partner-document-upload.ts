@@ -6,6 +6,7 @@ export enum PartnerDocumentKind {
   PAN = 'pan',
   GST = 'gst',
   CANCELLED_CHEQUE = 'cancelled-cheque',
+  AADHAAR = 'aadhaar',
 }
 
 export const PARTNER_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;

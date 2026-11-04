@@ -269,6 +269,10 @@ export class PartnersService {
           where: { role: PartnerRole.PARTNER_ADMIN },
           include: { users: true },
         },
+        venues: {
+          include: { partner_venue_legal_documents: true },
+          take: 1,
+        },
         _count: { select: { venues: true } },
       },
     });
@@ -279,6 +283,7 @@ export class PartnersService {
   private mapPrismaPartner(partner: any) {
     const profile = partner.partner_business_profiles;
     const owner = partner.partner_users?.[0]?.users;
+    const legalDoc = partner.venues?.[0]?.partner_venue_legal_documents;
     const names = (owner?.name || '').trim().split(/\s+/);
     return {
       id: partner.id,
@@ -305,8 +310,8 @@ export class PartnersService {
       city: profile?.city ?? null,
       state: profile?.state ?? null,
       zipCode: profile?.postal_code ?? null,
-      gstNumber: profile?.gst_number ?? null,
-      panNumber: profile?.pan_number ?? null,
+      gstNumber: profile?.gst_number ?? legalDoc?.gst_number ?? null,
+      panNumber: profile?.pan_number ?? legalDoc?.pan_number ?? null,
       isVerified: profile?.kyc_status === 'APPROVED',
       isActive: partner.status === PartnerStatus.ACTIVE,
       status: partner.status.toLowerCase(),
@@ -318,11 +323,11 @@ export class PartnersService {
       businessDescription: null,
       country: null,
       contactPhone: profile?.phone_e164 ?? owner?.phone_e164 ?? null,
-      gstinDocUrl: profile?.gst_document_url ?? null,
-      panCardUrl: profile?.pan_document_url ?? null,
-      aadhaarName: null,
-      aadhaarNumber: null,
-      aadhaarCardUrl: null,
+      gstinDocUrl: profile?.gst_document_url ?? legalDoc?.gstin_doc_url ?? null,
+      panCardUrl: profile?.pan_document_url ?? legalDoc?.pan_card_url ?? null,
+      aadhaarName: legalDoc?.aadhaar_name ?? null,
+      aadhaarNumber: legalDoc?.aadhaar_number ?? null,
+      aadhaarCardUrl: legalDoc?.aadhaar_card_url ?? null,
       bankAccountNumber: null,
       bankIfscCode: null,
       bankAccountHolderName: null,
@@ -377,8 +382,7 @@ export class PartnersService {
     }
 
     const unsupported = [
-      'businessDescription', 'country',
-      'aadhaarName', 'aadhaarNumber', 'aadhaarCardUrl', 'bankAccountNumber',
+      'businessDescription', 'country', 'bankAccountNumber',
       'bankIfscCode', 'bankAccountHolderName',
     ].filter((field) => (updatePartnerDto as any)[field] !== undefined);
     if (unsupported.length > 0) {
@@ -479,6 +483,44 @@ export class PartnersService {
           updated_at: new Date(),
         },
       });
+      if (tx.venues && (updatePartnerDto.aadhaarNumber !== undefined || updatePartnerDto.aadhaarCardUrl !== undefined || (updatePartnerDto as any).aadhaarName !== undefined || updatePartnerDto.panNumber !== undefined || updatePartnerDto.gstNumber !== undefined || updatePartnerDto.panCardUrl !== undefined || updatePartnerDto.gstinDocUrl !== undefined)) {
+        const rawAadhaar = updatePartnerDto.aadhaarNumber !== undefined ? (updatePartnerDto.aadhaarNumber ? updatePartnerDto.aadhaarNumber.trim().replace(/-/g, '') : null) : undefined;
+        const rawAadhaarUrl = updatePartnerDto.aadhaarCardUrl !== undefined ? (updatePartnerDto.aadhaarCardUrl ? updatePartnerDto.aadhaarCardUrl.trim() : null) : undefined;
+        const rawAadhaarName = (updatePartnerDto as any).aadhaarName !== undefined ? ((updatePartnerDto as any).aadhaarName ? (updatePartnerDto as any).aadhaarName.trim() : null) : undefined;
+        const partnerVenues = await tx.venues.findMany({
+          where: { partner_id: id },
+          select: { id: true },
+        });
+        const now = new Date();
+        for (const venue of partnerVenues) {
+          if (tx.partner_venue_legal_documents) {
+            await tx.partner_venue_legal_documents.upsert({
+              where: { venue_id: venue.id },
+              create: {
+                venue_id: venue.id,
+                ...(rawAadhaar !== undefined ? { aadhaar_number: rawAadhaar } : {}),
+                ...(rawAadhaarUrl !== undefined ? { aadhaar_card_url: rawAadhaarUrl } : {}),
+                ...(rawAadhaarName !== undefined ? { aadhaar_name: rawAadhaarName } : {}),
+                ...(updatePartnerDto.panNumber !== undefined ? { pan_number: updatePartnerDto.panNumber.trim() || null } : {}),
+                ...(updatePartnerDto.gstNumber !== undefined ? { gst_number: updatePartnerDto.gstNumber.trim() || null } : {}),
+                ...(updatePartnerDto.panCardUrl !== undefined ? { pan_card_url: updatePartnerDto.panCardUrl.trim() || null } : {}),
+                ...(updatePartnerDto.gstinDocUrl !== undefined ? { gstin_doc_url: updatePartnerDto.gstinDocUrl.trim() || null } : {}),
+                updated_at: now,
+              },
+              update: {
+                ...(rawAadhaar !== undefined ? { aadhaar_number: rawAadhaar } : {}),
+                ...(rawAadhaarUrl !== undefined ? { aadhaar_card_url: rawAadhaarUrl } : {}),
+                ...(rawAadhaarName !== undefined ? { aadhaar_name: rawAadhaarName } : {}),
+                ...(updatePartnerDto.panNumber !== undefined ? { pan_number: updatePartnerDto.panNumber.trim() || null } : {}),
+                ...(updatePartnerDto.gstNumber !== undefined ? { gst_number: updatePartnerDto.gstNumber.trim() || null } : {}),
+                ...(updatePartnerDto.panCardUrl !== undefined ? { pan_card_url: updatePartnerDto.panCardUrl.trim() || null } : {}),
+                ...(updatePartnerDto.gstinDocUrl !== undefined ? { gstin_doc_url: updatePartnerDto.gstinDocUrl.trim() || null } : {}),
+                updated_at: now,
+              },
+            });
+          }
+        }
+      }
       if (updatePartnerDto.bankAccounts) {
         if (updatePartnerDto.bankAccounts.filter(bank => bank.isPrimary).length > 1) {
           throw new BadRequestException('Only one bank account can be primary');
