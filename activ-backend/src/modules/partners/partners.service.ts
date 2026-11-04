@@ -352,9 +352,7 @@ export class PartnersService {
 
   async update(id: string, updatePartnerDto: AdminUpdatePartnerDto, reviewerId?: string): Promise<any> {
     if (updatePartnerDto.isActive !== undefined && Object.keys(updatePartnerDto).length === 1) {
-      const previous = updatePartnerDto.isActive === false
-        ? await this.prisma.partners.findUnique({ where: { id }, select: { status: true } })
-        : null;
+      const previous = await this.prisma.partners.findUnique({ where: { id }, select: { status: true } });
       const partner = await this.prisma.partners.update({
         where: { id },
         data: {
@@ -370,12 +368,21 @@ export class PartnersService {
         },
       });
       const mapped = this.mapPrismaPartner(partner);
+      const owner = partner.partner_users?.find((link) => link.role === 'PARTNER_ADMIN')?.users;
+      const toEmail = owner?.email || mapped.email;
+      const partnerName = owner?.name || [mapped.firstName, mapped.lastName].filter(Boolean).join(' ') || mapped.businessName;
+
       if (updatePartnerDto.isActive === false && previous?.status !== PartnerStatus.SUSPENDED) {
-        const owner = partner.partner_users?.find((link) => link.role === 'PARTNER_ADMIN')?.users;
         await this.mailService.sendSuspensionEmail({
           deliveryKey: `partner-suspended:${id}:${partner.updated_at.toISOString()}`,
-          toEmail: owner?.email || mapped.email,
-          partnerName: owner?.name || [mapped.firstName, mapped.lastName].filter(Boolean).join(' ') || mapped.businessName,
+          toEmail,
+          partnerName,
+        });
+      } else if (updatePartnerDto.isActive === true && previous?.status === PartnerStatus.SUSPENDED) {
+        await this.mailService.sendReactivationEmail({
+          deliveryKey: `partner-reactivated:${id}:${partner.updated_at.toISOString()}`,
+          toEmail,
+          partnerName,
         });
       }
       return mapped;
@@ -557,7 +564,14 @@ export class PartnersService {
     if (saved.status === 'suspended' && result.previousStatus !== PartnerStatus.SUSPENDED) {
       await this.mailService.sendSuspensionEmail({
         deliveryKey: `partner-suspended:${id}:${result.partner.updated_at.toISOString()}`,
-        toEmail: saved.email, partnerName: [saved.firstName, saved.lastName].filter(Boolean).join(' ') || saved.businessName,
+        toEmail: saved.email,
+        partnerName: [saved.firstName, saved.lastName].filter(Boolean).join(' ') || saved.businessName,
+      });
+    } else if (saved.status === 'active' && result.previousStatus === PartnerStatus.SUSPENDED) {
+      await this.mailService.sendReactivationEmail({
+        deliveryKey: `partner-reactivated:${id}:${result.partner.updated_at.toISOString()}`,
+        toEmail: saved.email,
+        partnerName: [saved.firstName, saved.lastName].filter(Boolean).join(' ') || saved.businessName,
       });
     }
     return saved;

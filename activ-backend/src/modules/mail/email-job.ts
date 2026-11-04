@@ -1,6 +1,6 @@
 export type EmailProvider = 'legacy' | 'gmail' | 'smtp';
 
-export type EmailMethod = 'template' | 'agreement' | 'smtpAgreement' | 'suspension'
+export type EmailMethod = 'template' | 'agreement' | 'smtpAgreement' | 'suspension' | 'reactivation'
   | 'changes' | 'approval' | 'invitation' | 'reset' | 'callback' | 'support' | 'rejection';
 
 /** Encrypted at rest, including temporary passwords, reset codes and PDF bytes. */

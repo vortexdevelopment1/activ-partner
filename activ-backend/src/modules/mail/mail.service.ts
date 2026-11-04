@@ -83,6 +83,7 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     if (!result.sent) throw new Error('Agreement email is pending delivery');
   }
   async sendSuspensionEmail(params: Params<'sendSuspensionEmail'> & { deliveryKey?: string }): Promise<boolean> { return this.notice('suspension', params, params.toEmail); }
+  async sendReactivationEmail(params: Params<'sendReactivationEmail'> & { deliveryKey?: string }): Promise<boolean> { return this.notice('reactivation', params, params.toEmail); }
   async sendVenueChangesRequestedEmail(params: Params<'sendVenueChangesRequestedEmail'> & { partnerName?: string; deliveryKey?: string }): Promise<boolean> { return this.notice('changes', params, params.toEmail); }
   async sendPartnerApprovalEmail(params: Omit<Params<'sendPartnerApprovalEmail'>, 'password'> & { password?: string; deliveryKey?: string }): Promise<boolean> { return this.notice('approval', params, params.toEmail); }
 
@@ -138,6 +139,7 @@ export class MailService extends LegacyMailService implements OnModuleInit {
         case 'agreement': result = await super.sendSignedAgreementEmailViaGmail(p); break;
         case 'smtpAgreement': await super.sendSignedPartnerAgreementEmail(p); result = true; break;
         case 'suspension': result = await super.sendSuspensionEmail(p); break;
+        case 'reactivation': result = await super.sendReactivationEmail(p); break;
         case 'changes': result = await super.sendVenueChangesRequestedEmail(p); break;
         case 'approval': result = await super.sendPartnerApprovalEmail(p); break;
         case 'invitation': result = await super.sendTeamMemberInviteEmail(p); break;
@@ -183,6 +185,7 @@ export class MailService extends LegacyMailService implements OnModuleInit {
         break;
       case 'agreement': case 'smtpAgreement': id = 'agreement_signed'; data.signedAt = new Date(p.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short' }); break;
       case 'suspension': id = p.venueName ? 'venue_suspended' : 'partner_suspended'; break;
+      case 'reactivation': id = p.venueName ? 'venue_reactivated' : 'partner_reactivated'; break;
       case 'changes': id = 'venue_changes_requested'; break;
       case 'approval': id = 'venue_approved'; data.email = p.toEmail;
         if (!p.password) data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';

@@ -45,4 +45,14 @@ describe('suspension emails', () => {
     expect(close).toHaveBeenCalled();
     expect(sender.sendEmail).not.toHaveBeenCalled();
   });
+  it('sends partner reactivation email with branded HTML', async () => {
+    await service.sendReactivationEmail({ toEmail: 'owner@example.com', partnerName: 'Owner' });
+    expect(sender.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      recipientEmail: 'owner@example.com',
+      subject: 'Your ACTIV partner account has been reactivated',
+      text: expect.stringContaining('Your ACTIV partner account has been reactivated'),
+      html: expect.stringContaining('Has Been Reactivated'),
+      inlineImages: [expect.objectContaining({ cid: 'activ-partner-logo' })],
+    }));
+  });
 });

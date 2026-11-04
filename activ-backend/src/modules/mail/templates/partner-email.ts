@@ -40,9 +40,17 @@ export const EMAIL_TEMPLATES = {
     subject: 'Your ACTIV Venue Has Been Suspended', heading: 'Your Venue', highlight: 'Has Been Suspended', status: 'Suspended', tone: 'red',
     paragraphs: ['Your venue has been suspended and is no longer available for new bookings on ACTIV.', 'Review the reason below and contact our support team for clarification and assistance with reactivation. Existing bookings should still be managed with the support team.'],
   },
+  venue_reactivated: {
+    subject: 'Your ACTIV Venue Has Been Reactivated', heading: 'Your Venue', highlight: 'Has Been Reactivated', status: 'Active', tone: 'green',
+    paragraphs: ['Your venue has been reactivated and is now live and available for bookings on ACTIV.', 'Open ACTIV Partner to review your venue details, activities, and schedule.'],
+  },
   partner_suspended: {
     subject: 'Your ACTIV Partner Account Has Been Suspended', heading: 'Your Partner Account', highlight: 'Has Been Suspended', status: 'Suspended', tone: 'red',
     paragraphs: ['Access to your ACTIV Partner account has been disabled.', 'Review the reason below and contact our support team for clarification and assistance with reactivation.'],
+  },
+  partner_reactivated: {
+    subject: 'Your ACTIV Partner Account Has Been Reactivated', heading: 'Your Partner Account', highlight: 'Has Been Reactivated', status: 'Active', tone: 'green',
+    paragraphs: ['Great news! Your ACTIV Partner account has been reactivated by the administrator.', 'You can now sign in to ACTIV Partner to manage your venues, activities, and bookings as usual.'],
   },
   venue_deleted: {
     subject: 'Your Venue Has Been Removed – ACTIV Partner', heading: 'Your Venue', highlight: 'Has Been Removed', status: 'Removed', tone: 'red',
@@ -153,10 +161,10 @@ export function renderPartnerEmail(id: EmailTemplateId, data: EmailData = {}, br
   const color = { green: '#13c83f', amber: '#b67813', red: '#df4747', purple: '#9e35e9' }[template.tone];
   const badgeBackground = { green: '#e4faeb', amber: '#fff0c9', red: '#ffe8e8', purple: '#f1e6ff' }[template.tone];
   const rows: [string, string | undefined][] = [
-    ['Partner Name', ['callback_request', 'partner_invitation'].includes(id) ? data.partnerName : undefined],
+    ['Partner Name', ['callback_request', 'partner_invitation', 'partner_suspended', 'partner_reactivated'].includes(id) ? data.partnerName : undefined],
     ['Business Name', data.businessName],
     ['Venue', data.venueName], ['Activity', data.activityName],
-    [id === 'callback_request' ? 'Request Status' : ['partner_invitation', 'team_invitation'].includes(id) ? 'Account Status' : 'Application Status', template.status], ['Reference', data.reference],
+    [id === 'callback_request' ? 'Request Status' : ['partner_invitation', 'team_invitation', 'partner_suspended', 'partner_reactivated'].includes(id) ? 'Account Status' : 'Application Status', template.status], ['Reference', data.reference],
     ['City', data.city],
     ['Bank', data.bankName], ['Account', data.accountLast4 ? `Ending in ${data.accountLast4.replace(/\D/g, '').slice(-4)}` : undefined],
     ['Signed On', data.signedAt], ['Callback Date', data.callbackDate], ['Callback Time', data.callbackTime],

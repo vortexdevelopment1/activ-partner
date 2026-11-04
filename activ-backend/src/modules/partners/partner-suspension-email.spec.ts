@@ -5,7 +5,10 @@ describe('partner account suspension email', () => {
   let mailService: any;
   let prisma: any;
   beforeEach(() => {
-    mailService = { sendSuspensionEmail: jest.fn().mockResolvedValue(true) };
+    mailService = {
+      sendSuspensionEmail: jest.fn().mockResolvedValue(true),
+      sendReactivationEmail: jest.fn().mockResolvedValue(true),
+    };
     prisma = { partners: {
       findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
       update: jest.fn().mockResolvedValue({ id: 'partner', updated_at: new Date('2026-10-29T00:00:00Z'), status: 'SUSPENDED', legal_name: 'Business', partner_users: [
@@ -28,5 +31,24 @@ describe('partner account suspension email', () => {
     prisma.partners.findUnique.mockResolvedValue({ status: 'SUSPENDED' });
     await service.update('partner', { isActive: false });
     expect(mailService.sendSuspensionEmail).not.toHaveBeenCalled();
+  });
+  it('sends a reactivation email when a suspended account is activated', async () => {
+    prisma.partners.findUnique.mockResolvedValue({ status: 'SUSPENDED' });
+    prisma.partners.update.mockResolvedValue({
+      id: 'partner',
+      updated_at: new Date('2026-10-29T00:00:00Z'),
+      status: 'ACTIVE',
+      legal_name: 'Business',
+      partner_users: [
+        { role: 'PARTNER_USER', users: { email: 'staff@example.com', name: 'Staff' } },
+        { role: 'PARTNER_ADMIN', users: { email: 'owner@example.com', name: 'Owner' } },
+      ],
+    });
+    await service.update('partner', { isActive: true });
+    expect(mailService.sendReactivationEmail).toHaveBeenCalledWith({
+      toEmail: 'owner@example.com',
+      partnerName: 'Owner',
+      deliveryKey: 'partner-reactivated:partner:2026-10-29T00:00:00.000Z',
+    });
   });
 });
