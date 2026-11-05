@@ -162,12 +162,12 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     try {
       final response = await _client
           .get(Uri.parse(_endpoint), headers: await _headers())
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 25));
       final data = Map<String, dynamic>.from(_response(response) as Map);
       if (mounted) setState(() => _data = data);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+        setState(() => _error = _friendlyError(e));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -184,36 +184,71 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               ? _client.delete(Uri.parse(_endpoint), headers: headers)
               : _client.patch(Uri.parse(_endpoint),
                   headers: headers, body: jsonEncode(payload)))
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 25));
       _response(response);
       _changed = true;
       if (!delete && mounted) await _load();
       return true;
     } catch (e) {
-      if (mounted) _message(e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) _message(_friendlyError(e));
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  String _friendlyError(dynamic e) {
+    final str = e.toString().toLowerCase();
+    if (str.contains("socket") ||
+        str.contains("host lookup") ||
+        str.contains("connection refused") ||
+        str.contains("failed host lookup") ||
+        str.contains("errno = 7") ||
+        str.contains("no address associated")) {
+      return "Unable to reach the server. Please check your internet connection and try again.";
+    }
+    if (str.contains("timeout") || str.contains("timed out")) {
+      return "The connection timed out. Please check your internet connection and try again.";
+    }
+    return e.toString().replaceFirst("Exception: ", "");
+  }
+
+  Future<http.Response> _getWithRetry(String url,
+      {int retries = 2, Duration timeout = const Duration(seconds: 25)}) async {
+    final headers = await _headers();
+    dynamic lastError;
+    for (var attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await _client
+            .get(Uri.parse(url), headers: headers)
+            .timeout(timeout);
+      } catch (e) {
+        lastError = e;
+        if (attempt < retries) {
+          await Future.delayed(Duration(milliseconds: 400 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastError;
+  }
+
   void _message(String message) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(message)));
 
   Future<void> _pause() async {
-    final reason = _reason == 'Other' ? _otherReason.text.trim() : _reason;
+    final reason = _reason == "Other" ? _otherReason.text.trim() : _reason;
     if (reason.isEmpty) {
-      _message('Please enter a reason.');
+      _message("Please enter a reason.");
       return;
     }
-    if (await _save({'isActive': false, 'reason': reason}) && mounted) {
-      _message('Bookings paused. Existing bookings are preserved.');
+    if (await _save({"isActive": false, "reason": reason}) && mounted) {
+      _message("Bookings paused. Existing bookings are preserved.");
     }
   }
 
   Future<void> _resumeBooking() async {
-    if (await _save({'isActive': true}) && mounted) {
-      _message('Bookings resumed for this activity.');
+    if (await _save({"isActive": true}) && mounted) {
+      _message("Bookings resumed for this activity.");
     }
   }
 
@@ -221,42 +256,40 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final response = await _client
-          .get(Uri.parse(MY_APPROVED_VENUES_URL), headers: await _headers())
-          .timeout(const Duration(seconds: 15));
+      final response = await _getWithRetry(MY_APPROVED_VENUES_URL);
       final venues = (_response(response) as List).whereType<Map>();
       final venue = venues
-          .where((venue) => (venue['services'] as List? ?? [])
+          .where((venue) => (venue["services"] as List? ?? [])
               .whereType<Map>()
-              .any((service) => service['id'] == widget.activity.activityId))
+              .any((service) => service["id"] == widget.activity.activityId))
           .firstOrNull;
       if (venue == null) {
-        throw Exception('Unable to find this activity. Please refresh.');
+        throw Exception("Unable to find this activity. Please refresh.");
       }
-      final services = (venue['services'] as List? ?? [])
+      final services = (venue["services"] as List? ?? [])
           .whereType<Map>()
           .where((service) =>
-              service['status']?.toString().toLowerCase() == 'approved' &&
-              service['isActive'] != false &&
-              venue['bookingAccept'] != false)
+              service["status"]?.toString().toLowerCase() == "approved" &&
+              service["isActive"] != false &&
+              venue["bookingAccept"] != false)
           .toList();
       if (!mounted) return;
       if (services.isEmpty) {
-        _message('All activities are already paused.');
+        _message("All activities are already paused.");
         return;
       }
       final selected = <String>{
         if (services
-            .any((service) => service['id'] == widget.activity.activityId))
+            .any((service) => service["id"] == widget.activity.activityId))
           widget.activity.activityId,
       };
-      var reason = '';
+      var reason = "";
       Map<String, dynamic>? selection;
       selection = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
             builder: (dialogContext, update) => AlertDialog(
-                  title: const Text('Pause activities'),
+                  title: const Text("Pause activities"),
                   content: SizedBox(
                       width: 400,
                       child: SingleChildScrollView(
@@ -264,36 +297,36 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
-                              'Select activities to pause. Existing bookings will be preserved.'),
+                              "Select activities to pause. Existing bookings will be preserved."),
                           CheckboxListTile(
-                              title: const Text('Select all'),
+                              title: const Text("Select all"),
                               value: selected.length == services.length,
                               onChanged: (value) => update(() {
                                     selected.clear();
                                     if (value == true) {
                                       selected.addAll(services.map((service) =>
-                                          service['id'].toString()));
+                                          service["id"].toString()));
                                     }
                                   })),
                           for (final service in services)
                             CheckboxListTile(
                                 title: Text(
-                                    service['name']?.toString() ?? 'Activity'),
+                                    service["name"]?.toString() ?? "Activity"),
                                 value:
-                                    selected.contains(service['id'].toString()),
+                                    selected.contains(service["id"].toString()),
                                 onChanged: (value) => update(() {
                                       if (value == true) {
-                                        selected.add(service['id'].toString());
+                                        selected.add(service["id"].toString());
                                       } else {
                                         selected
-                                            .remove(service['id'].toString());
+                                            .remove(service["id"].toString());
                                       }
                                     })),
                           TextField(
                               maxLength: 500,
                               decoration: const InputDecoration(
-                                  labelText: 'Pause reason',
-                                  hintText: 'For example, maintenance'),
+                                  labelText: "Pause reason",
+                                  hintText: "For example, maintenance"),
                               onChanged: (value) =>
                                   update(() => reason = value)),
                         ],
@@ -301,50 +334,52 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('Cancel')),
+                        child: const Text("Cancel")),
                     FilledButton(
                         onPressed: selected.isEmpty || reason.trim().isEmpty
                             ? null
                             : () => Navigator.pop(dialogContext, {
-                                  'ids': selected.toList(),
-                                  'reason': reason.trim()
+                                  "ids": selected.toList(),
+                                  "reason": reason.trim()
                                 }),
-                        child: const Text('Pause selected')),
+                        child: const Text("Pause selected")),
                   ],
                 )),
       );
       if (selection == null || !mounted) return;
       final failed = <String>[];
       var paused = 0;
-      for (final id in selection['ids'] as List) {
+      final headers = await _headers();
+      for (final id in selection["ids"] as List) {
         try {
           final result = await _client
               .patch(
-                Uri.parse('$BASE_URL/venues/activities/$id/management'),
-                headers: await _headers(),
+                Uri.parse("$BASE_URL/venues/activities/$id/management"),
+                headers: headers,
                 body: jsonEncode(
-                    {'isActive': false, 'reason': selection['reason']}),
+                    {"isActive": false, "reason": selection["reason"]}),
               )
-              .timeout(const Duration(seconds: 15));
+              .timeout(const Duration(seconds: 20));
           _response(result);
           paused++;
           _changed = true;
         } catch (_) {
           failed.add(services
-                  .firstWhere((service) => service['id'] == id)['name']
+                  .firstWhere((service) => service["id"] == id,
+                      orElse: () => {"name": "Activity"})["name"]
                   ?.toString() ??
-              'Activity');
+              "Activity");
         }
       }
       if (!mounted) return;
       await _load();
       if (mounted) {
         _message(failed.isEmpty
-            ? '$paused ${paused == 1 ? 'activity' : 'activities'} paused. Existing bookings are preserved.'
-            : '$paused ${paused == 1 ? 'activity' : 'activities'} paused. Could not pause: ${failed.join(', ')}. Please retry.');
+            ? "$paused ${paused == 1 ? "activity" : "activities"} paused. Existing bookings are preserved."
+            : "$paused ${paused == 1 ? "activity" : "activities"} paused. Could not pause: ${failed.join(", ")}. Please retry.");
       }
     } catch (e) {
-      if (mounted) _message(e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) _message(_friendlyError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
