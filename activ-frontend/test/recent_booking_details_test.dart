@@ -100,4 +100,64 @@ void main() {
     expect(reads, 2);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'recent card on HomeScreen displays IST date and time matching Activity Management',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {'jwt_token': 'session', 'user_type': 'partner'});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/my-approved-venues')) {
+        return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'venue',
+                  'name': 'Arena',
+                  'services': [
+                    {'id': 'service'}
+                  ]
+                }
+              ]
+            }),
+            200);
+      } else if (request.url.path.endsWith('/management')) {
+        return http.Response(
+            jsonEncode({
+              'data': {
+                'name': 'Badminton',
+                'bookings': [
+                  {
+                    'id': 'booking-1',
+                    'bookingReference': 'ACT-TEST-001',
+                    'customerName': 'huhi',
+                    'bookingDate': '10 Nov 2026',
+                    'bookingTime': '08:00 pm',
+                    'startsAt': '2026-11-10T14:30:00.000Z',
+                    'amount': 500,
+                    'participants': 1,
+                    'status': 'no_show',
+                  }
+                ]
+              }
+            }),
+            200);
+      }
+      return http.Response(jsonEncode({'data': []}), 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(client: client)));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('huhi'), 400,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('huhi'), findsOneWidget);
+    // Verified that it renders "10 Nov 2026  |  08:00 pm" matching Activity Management IST time
+    expect(find.text('Badminton  |  10 Nov 2026  |  08:00 pm'), findsOneWidget);
+  });
 }

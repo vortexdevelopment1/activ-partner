@@ -17,14 +17,14 @@ describe('automatic no-show attendance', () => {
     expect(attendanceStatus({ ...booking, status: 'CANCELLED' }, now)).toBe('Canceled');
     expect(attendanceStatus({ ...booking, status: 'PENDING_PAYMENT' }, now)).toBe('Pending Payment');
   });
-  it('converts wall-clock walk-ins to India instants, including midnight', () => {
-    expect(bookingHasEnded(new Date('2026-10-28T10:00:00Z'), now, true)).toBe(true);
-    expect(bookingHasEnded(new Date('2026-10-29T00:30:00Z'), new Date('2026-10-28T18:59:59Z'), true)).toBe(false);
-    expect(bookingHasEnded(new Date('2026-10-29T00:30:00Z'), new Date('2026-10-28T19:00:00Z'), true)).toBe(true);
+  it('checks ended walk-ins at their UTC end instant', () => {
+    expect(bookingHasEnded(now, now, true)).toBe(true);
+    expect(bookingHasEnded(new Date(now.getTime() + 1), now, true)).toBe(false);
+    expect(bookingHasEnded(new Date(now.getTime() - 1), now, true)).toBe(true);
   });
   function setup(walkIn = false) {
     const record: any = { id: 'booking', status: walkIn ? 'RESERVED' : 'CONFIRMED',
-      checked_in_at: null, notes: null, ends_at: new Date('2026-10-28T10:00:00Z'), slots: { ends_at: now } };
+      checked_in_at: null, notes: null, ends_at: now, slots: { ends_at: now } };
     let event: any;
     const tx: any = { $executeRaw: jest.fn(), $queryRaw: jest.fn(),
       bookings: { findUnique: jest.fn(async () => record) },

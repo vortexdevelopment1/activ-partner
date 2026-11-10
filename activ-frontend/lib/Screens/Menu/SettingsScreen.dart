@@ -942,17 +942,23 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.darkBlack,
                         backgroundColor: const Color(0xFFFFF7C9),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         side: BorderSide.none,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontWeight: FontWeight.w500,
-                          fontSize: 18,
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Cancel',
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w500,
+                            fontSize: 18,
+                          ),
                         ),
                       ),
                     ),
@@ -968,6 +974,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF222222),
                         foregroundColor: const Color(0xFFD8F34A),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         disabledBackgroundColor:
                             const Color(0xFF222222).withValues(alpha: .6),
                         elevation: 0,
@@ -975,12 +982,17 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: Text(
-                        _deleting ? 'Deleting...' : 'Delete Account',
-                        style: const TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontWeight: FontWeight.w500,
-                          fontSize: 18,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _deleting ? 'Deleting...' : 'Delete Account',
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w500,
+                            fontSize: 18,
+                          ),
                         ),
                       ),
                     ),

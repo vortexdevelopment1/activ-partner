@@ -442,17 +442,26 @@ class _State extends State<HomeScreen> {
     }
   }
 
+  DateTime _indiaTime(DateTime value) =>
+      value.toUtc().add(const Duration(hours: 5, minutes: 30));
+
   _BookingItem _bookingFromManagement(
       Map<String, dynamic> json, String fallbackActivity) {
     final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
-    final local = startsAt?.toLocal();
+    final local = startsAt == null ? null : _indiaTime(startsAt);
+    final bookingDate = json['bookingDate']?.toString();
+    final bookingTime = json['bookingTime']?.toString();
     final participants = _asInt(json['participants']);
     return _BookingItem(
       booking: Map<String, dynamic>.from(json),
       name: json['customerName']?.toString() ?? 'Customer',
       service: json['activity']?.toString() ?? fallbackActivity,
-      date: local == null ? '' : DateFormat('dd MMM yyyy').format(local),
-      time: local == null ? '' : DateFormat('hh:mm a').format(local),
+      date: (bookingDate != null && bookingDate.trim().isNotEmpty)
+          ? bookingDate.trim()
+          : (local == null ? '' : DateFormat('dd MMM yyyy').format(local)),
+      time: (bookingTime != null && bookingTime.trim().isNotEmpty)
+          ? bookingTime.trim()
+          : (local == null ? '' : DateFormat('hh:mm a').format(local)),
       amount: _formatMoney(_asNum(json['amount'])),
       persons: '$participants ${participants == 1 ? 'person' : 'persons'}',
       status: _displayStatus(json['status']?.toString()),

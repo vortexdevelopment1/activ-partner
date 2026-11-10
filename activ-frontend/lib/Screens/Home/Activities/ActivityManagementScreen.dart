@@ -1757,13 +1757,17 @@ class _BookingsPageState extends State<_BookingsPage> {
                       ('Activity', widget.activityName),
                       (
                         'Date',
-                        date == null
-                            ? '0'
-                            : DateFormat('dd MMM yyyy').format(date)
+                        booking['bookingDate']?.toString() ??
+                            (date == null
+                                ? '0'
+                                : DateFormat('dd MMM yyyy').format(date))
                       ),
                       (
                         'Time',
-                        date == null ? '0' : DateFormat('hh:mm a').format(date)
+                        booking['bookingTime']?.toString() ??
+                            (date == null
+                                ? '0'
+                                : DateFormat('hh:mm a').format(date))
                       ),
                       (
                         'Participants',

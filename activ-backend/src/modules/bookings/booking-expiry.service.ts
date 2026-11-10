@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { bookingHasEnded, INDIA_OFFSET_MS } from './booking-expiry';
+import { bookingHasEnded } from './booking-expiry';
 
 @Injectable()
 export class BookingExpiryService implements OnModuleInit, OnModuleDestroy {
@@ -31,7 +31,7 @@ export class BookingExpiryService implements OnModuleInit, OnModuleDestroy {
         select: { id: true }, orderBy: { starts_at: 'asc' }, take: 200,
       });
       const walkIns = await this.prisma.partner_walk_in_reservations.findMany({
-        where: { status: 'RESERVED', ends_at: { lte: new Date(now.getTime() + INDIA_OFFSET_MS) },
+        where: { status: 'RESERVED', ends_at: { lte: now },
           OR: [{ notes: null }, { NOT: { notes: { contains: 'Checked-in: ' } } }] },
         select: { id: true }, orderBy: { ends_at: 'asc' }, take: 200,
       });

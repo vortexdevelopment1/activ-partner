@@ -20,128 +20,225 @@ class WalkInBookingSuccessScreen extends StatelessWidget {
   final String participantPhone;
   final String? participantEmail;
 
-  static const _text = TextStyle(
-      fontFamily: 'Satoshi',
-      fontSize: 16,
-      height: 1.35,
-      color: Color(0xFF202124));
+  static const _backgroundColor = Color(0xFFF0F6D2);
+  static const _cardBorderRadius = BorderRadius.all(Radius.circular(22));
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: const Color(0xFFF0F7D2),
+        backgroundColor: _backgroundColor,
         body: SafeArea(
-            child: Center(
-                child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-              Container(
-                key: const ValueKey('walk-in-success-card'),
-                padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24)),
-                child: Column(children: [
-                  Container(
-                      width: 62,
-                      height: 62,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      key: const ValueKey('walk-in-success-card'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 26),
                       decoration: const BoxDecoration(
-                          color: Color(0xFF76AD3D), shape: BoxShape.circle),
-                      child: const Icon(Icons.check_rounded,
-                          size: 45, color: Colors.white)),
-                  const SizedBox(height: 10),
-                  const Text('Walk-In Slot Reserved!',
-                      textAlign: TextAlign.center,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF6FAF3D),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              size: 50,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Walk-In Slot Reserved!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1B1B1B),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'This time slot is now blocked on the\nACTIV app to prevent double bookings.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontSize: 13.5,
+                              height: 1.45,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF666666),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Slot Details',
                       style: TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black)),
-                  const SizedBox(height: 10),
-                  Text(
-                      'This time slot is now blocked on the ACTIV app to prevent double bookings.',
-                      textAlign: TextAlign.center,
-                      style: _text.copyWith(
-                          fontSize: 13, color: const Color(0xFF626262))),
-                ]),
-              ),
-              const SizedBox(height: 10),
-              _heading('Slot Details'),
-              const SizedBox(height: 6),
-              _card([
-                _detail(Icons.location_on, venueName),
-                _detail(Icons.calendar_today_outlined, date),
-                _detail(Icons.sports_tennis_outlined, court),
-                ...slots.map((slot) => _detail(Icons.access_time, slot)),
-              ]),
-              const SizedBox(height: 10),
-              _heading('Participant Details'),
-              const SizedBox(height: 6),
-              _card([
-                _detail(Icons.account_circle_outlined, participantName),
-                _detail(Icons.call, participantPhone),
-                if (participantEmail?.trim().isNotEmpty == true)
-                  _detail(Icons.email, participantEmail!),
-              ]),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  backgroundColor: const Color(0xFFFDF6DE),
-                  foregroundColor: Colors.black,
-                  side: const BorderSide(color: Colors.black),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  textStyle: _text.copyWith(fontWeight: FontWeight.w700),
+                        fontFamily: 'Satoshi',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF202124),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: _cardBorderRadius,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (venueName.isNotEmpty) ...[
+                            _row(Icons.location_on, venueName, iconSize: 20),
+                            const SizedBox(height: 12),
+                          ],
+                          _row(Icons.calendar_today_outlined, date,
+                              iconSize: 18),
+                          if (court.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _row(Icons.grid_on_outlined, court, iconSize: 18),
+                          ],
+                          ...slots.map(
+                            (slot) => Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: _row(Icons.access_time, slot,
+                                  iconSize: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Participant Details',
+                      style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF202124),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: _cardBorderRadius,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _row(Icons.account_circle_outlined, participantName,
+                              iconSize: 20),
+                          const SizedBox(height: 12),
+                          _row(Icons.call, participantPhone, iconSize: 19),
+                          if (participantEmail?.trim().isNotEmpty == true) ...[
+                            const SizedBox(height: 12),
+                            _row(Icons.email, participantEmail!.trim(),
+                                iconSize: 19),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFDF6DE),
+                          foregroundColor: Colors.black,
+                          side: const BorderSide(
+                              color: Colors.black, width: 1.2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Book Another Slot',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: const Color(0xFFDAFF50),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Back To Activity Management',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: Color(0xFFDAFF50),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Text('Book Another Slot',
-                    textAlign: TextAlign.center),
               ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, false),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  backgroundColor: Colors.black,
-                  foregroundColor: const Color(0xFFDAFF50),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  textStyle: _text.copyWith(fontWeight: FontWeight.w700),
-                ),
-                child: const Text('Back To Activity Management',
-                    textAlign: TextAlign.center),
-              ),
-              ],
             ),
           ),
-        ))),
+        ),
       );
 
-  Widget _heading(String title) => Text(title,
-      style: _text.copyWith(fontSize: 17, fontWeight: FontWeight.w700));
-
-  Widget _card(List<Widget> children) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-        decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(24)),
-        child: Column(children: children),
-      );
-
-  Widget _detail(IconData icon, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: const Color(0xFF777777), size: 23),
-          const SizedBox(width: 11),
-          Expanded(child: Text(value, style: _text.copyWith(fontSize: 14))),
-        ]),
+  Widget _row(IconData icon, String text, {double iconSize = 19}) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: const Color(0xFF666666), size: iconSize),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'Satoshi',
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF202124),
+              ),
+            ),
+          ),
+        ],
       );
 }

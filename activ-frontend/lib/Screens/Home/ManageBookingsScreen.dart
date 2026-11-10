@@ -111,6 +111,8 @@ class _Booking {
     final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
     final local = startsAt == null ? null : _indiaTime(startsAt);
     final total = double.tryParse(json['amount']?.toString() ?? '') ?? 0;
+    final bookingDate = json['bookingDate']?.toString();
+    final bookingTime = json['bookingTime']?.toString();
     return _Booking(
       id: json['id']?.toString() ?? '',
       reference: (json['bookingReference'] ??
@@ -122,8 +124,12 @@ class _Booking {
       phone: json['phone']?.toString() ?? '0',
       email: json['email']?.toString() ?? '0',
       activity: json['activity']?.toString() ?? fallbackActivity,
-      date: local == null ? '0' : DateFormat('dd MMM yyyy').format(local),
-      time: local == null ? '0' : DateFormat('hh:mm a').format(local),
+      date: (bookingDate != null && bookingDate.trim().isNotEmpty)
+          ? bookingDate.trim()
+          : (local == null ? '0' : DateFormat('dd MMM yyyy').format(local)),
+      time: (bookingTime != null && bookingTime.trim().isNotEmpty)
+          ? bookingTime.trim()
+          : (local == null ? '0' : DateFormat('hh:mm a').format(local)),
       bookedOn: _formatDate(
           json['bookedOn']?.toString() ?? json['startsAt']?.toString()),
       participants: int.tryParse(json['participants']?.toString() ?? '') ?? 0,

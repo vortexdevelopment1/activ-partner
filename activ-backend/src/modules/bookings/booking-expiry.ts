@@ -1,8 +1,8 @@
-// Walk-in reservations use India wall-clock timestamps; ACTIV slots use UTC instants.
+// Both ACTIV slots and walk-in reservations store UTC instants.
 export const INDIA_OFFSET_MS = 330 * 60 * 1000;
 
 export function bookingHasEnded(end: Date | undefined, now = new Date(), walkIn = false): boolean {
-  return !!end && end.getTime() - (walkIn ? INDIA_OFFSET_MS : 0) <= now.getTime();
+  return !!end && end.getTime() <= now.getTime();
 }
 
 export function attendanceStatus(input: {
@@ -17,6 +17,6 @@ export function attendanceStatus(input: {
   }
   if (input.checkedIn || input.attendance === 'CHECKED_IN') return 'Ongoing';
   if (bookingHasEnded(input.endsAt, now, input.walkIn)) return 'No Show';
-  const start = input.startsAt.getTime() - (input.walkIn ? INDIA_OFFSET_MS : 0);
+  const start = input.startsAt.getTime();
   return start <= now.getTime() ? 'Ongoing' : 'Upcoming';
 }

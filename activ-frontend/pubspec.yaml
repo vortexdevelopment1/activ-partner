@@ -203,6 +203,8 @@ flutter:
     - assets/burger_icon.svg
     - assets/ic_enjoy.gif
     - assets/ic_black_right.svg
+    - assets/ic_release_warning.png
+    - assets/ic_slot_released_badge.png
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

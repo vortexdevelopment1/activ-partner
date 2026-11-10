@@ -29,14 +29,45 @@ void main() {
       activity: ActivityModel.fromJson({'activity_id': 'activity', 'operate_value': {'title': 'Tennis'}}),
       activityData: const {'id': 'activity'}, venueId: 'venue', venueName: 'Arena',
       now: () => now,
-      client: MockClient((_) async => http.Response(jsonEncode({'data': {
-        'courts': ['Court 01'], 'slots': slots ?? [
-          {'startTime': '09:00', 'endTime': '10:00', 'status': 'activ_booking'},
-          {'startTime': '16:00', 'endTime': '17:00', 'status': 'available'},
-          {'startTime': '17:00', 'endTime': '18:00', 'status': 'available'},
-          {'startTime': '18:00', 'endTime': '19:00', 'status': 'available'},
-        ],
-      }}), 200)),
+      client: MockClient((request) async {
+        if (request.method == 'POST') {
+          return http.Response(
+              jsonEncode({
+                'data': {'id': 'reservation'}
+              }),
+              201);
+        }
+        return http.Response(
+            jsonEncode({
+              'data': {
+                'courts': ['Court 01'],
+                'slots': slots ??
+                    [
+                      {
+                        'startTime': '09:00',
+                        'endTime': '10:00',
+                        'status': 'activ_booking'
+                      },
+                      {
+                        'startTime': '16:00',
+                        'endTime': '17:00',
+                        'status': 'available'
+                      },
+                      {
+                        'startTime': '17:00',
+                        'endTime': '18:00',
+                        'status': 'available'
+                      },
+                      {
+                        'startTime': '18:00',
+                        'endTime': '19:00',
+                        'status': 'available'
+                      },
+                    ],
+              }
+            }),
+            200);
+      }),
     )));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Next'));
@@ -80,9 +111,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).at(0), 'Test Participant');
     await tester.enterText(find.byType(TextFormField).at(1), '9876543210');
-    await tester.tap(find.text('Review'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
-    expect(find.text('Review Booking'), findsOneWidget);
+    expect(find.text('Walk-In Slot Reserved!'), findsOneWidget);
     expect(find.textContaining('31 October 2026, Saturday', findRichText: true), findsOneWidget);
     expect(find.textContaining('30 October 2026, Friday', findRichText: true), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -113,18 +113,12 @@ void main() {
       await tester.enterText(find.byType(TextFormField).at(1), '9876543210');
       expect(tester.takeException(), isNull,
           reason: 'participant details layout');
-      await tester.tap(find.text('Review'));
-      await tester.pumpAndSettle();
-      expect(find.text('Review Booking'), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: 'review layout');
-      await tester.tap(find.text('Confirm'));
-      await tester.tap(find.text('Confirm'));
+      await tester.tap(find.text('Next'));
       await tester.pump(const Duration(milliseconds: 200));
       expect(payloads, hasLength(1));
       expect(tester.takeException(), isNull,
           reason: 'confirmation loader layout');
       expect(find.text('Confirming...'), findsOneWidget);
-      expect(find.text('Review Booking'), findsOneWidget);
       expect(
           tester
               .widget<ElevatedButton>(
@@ -135,7 +129,6 @@ void main() {
           .complete(http.Response('{"message":"Internal server error"}', 500));
       await tester.pumpAndSettle();
       if (recovery != 'exact') {
-        expect(find.text('Review Booking'), findsOneWidget);
         expect(find.text('Unable to confirm this booking. Please retry.'),
             findsOneWidget);
         expect(find.textContaining('Test Participant', findRichText: true),

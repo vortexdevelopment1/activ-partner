@@ -3308,8 +3308,8 @@ export class VenuesService {
         bookingTime: displayTime(reservation.starts_at),
         customerName: reservation.participant_name ?? "Walk-in Customer",
         activity: service.title,
-        startsAt: new Date(reservation.starts_at.getTime() - INDIA_OFFSET_MS),
-        endsAt: new Date(reservation.ends_at.getTime() - INDIA_OFFSET_MS),
+        startsAt: reservation.starts_at,
+        endsAt: reservation.ends_at,
         status: attendanceStatus(
           {
             status: reservation.status,
@@ -4613,7 +4613,7 @@ export class VenuesService {
         );
         const status =
           slot.status === "BLOCKED"
-            ? "blocked"
+            ? "not_operational"
             : hasActivBooking
               ? "activ_booking"
               : matchedWalkIn
@@ -5005,7 +5005,11 @@ export class VenuesService {
     partnerId: string,
     date?: string,
   ): Promise<any[]> {
-    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const service = await this.assertOwnedVenueService(
+      venueId,
+      serviceId,
+      partnerId,
+    );
     const dayStart = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
     const dayEnd = date ? new Date(`${date}T23:59:59.999Z`) : undefined;
     const reservations =
@@ -5030,13 +5034,47 @@ export class VenuesService {
     reservationId: string,
     partnerId: string,
   ): Promise<any> {
-    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const service = await this.assertOwnedVenueService(
+      venueId,
+      serviceId,
+      partnerId,
+    );
     const reservation =
       await this.prisma.partner_walk_in_reservations.findFirst({
         where: { id: reservationId, venue_service_id: serviceId },
       });
     if (!reservation) throw new NotFoundException("Reservation not found");
-    return this.mapWalkInReservation(reservation);
+    const idempotencyMatch = String(reservation.notes ?? "").match(
+      /^Idempotency-Key: (.+)$/m,
+    );
+    let details: any;
+    if (idempotencyMatch) {
+      const siblings = await this.prisma.partner_walk_in_reservations.findMany({
+        where: {
+          venue_service_id: serviceId,
+          status: "RESERVED",
+          notes: { contains: `Idempotency-Key: ${idempotencyMatch[1]}` },
+        },
+        orderBy: { starts_at: "asc" },
+      });
+      if (siblings.length > 1) {
+        const base = this.mapWalkInReservation(reservation);
+        base.slots = siblings.map((r) => ({
+          startTime: this.minutesToTime(
+            this.istDateTimeToMinutes(r.starts_at),
+          ),
+          endTime: this.minutesToTime(
+            this.istDateTimeToMinutes(r.ends_at),
+          ),
+        }));
+        details = base;
+      }
+    }
+    if (!details) {
+      details = this.mapWalkInReservation(reservation);
+    }
+    details.venueName = service.venues?.name ?? null;
+    return details;
   }
 
   async releaseWalkIn(
@@ -5045,7 +5083,11 @@ export class VenuesService {
     reservationId: string,
     partnerId: string,
   ): Promise<any> {
-    await this.assertOwnedVenueService(venueId, serviceId, partnerId);
+    const service = await this.assertOwnedVenueService(
+      venueId,
+      serviceId,
+      partnerId,
+    );
     const reservation =
       await this.prisma.partner_walk_in_reservations.findFirst({
         where: { id: reservationId, venue_service_id: serviceId },
@@ -5056,11 +5098,28 @@ export class VenuesService {
     if (reservation.status !== "RESERVED")
       throw new BadRequestException("Reservation is already released");
 
-    const released = await this.prisma.partner_walk_in_reservations.update({
+    const idempotencyMatch = String(reservation.notes ?? "").match(
+      /^Idempotency-Key: (.+)$/m,
+    );
+    if (idempotencyMatch) {
+      await this.prisma.partner_walk_in_reservations.updateMany({
+        where: {
+          venue_service_id: serviceId,
+          status: "RESERVED",
+          notes: { contains: `Idempotency-Key: ${idempotencyMatch[1]}` },
+        },
+        data: { status: "CANCELLED", updated_at: new Date() },
+      });
+    } else {
+      await this.prisma.partner_walk_in_reservations.update({
+        where: { id: reservation.id },
+        data: { status: "CANCELLED", updated_at: new Date() },
+      });
+    }
+    const released = await this.prisma.partner_walk_in_reservations.findUnique({
       where: { id: reservation.id },
-      data: { status: "CANCELLED", updated_at: new Date() },
     });
-    return this.mapWalkInReservation(released);
+    return this.mapWalkInReservation(released ?? reservation);
   }
 
   private async assertOwnedVenueService(

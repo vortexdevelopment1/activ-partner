@@ -221,7 +221,6 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
         if (courts.isNotEmpty) _serverCourts = courts;
         _serverSlots = slots
             .whereType<Map>()
-            .where((slot) => slot['status']?.toString() != 'not_operational')
             .map((slot) =>
                 _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
             .toList();
@@ -265,7 +264,6 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
     final slots = data['slots'] is List ? data['slots'] as List : const [];
     return slots
         .whereType<Map>()
-        .where((slot) => slot['status']?.toString() != 'not_operational')
         .map(
             (slot) => _BookableSlot.fromStatus(Map<String, dynamic>.from(slot)))
         .toList();
@@ -485,69 +483,45 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
       return;
     }
     final chosenSlots = List<_BookableSlot>.of(_selectedSlots);
+    String? idempotencyKey;
 
-    final details = await Navigator.push<Map<String, String>>(
+    final bookAnother = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => _WalkInParticipantScreen(
-          slots: _selectedSlots.map((slot) => slot.label).toList(),
-        ),
-      ),
-    );
-    if (details == null || !mounted) return;
-    if (_selectedSlots.isEmpty || chosenSlots.any(_hasEnded)) {
-      _message('The selected slot has ended. Please choose another slot.');
-      return;
-    }
-    final participant = <String, String>{
-      'participantName': details['participantName']!,
-      'participantPhone': details['participantPhone']!,
-      if (details['participantEmail']?.isNotEmpty == true)
-        'participantEmail': details['participantEmail']!,
-    };
-    final payment = <String, String>{
-      'paymentMethod': details['paymentMethod']!,
-      'paymentStatus': details['paymentStatus']!,
-      if (details['amountPaise']?.isNotEmpty == true)
-        'amountPaise': details['amountPaise']!,
-      if (details['notes']?.isNotEmpty == true) 'notes': details['notes']!,
-    };
-
-    final idempotencyKey =
-        '${DateTime.now().microsecondsSinceEpoch}-${_selectedSlots.first.startTime}';
-    final booking = <String, dynamic>{
-      'court': _selectedCourt,
-      'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-      'slots': _selectedSlots
-          .map((slot) => {
-                'startTime': slot.startTime,
-                'endTime': slot.endTime,
-              })
-          .toList(),
-      'idempotencyKey': idempotencyKey,
-      ...payment,
-      ...participant,
-    };
-    final payload = jsonEncode(booking);
-    final body = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _WalkInReviewScreen(
           venueName: widget.venueName,
-          activityName: _activityName,
-          court: _selectedCourt,
           date: _selectedDate,
+          court: _selectedCourt,
           slots: _selectedSlots.map((slot) => slot.label).toList(),
-          participant: participant,
-          payment: payment,
-          onConfirm: () async {
-            if (chosenSlots.any(_hasEnded)) {
-              throw Exception('The selected slot has ended. Please choose another slot.');
+          onReserve: (participant) async {
+            if (_selectedSlots.isEmpty || chosenSlots.any(_hasEnded)) {
+              throw Exception(
+                  'The selected slot has ended. Please choose another slot.');
             }
             final token = await SharedPreference.readStr('jwt_token');
             if (token == null || token.isEmpty) {
               throw Exception('Please sign in again.');
             }
+            idempotencyKey ??=
+                '${DateTime.now().microsecondsSinceEpoch}-${chosenSlots.first.startTime}';
+            final booking = <String, dynamic>{
+              'court': _selectedCourt,
+              'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+              'slots': chosenSlots
+                  .map((slot) => {
+                        'startTime': slot.startTime,
+                        'endTime': slot.endTime,
+                      })
+                  .toList(),
+              'idempotencyKey': idempotencyKey,
+              'paymentMethod': 'Cash',
+              'paymentStatus': 'PAID',
+              'participantName': participant['participantName']!,
+              'participantPhone': participant['participantPhone']!,
+              if (participant['participantEmail']?.isNotEmpty == true)
+                'participantEmail': participant['participantEmail']!,
+            };
+            final payload = jsonEncode(booking);
             var checkSavedBooking = true;
             try {
               final response = await (widget.client?.post ?? http.post)(
@@ -594,36 +568,12 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
         ),
       ),
     );
-    if (body == null || !mounted) return;
-
-    setState(() => _saving = true);
-    try {
-      final bookAnother = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-              builder: (_) => WalkInBookingSuccessScreen(
-                    venueName: widget.venueName,
-                    date:
-                        DateFormat('dd MMMM yyyy, EEEE').format(_selectedDate),
-                    slots: _selectedSlots.map((slot) => slot.label).toList(),
-                    court: _selectedCourt,
-                    participantName: participant['participantName']!,
-                    participantPhone: participant['participantPhone']!,
-                    participantEmail: participant['participantEmail'],
-                  )));
-      if (!mounted) return;
-      if (bookAnother == true) {
-        _selectedSlots.clear();
-        await _loadSlots();
-      } else {
-        Navigator.pop(context, true);
-      }
-    } catch (error) {
-      if (mounted) {
-        _message(error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
+    if (!mounted) return;
+    if (bookAnother == true) {
+      _selectedSlots.clear();
+      await _loadSlots();
+    } else if (bookAnother == false) {
+      Navigator.pop(context, true);
     }
   }
 
@@ -685,10 +635,18 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
           selectedSlots: _selectedSlots,
           loadSlots: _loadSlotsForDate,
           now: _now,
+          venueId: widget.venueId,
+          serviceId: _serviceId,
+          venueName: widget.venueName,
+          court: _selectedCourt,
+          client: widget.client,
         ),
       ),
     );
-    if (selected == null || !mounted) return;
+    if (selected == null || !mounted) {
+      await _loadSlots();
+      return;
+    }
     setState(() {
       _selectedDate = selected.date;
       _serverSlots = selected.slots;
@@ -911,7 +869,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
                       child: ElevatedButton(
                         onPressed: _saving ||
                                 _loadingSlots ||
-                                !slots.any((slot) => slot.isAvailable)
+                                slots.isEmpty
                             ? null
                             : _continueToSlotSelection,
                         style: ElevatedButton.styleFrom(
@@ -999,9 +957,19 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
 }
 
 class _WalkInParticipantScreen extends StatefulWidget {
-  const _WalkInParticipantScreen({required this.slots});
+  const _WalkInParticipantScreen({
+    required this.slots,
+    this.venueName = '',
+    this.court = '',
+    this.date,
+    this.onReserve,
+  });
 
   final List<String> slots;
+  final String venueName;
+  final String court;
+  final DateTime? date;
+  final Future<dynamic> Function(Map<String, String> participant)? onReserve;
 
   @override
   State<_WalkInParticipantScreen> createState() =>
@@ -1013,9 +981,9 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late final TextEditingController _email;
-  late final TextEditingController _amount;
-  late final TextEditingController _notes;
-  String _paymentMethod = 'Cash';
+  bool _showValidation = false;
+  bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -1023,8 +991,6 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
     _name = TextEditingController();
     _phone = TextEditingController();
     _email = TextEditingController();
-    _amount = TextEditingController();
-    _notes = TextEditingController();
   }
 
   @override
@@ -1032,42 +998,117 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
     _name.dispose();
     _phone.dispose();
     _email.dispose();
-    _amount.dispose();
-    _notes.dispose();
     super.dispose();
   }
 
-  InputDecoration _input(String hint) => InputDecoration(
+  InputDecoration _input({String? hint}) => InputDecoration(
         hintText: hint,
+        hintStyle: const TextStyle(
+          fontFamily: 'Satoshi',
+          fontSize: 16,
+          color: Color(0xFF9E9E9E),
+        ),
         filled: true,
         fillColor: Colors.white,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(28),
-            borderSide: const BorderSide(color: Color(0xFFD4D8B8))),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFD4D8B8)),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(28),
-            borderSide: const BorderSide(color: Color(0xFFD4D8B8))),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFD4D8B8)),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(28),
-            borderSide: const BorderSide(color: _purple, width: 1.5)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _purple, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE53935)),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE53935), width: 1.5),
+        ),
       );
 
-  void _review() {
+  Widget _slotRow(IconData icon, String text) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: const Color(0xFF666666), size: 19),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'Satoshi',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF202124),
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Future<void> _next() async {
+    if (_saving) return;
+    if (!_showValidation) {
+      setState(() => _showValidation = true);
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final digits = _phone.text.replaceAll(RegExp(r'\D'), '');
-    Navigator.pop(context, {
+    final participant = {
       'participantName': _name.text.trim(),
       'participantPhone': '+91$digits',
       'participantEmail': _email.text.trim(),
-      'paymentMethod': _paymentMethod,
-      'paymentStatus': 'PAID',
-      'amountPaise': _amount.text.trim().isEmpty
-          ? ''
-          : ((int.tryParse(_amount.text.trim()) ?? 0) * 100).toString(),
-      'notes': _notes.text.trim(),
+    };
+
+    if (widget.onReserve == null) {
+      Navigator.pop(context, {
+        ...participant,
+        'paymentMethod': 'Cash',
+        'paymentStatus': 'PAID',
+        'amountPaise': '',
+        'notes': '',
+      });
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
     });
+
+    try {
+      await widget.onReserve!(participant);
+      if (!mounted) return;
+      final bookAnother = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WalkInBookingSuccessScreen(
+            venueName: widget.venueName,
+            date: DateFormat('dd MMMM yyyy, EEEE')
+                .format(widget.date ?? DateTime.now()),
+            slots: widget.slots,
+            court: widget.court,
+            participantName: participant['participantName']!,
+            participantPhone: participant['participantPhone']!,
+            participantEmail: participant['participantEmail'],
+          ),
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pop(context, bookAnother);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
@@ -1076,163 +1117,302 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
         body: SafeArea(
           child: Form(
             key: _formKey,
-            child: Column(children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                child: Row(children: [
-                  Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    elevation: 2,
-                    child: IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back)),
-                  ),
-                  const SizedBox(width: 18),
-                  const Text('Participant Details',
-                      style: TextStyle(
+            autovalidateMode: _showValidation
+                ? AutovalidateMode.always
+                : AutovalidateMode.disabled,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                  child: Row(
+                    children: [
+                      Material(
+                        color: Colors.white,
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        child: IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      const Text(
+                        'Reserve Walk-In Slot',
+                        style: TextStyle(
                           fontFamily: 'Satoshi',
-                          fontSize: 25,
-                          fontWeight: FontWeight.w700)),
-                ]),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-                      decoration: BoxDecoration(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202124),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                    children: [
+                      const Text(
+                        'Slot Details',
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202124),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 16),
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(20)),
-                      child: Column(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${widget.slots.length} slot(s) selected',
-                                style: const TextStyle(
-                                    fontFamily: 'Satoshi',
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
-                            ...widget.slots.map((slot) => Padding(
-                                padding: const EdgeInsets.only(bottom: 3),
-                                child: Text(slot,
-                                    style: const TextStyle(
-                                        fontFamily: 'Satoshi',
-                                        fontSize: 15,
-                                        color: Color(0xFF666666))))),
-                          ]),
-                    ),
-                    const SizedBox(height: 22),
-                    const Text('Customer Name',
-                        style: TextStyle(
+                            if (widget.venueName.isNotEmpty) ...[
+                              _slotRow(Icons.location_on, widget.venueName),
+                              const SizedBox(height: 10),
+                            ],
+                            _slotRow(
+                              Icons.calendar_today_outlined,
+                              DateFormat('d MMMM yyyy, EEEE').format(
+                                  widget.date ?? DateTime.now()),
+                            ),
+                            if (widget.court.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              _slotRow(Icons.grid_on_outlined, widget.court),
+                            ],
+                            ...widget.slots.map(
+                              (slot) => Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: _slotRow(Icons.access_time, slot),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text.rich(
+                        const TextSpan(
+                          text: 'Participant Name',
+                          style: TextStyle(
                             fontFamily: 'Satoshi',
-                            fontSize: 16,
-                            color: Color(0xFF5F6064))),
-                    const SizedBox(height: 8),
-                    TextFormField(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF202124),
+                          ),
+                          children: [
+                            TextSpan(
+                              text: '*',
+                              style: TextStyle(
+                                color: Color(0xFFE53935),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
                         controller: _name,
-                        decoration: _input('Enter full name'),
+                        onChanged: (_) {
+                          if (_showValidation) {
+                            _formKey.currentState?.validate();
+                          }
+                        },
+                        style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          color: Color(0xFF202124),
+                        ),
+                        decoration: _input(hint: 'Enter participant name'),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
-                                ? 'Enter customer name'
-                                : null),
-                    const SizedBox(height: 18),
-                    const Text('Mobile Number',
-                        style: TextStyle(
+                                ? 'Enter participant name'
+                                : null,
+                      ),
+                      const SizedBox(height: 18),
+                      Text.rich(
+                        const TextSpan(
+                          text: 'Mobile Number',
+                          style: TextStyle(
                             fontFamily: 'Satoshi',
-                            fontSize: 16,
-                            color: Color(0xFF5F6064))),
-                    const SizedBox(height: 8),
-                    TextFormField(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF202124),
+                          ),
+                          children: [
+                            TextSpan(
+                              text: '*',
+                              style: TextStyle(
+                                color: Color(0xFFE53935),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
                         controller: _phone,
+                        onChanged: (_) {
+                          if (_showValidation) {
+                            _formKey.currentState?.validate();
+                          }
+                        },
                         keyboardType: TextInputType.phone,
                         maxLength: 10,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10)
+                          LengthLimitingTextInputFormatter(10),
                         ],
-                        decoration: _input('10-digit mobile')
-                            .copyWith(prefixText: '+91 ', counterText: ''),
-                        validator: (value) => (value ?? '').length == 10
-                            ? null
-                            : 'Enter a valid 10 digit mobile number'),
-                    const SizedBox(height: 18),
-                    const Text('Email (optional)',
+                        style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          color: Color(0xFF202124),
+                        ),
+                        decoration: _input(hint: 'Enter mobile number')
+                            .copyWith(counterText: ''),
+                        validator: (value) {
+                          final digits =
+                              (value ?? '').replaceAll(RegExp(r'\D'), '');
+                          if (digits.isEmpty) return 'Enter mobile number';
+                          if (digits.length != 10) {
+                            return 'Enter a valid 10 digit mobile number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Email',
                         style: TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontSize: 16,
-                            color: Color(0xFF5F6064))),
-                    const SizedBox(height: 8),
-                    TextFormField(
+                          fontFamily: 'Satoshi',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF202124),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: _input('Email address')),
-                    const SizedBox(height: 22),
-                    const Text('Payment Method',
-                        style: TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontSize: 16,
-                            color: Color(0xFF5F6064))),
-                    ...[
-                      'Cash',
-                      'UPI',
-                      'Card',
-                      'Other'
-                    ].map((method) => RadioListTile<String>(
-                        contentPadding: EdgeInsets.zero,
-                        activeColor: Colors.black,
-                        title: Text(method),
-                        value: method,
-                        groupValue: _paymentMethod,
-                        onChanged: (value) => setState(
-                            () => _paymentMethod = value ?? _paymentMethod))),
-                    TextFormField(
-                        controller: _amount,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        decoration: _input('Amount (₹, optional)')),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                        controller: _notes,
-                        decoration: _input('Notes (optional)'),
-                        maxLines: 2),
-                  ],
+                        style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          color: Color(0xFF202124),
+                        ),
+                        decoration: _input(hint: 'Enter Email'),
+                      ),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              fontFamily: 'Satoshi',
+                              color: Color(0xFFE53935),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-                  child: Row(children: [
-                    Expanded(
-                        child: OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 110,
+                          height: 52,
+                          child: OutlinedButton(
+                            onPressed:
+                                _saving ? null : () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(54),
-                                foregroundColor: const Color(0xFF5F6064),
-                                side:
-                                    const BorderSide(color: Color(0xFFD4D8B8)),
+                              backgroundColor: const Color(0xFFFDF6DE),
+                              foregroundColor: Colors.black,
+                              side: const BorderSide(
+                                  color: Colors.black, width: 1.2),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(
+                                fontFamily: 'Satoshi',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: _saving ? null : _next,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                                foregroundColor: const Color(0xFFDAFF50),
+                                elevation: 0,
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(28))),
-                            child: const Text('Back'))),
-                    const SizedBox(width: 14),
-                    Expanded(
-                        child: ElevatedButton(
-                            onPressed: _review,
-                            style: ElevatedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(54),
-                                backgroundColor: const Color(0xFF1F1F1F),
-                                foregroundColor: _lime,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(28))),
-                            child: const Text('Review'))),
-                  ]),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: _saving
+                                  ? const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Color(0xFFDAFF50),
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Confirming...',
+                                          style: TextStyle(
+                                            fontFamily: 'Satoshi',
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 16,
+                                            color: Color(0xFFDAFF50),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(
+                                      _error != null
+                                          ? 'Retry confirmation'
+                                          : 'Next',
+                                      style: const TextStyle(
+                                        fontFamily: 'Satoshi',
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ),
         ),
       );
@@ -1252,6 +1432,11 @@ class _WalkInSlotSelectionScreen extends StatefulWidget {
     required this.selectedSlots,
     required this.loadSlots,
     required this.now,
+    this.venueId,
+    this.serviceId,
+    this.venueName,
+    this.court,
+    this.client,
   });
 
   final DateTime date;
@@ -1259,6 +1444,11 @@ class _WalkInSlotSelectionScreen extends StatefulWidget {
   final List<_BookableSlot> selectedSlots;
   final Future<List<_BookableSlot>> Function(DateTime date) loadSlots;
   final DateTime Function() now;
+  final String? venueId;
+  final String? serviceId;
+  final String? venueName;
+  final String? court;
+  final http.Client? client;
 
   @override
   State<_WalkInSlotSelectionScreen> createState() =>
@@ -1309,6 +1499,45 @@ class _WalkInSlotSelectionScreenState
     super.dispose();
   }
 
+  Future<void> _refresh() async {
+    setState(() => _loadingDate = true);
+    try {
+      final slots = await widget.loadSlots(_date);
+      if (!mounted) return;
+      setState(() {
+        _slots = slots;
+        _selectedSlots.clear();
+      });
+      _scheduleExpiry();
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingDate = false);
+    }
+  }
+
+  Future<void> _showWalkInDetails(_BookableSlot slot) async {
+    final removed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _WalkInReservationDetailsScreen(
+          venueId: widget.venueId ?? '',
+          serviceId: widget.serviceId ?? '',
+          venueName: widget.venueName ?? '',
+          court: widget.court ?? '',
+          date: _date,
+          slot: slot,
+          client: widget.client,
+          onReleased: () {
+            if (mounted) _refresh();
+          },
+        ),
+      ),
+    );
+    if (removed == true && mounted && !_loadingDate) {
+      await _refresh();
+    }
+  }
+
   Future<void> _changeDate(int days) async {
     final next = DateTime(_date.year, _date.month, _date.day + days);
     final todayOnly = venueCalendarDate(widget.now());
@@ -1334,16 +1563,17 @@ class _WalkInSlotSelectionScreenState
 
   String _sectionFor(_BookableSlot slot) {
     final hour = int.tryParse(slot.startTime.split(':').first) ?? 0;
-    if (hour < 12) return 'Morning';
-    if (hour < 16) return 'Afternoon';
-    if (hour < 21) return 'Evening';
+    if (hour >= 5 && hour < 12) return 'Morning';
+    if (hour >= 12 && hour < 16) return 'Afternoon';
+    if (hour >= 16 && hour < 21) return 'Evening';
     return 'Night';
   }
 
   Color _statusColor(_BookableSlot slot) {
     if (slot.isAvailable) return const Color(0xFF39B54A);
-    if (slot.status == 'walk_in_reserved') return Colors.orange;
+    if (slot.status == 'walk_in_reserved') return const Color(0xFFF57C00);
     if (slot.status == 'activ_booking') return const Color(0xFF1687FF);
+    if (slot.status == 'not_operational') return const Color(0xFFFF5B5B);
     return const Color(0xFFFF5B5B);
   }
 
@@ -1364,7 +1594,7 @@ class _WalkInSlotSelectionScreenState
   Widget build(BuildContext context) {
     const sections = ['Morning', 'Afternoon', 'Evening', 'Night'];
     final visibleSlots = _slots
-        .where((slot) => slot.status != 'not_operational' && !_hasEnded(slot))
+        .where((slot) => !_hasEnded(slot))
         .toList();
     return Scaffold(
       backgroundColor: _background,
@@ -1382,33 +1612,49 @@ class _WalkInSlotSelectionScreenState
                     icon: const Icon(Icons.arrow_back)),
               ),
               const SizedBox(width: 18),
-              const Text('Select Slot',
-                  style: TextStyle(
-                      fontFamily: 'Satoshi',
-                      fontSize: 27,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF202124))),
+              const Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text('Select Slot',
+                      style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 27,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202124))),
+                ),
+              ),
             ]),
           ),
           const SizedBox(height: 14),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(
-                onPressed: _loadingDate ? null : () => _changeDate(-1),
-                icon: const Icon(Icons.chevron_left, size: 28)),
-            SizedBox(
-              width: 230,
-              child: Text(DateFormat('dd MMMM yyyy, EEEE').format(_date),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontFamily: 'Satoshi',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF202124))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                    onPressed: _loadingDate ? null : () => _changeDate(-1),
+                    icon: const Icon(Icons.chevron_left, size: 28)),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      DateFormat('dd MMMM yyyy, EEEE').format(_date),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202124)),
+                    ),
+                  ),
+                ),
+                IconButton(
+                    onPressed: _loadingDate ? null : () => _changeDate(1),
+                    icon: const Icon(Icons.chevron_right, size: 28)),
+              ],
             ),
-            IconButton(
-                onPressed: _loadingDate ? null : () => _changeDate(1),
-                icon: const Icon(Icons.chevron_right, size: 28)),
-          ]),
+          ),
           const SizedBox(height: 22),
           Expanded(
             child: ListView(
@@ -1499,6 +1745,7 @@ class _WalkInSlotSelectionScreenState
     final selected = _selectedSlots.any((item) =>
         item.startTime == slot.startTime && item.endTime == slot.endTime);
     final statusColor = _statusColor(slot);
+    final isWalkIn = slot.status == 'walk_in_reserved';
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Material(
@@ -1509,7 +1756,11 @@ class _WalkInSlotSelectionScreenState
             : const Color(0xFFE4E5E9),
         borderRadius: BorderRadius.circular(11),
         child: InkWell(
-          onTap: slot.isAvailable ? () => _toggle(slot) : null,
+          onTap: slot.isAvailable
+              ? () => _toggle(slot)
+              : isWalkIn
+                  ? () => _showWalkInDetails(slot)
+                  : null,
           borderRadius: BorderRadius.circular(11),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -1517,27 +1768,662 @@ class _WalkInSlotSelectionScreenState
                 borderRadius: BorderRadius.circular(11),
                 border: Border.all(
                     color: selected ? _purple : const Color(0xFFD6E0E3))),
-            child: Row(children: [
-              Icon(
-                  selected
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  color: selected ? _purple : const Color(0xFFCFDDE1),
-                  size: 25),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Text(slot.label,
+            child: Row(
+              children: [
+                Icon(
+                    selected
+                        ? Icons.check_box_outlined
+                        : Icons.check_box_outline_blank,
+                    color: selected ? _purple : const Color(0xFFCFDDE1),
+                    size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      slot.label,
+                      maxLines: 1,
+                      softWrap: false,
                       style: const TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontSize: 15,
-                          color: Color(0xFF555555)))),
-              Text(slot.isAvailable ? 'Available' : slot.statusLabel,
-                  style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 14,
+                        color: Color(0xFF555555),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    slot.isAvailable ? 'Available' : slot.statusLabel,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: statusColor)),
-            ]),
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalkInReservationDetailsScreen extends StatefulWidget {
+  const _WalkInReservationDetailsScreen({
+    required this.venueId,
+    required this.serviceId,
+    required this.venueName,
+    required this.court,
+    required this.date,
+    required this.slot,
+    this.client,
+    this.onReleased,
+  });
+
+  final String venueId;
+  final String serviceId;
+  final String venueName;
+  final String court;
+  final DateTime date;
+  final _BookableSlot slot;
+  final http.Client? client;
+  final VoidCallback? onReleased;
+
+  @override
+  State<_WalkInReservationDetailsScreen> createState() =>
+      _WalkInReservationDetailsScreenState();
+}
+
+class _WalkInReservationDetailsScreenState
+    extends State<_WalkInReservationDetailsScreen> {
+  bool _loading = true;
+  bool _removing = false;
+  late String _venueName = widget.venueName;
+  late String _court = widget.court;
+  late final DateTime _date = widget.date;
+  late List<String> _slots = [widget.slot.label];
+  String _participantName = '';
+  String _participantPhone = '';
+  String? _participantEmail;
+  String? _reservationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _reservationId = widget.slot.reservationId;
+    _fetchDetails();
+  }
+
+  Future<void> _fetchDetails() async {
+    try {
+      final token = await SharedPreference.readStr('jwt_token');
+      if (token == null || token.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final get = widget.client?.get ?? http.get;
+      final headers = {'Authorization': 'Bearer $token'};
+
+      Map<String, dynamic>? data;
+      if (_reservationId != null && _reservationId!.isNotEmpty) {
+        final uri = Uri.parse(
+          '$BASE_URL/venues/${widget.venueId}/activities/${widget.serviceId}/walk-in/$_reservationId',
+        );
+        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 15));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final json = jsonDecode(res.body);
+          if (json['data'] is Map) data = Map<String, dynamic>.from(json['data']);
+        }
+      }
+      if (data == null && widget.venueId.isNotEmpty && widget.serviceId.isNotEmpty) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(_date);
+        final uri = Uri.parse(
+          '$BASE_URL/venues/${widget.venueId}/activities/${widget.serviceId}/walk-in?date=$dateStr',
+        );
+        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 15));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final json = jsonDecode(res.body);
+          final list = json['data'] is List ? json['data'] as List : [];
+          for (final item in list) {
+            if (item is Map) {
+              final slots = item['slots'] is List ? item['slots'] as List : [];
+              final matches = slots.any((s) =>
+                  s is Map &&
+                  s['startTime'] == widget.slot.startTime &&
+                  s['endTime'] == widget.slot.endTime);
+              if (matches) {
+                data = Map<String, dynamic>.from(item);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (data != null && mounted) {
+        setState(() {
+          _reservationId = data!['id']?.toString() ?? _reservationId;
+          if (data['venueName'] != null && data['venueName'].toString().isNotEmpty) {
+            _venueName = data['venueName'].toString();
+          }
+          if (data['court'] != null && data['court'].toString().isNotEmpty) {
+            _court = data['court'].toString();
+          }
+          _participantName = data['participantName']?.toString() ?? '';
+          _participantPhone = data['participantPhone']?.toString() ?? '';
+          _participantEmail = data['participantEmail']?.toString();
+          if (data['slots'] is List && (data['slots'] as List).isNotEmpty) {
+            _slots = (data['slots'] as List)
+                .whereType<Map>()
+                .map((s) =>
+                    '${_BookableSlot._displayTime(s['startTime']?.toString() ?? '')} - ${_BookableSlot._displayTime(s['endTime']?.toString() ?? '')}')
+                .toList();
+          }
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _removeReservation() async {
+    if (_removing) return;
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/ic_release_warning.png',
+                width: 90,
+                height: 80,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.warning_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 76,
+                ),
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                'Release Walk-In Reservation?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  color: Color(0xFF202124),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'This slot will become available for\nbooking on ACTIV immediately.\n\nUsers may be able to reserve the slot\nonce it is released',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                  height: 1.4,
+                  color: Color(0xFF202124),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF202124),
+                          backgroundColor: const Color(0xFFFBF5DE),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          side: const BorderSide(
+                            color: Color(0xFF202124),
+                            width: 1.2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Keep Reserved',
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: const Color(0xFFFF3838),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Remove Reservation',
+                            style: TextStyle(
+                              fontFamily: 'Satoshi',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    if (_reservationId == null || _reservationId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reservation ID not found.')),
+      );
+      return;
+    }
+
+    setState(() => _removing = true);
+    try {
+      final token = await SharedPreference.readStr('jwt_token');
+      if (token == null || token.isEmpty) {
+        throw Exception('Please sign in again.');
+      }
+      final del = widget.client?.delete ?? http.delete;
+      final uri = Uri.parse(
+        '$BASE_URL/venues/${widget.venueId}/activities/${widget.serviceId}/walk-in/$_reservationId',
+      );
+      final res = await del(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        final body = jsonDecode(res.body);
+        throw Exception(body['message'] ?? 'Failed to remove reservation.');
+      }
+      if (!mounted) return;
+      widget.onReleased?.call();
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _SlotReleasedScreen(
+            onBackToSlots: widget.onReleased,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _removing = false);
+    }
+  }
+
+  Widget _detailRow(IconData icon, String text) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: const Color(0xFF6B7280), size: 19),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'Satoshi',
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF202124),
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _sectionCard({required String title, required List<Widget> children}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'Satoshi',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF202124),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                for (int i = 0; i < children.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 14),
+                  children[i],
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Walk-In Reservation Details',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202124),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8, right: 4),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _purple,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close,
+                        color: Color(0xFF4A4A4A), size: 26),
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
+                    splashRadius: 20,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                children: [
+                  _sectionCard(
+                    title: 'Slot Details',
+                    children: [
+                      _detailRow(Icons.location_on,
+                          _venueName.isNotEmpty ? _venueName : 'Venue'),
+                      _detailRow(Icons.calendar_today_outlined,
+                          DateFormat('dd MMMM yyyy, EEEE').format(_date)),
+                      if (_court.isNotEmpty)
+                        _detailRow(Icons.grid_on_outlined, _court),
+                      for (final label in _slots)
+                        _detailRow(Icons.access_time, label),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _sectionCard(
+                    title: 'Participant Details',
+                    children: [
+                      _detailRow(
+                          Icons.account_circle_outlined,
+                          _participantName.isNotEmpty
+                              ? _participantName
+                              : 'Walk-in Customer'),
+                      if (_participantPhone.isNotEmpty)
+                        _detailRow(Icons.call, _participantPhone),
+                      if (_participantEmail != null &&
+                          _participantEmail!.isNotEmpty)
+                        _detailRow(Icons.email_outlined, _participantEmail!),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton(
+                      onPressed: _removing ? null : _removeReservation,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                        backgroundColor: const Color(0xFFFFF5F5),
+                        foregroundColor: const Color(0xFFFF4D4D),
+                        side: const BorderSide(
+                            color: Color(0xFFFF8A8A), width: 1.2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: _removing
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Color(0xFFFF4D4D),
+                              ),
+                            )
+                          : const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.delete_outline,
+                                      size: 21, color: Color(0xFFFF4D4D)),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Remove Reservation',
+                                    style: TextStyle(
+                                      fontFamily: 'Satoshi',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                        backgroundColor: const Color(0xFFFBF5DE),
+                        foregroundColor: const Color(0xFF202124),
+                        side: const BorderSide(
+                            color: Color(0xFF202124), width: 1.2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SlotReleasedScreen extends StatelessWidget {
+  const _SlotReleasedScreen({this.onBackToSlots});
+
+  final VoidCallback? onBackToSlots;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        onBackToSlots?.call();
+        Navigator.pop(context, true);
+      },
+      child: Scaffold(
+        backgroundColor: _background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              const Spacer(flex: 3),
+              Center(
+                child: Image.asset(
+                  'assets/ic_slot_released_badge.png',
+                  width: 110,
+                  height: 110,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 96,
+                    height: 96,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1DD505),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 64,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'Slot Released!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF202124),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'This slot is now available for\nbooking on ACTIV.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 16,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF202124),
+                ),
+              ),
+              const Spacer(flex: 4),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        onBackToSlots?.call();
+                        Navigator.pop(context, true);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        elevation: 0,
+                        backgroundColor: const Color(0xFF000000),
+                        foregroundColor: const Color(0xFFD8F34A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Back to Slots',
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: Color(0xFFD8F34A),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1774,6 +2660,7 @@ class _BookableSlot {
     required this.endTime,
     this.price,
     this.status = 'available',
+    this.reservationId,
   });
 
   final String label;
@@ -1781,12 +2668,13 @@ class _BookableSlot {
   final String endTime;
   final String? price;
   final String status;
+  final String? reservationId;
 
   bool get isAvailable => status == 'available';
 
   String get statusLabel => switch (status) {
-        'walk_in_reserved' => 'Reserved',
-        'activ_booking' => 'Booked',
+        'walk_in_reserved' => 'Walk-In Reserved',
+        'activ_booking' => 'ACTIV Booking',
         'not_operational' => 'Not Operational',
         _ => 'Unavailable',
       };
@@ -1794,11 +2682,14 @@ class _BookableSlot {
   factory _BookableSlot.fromStatus(Map<String, dynamic> json) {
     final start = json['startTime']?.toString() ?? '';
     final end = json['endTime']?.toString() ?? '';
+    var status = json['status']?.toString() ?? 'available';
+    if (status == 'blocked') status = 'not_operational';
     return _BookableSlot(
       label: '${_displayTime(start)} - ${_displayTime(end)}',
       startTime: start,
       endTime: end,
-      status: json['status']?.toString() ?? 'available',
+      status: status,
+      reservationId: json['reservationId']?.toString(),
     );
   }
 

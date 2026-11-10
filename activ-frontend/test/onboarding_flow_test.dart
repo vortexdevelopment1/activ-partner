@@ -894,7 +894,7 @@ void main() {
     await showScreen(tester, SettingsScreen(client: client));
     await tester.tap(find.text('Delete Account'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Delete Account'));
     await tester.pumpAndSettle();
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getKeys(), isEmpty);
