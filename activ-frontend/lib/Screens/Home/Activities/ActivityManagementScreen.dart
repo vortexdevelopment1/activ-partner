@@ -836,24 +836,56 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Widget _stat(String title, String value, IconData icon) => Container(
-      height: 78,
-      padding: const EdgeInsets.all(10),
+      height: 82,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: _border),
           borderRadius: BorderRadius.circular(12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: _text(title, size: 12, bold: true)),
-          Icon(icon, size: 13, color: Colors.greenAccent.shade400)
-        ]),
-        const SizedBox(height: 10),
-        Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: Color(0xFF303030),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(icon, size: 14, color: Colors.greenAccent.shade400),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
             child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: _text(value, size: 20, bold: true))),
-      ]));
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  color: Color(0xFF303030),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ));
 
   Widget _action(
           String title, String subtitle, IconData icon, VoidCallback onTap) =>

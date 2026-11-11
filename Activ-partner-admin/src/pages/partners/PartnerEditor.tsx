@@ -29,21 +29,21 @@ const groups = [
 const bankFields = [['accountHolderName', 'Account holder'], ['bankName', 'Bank name'], ['accountNumber', 'Account number'], ['ifscCode', 'IFSC code'], ['accountType', 'Account type'], ['branchName', 'Branch'], ['cancelledChequeUrl', 'Cancelled cheque URL'], ['upiId', 'UPI ID'], ['rejectionReason', 'Rejection reason']] as const;
 
 const accountStatusOptions = [
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'SUSPENDED', label: 'Suspended' },
+  { value: 'PENDING', label: 'Pending', color: 'amber' },
+  { value: 'ACTIVE', label: 'Active', color: 'emerald' },
+  { value: 'SUSPENDED', label: 'Suspended', color: 'red' },
 ];
 
 const kycStatusOptions = [
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'PENDING', label: 'Pending', color: 'amber' },
+  { value: 'APPROVED', label: 'Approved', color: 'emerald' },
+  { value: 'REJECTED', label: 'Rejected', color: 'red' },
 ];
 
 const bankStatusOptions = [
-  { value: 'UNDER_REVIEW', label: 'Under Review' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'UNDER_REVIEW', label: 'Under Review', color: 'amber' },
+  { value: 'APPROVED', label: 'Approved', color: 'emerald' },
+  { value: 'REJECTED', label: 'Rejected', color: 'red' },
 ];
 
 export const accountTypeOptions = [
@@ -57,6 +57,8 @@ export const BANK_HOLDER_REGEX = /^[\p{L}\p{M}\s.'-]+$/u;
 export const BANK_ACCOUNT_REGEX = /^[0-9]{6,20}$/;
 export const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 export const UPI_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+export const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const formatAadhaar = (val: string): string => {
   const digits = val.replace(/\D/g, '').slice(0, 12);
@@ -85,6 +87,14 @@ export const validateField = (key: string, val: string): string | null => {
     const raw = trimmed.replace(/\D/g, '');
     if (raw.length !== 12) {
       return 'Aadhaar number must be exactly 12 digits';
+    }
+  } else if (key === 'phone' || key === 'contactPhone') {
+    if (!PHONE_REGEX.test(trimmed.replace(/[\s-]/g, ''))) {
+      return 'Phone number must be 10 to 15 digits (e.g. +919876543210)';
+    }
+  } else if (key === 'email' || key === 'businessEmail') {
+    if (!EMAIL_REGEX.test(trimmed)) {
+      return 'Please enter a valid email address';
     }
   }
   return null;
@@ -240,9 +250,9 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
     aadhaarCardUrl: { kind: 'aadhaar', label: 'Aadhaar document' },
   };
 
-  const panError = validateField('panNumber', value('panNumber'));
-  const gstError = validateField('gstNumber', value('gstNumber'));
-  const aadhaarError = validateField('aadhaarNumber', value('aadhaarNumber'));
+  const hasGroupErrors = groups.some(group =>
+    group.fields.some(([key]) => Boolean(validateField(key, value(key))))
+  );
 
   const bankHasError = (bank: Bank) => {
     return Boolean(
@@ -254,7 +264,7 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
     );
   };
   const hasBankErrors = accounts.some(bankHasError);
-  const hasValidationErrors = Boolean(panError || gstError || aadhaarError || hasBankErrors);
+  const hasValidationErrors = Boolean(hasGroupErrors || hasBankErrors);
 
   return <Modal open onClose={close} title="Partner details" size="xl" subtitle={id}>
     {query.isLoading ? <p role="status">Loading partner details...</p> : query.isError ? <div role="alert">Could not load partner details. <button className="btn-secondary" onClick={() => query.refetch()}>Retry</button></div> : partner ?

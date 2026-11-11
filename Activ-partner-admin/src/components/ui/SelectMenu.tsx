@@ -6,7 +6,19 @@ import { floatingPanel } from '../../utils/floatingPanel';
 export interface SelectOption {
   value: string;
   label: string;
+  color?: string;
 }
+
+export const getStatusDotClass = (color?: string, text?: string): string | null => {
+  if (color === 'emerald' || color === 'green') return 'bg-emerald-500';
+  if (color === 'amber' || color === 'yellow') return 'bg-amber-500';
+  if (color === 'red' || color === 'rose') return 'bg-rose-500';
+  const lower = (text || '').toLowerCase().trim();
+  if (lower === 'active' || lower === 'approved') return 'bg-emerald-500';
+  if (lower === 'pending' || lower === 'under review' || lower === 'under_review') return 'bg-amber-500';
+  if (lower === 'suspended' || lower === 'rejected' || lower === 'inactive') return 'bg-rose-500';
+  return null;
+};
 
 export const formatStatusLabel = (status: string): string => {
   if (!status) return '';
@@ -42,6 +54,7 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
       option.label.toLowerCase() === value?.toLowerCase()
   );
   const displayLabel = selected?.label ?? (value ? formatStatusLabel(value) : placeholder);
+  const dotClass = getStatusDotClass(selected?.color, displayLabel);
   const isPlaceholder = !selected && !value;
   const ready = open && position !== null;
 
@@ -95,7 +108,10 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
         onClick={() => { if (!disabled) setOpen((current) => !current); }}
         onChange={(event: any) => onChange(event?.target?.value ?? event)}
         className={`input flex w-full items-center justify-between gap-2 text-left text-sm font-normal disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 ${!isPlaceholder ? 'text-gray-900' : 'text-gray-500'}`}>
-        <span className="min-w-0 truncate text-sm font-normal leading-normal">{displayLabel}</span>
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm font-normal leading-normal">
+          {dotClass && <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden="true" />}
+          <span className="truncate">{displayLabel}</span>
+        </span>
         <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && position && createPortal(
@@ -115,17 +131,26 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
           style={{ position: 'fixed', left: position.left, top: position.top, width: position.width,
             maxHeight: position.maxHeight, transform: position.opensUp ? 'translateY(-100%)' : undefined }}
           className="admin-popover z-[80] overflow-y-auto overscroll-contain rounded-lg border border-gray-200 bg-white p-1 shadow-xl">
-          {options.map((option) => (
-            <button key={option.value || '__empty'} type="button" role="option"
-              aria-selected={value === option.value}
-              onClick={() => { onChange(option.value); setOpen(false); buttonRef.current?.focus(); }}
-              className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                value === option.value ? 'bg-primary-50 font-medium text-primary-800' : 'text-gray-700 hover:bg-gray-50'
-              }`}>
-              <span className="min-w-0 break-words">{option.label}</span>
-              {value === option.value && <Check size={15} className="shrink-0 text-primary-700" />}
-            </button>
-          ))}
+          {options.map((option) => {
+            const isSelected = value === option.value ||
+              option.value.toUpperCase() === value?.toUpperCase() ||
+              option.label.toLowerCase() === value?.toLowerCase();
+            const optDot = getStatusDotClass(option.color, option.label);
+            return (
+              <button key={option.value || '__empty'} type="button" role="option"
+                aria-selected={isSelected}
+                onClick={() => { onChange(option.value); setOpen(false); buttonRef.current?.focus(); }}
+                className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  isSelected ? 'bg-primary-50 font-medium text-primary-800' : 'text-gray-700 hover:bg-gray-50'
+                }`}>
+                <span className="flex items-center gap-2 min-w-0 break-words">
+                  {optDot && <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${optDot}`} aria-hidden="true" />}
+                  <span>{option.label}</span>
+                </span>
+                {isSelected && <Check size={15} className="shrink-0 text-primary-700" />}
+              </button>
+            );
+          })}
         </div>, document.body,
       )}
     </div>

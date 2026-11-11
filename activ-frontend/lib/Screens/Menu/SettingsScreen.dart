@@ -18,6 +18,11 @@ class SettingsScreen extends StatelessWidget {
 
   final http.Client? client;
 
+  @visibleForTesting
+  static void showDeleteAccountSheetForTesting(BuildContext context,
+          [http.Client? client]) =>
+      _showDeleteAccountSheet(context, client);
+
   @override
   Widget build(BuildContext context) {
     return _AppScaffold(
@@ -934,8 +939,9 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
             Row(
               children: [
                 Expanded(
+                  flex: 2,
                   child: SizedBox(
-                    height: 56,
+                    height: 54,
                     child: OutlinedButton(
                       onPressed:
                           _deleting ? null : () => Navigator.pop(context),
@@ -944,6 +950,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                         backgroundColor: const Color(0xFFFFF7C9),
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         side: BorderSide.none,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -953,22 +960,21 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                         child: Text(
                           'Cancel',
                           maxLines: 1,
-                          softWrap: false,
                           style: TextStyle(
                             fontFamily: 'Satoshi',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 Expanded(
-                  flex: 2,
+                  flex: 3,
                   child: SizedBox(
-                    height: 56,
+                    height: 54,
                     child: ElevatedButton(
                       onPressed: _deleting ? null : _delete,
                       style: ElevatedButton.styleFrom(
@@ -978,23 +984,34 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                         disabledBackgroundColor:
                             const Color(0xFF222222).withValues(alpha: .6),
                         elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          _deleting ? 'Deleting...' : 'Delete Account',
-                          maxLines: 1,
-                          softWrap: false,
-                          style: const TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
+                      child: _deleting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFD8F34A),
+                                ),
+                              ),
+                            )
+                          : const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Delete Account',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontFamily: 'Satoshi',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ),

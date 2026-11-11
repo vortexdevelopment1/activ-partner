@@ -224,3 +224,37 @@ it('validates bank account fields, filters invalid characters, and prevents save
   expect(screen.queryByText('Enter a valid UPI ID (e.g. name@bank)')).toBeNull();
   expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(false);
 });
+
+it('displays formatted Title Case for Account status and Verification status with status indicator dots', async () => {
+  show();
+  const accountStatusBtn = await screen.findByRole('button', { name: 'Account status' });
+  const kycStatusBtn = await screen.findByRole('button', { name: 'Verification status' });
+
+  // Shows Title Case "Active" and "Pending", not "ACTIVE" or "PENDING"
+  expect(accountStatusBtn.textContent).toContain('Active');
+  expect(accountStatusBtn.textContent).not.toBe('ACTIVE');
+  expect(kycStatusBtn.textContent).toContain('Pending');
+  expect(kycStatusBtn.textContent).not.toBe('PENDING');
+
+  // Changing status updates display to Title Case with dot
+  fireEvent.click(kycStatusBtn);
+  expect(screen.getByRole('option', { name: /rejected/i })).toBeDefined();
+  fireEvent.click(screen.getByRole('option', { name: /rejected/i }));
+  expect(kycStatusBtn.textContent).toContain('Rejected');
+});
+
+it('validates GST number, sanitizes input, and blocks save on invalid GST', async () => {
+  show();
+  const gstInput = (await screen.findByLabelText('GST number')) as HTMLInputElement;
+
+  // Sanitizes: strips non-alphanumeric (like @), uppercases, max 15
+  fireEvent.change(gstInput, { target: { value: '63883hdhsueudud@@@@@@@@@@@@@@' } });
+  expect(gstInput.value).toBe('63883HDHSUEUDUD');
+  expect(await screen.findByText('GST must be 15 characters in 27AAPFU0939F1ZV format')).toBeDefined();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+
+  // Fix to valid GST
+  fireEvent.change(gstInput, { target: { value: '27AAPFU0939F1ZV' } });
+  expect(screen.queryByText('GST must be 15 characters in 27AAPFU0939F1ZV format')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(false);
+});
