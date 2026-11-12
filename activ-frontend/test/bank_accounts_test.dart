@@ -189,9 +189,7 @@ void main() {
         .controller!.text, 'HDFC0001234');
     final type = find.byKey(const ValueKey('Account Type'));
     await reveal(tester, type);
-    await tester.tap(type);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Saving Account').last);
+    await typeManually(tester, type, 'Saving Account');
     await tester.pumpAndSettle();
     expect(
         tester
@@ -266,7 +264,7 @@ void main() {
     await tester.tap(find.text('Submit for Verification'));
     await tester.pumpAndSettle();
     expect(find.text('Account numbers do not match.'), findsOneWidget);
-    expect(find.text('Select an account type.'), findsOneWidget);
+    expect(find.text('Enter account type.'), findsOneWidget);
     expect(posts, 0);
     expect(tester.takeException(), isNull);
   });

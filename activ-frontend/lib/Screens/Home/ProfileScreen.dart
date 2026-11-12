@@ -198,6 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _showPhotoOptions() async {
     if (_uploading) return;
+    final hasPhoto = _avatar.isNotEmpty;
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -207,15 +208,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Change Profile Photo'),
+            title:
+                Text(hasPhoto ? 'Change Profile Photo' : 'Add Profile Photo'),
             onTap: () => Navigator.pop(sheetContext, 'change'),
           ),
-          ListTile(
-            leading: const Icon(Icons.delete_outline, color: Colors.red),
-            title: const Text('Remove Profile Photo',
-                style: TextStyle(color: Colors.red)),
-            onTap: () => Navigator.pop(sheetContext, 'remove'),
-          ),
+          if (hasPhoto)
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Remove Profile Photo',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.pop(sheetContext, 'remove'),
+            ),
           const SizedBox(height: 8),
         ]),
       ),

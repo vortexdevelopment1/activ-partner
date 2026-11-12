@@ -948,7 +948,6 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.darkBlack,
                         backgroundColor: const Color(0xFFFFF7C9),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         side: BorderSide.none,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         shape: RoundedRectangleBorder(
@@ -980,7 +979,6 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF222222),
                         foregroundColor: const Color(0xFFD8F34A),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         disabledBackgroundColor:
                             const Color(0xFF222222).withValues(alpha: .6),
                         elevation: 0,

@@ -56,4 +56,23 @@ void main() {
       expect(isValidBankHolder(name), isFalse);
     }
   });
+
+  test('account type accepts manual letters and rejects paste and links', () {
+    final formatter = BankAccountInputFormatter(
+        allowed: bankAccountTypeCharacters, maxLength: 50);
+    expect(
+        formatter.formatEditUpdate(value('Savin'), value('Saving')).text,
+        'Saving');
+    expect(formatter.formatEditUpdate(value(''), value('Savings')).text, '');
+    expect(
+        formatter
+            .formatEditUpdate(
+                value(''), value('aps.app.goo.gl/WnEyiYLShTHjouvA6?g_st=ac'))
+            .text,
+        '');
+    expect(formatter.formatEditUpdate(value('Saving'), value('Saving1')).text,
+        'Saving');
+    expect(formatter.formatEditUpdate(value('Saving'), value('Saving/')).text,
+        'Saving');
+  });
 }

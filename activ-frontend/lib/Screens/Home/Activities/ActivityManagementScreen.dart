@@ -823,13 +823,17 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         _text(_description, color: Colors.grey, size: 13),
         const SizedBox(height: 14),
         Text.rich(
-            TextSpan(text: 'ACTIV ID: ', children: [
-              TextSpan(
-                  text: _activityReference.isNotEmpty
-                      ? _activityReference
-                      : 'Unavailable',
-                  style: const TextStyle(color: Colors.grey))
-            ]),
+            TextSpan(
+                text: 'ACTIV ID: ',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+                children: [
+                  TextSpan(
+                      text: _activityReference.isNotEmpty
+                          ? _activityReference
+                          : 'Unavailable',
+                      style: const TextStyle(
+                          color: Colors.grey, fontWeight: FontWeight.w400))
+                ]),
             style: const TextStyle(fontFamily: 'Satoshi', fontSize: 12)),
       ])),
     ]));
@@ -1429,8 +1433,9 @@ Widget _text(String text,
         Color color = const Color(0xFF303030)}) =>
     Text(text,
         style: TextStyle(
-            fontFamily: bold ? 'Satoshi' : 'Satoshi',
+            fontFamily: 'Satoshi',
             fontSize: size,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
             color: color));
 Widget _panel({required Widget child}) => Container(
     width: double.infinity,

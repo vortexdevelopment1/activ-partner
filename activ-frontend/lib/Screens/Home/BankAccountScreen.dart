@@ -1129,7 +1129,13 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                       allowed: bankHolderCharacters,
                                       maxLength: 100)
                                 ]
-                              : null,
+                              : controller == _typeController
+                                  ? [
+                                      BankAccountInputFormatter(
+                                          allowed: bankAccountTypeCharacters,
+                                          maxLength: 50)
+                                    ]
+                                  : null,
                   onChanged: ifsc
                       ? _ifscChanged
                       : onChanged ?? (_) => _validateLive(),
@@ -1232,9 +1238,15 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                           _type = value.trim().isEmpty ? null : value;
                           _validateLive();
                         },
-                        validator: (value) => (value ?? '').trim().isEmpty
-                            ? 'Enter account type.'
-                            : null),
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (text.isEmpty) return 'Enter account type.';
+                          if (!bankAccountTypeCharacters.hasMatch(text) ||
+                              text.length < 3) {
+                            return 'Enter a valid account type.';
+                          }
+                          return null;
+                        }),
                     const SizedBox(height: 14),
                     _field('Branch Name', 'Kormangala, Bengaluru', _branch,
                         required: false, readOnly: true),

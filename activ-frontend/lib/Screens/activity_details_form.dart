@@ -151,7 +151,7 @@ class ActivityDetailsHeading extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
       padding: const EdgeInsets.only(bottom: 26),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('$name (${activityBookingLabel(name, type: bookingType)})',
+        Text(name,
             style: const TextStyle(
                 fontFamily: 'Satoshi',
                 fontSize: 24,
@@ -322,11 +322,17 @@ class ActivityQuestionInput extends StatelessWidget {
                     child: DropdownButton<String>(
                         value: currentUnit,
                         isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down, size: 22),
+                        dropdownColor: Colors.white,
+                        borderRadius: BorderRadius.circular(9),
+                        elevation: 3,
+                        focusColor: Colors.transparent,
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            size: 22, color: Color(0xFF222222)),
                         style: activityInputStyle,
                         items: activityUnits(unit)
-                            .map((u) =>
-                                DropdownMenuItem(value: u, child: Text(u)))
+                            .map((u) => DropdownMenuItem(
+                                value: u,
+                                child: Text(u, style: activityInputStyle)))
                             .toList(),
                         onChanged: (value) {
                           if (value != null) onUnitChanged?.call(value);
@@ -443,23 +449,40 @@ class ActivityQuestionInput extends StatelessWidget {
         else if (type == 'radio')
           radio()
         else if (type == 'select')
-          DropdownButtonFormField<String>(
-              key: inputKey,
-              initialValue: options.contains(answer) ? answer as String : null,
-              isExpanded: true,
-              style: activityInputStyle,
-              icon: const Icon(Icons.keyboard_arrow_down, size: 24),
-              decoration: decoration.copyWith(hintText: null),
-              hint: Text(placeholder.isNotEmpty ? placeholder : 'Select',
-                  style: activityInputStyle.copyWith(color: Colors.grey)),
-              items: options
-                  .map((option) =>
-                      DropdownMenuItem(value: option, child: Text(option)))
-                  .toList(),
-              onChanged: options.isEmpty ? null : onChanged,
-              validator: (value) => required && value == null
-                  ? 'Please answer this question'
-                  : null)
+          Theme(
+            data: Theme.of(context).copyWith(
+              canvasColor: Colors.white,
+              hoverColor: const Color(0xFFF7F7F7),
+              highlightColor: const Color(0xFFF7F7F7),
+              splashColor: Colors.transparent,
+            ),
+            child: DropdownButtonFormField<String>(
+                key: inputKey,
+                initialValue:
+                    options.contains(answer) ? answer as String : null,
+                isExpanded: true,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(9),
+                elevation: 3,
+                focusColor: Colors.transparent,
+                menuMaxHeight: 250,
+                style: activityInputStyle,
+                icon: const Icon(Icons.keyboard_arrow_down,
+                    size: 24, color: Color(0xFF222222)),
+                decoration: decoration.copyWith(hintText: null),
+                hint: Text(placeholder.isNotEmpty ? placeholder : 'Select',
+                    style: activityInputStyle.copyWith(
+                        color: const Color(0xFF8A8C91))),
+                items: options
+                    .map((option) => DropdownMenuItem(
+                        value: option,
+                        child: Text(option, style: activityInputStyle)))
+                    .toList(),
+                onChanged: options.isEmpty ? null : onChanged,
+                validator: (value) => required && value == null
+                    ? 'Please answer this question'
+                    : null),
+          )
         else if (type == 'checkbox' || type == 'multiselect')
           Material(
               color: Colors.white,

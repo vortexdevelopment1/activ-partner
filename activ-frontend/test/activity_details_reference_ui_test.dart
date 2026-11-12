@@ -132,7 +132,7 @@ void main() {
       expect(find.bySemanticsLabel('ACTIV Partner'), findsOneWidget);
       expect(find.byIcon(Icons.arrow_back), findsNothing);
       expect(find.text('Back').hitTestable(), findsOneWidget);
-      expect(find.text('Yoga Studio (Single booking)'), findsOneWidget);
+      expect(find.text('Yoga Studio'), findsOneWidget);
       expect(find.text('Provide Activity Specific Details'), findsOneWidget);
       expect(find.text('25'), findsOneWidget);
       expect(find.text('0/150'), findsOneWidget);

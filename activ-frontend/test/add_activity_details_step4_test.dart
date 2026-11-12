@@ -74,7 +74,7 @@ void main() {
 
     expect(find.text('4/6'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_back), findsNothing);
-    expect(find.text('Badminton (Court booking)'), findsOneWidget);
+    expect(find.text('Badminton'), findsOneWidget);
     expect(find.text('Provide Activity Specific Details'), findsOneWidget);
     expect(find.textContaining('Activity Description'), findsOneWidget);
     expect(find.text('0/150'), findsOneWidget);

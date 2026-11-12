@@ -43,6 +43,7 @@ class BankAccountInputFormatter extends TextInputFormatter {
 final bankAccountDigits = RegExp(r'^[0-9]*$');
 final bankIfscPrefix = RegExp(r'^(?:[A-Z]{0,4}|[A-Z]{4}0[A-Z0-9]{0,6})$');
 final bankHolderCharacters = RegExp(r"^[\p{L}\p{M} .'-]*$", unicode: true);
+final bankAccountTypeCharacters = RegExp(r"^[\p{L} -]*$", unicode: true);
 
 bool isValidBankHolder(String value) =>
     value.trim().runes.length <= 100 &&

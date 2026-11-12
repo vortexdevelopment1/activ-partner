@@ -76,7 +76,7 @@ void main() {
     expect(find.byType(CategoryQuestionsScreen), findsOneWidget);
     expect(find.text('Update Activity Details'), findsNothing);
     expect(find.byIcon(Icons.arrow_back), findsNothing);
-    expect(find.text('Basketball (Court booking)'), findsOneWidget);
+    expect(find.text('Basketball'), findsOneWidget);
     expect(find.text('Provide Activity Specific Details'), findsOneWidget);
     expect(find.text('Save Changes'), findsOneWidget);
     expect(find.text('Tell us about your venue!'), findsNothing);

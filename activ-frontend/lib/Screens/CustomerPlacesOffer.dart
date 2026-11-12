@@ -253,6 +253,7 @@ class _State extends State<CustomerPlacesOffer> {
         "Tell customers what your venue has to offer",
         style: TextStyle(
             fontSize: AppSize.size_25,
+            fontWeight: FontWeight.bold,
             fontFamily: 'Satoshi',
             color: AppColors.darkBlack,
             height: 1.2

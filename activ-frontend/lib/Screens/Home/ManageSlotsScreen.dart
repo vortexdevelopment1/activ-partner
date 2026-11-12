@@ -326,11 +326,9 @@ class _State extends State<ManageSlotsScreen> {
         controller: controller,
         onChanged: (_) => _rememberDraft(),
         enabled: !_saving,
-        keyboardType: TextInputType.numberWithOptions(decimal: money),
+        keyboardType: TextInputType.number,
         inputFormatters: [
-          money
-              ? FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'))
-              : FilteringTextInputFormatter.digitsOnly
+          FilteringTextInputFormatter.digitsOnly,
         ],
         style: OnboardingStyles.body.copyWith(fontSize: 16),
         decoration: OnboardingStyles.inputDecoration(hintText: hint).copyWith(
