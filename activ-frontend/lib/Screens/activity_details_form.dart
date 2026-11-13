@@ -68,6 +68,17 @@ String activityBookingLabel(String name, {String? type}) {
 String activityStepperSuffix(String label) {
   final lower = label.toLowerCase();
   for (final entry in <String, String>{
+    'reformer': 'reformers',
+    'trampoline': 'trampolines',
+    'ground': 'grounds',
+    'horse': 'horses',
+    'climber': 'climbers',
+    'archer': 'archers',
+    'shooter': 'shooters',
+    'swimmer': 'swimmers',
+    'skater': 'skaters',
+    'player': 'players',
+    'participant': 'participants',
     'batch': 'per batch',
     'class': 'per batch',
     'capacity': 'people',
@@ -86,7 +97,8 @@ String activityStepperSuffix(String label) {
 
 List<String> activityUnits(String unit) => switch (unit) {
       'sq ft' || 'sq m' => ['sq ft', 'sq m'],
-      'meters' || 'ft' => ['meters', 'ft'],
+      'meters' || 'm' || 'ft' => ['m', 'ft'],
+      'mins' || 'min' || 'hours' => ['mins', 'hours'],
       _ => [unit],
     };
 
@@ -94,8 +106,10 @@ num activityConvertUnit(num value, String from, String to) {
   if (from == to) return value;
   if (from == 'sq ft' && to == 'sq m') return value * 0.09290304;
   if (from == 'sq m' && to == 'sq ft') return value / 0.09290304;
-  if (from == 'meters' && to == 'ft') return value / 0.3048;
-  if (from == 'ft' && to == 'meters') return value * 0.3048;
+  if ((from == 'meters' || from == 'm') && to == 'ft') return value / 0.3048;
+  if ((to == 'meters' || to == 'm') && from == 'ft') return value * 0.3048;
+  if (from == 'mins' && to == 'hours') return value / 60;
+  if (from == 'hours' && to == 'mins') return value * 60;
   return value;
 }
 
@@ -318,25 +332,11 @@ class ActivityQuestionInput extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: const BoxDecoration(
                     border: Border(left: BorderSide(color: _border))),
-                child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                        value: currentUnit,
-                        isExpanded: true,
-                        dropdownColor: Colors.white,
-                        borderRadius: BorderRadius.circular(9),
-                        elevation: 3,
-                        focusColor: Colors.transparent,
-                        icon: const Icon(Icons.keyboard_arrow_down,
-                            size: 22, color: Color(0xFF222222)),
-                        style: activityInputStyle,
-                        items: activityUnits(unit)
-                            .map((u) => DropdownMenuItem(
-                                value: u,
-                                child: Text(u, style: activityInputStyle)))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) onUnitChanged?.call(value);
-                        })))));
+                child: _UnitPicker(
+                  currentUnit: currentUnit,
+                  units: activityUnits(unit),
+                  onChanged: onUnitChanged,
+                ))));
   }
 
   Widget stepper() {
@@ -345,9 +345,10 @@ class ActivityQuestionInput extends StatelessWidget {
                 label.toLowerCase().contains('capacity')
             ? 25
             : 1);
+    final suffix = activityStepperSuffix(label);
     return Row(children: [
       Container(
-          width: 192,
+          width: 200,
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
@@ -358,16 +359,31 @@ class ActivityQuestionInput extends StatelessWidget {
             _stepButton(Icons.remove, 'Decrease $label',
                 value > 1 ? () => onChanged?.call(value - 1) : null),
             Expanded(
-                child: Text('$value',
-                    textAlign: TextAlign.center, style: activityInputStyle)),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$value', style: activityInputStyle),
+                    if (suffix.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        suffix,
+                        style: activityInputStyle.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: const Color(0xFF64685B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
             _stepButton(
                 Icons.add, 'Increase $label', () => onChanged?.call(value + 1)),
           ])),
-      const SizedBox(width: 18),
-      Flexible(
-          child: Text(activityStepperSuffix(label),
-              style: activityInputStyle.copyWith(
-                  fontSize: 14, color: const Color(0xFF64685B)))),
     ]);
   }
 
@@ -455,8 +471,11 @@ class ActivityQuestionInput extends StatelessWidget {
               hoverColor: const Color(0xFFF7F7F7),
               highlightColor: const Color(0xFFF7F7F7),
               splashColor: Colors.transparent,
+              buttonTheme: const ButtonThemeData(alignedDropdown: true),
             ),
-            child: DropdownButtonFormField<String>(
+            child: ButtonTheme(
+              alignedDropdown: true,
+              child: DropdownButtonFormField<String>(
                 key: inputKey,
                 initialValue:
                     options.contains(answer) ? answer as String : null,
@@ -482,6 +501,7 @@ class ActivityQuestionInput extends StatelessWidget {
                 validator: (value) => required && value == null
                     ? 'Please answer this question'
                     : null),
+            ),
           )
         else if (type == 'checkbox' || type == 'multiselect')
           Material(
@@ -525,3 +545,89 @@ class ActivityQuestionInput extends StatelessWidget {
                       fontSize: 12, color: Colors.grey))),
       ]));
 }
+
+class _UnitPicker extends StatelessWidget {
+  const _UnitPicker({
+    required this.currentUnit,
+    required this.units,
+    required this.onChanged,
+  });
+
+  final String currentUnit;
+  final List<String> units;
+  final ValueChanged<String>? onChanged;
+
+  void _showUnitMenu(BuildContext context) async {
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final translation = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    final media = MediaQuery.of(context);
+    final screenHeight = media.size.height;
+    final screenWidth = media.size.width;
+
+    final estimatedMenuHeight = units.length * 48.0 + 16.0;
+    final bottomBarThreshold = screenHeight - (media.padding.bottom + 100.0);
+    final openUpwards =
+        (translation.dy + size.height + estimatedMenuHeight) > bottomBarThreshold;
+
+    final RelativeRect position;
+    if (openUpwards) {
+      position = RelativeRect.fromLTRB(
+        translation.dx,
+        0,
+        screenWidth - translation.dx - size.width,
+        screenHeight - translation.dy + 4,
+      );
+    } else {
+      position = RelativeRect.fromLTRB(
+        translation.dx,
+        translation.dy + size.height + 4,
+        screenWidth - translation.dx - size.width,
+        0,
+      );
+    }
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      color: Colors.white,
+      items: units
+          .map((u) => PopupMenuItem<String>(
+                value: u,
+                height: 44,
+                child: Text(u, style: activityInputStyle),
+              ))
+          .toList(),
+    );
+
+    if (selected != null) {
+      onChanged?.call(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: units.length > 1 ? () => _showUnitMenu(context) : null,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              currentUnit,
+              style: activityInputStyle,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Icon(Icons.keyboard_arrow_down,
+              size: 22, color: Color(0xFF222222)),
+        ],
+      ),
+    );
+  }
+}
+

@@ -4662,12 +4662,33 @@ export class VenuesService {
       }
     }
 
+    const savedAnswers = this.prisma.partner_venue_answers
+      ? await this.prisma.partner_venue_answers.findMany({
+          where: {
+            venue_id: venueId,
+            OR: [
+              { venue_service_id: service.id },
+              {
+                venue_service_id: null,
+                partner_service_questions: {
+                  service_category_id: service.service_category_id,
+                },
+              },
+            ],
+          },
+          include: { partner_service_questions: true },
+        })
+      : [];
+
     return {
       serviceId,
       date,
       court: court ?? null,
       slotDurationMinutes,
-      courts: this.courtsFromOnboardingData(service.onboarding_data),
+      courts: this.courtsFromOnboardingData(
+        service.onboarding_data,
+        savedAnswers,
+      ),
       slots,
     };
   }
@@ -4680,16 +4701,69 @@ export class VenuesService {
     return value.getUTCHours() * 60 + value.getUTCMinutes();
   }
 
-  private courtsFromOnboardingData(value: unknown): string[] {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-    const data = value as Record<string, unknown>;
+  private courtsFromOnboardingData(
+    value: unknown,
+    savedAnswers: Array<{
+      answer: unknown;
+      partner_service_questions?: { question?: string } | null;
+    }> = [],
+  ): string[] {
+    const data =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
     const courts = data.courts;
-    if (Array.isArray(courts)) return courts.map(String);
-    const totalCourts = Number(data.numberOfCourt ?? data.totalCourts ?? 0);
-    if (!Number.isFinite(totalCourts) || totalCourts <= 0) return [];
+    if (Array.isArray(courts) && courts.length > 0) return courts.map(String);
+
+    let countFromAnswers = 0;
+    let detailFromAnswers = "";
+
+    for (const item of savedAnswers) {
+      const q = (item.partner_service_questions?.question ?? "").toLowerCase();
+      const ans = item.answer;
+      if (
+        q.includes("court") ||
+        q.includes("turf") ||
+        q.includes("net") ||
+        q.includes("table") ||
+        q.includes("ground")
+      ) {
+        if (
+          q.includes("no.") ||
+          q.includes("number") ||
+          q.includes("total")
+        ) {
+          const parsed = Number(ans);
+          if (Number.isFinite(parsed) && parsed > 0) countFromAnswers = parsed;
+        }
+      }
+      if (
+        q.includes("match format") ||
+        q.includes("turf size") ||
+        q.includes("court size") ||
+        q.includes("table size") ||
+        q.includes("court type")
+      ) {
+        if (typeof ans === "string" && ans.trim()) {
+          detailFromAnswers = ans.trim();
+        }
+      }
+    }
+
+    const totalCourts =
+      Number(data.numberOfCourt ?? data.totalCourts ?? 0) ||
+      countFromAnswers ||
+      1;
+    const detail =
+      (typeof data.matchFormat === "string" && data.matchFormat.trim()) ||
+      (typeof data.turfSize === "string" && data.turfSize.trim()) ||
+      (typeof data.courtType === "string" && data.courtType.trim()) ||
+      detailFromAnswers;
+    const suffix = detail ? ` (${detail})` : "";
+
     return Array.from(
       { length: totalCourts },
-      (_, index) => `Court ${String(index + 1).padStart(2, "0")}`,
+      (_, index) => `Court ${String(index + 1).padStart(2, "0")}${suffix}`,
     );
   }
 

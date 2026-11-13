@@ -28,9 +28,13 @@ DateTime? slotEndInstant(DateTime date, String startTime, String endTime) {
   final start = _minutes(startTime);
   final end = _minutes(endTime);
   if (start == null || end == null) return null;
-  final endMinutes = end <= start ? end + 24 * 60 : end;
+  final effectiveStart = start < 5 * 60 ? start + 24 * 60 : start;
+  var effectiveEnd = end < 5 * 60 ? end + 24 * 60 : end;
+  if (effectiveEnd <= effectiveStart) {
+    effectiveEnd += 24 * 60;
+  }
   return DateTime.utc(date.year, date.month, date.day)
-      .add(Duration(minutes: endMinutes)).subtract(_venueOffset);
+      .add(Duration(minutes: effectiveEnd)).subtract(_venueOffset);
 }
 
 bool slotHasEnded(DateTime date, String startTime, String endTime, DateTime now) {

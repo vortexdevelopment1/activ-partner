@@ -762,7 +762,7 @@ class _State extends State<CategoryQuestionsScreen> {
           if (_managedMode) { _saveManagedAnswers(); } else { _submitAnswers(); }
         }
       },
-      child: ListView(padding: EdgeInsets.symmetric(horizontal: activityDetailsGutter(context)), children: [
+      child: ListView(padding: EdgeInsets.fromLTRB(activityDetailsGutter(context), 0, activityDetailsGutter(context), 80), children: [
         ActivityDetailsHeading(name: name, bookingType: widget.currentCategory['type']?.toString()),
         if (_isLoading) const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
         else if (_errorMessage.isNotEmpty) Padding(padding: const EdgeInsets.all(20), child: Column(children: [

@@ -432,29 +432,32 @@ class _State extends State<SelectedVenueFormScreen> {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: selected,
-              hint: Text(
-                q.placeholder.isNotEmpty ? q.placeholder : 'Select an option',
+            child: ButtonTheme(
+              alignedDropdown: true,
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: selected,
+                hint: Text(
+                  q.placeholder.isNotEmpty ? q.placeholder : 'Select an option',
+                  style: TextStyle(
+                    fontSize: AppSize.size_14,
+                    fontFamily: 'Satoshi',
+                    color: AppColors.hintColor,
+                  ),
+                ),
                 style: TextStyle(
                   fontSize: AppSize.size_14,
                   fontFamily: 'Satoshi',
-                  color: AppColors.hintColor,
+                  color: AppColors.darkBlack,
                 ),
+                items: q.options
+                    .map((opt) => DropdownMenuItem<String>(
+                          value: opt,
+                          child: Text(opt),
+                        ))
+                    .toList(),
+                onChanged: q.options.isEmpty ? null : (val) => setState(() => _answers[q.id] = val),
               ),
-              style: TextStyle(
-                fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi',
-                color: AppColors.darkBlack,
-              ),
-              items: q.options
-                  .map((opt) => DropdownMenuItem<String>(
-                        value: opt,
-                        child: Text(opt),
-                      ))
-                  .toList(),
-              onChanged: q.options.isEmpty ? null : (val) => setState(() => _answers[q.id] = val),
             ),
           ),
         ),

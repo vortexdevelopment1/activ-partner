@@ -105,6 +105,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('31 October 2026, Saturday'), findsOneWidget);
     expect(find.text('09:00 AM - 10:00 AM'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('05:00 PM - 06:00 PM'), 200);
     await tester.tap(find.text('05:00 PM - 06:00 PM'));
     await tester.pump();
     await tester.tap(find.text('Next'));

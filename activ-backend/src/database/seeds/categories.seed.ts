@@ -50,6 +50,7 @@ export const CATEGORIES = [
   ["Paintball", "Paintball field bookings", ActivityType.TURF],
   ["Frisbee", "Frisbee field bookings", ActivityType.TURF],
   ["Cricket Nets", "Cricket nets bookings", ActivityType.CRICKET_NETS],
+  ["Others", "Other activity bookings", ActivityType.SINGLE],
 ] as const;
 
 export const toCategorySlug = (name: string): string =>

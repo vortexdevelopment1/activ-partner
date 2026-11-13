@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:activ_app/Beans/activity_model.dart';
 import 'package:activ_app/Screens/Home/Activities/DirectBookSlotScreen.dart';
@@ -280,5 +281,94 @@ void main() {
     final Text titleText = tester.widget(titleFinder);
     expect(titleText.maxLines, 1);
     expect(titleText.softWrap, isFalse);
+  });
+
+  testWidgets('shows friendly error message when remove reservation times out', (tester) async {
+    SharedPreferences.setMockInitialValues({'jwt_token': 'session'});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 950);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final client = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path.endsWith('/slots')) {
+        return http.Response(jsonEncode({
+          'data': {
+            'courts': ['Court 01'],
+            'slots': [
+              {
+                'startTime': '16:00',
+                'endTime': '17:00',
+                'status': 'walk_in_reserved',
+                'reservationId': 'res-timeout',
+              }
+            ],
+          }
+        }), 200, headers: {'content-type': 'application/json'});
+      }
+      if (request.method == 'GET' && request.url.path.contains('/walk-in/res-timeout')) {
+        return http.Response(jsonEncode({
+          'data': {
+            'id': 'res-timeout',
+            'venueName': 'Sports Arena Complex',
+            'court': 'Court 01',
+            'date': '2026-06-16',
+            'participantName': 'Virat Kohli',
+            'participantPhone': '+91 98000 00000',
+            'participantEmail': 'xyz@gmail.com',
+            'slots': [{'startTime': '16:00', 'endTime': '17:00'}],
+          }
+        }), 200, headers: {'content-type': 'application/json'});
+      }
+      if (request.method == 'DELETE' && request.url.path.contains('/walk-in/res-timeout')) {
+        throw TimeoutException('Future not completed');
+      }
+      return http.Response('{"message":"not found"}', 404);
+    });
+
+    final activity = ActivityModel.fromJson({
+      'activity_id': 'activity',
+      'operate_value': {'title': 'Badminton'},
+      'venue_timing': {
+        for (final day in [
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+          'Sunday'
+        ])
+          day: [
+            {'open': '09:00 AM', 'close': '11:00 PM'}
+          ]
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: DirectBookSlotScreen(
+        activity: activity,
+        activityData: const {},
+        venueId: 'venue',
+        venueName: 'Sports Arena Complex',
+        client: client,
+        now: () => DateTime(2026, 6, 16, 10, 0),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Walk-In Reserved'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Remove Reservation'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Remove Reservation'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Server is taking longer than usual to respond. Please try again.'), findsOneWidget);
   });
 }

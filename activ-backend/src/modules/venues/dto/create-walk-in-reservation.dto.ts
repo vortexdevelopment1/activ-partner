@@ -6,6 +6,8 @@ import {
   ValidateNested,
   IsNotEmpty,
   Matches,
+  IsEmail,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -54,6 +56,8 @@ export class CreateWalkInReservationDto {
   @ApiPropertyOptional({ example: 'virat@example.com' })
   @IsOptional()
   @IsString()
+  @ValidateIf((o) => typeof o.participantEmail === 'string' && o.participantEmail.trim().length > 0)
+  @IsEmail({}, { message: 'participantEmail must be a valid email address' })
   participantEmail?: string;
 
   @ApiPropertyOptional({ example: 'Cash' })

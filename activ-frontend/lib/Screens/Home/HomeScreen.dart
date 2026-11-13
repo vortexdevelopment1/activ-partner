@@ -24,6 +24,7 @@ import 'BankAccountScreen.dart';
 import 'ManagerHomeScreen.dart';
 import 'dashboard_setup_cards.dart';
 import 'NotificationsScreen.dart';
+import 'Activities/VenueActivityListScreen.dart';
 
 // ── Dummy data models ─────────────────────────────────────────────────────────
 
@@ -1065,7 +1066,7 @@ class _State extends State<HomeScreen> {
               : _noAccess,
         ),
         _actionCard(
-          title: 'Manage Slots',
+          title: 'Manage Slots & Pricing',
           subtitle: 'Add or update availability',
           image: 'assets/ic_manage_slot.png',
           onTap: _isPartner
@@ -1073,11 +1074,11 @@ class _State extends State<HomeScreen> {
               : _noAccess,
         ),
         _actionCard(
-          title: 'Manage Pricing',
-          subtitle: 'Manage pricing strategy',
+          title: 'Manage Activity',
+          subtitle: 'Update activity details',
           image: 'assets/ic_manage_price.png',
-          onTap: _permPricing
-              ? () => _openSetup(ManagePricingScreen(client: widget.client))
+          onTap: _isPartner
+              ? () => _openSetup(VenueActivityListScreen(client: widget.client))
               : _noAccess,
         ),
       ],

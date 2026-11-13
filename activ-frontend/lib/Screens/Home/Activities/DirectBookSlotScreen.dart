@@ -70,8 +70,15 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
         int.tryParse(
             widget.activityData['number_of_court']?.toString() ?? '') ??
         1;
+    final spec = (widget.activityData['matchFormat'] ??
+            widget.activityData['turfSize'] ??
+            widget.activityData['courtSize'] ??
+            widget.activityData['courtType'])
+        ?.toString()
+        .trim();
+    final suffix = spec != null && spec.isNotEmpty ? ' ($spec)' : '';
     return List.generate(count < 1 ? 1 : count,
-        (index) => 'Court ${(index + 1).toString().padLeft(2, '0')}');
+        (index) => 'Court ${(index + 1).toString().padLeft(2, '0')}$suffix');
   }
 
   List<_BookableSlot> get _slots {
@@ -783,6 +790,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
                               style: TextStyle(
                                   fontFamily: 'Satoshi',
                                   fontSize: 28,
+                                  fontWeight: FontWeight.w700,
                                   color: Color(0xFF202124))),
                         ),
                       ]),
@@ -794,7 +802,8 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
                       _readonly(_activityName),
                       const SizedBox(height: 24),
                       _label('Select Court', required: true),
-                      _picker(_selectedCourt, Icons.chevron_right, _pickCourt),
+                      _picker(
+                          _selectedCourt, Icons.keyboard_arrow_down, _pickCourt),
                       const SizedBox(height: 24),
                       _label('Select Date', required: true),
                       _picker(DateFormat('dd MMMM yyyy').format(_selectedDate),
@@ -902,15 +911,18 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
             TextSpan(text: text),
             if (required)
               const TextSpan(
-                  text: ' *', style: TextStyle(color: Color(0xFFFF6B6B))),
+                  text: '*', style: TextStyle(color: Color(0xFFFF6B6B))),
           ]),
           style: const TextStyle(
-              fontFamily: 'Satoshi', fontSize: 18, color: Color(0xFF202124)),
+              fontFamily: 'Satoshi',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF202124)),
         ),
       );
 
   Widget _readonly(String value) => Container(
-        height: 36,
+        height: 48,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
@@ -1299,6 +1311,11 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _email,
+                        onChanged: (_) {
+                          if (_showValidation) {
+                            _formKey.currentState?.validate();
+                          }
+                        },
                         keyboardType: TextInputType.emailAddress,
                         style: const TextStyle(
                           fontFamily: 'Satoshi',
@@ -1306,6 +1323,16 @@ class _WalkInParticipantScreenState extends State<_WalkInParticipantScreen> {
                           color: Color(0xFF202124),
                         ),
                         decoration: _input(hint: 'Enter Email'),
+                        validator: (value) {
+                          final trimmed = value?.trim() ?? '';
+                          if (trimmed.isEmpty) return null;
+                          final emailRegex = RegExp(
+                              r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                          if (!emailRegex.hasMatch(trimmed)) {
+                            return 'Enter a valid email address';
+                          }
+                          return null;
+                        },
                       ),
                       if (_error != null)
                         Padding(
@@ -1459,7 +1486,7 @@ class _WalkInSlotSelectionScreenState
     extends State<_WalkInSlotSelectionScreen> with WidgetsBindingObserver {
   Timer? _expiryTimer;
   late DateTime _date = widget.date;
-  late List<_BookableSlot> _slots = [...widget.slots];
+  late List<_BookableSlot> _slots = _BookableSlot.ensureFullDaySlots(widget.slots);
   late final List<_BookableSlot> _selectedSlots = [...widget.selectedSlots];
   bool _loadingDate = false;
 
@@ -1505,7 +1532,7 @@ class _WalkInSlotSelectionScreenState
       final slots = await widget.loadSlots(_date);
       if (!mounted) return;
       setState(() {
-        _slots = slots;
+        _slots = _BookableSlot.ensureFullDaySlots(slots);
         _selectedSlots.clear();
       });
       _scheduleExpiry();
@@ -1548,7 +1575,7 @@ class _WalkInSlotSelectionScreenState
       if (!mounted) return;
       setState(() {
         _date = next;
-        _slots = slots;
+        _slots = _BookableSlot.ensureFullDaySlots(slots);
         _selectedSlots.clear();
       });
       _scheduleExpiry();
@@ -1879,7 +1906,7 @@ class _WalkInReservationDetailsScreenState
         final uri = Uri.parse(
           '$BASE_URL/venues/${widget.venueId}/activities/${widget.serviceId}/walk-in/$_reservationId',
         );
-        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 15));
+        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 35));
         if (res.statusCode >= 200 && res.statusCode < 300) {
           final json = jsonDecode(res.body);
           if (json['data'] is Map) data = Map<String, dynamic>.from(json['data']);
@@ -1890,7 +1917,7 @@ class _WalkInReservationDetailsScreenState
         final uri = Uri.parse(
           '$BASE_URL/venues/${widget.venueId}/activities/${widget.serviceId}/walk-in?date=$dateStr',
         );
-        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 15));
+        final res = await get(uri, headers: headers).timeout(const Duration(seconds: 35));
         if (res.statusCode >= 200 && res.statusCode < 300) {
           final json = jsonDecode(res.body);
           final list = json['data'] is List ? json['data'] as List : [];
@@ -2078,7 +2105,7 @@ class _WalkInReservationDetailsScreenState
       final res = await del(
         uri,
         headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 35));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         final body = jsonDecode(res.body);
         throw Exception(body['message'] ?? 'Failed to remove reservation.');
@@ -2093,10 +2120,23 @@ class _WalkInReservationDetailsScreenState
           ),
         ),
       );
-    } catch (e) {
+    } on TimeoutException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          const SnackBar(
+            content: Text(
+              'Server is taking longer than usual to respond. Please try again.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final message = e.toString().contains('TimeoutException')
+            ? 'Server is taking longer than usual to respond. Please try again.'
+            : e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
         );
       }
     } finally {
@@ -2703,6 +2743,58 @@ class _BookableSlot {
     final suffix = hour >= 12 ? 'PM' : 'AM';
     final displayHour = hour % 12 == 0 ? 12 : hour % 12;
     return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $suffix';
+  }
+
+  static List<_BookableSlot> ensureFullDaySlots(List<_BookableSlot> source) {
+    if (source.isEmpty) return const [];
+    const hoursOrder = [
+      5, 6, 7, 8, 9, 10, 11, // Morning: 5 AM - 12 PM
+      12, 13, 14, 15,         // Afternoon: 12 PM - 4 PM
+      16, 17, 18, 19, 20,     // Evening: 4 PM - 9 PM
+      21, 22, 23, 0, 1, 2, 3, 4, // Night: 9 PM - 5 AM
+    ];
+
+    int? parseStartHour(String timeStr) {
+      final trimmed = timeStr.trim();
+      final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(trimmed);
+      if (match == null) return null;
+      var hour = int.parse(match[1]!);
+      final upper = trimmed.toUpperCase();
+      if (upper.contains('PM') && hour != 12) hour += 12;
+      if (upper.contains('AM') && hour == 12) hour = 0;
+      return hour;
+    }
+
+    final result = <_BookableSlot>[];
+    final consumed = <_BookableSlot>{};
+
+    for (final hour in hoursOrder) {
+      final matches = source
+          .where((s) => !consumed.contains(s) && parseStartHour(s.startTime) == hour)
+          .toList();
+      if (matches.isNotEmpty) {
+        result.addAll(matches);
+        consumed.addAll(matches);
+      } else {
+        final startStr = '${hour.toString().padLeft(2, '0')}:00';
+        final nextHour = (hour + 1) % 24;
+        final endStr = '${nextHour.toString().padLeft(2, '0')}:00';
+        result.add(_BookableSlot(
+          label: '${_displayTime(startStr)} - ${_displayTime(endStr)}',
+          startTime: startStr,
+          endTime: endStr,
+          status: 'not_operational',
+        ));
+      }
+    }
+
+    for (final s in source) {
+      if (!consumed.contains(s)) {
+        result.add(s);
+      }
+    }
+
+    return result;
   }
 }
 

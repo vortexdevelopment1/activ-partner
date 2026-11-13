@@ -234,7 +234,7 @@ class _AddActivityDetailsScreenState extends State<AddActivityDetailsScreen> {
           TextButton(onPressed: _load, child: const Text('Retry')),
         ]))
       : Form(key: _formKey, child: ListView(
-          padding: EdgeInsets.symmetric(horizontal: activityDetailsGutter(context)),
+          padding: EdgeInsets.fromLTRB(activityDetailsGutter(context), 0, activityDetailsGutter(context), 80),
           children: [
             ActivityDetailsHeading(name: _activityName, bookingType: _bookingType),
             if (_questions.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No extra details needed')),

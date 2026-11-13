@@ -6,10 +6,10 @@ describe("activity detail field catalogue", () => {
     expect(Object.keys(ACTIVITY_FIELDS).sort()).toEqual(
       CATEGORIES.map(([name]) => name).sort(),
     );
-    expect(Object.keys(ACTIVITY_FIELDS)).toHaveLength(38);
+    expect(Object.keys(ACTIVITY_FIELDS)).toHaveLength(39);
   });
 
-  it("uses the supplied Gym and Adventure Sports field definitions", () => {
+  it("uses the supplied Gym, Adventure Sports, Badminton, Basketball and Others field definitions", () => {
     expect(ACTIVITY_FIELDS.Gym.map((field) => field.question)).toEqual([
       "Activity Description",
       "Total Floor Area",
@@ -28,6 +28,35 @@ describe("activity detail field catalogue", () => {
       "Safety Equipment",
       "Instructor Present",
       "Age Restriction",
+    ]);
+    expect(ACTIVITY_FIELDS.Badminton.map((field) => field.question)).toEqual([
+      "Activity Description",
+      "No. of Courts",
+      "Indoor/Outdoor",
+      "Flooring Type",
+      "Ceiling Height",
+      "Lighting Quality",
+      "Equipment Provided",
+      "Max Players",
+    ]);
+    expect(ACTIVITY_FIELDS.Basketball.map((field) => field.question)).toEqual([
+      "Activity Description",
+      "No. of Courts",
+      "Full/Half Court",
+      "Indoor/Outdoor",
+      "Floor Type",
+      "Lighting",
+      "Ball Provided",
+      "Max Players",
+    ]);
+    expect(ACTIVITY_FIELDS.Others.map((field) => field.question)).toEqual([
+      "Activity Description",
+      "Activity Name",
+      "Indoor/Outdoor",
+      "Capacity",
+      "Equipment Provided",
+      "Safety Measures",
+      "Session Duration",
     ]);
     expect(ACTIVITY_FIELDS["Adventure Sports"][0]).toMatchObject({
       required: true,
