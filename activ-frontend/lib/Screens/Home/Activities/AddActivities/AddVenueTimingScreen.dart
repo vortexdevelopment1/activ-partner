@@ -24,9 +24,10 @@ class DayTiming {
 class AddVenueTimingScreen extends StatefulWidget {
   final String activityId;
   const AddVenueTimingScreen(
-      {super.key, required this.activityId, this.client, this.initialTiming});
+      {super.key, required this.activityId, this.client, this.initialTiming, this.isEdit = false});
   final Map<String, dynamic>? initialTiming;
   final http.Client? client;
+  final bool isEdit;
 
   @override
   State<AddVenueTimingScreen> createState() => _State();
@@ -101,18 +102,22 @@ class _State extends State<AddVenueTimingScreen> {
     try {
       final activity = await _api.activity(widget.activityId);
       if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => AddActivityConfigureScreen(
-            activityId: widget.activityId,
-            timing: buildVenueTiming(),
-            activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
-                .toString(),
-            client: widget.client,
-            hasPreviousTimingRoute: true,
-          ),
-        ));
+      if (widget.isEdit) {
+        Navigator.pop(context, true);
+      } else {
+        await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => AddActivityConfigureScreen(
+              activityId: widget.activityId,
+              timing: buildVenueTiming(),
+              activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
+                  .toString(),
+              client: widget.client,
+              hasPreviousTimingRoute: true,
+            ),
+          ));
+      }
       if (mounted) {
         await ActivityFlowCheckpoint.save(activityId: widget.activityId,
             step: 'timing', data: {'timing': buildVenueTiming()});

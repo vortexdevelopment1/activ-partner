@@ -12,6 +12,7 @@ class AddSelectedVenueFormScreen extends StatelessWidget {
     this.initialActivity,
     this.initialQuestions,
     this.client,
+    this.isEdit = false,
   });
 
   final String activityId;
@@ -20,6 +21,7 @@ class AddSelectedVenueFormScreen extends StatelessWidget {
   final Map<String, dynamic>? initialActivity;
   final List<Map<String, dynamic>>? initialQuestions;
   final http.Client? client;
+  final bool isEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,7 @@ class AddSelectedVenueFormScreen extends StatelessWidget {
             initialActivity: initialActivity,
             initialQuestions: initialQuestions,
             client: client,
+            isEdit: isEdit,
           );
         },
       );
@@ -58,6 +61,7 @@ class AddSelectedVenueFormScreen extends StatelessWidget {
       initialActivity: initialActivity,
       initialQuestions: initialQuestions,
       client: client,
+      isEdit: isEdit,
     );
   }
 }

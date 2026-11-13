@@ -211,38 +211,50 @@ class _State extends State<AddActivityConfigureScreen> {
               .toList(),
       };
 
-  void _editDetails() {
-    Navigator.push(
+  void _editDetails() async {
+    final updated = await Navigator.push<bool>(
         context,
-        MaterialPageRoute<void>(
+        MaterialPageRoute<bool>(
           builder: (_) => AddSelectedVenueFormScreen(
             activityId: widget.activityId,
             client: widget.client,
+            isEdit: true,
           ),
         ));
+    if (updated == true && mounted) {
+      _load();
+    }
   }
 
-  void _editAmenities() {
-    Navigator.push(
+  void _editAmenities() async {
+    final updated = await Navigator.push<bool>(
         context,
-        MaterialPageRoute<void>(
+        MaterialPageRoute<bool>(
           builder: (_) => AddActivityAmenitiesScreen(
             activityId: widget.activityId,
             client: widget.client,
+            isEdit: true,
           ),
         ));
+    if (updated == true && mounted) {
+      _load();
+    }
   }
 
-  void _editTiming() {
-    Navigator.push(
+  void _editTiming() async {
+    final updated = await Navigator.push<bool>(
         context,
-        MaterialPageRoute<void>(
+        MaterialPageRoute<bool>(
           builder: (_) => AddVenueTimingScreen(
             activityId: widget.activityId,
             initialTiming: _timingForEdit,
             client: widget.client,
+            isEdit: true,
           ),
         ));
+    if (updated == true && mounted) {
+      _load();
+    }
   }
 
   @override

@@ -18,9 +18,10 @@ import '../../../onboarding_widgets.dart';
 
 class AddActivityAmenitiesScreen extends StatefulWidget {
   const AddActivityAmenitiesScreen(
-      {super.key, required this.activityId, this.client});
+      {super.key, required this.activityId, this.client, this.isEdit = false});
   final String activityId;
   final http.Client? client;
+  final bool isEdit;
 
   @override
   State<AddActivityAmenitiesScreen> createState() =>
@@ -93,11 +94,15 @@ class _AddActivityAmenitiesScreenState
               .map((item) => item.title)
               .toList());
       if (!mounted) return;
-      await Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-              builder: (_) => AddVenueTimingScreen(
-                  activityId: widget.activityId, client: widget.client)));
+      if (widget.isEdit) {
+        Navigator.pop(context, true);
+      } else {
+        await Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+                builder: (_) => AddVenueTimingScreen(
+                    activityId: widget.activityId, client: widget.client)));
+      }
     } catch (error) {
       if (mounted) CommonUtilities.createSnackBar(context, error.toString());
     } finally {

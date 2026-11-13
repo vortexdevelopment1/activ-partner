@@ -225,7 +225,7 @@ class _AddActivityDetailsScreenState extends State<AddActivityDetailsScreen> {
   Widget build(BuildContext context) => ActivityDetailsLayout(
     currentStep: widget.isEdit ? null : 4,
     totalSteps: widget.isEdit ? null : 6,
-    buttonLabel: widget.isEdit ? 'Save Changes' : 'Next',
+    buttonLabel: 'Next',
     saving: _saving,
     onContinue: _loading || _error != null ? null : _save,
     child: _loading ? const Center(child: CircularProgressIndicator())
