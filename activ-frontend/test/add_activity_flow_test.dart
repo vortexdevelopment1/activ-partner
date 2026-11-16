@@ -261,8 +261,6 @@ void main() {
     expect(find.text('4/6'), findsOneWidget);
     expect(find.text('Pickle Ball'), findsOneWidget);
     expect(find.text('No extra details needed'), findsOneWidget);
-    expect(find.text('You can continue to choose amenities for Pickle Ball.'),
-        findsOneWidget);
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(find.byType(AddActivityAmenitiesScreen), findsOneWidget);

@@ -29,21 +29,50 @@ class AddActivityConfigureScreen extends StatefulWidget {
 
 class _State extends State<AddActivityConfigureScreen> {
   late final ActivitySetupApi _api;
+  late Map<String, dynamic> _timing;
   List<Map<String, dynamic>> _questions = [];
   Map<String, dynamic> _activity = {};
   bool _loading = true, _editingPhotos = false;
   String? _loadError;
   bool _leaving = false;
 
-  String _priceValue(Map slot, String key, {String fallback = '-'}) {
-    final value = slot[key];
-    if (value == null || value.toString().trim().isEmpty) return fallback;
-    return value.toString();
+  static const List<String> _shortDays = [
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+  ];
+  static const Map<String, String> _dayMap = {
+    'Mon': 'Monday',
+    'Tue': 'Tuesday',
+    'Wed': 'Wednesday',
+    'Thu': 'Thursday',
+    'Fri': 'Friday',
+    'Sat': 'Saturday',
+    'Sun': 'Sunday',
+  };
+
+  List<dynamic> _getSlotsForDay(String shortDay) {
+    final fullDay = _dayMap[shortDay] ?? shortDay;
+    final val = _timing[fullDay] ?? _timing[shortDay];
+    return (val is List) ? val : [];
+  }
+
+  bool _isDayActive(String shortDay) {
+    final slots = _getSlotsForDay(shortDay);
+    return slots.any((s) =>
+        s is Map &&
+        s['open'] != null &&
+        s['open'] != '-' &&
+        s['open'].toString().trim().isNotEmpty);
   }
 
   @override
   void initState() {
     super.initState();
+    _timing = {
+      for (final entry in widget.timing.entries)
+        entry.key: (entry.value as List)
+            .map((slot) => Map<String, String>.from(slot as Map))
+            .toList(),
+    };
     _api = ActivitySetupApi(client: widget.client);
     _saveInterruptedCheckpoint();
     _load();
@@ -111,13 +140,18 @@ class _State extends State<AddActivityConfigureScreen> {
     await ActivityFlowCheckpoint.save(
       activityId: widget.activityId,
       step: 'configure',
-      data: {'activityName': widget.activityName, 'timing': widget.timing},
+      data: {'activityName': widget.activityName, 'timing': _timing},
     );
   }
 
   void _backToPreviousAddStep() {
     if (_leaving) return;
     _leaving = true;
+    ActivityFlowCheckpoint.save(
+      activityId: widget.activityId,
+      step: 'timing',
+      data: {'timing': _timing},
+    );
     if (widget.hasPreviousTimingRoute && Navigator.of(context).canPop()) {
       Navigator.pop(context);
       return;
@@ -129,7 +163,7 @@ class _State extends State<AddActivityConfigureScreen> {
       MaterialPageRoute<void>(
         builder: (_) => AddVenueTimingScreen(
           activityId: widget.activityId,
-          initialTiming: widget.timing,
+          initialTiming: _timing,
           client: widget.client,
         ),
       ),
@@ -204,13 +238,6 @@ class _State extends State<AddActivityConfigureScreen> {
             : _editPhotos);
   }
 
-  Map<String, dynamic> get _timingForEdit => {
-        for (final entry in widget.timing.entries)
-          entry.key: (entry.value as List)
-              .map((slot) => Map<String, String>.from(slot as Map))
-              .toList(),
-      };
-
   void _editDetails() async {
     final updated = await Navigator.push<bool>(
         context,
@@ -242,17 +269,40 @@ class _State extends State<AddActivityConfigureScreen> {
   }
 
   void _editTiming() async {
-    final updated = await Navigator.push<bool>(
+    final updated = await Navigator.push<dynamic>(
         context,
-        MaterialPageRoute<bool>(
+        MaterialPageRoute<dynamic>(
           builder: (_) => AddVenueTimingScreen(
             activityId: widget.activityId,
-            initialTiming: _timingForEdit,
+            initialTiming: _timing,
             client: widget.client,
             isEdit: true,
           ),
         ));
-    if (updated == true && mounted) {
+    if (updated != null && mounted) {
+      if (updated is Map<String, dynamic>) {
+        setState(() {
+          _timing = {
+            for (final entry in updated.entries)
+              entry.key: (entry.value as List)
+                  .map((slot) => Map<String, String>.from(slot as Map))
+                  .toList(),
+          };
+        });
+      } else {
+        final cp = await ActivityFlowCheckpoint.read(widget.activityId);
+        if (cp?.data['timing'] is Map) {
+          setState(() {
+            _timing = {
+              for (final entry in (cp!.data['timing'] as Map).entries)
+                entry.key.toString(): (entry.value as List)
+                    .map((slot) => Map<String, String>.from(slot as Map))
+                    .toList(),
+            };
+          });
+        }
+      }
+      await _saveInterruptedCheckpoint();
       _load();
     }
   }
@@ -301,39 +351,238 @@ class _State extends State<AddActivityConfigureScreen> {
                       .join('\n')),
                   onEdit: _editAmenities),
               _card(
-                  'Operational Details',
-                  Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                'Operational Details',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Operating Days',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Satoshi',
+                        color: AppColors.darkBlack,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        for (final e in widget.timing.entries.where((e) =>
-                            (e.value as List? ?? []).any((s) =>
-                                s['open'] != null && s['open'] != '-'))) ...[
-                          Text(e.key.toString(),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700)),
-                          for (final s in (e.value as List))
+                        for (final shortDay in _shortDays)
+                          Builder(builder: (_) {
+                            final isActive = _isDayActive(shortDay);
+                            return Text(
+                              shortDay,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontFamily: 'Satoshi',
+                                fontWeight: isActive
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: isActive
+                                    ? AppColors.darkBlack
+                                    : const Color(0xFFB0B0B0),
+                                decoration: isActive
+                                    ? TextDecoration.none
+                                    : TextDecoration.lineThrough,
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                    const Divider(
+                        color: Color(0xFFE8E8E8), height: 32, thickness: 1),
+                    const Text(
+                      'Day Wise Timings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Satoshi',
+                        color: AppColors.darkBlack,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Builder(builder: (_) {
+                      final activeShortDays =
+                          _shortDays.where(_isDayActive).toList();
+                      if (activeShortDays.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Text(
+                            'No operating timings added.',
+                            style:
+                                TextStyle(fontSize: 14, color: AppColors.gray),
+                          ),
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (int i = 0; i < activeShortDays.length; i++) ...[
                             Builder(builder: (_) {
-                              final basePrice = _priceValue(s as Map, 'price',
-                                  fallback: _priceValue(s, 'price_paise',
-                                      fallback: '-'));
-                              final discountPrice = _priceValue(
-                                  s, 'discountedPrice',
-                                  fallback: basePrice);
-                              final price = double.tryParse(basePrice);
-                              final discounted = double.tryParse(discountPrice);
-                              final percent = price != null &&
-                                      price > 0 &&
-                                      discounted != null
-                                  ? ((price - discounted) / price * 100).round()
-                                  : 0;
-                              return Text(
-                                  '${s['open'] ?? s['openTime'] ?? '-'}    ${s['close'] ?? s['closeTime'] ?? '-'}    ₹$discountPrice'
-                                  '${percent > 0 ? '  ($percent% OFF)' : ''}');
+                              final shortDay = activeShortDays[i];
+                              final fullDay = _dayMap[shortDay] ?? shortDay;
+                              final slots = _getSlotsForDay(shortDay)
+                                  .where((s) =>
+                                      s is Map &&
+                                      s['open'] != null &&
+                                      s['open'] != '-' &&
+                                      s['open']
+                                          .toString()
+                                          .trim()
+                                          .isNotEmpty)
+                                  .toList();
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    fullDay,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      fontFamily: 'Satoshi',
+                                      color: AppColors.darkBlack,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  for (final rawSlot in slots)
+                                    Builder(builder: (_) {
+                                      final slot = rawSlot as Map;
+                                      final openTime = slot['open'] ??
+                                          slot['openTime'] ??
+                                          '-';
+                                      final closeTime = slot['close'] ??
+                                          slot['closeTime'] ??
+                                          '-';
+                                      final priceVal =
+                                          slot['price']?.toString().trim();
+                                      final discountedVal =
+                                          slot['discountedPrice']
+                                              ?.toString()
+                                              .trim();
+                                      final slotPrice = (priceVal != null &&
+                                              priceVal.isNotEmpty &&
+                                              priceVal != '-')
+                                          ? priceVal
+                                          : (discountedVal != null &&
+                                                  discountedVal.isNotEmpty &&
+                                                  discountedVal != '-')
+                                              ? discountedVal
+                                              : '-';
+
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                            bottom: 12.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: const [
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    'Open Time',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontFamily: 'Satoshi',
+                                                      color: Color(0xFF8E8E93),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    'Close Time',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontFamily: 'Satoshi',
+                                                      color: Color(0xFF8E8E93),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    'Slot Price',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontFamily: 'Satoshi',
+                                                      color: Color(0xFF8E8E93),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    openTime.toString(),
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontFamily: 'Satoshi',
+                                                      color:
+                                                          AppColors.darkBlack,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    closeTime.toString(),
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontFamily: 'Satoshi',
+                                                      color:
+                                                          AppColors.darkBlack,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    slotPrice,
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontFamily: 'Satoshi',
+                                                      color:
+                                                          AppColors.darkBlack,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                ],
+                              );
                             }),
-                          const Divider(),
+                            if (i < activeShortDays.length - 1)
+                              const Divider(
+                                  color: Color(0xFFE8E8E8),
+                                  height: 28,
+                                  thickness: 1),
+                          ],
                         ],
-                      ]),
-                  onEdit: _editTiming),
+                      );
+                    }),
+                  ],
+                ),
+                onEdit: _editTiming,
+              ),
             ])),
         Padding(
             padding: const EdgeInsets.all(20),
@@ -355,7 +604,7 @@ class _State extends State<AddActivityConfigureScreen> {
                                   activityId: widget.activityId,
                                   activityName: widget.activityName,
                                   timing: {
-                                    for (final e in widget.timing.entries)
+                                    for (final e in _timing.entries)
                                       e.key: (e.value as List)
                                           .map((s) => Map<String, String>.from(
                                               s as Map))

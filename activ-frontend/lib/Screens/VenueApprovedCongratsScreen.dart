@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:no_context_navigation/no_context_navigation.dart';
+
 import '../Style/app_colors.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
@@ -53,9 +57,19 @@ class _VenueApprovedCongratsScreenState
 
     try {
       final venueId = widget.venueId.trim();
+      final displayRef = _displayVenueReference;
       if (venueId.isNotEmpty) {
+        // Mark both ID-based and reference-based keys to ensure it is never shown again
         await SharedPreference.addStringToSF(
             "venue_approved_seen_$venueId", "true");
+        if (displayRef.isNotEmpty) {
+          await SharedPreference.addStringToSF(
+              "venue_approved_seen_$displayRef", "true");
+          await SharedPreference.addStringToSF(
+              "venue_approved_seen_#$displayRef", "true");
+        }
+        await SharedPreference.addStringToSF(
+            "venue_approved_welcome_seen", "true");
         await SharedPreference.addStringToSF("venue_id", venueId);
         if (widget.venueName != null && widget.venueName!.trim().isNotEmpty) {
           await SharedPreference.addStringToSF(
@@ -79,6 +93,8 @@ class _VenueApprovedCongratsScreenState
       }
     } catch (e) {
       CommonUtilities.showLog("Error in VenueApprovedCongratsScreen: $e");
+    } finally {
+      VenueApprovalService.isShowingCongrats = false;
     }
 
     if (!mounted) return;
@@ -86,6 +102,12 @@ class _VenueApprovedCongratsScreenState
       context,
       HomeScreen(client: widget.client),
     );
+  }
+
+  @override
+  void dispose() {
+    VenueApprovalService.isShowingCongrats = false;
+    super.dispose();
   }
 
   @override
@@ -230,5 +252,217 @@ class _VenueApprovedCongratsScreenState
         ),
       ),
     );
+  }
+}
+
+class VenueApprovalService {
+  static bool _isChecking = false;
+  static bool isShowingCongrats = false;
+  static Timer? _pollTimer;
+  static http.Client? _activeClient;
+
+  /// Checks MY_APPROVED_VENUES_URL for any approved venue that hasn't seen the welcome screen.
+  static Future<Map<String, dynamic>?> checkUnseenApprovedVenue({
+    String? token,
+    http.Client? client,
+  }) async {
+    try {
+      final jwt = token ?? await SharedPreference.readStr("jwt_token");
+      if (jwt == null || jwt.trim().isEmpty) return null;
+
+      final httpClient = client ?? _activeClient;
+      final response = await (httpClient?.get ?? http.get)(
+        Uri.parse(MY_APPROVED_VENUES_URL),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer ${jwt.trim()}',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final list = (body['data'] is List) ? body['data'] as List : [];
+        for (final item in list) {
+          if (item is Map) {
+            final venueMap = Map<String, dynamic>.from(item);
+            final venueId = venueMap['id']?.toString() ?? '';
+            final venueRef = venueMap['publicReference']?.toString() ??
+                venueMap['venueReference']?.toString() ??
+                '';
+            final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
+            final seenById = venueId.isNotEmpty
+                ? await SharedPreference.readStr('venue_approved_seen_$venueId')
+                : null;
+            final seenByRef = venueRef.isNotEmpty
+                ? await SharedPreference.readStr('venue_approved_seen_$venueRef')
+                : null;
+            final seenByHashRef = venueRef.isNotEmpty
+                ? await SharedPreference.readStr('venue_approved_seen_#$venueRef')
+                : null;
+
+            // If already marked seen on backend or locally, skip this venue completely
+            if (hasSeenBackend ||
+                seenById == 'true' ||
+                seenByRef == 'true' ||
+                seenByHashRef == 'true') {
+              continue;
+            }
+            if (venueId.isNotEmpty) {
+              return venueMap;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      CommonUtilities.showLog('VenueApprovalService check error: $e');
+    }
+    return null;
+  }
+
+  /// Checks if there is an unseen approved venue and immediately shows the congrats screen.
+  static Future<bool> checkAndShowCongrats({
+    BuildContext? context,
+    http.Client? client,
+  }) async {
+    if (_isChecking || isShowingCongrats) return false;
+    _isChecking = true;
+    try {
+      final unseenVenue = await checkUnseenApprovedVenue(client: client);
+      if (unseenVenue != null) {
+        if (isShowingCongrats) return false;
+
+        final venueId = unseenVenue['id']?.toString() ?? '';
+        final venueRef = unseenVenue['publicReference']?.toString() ??
+            unseenVenue['venueReference']?.toString() ??
+            (venueId.length >= 6
+                ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase()
+                : venueId);
+        final venueName = unseenVenue['name']?.toString();
+
+        await SharedPreference.addStringToSF("is_active", "true");
+        if (venueId.isNotEmpty) {
+          await SharedPreference.addStringToSF("venue_id", venueId);
+        }
+        if (venueName != null && venueName.isNotEmpty) {
+          await SharedPreference.addStringToSF("venue_name", venueName);
+        }
+
+        isShowingCongrats = true;
+        final target = VenueApprovedCongratsScreen(
+          venueId: venueId,
+          venueReference: venueRef,
+          venueName: venueName,
+          client: client ?? _activeClient,
+        );
+
+        if (context != null && context.mounted) {
+          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+            context,
+            target,
+          );
+          return true;
+        }
+
+        final navState = NavigationService.navigationKey.currentState;
+        if (navState != null) {
+          await navState.pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => target),
+            (_) => false,
+          );
+          return true;
+        }
+      }
+    } catch (e) {
+      CommonUtilities.showLog('VenueApprovalService show error: $e');
+    } finally {
+      _isChecking = false;
+    }
+    return false;
+  }
+
+  /// Starts polling every [interval] while the app is in foreground.
+  static void startPolling({
+    http.Client? client,
+    Duration interval = const Duration(seconds: 3),
+  }) {
+    if (client != null) _activeClient = client;
+    _pollTimer?.cancel();
+    checkAndShowCongrats(client: client);
+    _pollTimer = Timer.periodic(interval, (_) {
+      checkAndShowCongrats(client: client);
+    });
+  }
+
+  /// Stops polling.
+  static void stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  /// Resets checking and congratulation state (primarily for tests).
+  static void resetState() {
+    _isChecking = false;
+    isShowingCongrats = false;
+    stopPolling();
+  }
+}
+
+/// Global widget that listens for app lifecycle changes and actively polls
+/// for venue approval while the app is running.
+class VenueApprovalWatcher extends StatefulWidget {
+  final Widget? child;
+  final http.Client? client;
+
+  const VenueApprovalWatcher({super.key, this.child, this.client});
+
+  @override
+  State<VenueApprovalWatcher> createState() => _VenueApprovalWatcherState();
+}
+
+class _VenueApprovalWatcherState extends State<VenueApprovalWatcher>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startWatcher();
+  }
+
+  void _startWatcher() {
+    _timer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _check();
+    });
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _check();
+    });
+  }
+
+  Future<void> _check() async {
+    final token = await SharedPreference.readStr("jwt_token");
+    if (token != null && token.isNotEmpty) {
+      await VenueApprovalService.checkAndShowCongrats(client: widget.client);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _check();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child ?? const SizedBox.shrink();
   }
 }

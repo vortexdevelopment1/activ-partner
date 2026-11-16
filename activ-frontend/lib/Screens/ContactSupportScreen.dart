@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'VenueApprovedCongratsScreen.dart';
 
 import 'package:activ_app/Screens/StringExtensions.dart';
 import 'package:activ_app/Style/app_colors.dart';
@@ -13,14 +15,16 @@ import 'LoginScreen.dart';
 import 'onboarding_widgets.dart';
 
 class ContactSupportScreen extends StatefulWidget {
-  const ContactSupportScreen({super.key, this.emailWarning});
+  const ContactSupportScreen({super.key, this.emailWarning, this.client});
   final String? emailWarning;
+  final http.Client? client;
 
   @override
   State<ContactSupportScreen> createState() => _State();
 }
 
-class _State extends State<ContactSupportScreen> {
+class _State extends State<ContactSupportScreen> with WidgetsBindingObserver {
+  Timer? _approvalPollTimer;
   String _venueId = '';
   String _venueName = '';
   String? _emailWarning;
@@ -29,8 +33,40 @@ class _State extends State<ContactSupportScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _emailWarning = widget.emailWarning;
     _loadVenueInfo();
+    _startApprovalPolling();
+  }
+
+  void _startApprovalPolling() {
+    _approvalPollTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkApproval());
+    _approvalPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _checkApproval();
+    });
+  }
+
+  Future<void> _checkApproval() async {
+    if (!mounted) return;
+    await VenueApprovalService.checkAndShowCongrats(
+      context: context,
+      client: widget.client,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkApproval();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _approvalPollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _retryAgreementEmail() async {

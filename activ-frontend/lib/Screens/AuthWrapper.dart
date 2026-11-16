@@ -239,21 +239,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
+      final unseenVenue = await _checkUnseenApprovedVenue(token);
+      if (unseenVenue != null) {
+        final venueId = unseenVenue['id']?.toString() ?? '';
+        final venueRef = unseenVenue['publicReference']?.toString() ??
+            unseenVenue['venueReference']?.toString() ??
+            (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
+        _finish(VenueApprovedCongratsScreen(
+          venueId: venueId,
+          venueReference: venueRef,
+          venueName: unseenVenue['name']?.toString(),
+          client: widget.client,
+        ));
+        return;
+      }
+
       if (apiIsActive) {
-        final unseenVenue = await _checkUnseenApprovedVenue(token);
-        if (unseenVenue != null) {
-          final venueId = unseenVenue['id']?.toString() ?? '';
-          final venueRef = unseenVenue['publicReference']?.toString() ??
-              unseenVenue['venueReference']?.toString() ??
-              (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
-          _finish(VenueApprovedCongratsScreen(
-            venueId: venueId,
-            venueReference: venueRef,
-            venueName: unseenVenue['name']?.toString(),
-            client: widget.client,
-          ));
-          return;
-        }
         _finish(HomeScreen(client: widget.client));
         return;
       }
@@ -267,33 +268,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
-    try {
-      final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(MY_APPROVED_VENUES_URL),
-        headers: {
-          'accept': '*/*',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        final list = (body['data'] is List) ? body['data'] as List : [];
-        for (final item in list) {
-          if (item is Map) {
-            final venueMap = Map<String, dynamic>.from(item);
-            final venueId = venueMap['id']?.toString() ?? '';
-            final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
-            final seenLocally = await SharedPreference.readStr('venue_approved_seen_$venueId');
-            if (!hasSeenBackend && seenLocally != 'true' && venueId.isNotEmpty) {
-              return venueMap;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      CommonUtilities.showLog('AuthWrapper approved venues check error: $e');
-    }
-    return null;
+    return VenueApprovalService.checkUnseenApprovedVenue(
+      token: token,
+      client: widget.client,
+    );
   }
 
   Future<void> _checkVenueStatus(String token) async {

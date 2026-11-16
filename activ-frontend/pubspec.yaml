@@ -205,6 +205,11 @@ flutter:
     - assets/ic_black_right.svg
     - assets/ic_release_warning.png
     - assets/ic_slot_released_badge.png
+    - assets/verified.svg
+    - assets/withdraw.svg
+    - assets/total_activity.png
+    - assets/total_booking.svg
+    - assets/total_earning.svg
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

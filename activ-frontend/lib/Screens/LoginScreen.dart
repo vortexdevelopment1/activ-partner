@@ -343,33 +343,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
-    try {
-      final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(MY_APPROVED_VENUES_URL),
-        headers: {
-          'accept': '*/*',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        final list = (body['data'] is List) ? body['data'] as List : [];
-        for (final item in list) {
-          if (item is Map) {
-            final venueMap = Map<String, dynamic>.from(item);
-            final venueId = venueMap['id']?.toString() ?? '';
-            final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
-            final seenLocally = await SharedPreference.readStr('venue_approved_seen_$venueId');
-            if (!hasSeenBackend && seenLocally != 'true' && venueId.isNotEmpty) {
-              return venueMap;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      CommonUtilities.showLog('Error checking approved venues: $e');
-    }
-    return null;
+    return VenueApprovalService.checkUnseenApprovedVenue(
+      token: token,
+      client: widget.client,
+    );
   }
 
   void _showMessage(BuildContext context, String message) {

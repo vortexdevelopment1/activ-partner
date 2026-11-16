@@ -49,13 +49,15 @@ class _State extends State<AddVenueTimingScreen> {
   }
 
   Future<void> _restoreTimings() async {
-    final draft = await SlotTimingDraft.read(_draftKey);
+    final draft = widget.isEdit ? null : await SlotTimingDraft.read(_draftKey);
     if (!mounted) return;
     final checkpoint = draft == null && widget.initialTiming == null
         ? await ActivityFlowCheckpoint.read(widget.activityId) : null;
     if (!mounted) return;
-    final saved = draft?['timings'] ?? widget.initialTiming ?? checkpoint?.data['timing'];
+    final saved = widget.initialTiming ?? draft?['timings'] ?? checkpoint?.data['timing'];
     if (saved is Map) {
+      timings.clear();
+      selectedDays.clear();
       for (final day in days) {
         final slots = saved[day] ?? saved[dayMap[day]];
         if (slots is! List) continue;
@@ -100,28 +102,33 @@ class _State extends State<AddVenueTimingScreen> {
     _saveTimings();
     setState(() => _submitting = true);
     try {
-      final activity = await _api.activity(widget.activityId);
-      if (!mounted) return;
-      if (widget.isEdit) {
-        Navigator.pop(context, true);
-      } else {
-        await Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => AddActivityConfigureScreen(
-              activityId: widget.activityId,
-              timing: buildVenueTiming(),
-              activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
-                  .toString(),
-              client: widget.client,
-              hasPreviousTimingRoute: true,
-            ),
-          ));
-      }
+      final newTiming = buildVenueTiming();
+      SlotTimingDraft.save(_draftKey, {
+        'days': selectedDays,
+        'timings': {for (final entry in timings.entries) entry.key: entry.value.timeSlots},
+      });
       if (mounted) {
         await ActivityFlowCheckpoint.save(activityId: widget.activityId,
-            step: 'timing', data: {'timing': buildVenueTiming()});
+            step: 'timing', data: {'timing': newTiming});
       }
+      if (widget.isEdit) {
+        if (mounted) Navigator.pop(context, newTiming);
+        return;
+      }
+      final activity = await _api.activity(widget.activityId);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => AddActivityConfigureScreen(
+            activityId: widget.activityId,
+            timing: newTiming,
+            activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
+                .toString(),
+            client: widget.client,
+            hasPreviousTimingRoute: true,
+          ),
+        ));
     } catch (error) {
       if (mounted) _showError(error.toString());
     } finally {

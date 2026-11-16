@@ -104,11 +104,13 @@ void main() {
         ], pages: 2));
     await show(
         tester, PayoutHistoryScreen(client: client, initialRange: range));
-    expect(find.text('ACTIV-PAYOUT-1'), findsOneWidget);
-    expect(find.text('Test Bank | XXXX 7890'), findsOneWidget);
+    expect(find.text('ACTIV-PAYOUT-1'), findsNothing);
+    expect(find.text('10 Oct 2026'), findsOneWidget);
+    expect(find.text('125.50'), findsOneWidget);
     await tester.tap(find.text('Load More'));
     await tester.pumpAndSettle();
-    expect(find.text('ACTIV-PAYOUT-2'), findsOneWidget);
+    expect(find.text('ACTIV-PAYOUT-2'), findsNothing);
+    expect(find.text('10 Oct 2026'), findsNWidgets(2));
     expect(find.text('Load More'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -197,7 +199,9 @@ void main() {
     fail = false;
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(find.text('ACTIV-PAYOUT-1'), findsOneWidget);
+    expect(find.text('10 Oct 2026'), findsOneWidget);
+    expect(find.text('125.50'), findsOneWidget);
+    expect(find.text('ACTIV-PAYOUT-1'), findsNothing);
   });
 
   testWidgets('history and export fit narrow mobile and desktop viewports',

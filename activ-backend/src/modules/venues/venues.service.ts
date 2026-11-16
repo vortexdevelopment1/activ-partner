@@ -932,7 +932,15 @@ export class VenuesService {
   async markWelcomeSeen(venueId: string, partnerId: string): Promise<Venue> {
     const venue = await this.findOne(venueId);
     if (venue.partnerId !== partnerId) {
-      throw new ForbiddenException("You can only update your own venues");
+      const isOwner = await this.prisma.partner_users.findFirst({
+        where: {
+          partner_id: venue.partnerId,
+          user_id: partnerId,
+        },
+      });
+      if (!isOwner) {
+        throw new ForbiddenException("You can only update your own venues");
+      }
     }
     await this.prisma.venues.update({
       where: { id: venueId },

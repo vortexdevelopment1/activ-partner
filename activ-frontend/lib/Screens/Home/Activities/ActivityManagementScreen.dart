@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -683,7 +684,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                   child: _stat(
                                       'Total Booking',
                                       _data['bookingCount']?.toString() ?? '0',
-                                      Icons.calendar_month_outlined)),
+                                      svgAsset: 'assets/total_booking.svg')),
                               const SizedBox(width: 8),
                               Expanded(
                                   child: _stat(
@@ -694,13 +695,13 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                                   _data['earnings']
                                                       .toString()) ??
                                               0),
-                                      Icons.home_outlined)),
+                                      svgAsset: 'assets/total_earning.svg')),
                               const SizedBox(width: 8),
                               Expanded(
                                   child: _stat(
                                       'Occupancy',
                                       '${_data['occupancy']?.toString() ?? '0'}%',
-                                      Icons.sync_alt_outlined)),
+                                      icon: Icons.sync_alt_outlined)),
                             ]),
                             if (_loading)
                               const Padding(
@@ -839,38 +840,58 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     ]));
   }
 
-  Widget _stat(String title, String value, IconData icon) => Container(
-      height: 82,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: _border),
-          borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _stat(String title, String value,
+          {IconData? icon, String? svgAsset}) =>
+      Container(
+          height: 82,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _border),
+              borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: Color(0xFF303030),
+              Row(
+                children: [
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: Color(0xFF303030),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  if (svgAsset != null)
+                    SvgPicture.asset(
+                      svgAsset,
+                      width: 18,
+                      height: 18,
+                      fit: BoxFit.contain,
+                    )
+                  else if (icon != null)
+                    Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFFBF1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      alignment: Alignment.center,
+                      child:
+                          Icon(icon, size: 12, color: const Color(0xFF2EB944)),
+                    ),
+                ],
               ),
-              const SizedBox(width: 4),
-              Icon(icon, size: 14, color: Colors.greenAccent.shade400),
-            ],
-          ),
           const SizedBox(height: 8),
           Expanded(
             child: FittedBox(

@@ -84,4 +84,26 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+      'renders circular back button and bold Contact Us header matching reference design',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: ContactSupportFormScreen()),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify circular back button with arrow_back icon
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    final material = tester.widget<Material>(find.byWidgetPredicate(
+        (w) => w is Material && w.shape is CircleBorder));
+    expect(material.color, Colors.white);
+    expect(material.elevation, 4);
+
+    // Verify Contact Us title text styling
+    final titleText = tester.widget<Text>(find.text('Contact Us'));
+    expect(titleText.style?.fontSize, 24);
+    expect(titleText.style?.fontWeight, FontWeight.w700);
+    expect(titleText.style?.fontFamily, 'Satoshi');
+  });
 }

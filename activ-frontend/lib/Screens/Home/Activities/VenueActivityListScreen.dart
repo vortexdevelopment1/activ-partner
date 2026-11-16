@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
 import '../../../Beans/activity_model.dart';
@@ -242,27 +243,30 @@ class _State extends State<VenueActivityListScreen> {
             ]),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(children: [
               Expanded(
                   child: summaryTile(
                       'Total Activities',
                       isLoading ? '0' : activities.length.toString(),
-                      'Active, Draft & Pending')),
-              const SizedBox(width: 10),
+                      'Active, Draft & Pending',
+                      'assets/total_activity.png')),
+              const SizedBox(width: 8),
               Expanded(
                   child: summaryTile(
                       'Total Booking',
                       isLoading ? '0' : totalMetric('bookings'),
-                      'All Activities')),
-              const SizedBox(width: 10),
+                      'All Activities',
+                      'assets/total_booking.svg')),
+              const SizedBox(width: 8),
               Expanded(
                   child: summaryTile(
                       'Total Earning',
                       isLoading
                           ? currency.format(0)
                           : totalMetric('earnings', money: true),
-                      'All Activities')),
+                      'All Activities',
+                      'assets/total_earning.svg')),
             ]),
           ),
           Padding(
@@ -382,39 +386,72 @@ class _State extends State<VenueActivityListScreen> {
     );
   }
 
-  Widget summaryTile(String title, String value, String caption) => Container(
+  Widget _summaryIcon(String asset) {
+    if (asset.endsWith('.svg')) {
+      return SvgPicture.asset(
+        asset,
+        width: 18,
+        height: 18,
+        fit: BoxFit.contain,
+      );
+    }
+    return Image.asset(
+      asset,
+      width: 20,
+      height: 20,
+      fit: BoxFit.contain,
+    );
+  }
+
+  Widget summaryTile(
+          String title, String value, String caption, String iconAsset) =>
+      Container(
         height: 82,
-        padding: const EdgeInsets.all(9),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
             color: Colors.white, borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-                child: Text(title,
-                    maxLines: 1,
-                    style: const TextStyle(
-                        fontFamily: 'Satoshi',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700))),
-            const Icon(Icons.receipt_long_outlined,
-                size: 12, color: Color(0xFF80DD92)),
-          ]),
-          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF303030),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              _summaryIcon(iconAsset),
+            ],
+          ),
+          const SizedBox(height: 8),
           Expanded(
               child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(value,
                       style: const TextStyle(
-                          fontFamily: 'Satoshi', fontSize: 16)))),
-          const SizedBox(height: 7),
-          Text(caption,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
                           fontFamily: 'Satoshi',
-                          fontSize: 10,
-                  color: Color(0xFF858585))),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF202020))))),
+          const SizedBox(height: 6),
+          Text(
+            caption,
+            maxLines: 1,
+            style: const TextStyle(
+              fontFamily: 'Satoshi',
+              fontSize: 8.5,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF858585),
+            ),
+          ),
         ]),
       );
 
@@ -515,6 +552,11 @@ class _State extends State<VenueActivityListScreen> {
   Widget activityCard(ActivityModel activity) {
     final info = activityInfo[activity.activityId]!;
     final status = info['status'] as String;
+    final displayStatus = switch (status) {
+      'In Review' => 'In review',
+      'Inactive' => 'In-active',
+      _ => status,
+    };
     final statusColor = switch (status) {
       'Active' => const Color(0xFF13CE28),
       'Inactive' => const Color(0xFFFF5757),
@@ -594,7 +636,10 @@ class _State extends State<VenueActivityListScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontFamily: 'Satoshi', fontSize: 15))),
+                                  fontFamily: 'Satoshi',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF202020)))),
                       const Icon(Icons.chevron_right,
                           size: 18, color: Color(0xFF777777)),
                     ]),
@@ -608,51 +653,63 @@ class _State extends State<VenueActivityListScreen> {
                             color: Color(0xFF888888))),
                     const SizedBox(height: 15),
                     Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Expanded(
-                              child: metric(
-                                  'Booking',
-                                  Text(bookings.toInt().toString(),
-                                      style: const TextStyle(
-                                          fontFamily: 'Satoshi',
-                                          fontSize: 15,
-                                          color: purple)))),
-                          Expanded(
-                              child: metric(
-                                  'Earning',
-                                  FittedBox(
+                          metric(
+                              'Booking',
+                              Text(bookings.toInt().toString(),
+                                  style: const TextStyle(
+                                      fontFamily: 'Satoshi',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: purple))),
+                          const Spacer(),
+                          Container(
+                            width: 1,
+                            height: 28,
+                            color: const Color(0xFFE5E5E5),
+                          ),
+                          const Spacer(),
+                          metric(
+                              'Earning',
+                              ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 72),
+                                  child: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
                                       child: Text(
                                           currency.format(earnings),
                                           style: const TextStyle(
                                               fontFamily: 'Satoshi',
-                                              fontSize: 11))))),
-                          const SizedBox(width: 4),
-                          Expanded(
-                              child: metric(
-                                  'Status',
-                                  Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 5, vertical: 2),
-                                          decoration: BoxDecoration(
-                                              color: statusColor,
-                                              borderRadius:
-                                                  BorderRadius.circular(5)),
-                                          child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(
-                                                  status == 'In Review'
-                                                      ? 'In review'
-                                                      : status,
-                                                  style: const TextStyle(
-                                                      fontFamily: 'Satoshi',
-                                                      fontSize: 9,
-                                                      color:
-                                                          Colors.white))))))),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF202020)))))),
+                          const Spacer(),
+                          Container(
+                            width: 1,
+                            height: 28,
+                            color: const Color(0xFFE5E5E5),
+                          ),
+                          const Spacer(),
+                          metric(
+                              'Status',
+                              Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                      color: statusColor,
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                  child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                          displayStatus,
+                                          style: const TextStyle(
+                                              fontFamily: 'Satoshi',
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white))))),
                         ]),
                   ])),
             ])),
@@ -662,9 +719,14 @@ class _State extends State<VenueActivityListScreen> {
 
   Widget metric(String label, Widget value) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(label,
-              style: const TextStyle(fontFamily: 'Satoshi', fontSize: 10)),
+              style: const TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF404040))),
           const SizedBox(height: 4),
           value,
         ],

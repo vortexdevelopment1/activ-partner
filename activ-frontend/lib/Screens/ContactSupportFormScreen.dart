@@ -458,31 +458,45 @@ class _State extends State<ContactSupportFormScreen> {
   }
 
   // To show the toolbar
-  Widget getToolTab(BuildContext context)
-  {
-    return SizedBox(
-      height: AppSize.toolTabSize,
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.all(0),
-              child: InkWell(onTap: ()
-              {
-                Navigator.pop(context);
-              },
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(13,10,15,10),
-                    child: SvgPicture.asset('assets/ic_back.svg',),
-                  )
+  Widget getToolTab(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Row(
+        children: [
+          Material(
+            color: Colors.white,
+            shape: const CircleBorder(),
+            elevation: 4,
+            shadowColor: Colors.black12,
+            child: IconButton(
+              tooltip: 'Back',
+              onPressed: () => Navigator.maybePop(context),
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(40),
+                maximumSize: const Size.square(40),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.arrow_back, size: 24, color: Color(0xFF202020)),
+              constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+              padding: EdgeInsets.zero,
+            ),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Contact Us',
+                style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF202020),
+                ),
               ),
             ),
           ),
-
-          getTitleText(context, 'Contact Us', 'Contact_Us')
-
         ],
       ),
     );

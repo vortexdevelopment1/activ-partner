@@ -38,10 +38,12 @@ void main() {
         expect(request.headers['Authorization'], 'Bearer token');
         if (fail) return http.Response('{}', 500);
         if (request.url.path.endsWith('/my-approved-venues')) {
-          final venues = [
-            {'id': 'other', 'venuePhone': '+91 9999999999'},
-            {'id': 'selected', 'venuePhone': '+91 9111467798'},
-          ];
+          final venues = verified
+              ? [
+                  {'id': 'other', 'venuePhone': '+91 9999999999'},
+                  {'id': 'selected', 'venuePhone': '+91 9111467798'},
+                ]
+              : <Map<String, dynamic>>[];
           return http.Response(
               jsonEncode({
                 'data': paginatedVenues
@@ -114,7 +116,7 @@ void main() {
         find.text('Need to update your details?'), 180);
     await tester.pumpAndSettle();
     expect(find.text('+91 9111467798'), findsNWidgets(2));
-    expect(find.byIcon(Icons.lock_outline_rounded), findsNWidgets(4));
+    expect(find.bySemanticsLabel('Read only'), findsNWidgets(4));
     expect(tester.takeException(), isNull);
     await capture(tester, key, '360-bottom');
     await tester.tap(find.text('Contact Support'));

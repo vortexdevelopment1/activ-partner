@@ -438,7 +438,7 @@ export class VenuesController {
 
   @Patch(":id/mark-welcome-seen")
   @ApiBearerAuth()
-  @Roles(UserRole.PARTNER)
+  @Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Mark welcome screen as seen for a venue (Partner only)",
@@ -447,7 +447,8 @@ export class VenuesController {
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    const data = await this.venuesService.markWelcomeSeen(id, user.id);
+    const partnerId = user.role === "team_member" ? user.partnerId : user.id;
+    const data = await this.venuesService.markWelcomeSeen(id, partnerId);
     return { message: "Welcome screen marked as seen", data };
   }
 

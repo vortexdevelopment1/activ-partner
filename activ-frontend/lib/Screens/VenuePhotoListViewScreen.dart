@@ -65,6 +65,7 @@ class VenuePhotoListViewScreen extends StatefulWidget {
 class _State extends State<VenuePhotoListViewScreen> {
   late List<XFile> _images;
   late List<Uint8List> _imageBytes;
+  late List<String> _imageIds;
   int? _coverIndex = 0; // by default first image is cover
   int currentStep = onboardingPhotosStep;
   final int totalSteps = totalSetup;
@@ -90,6 +91,7 @@ class _State extends State<VenuePhotoListViewScreen> {
     super.initState();
     _images = List.from(widget.images);
     _imageBytes = List.from(widget.imageBytes);
+    _imageIds = List.generate(_images.length, (i) => 'venue_img_${i}_${_images[i].path}');
     _coverIndex = _imageBytes.isEmpty
         ? null
         : widget.initialCoverIndex.clamp(0, _imageBytes.length - 1);
@@ -159,9 +161,11 @@ class _State extends State<VenuePhotoListViewScreen> {
 
       final selectedImage = _images.removeAt(index);
       final selectedBytes = _imageBytes.removeAt(index);
+      final selectedId = _imageIds.removeAt(index);
 
       _images.insert(0, selectedImage);
       _imageBytes.insert(0, selectedBytes);
+      _imageIds.insert(0, selectedId);
 
       _coverIndex = 0;
     });
@@ -183,6 +187,7 @@ class _State extends State<VenuePhotoListViewScreen> {
     setState(() {
       _images.removeAt(index);
       _imageBytes.removeAt(index);
+      _imageIds.removeAt(index);
 
       if (_coverIndex == index) {
         _coverIndex = _images.isNotEmpty ? 0 : null;
@@ -198,6 +203,22 @@ class _State extends State<VenuePhotoListViewScreen> {
       VenuePhotoListViewScreen.returnToReviewBuilder = null;
       Navigator.pop(context);
     }
+  }
+
+  void onReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final item = _images.removeAt(oldIndex);
+      final bytes = _imageBytes.removeAt(oldIndex);
+      final id = _imageIds.removeAt(oldIndex);
+      _images.insert(newIndex, item);
+      _imageBytes.insert(newIndex, bytes);
+      _imageIds.insert(newIndex, id);
+      _coverIndex = _images.isNotEmpty ? 0 : null;
+    });
+    _notifyPhotosChanged();
   }
 
 
@@ -326,111 +347,91 @@ class _State extends State<VenuePhotoListViewScreen> {
 
                             Expanded(
                               child: Container(
-                                margin: EdgeInsets.fromLTRB(5, 0, 5, 0),
+                                margin: const EdgeInsets.fromLTRB(5, 0, 5, 0),
                                 child: _images.isEmpty
                                     ? const Center(child: Text("No images uploaded"))
-                                    : ListView.builder(
+                                    : ReorderableListView.builder(
+                                  buildDefaultDragHandles: false,
+                                  padding: EdgeInsets.zero,
                                   itemCount: _images.length,
+                                  onReorder: onReorder,
+                                  proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                                    return Material(
+                                      elevation: 6,
+                                      color: Colors.transparent,
+                                      shadowColor: Colors.black26,
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: child,
+                                    );
+                                  },
                                   itemBuilder: (context, index) {
-                                    return Stack(
-                                      children: [
-                                        Card(
-                                          margin: const EdgeInsets.all(10),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          clipBehavior: Clip.antiAlias,
-                                          child: Column(
-                                            children: [
+                                    return ReorderableDelayedDragStartListener(
+                                      key: ValueKey(_imageIds[index]),
+                                      index: index,
+                                      child: Stack(
+                                        children: [
+                                          Card(
+                                            margin: const EdgeInsets.all(10),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            clipBehavior: Clip.antiAlias,
+                                            child: Column(
+                                              children: [
 
-                                              AspectRatio(
-                                                aspectRatio: 16/9,
-                                                child: Image.memory(
-                                                  _imageBytes[index],
-                                                  fit: BoxFit.cover,
-                                                  width: double.infinity,
+                                                AspectRatio(
+                                                  aspectRatio: 16/9,
+                                                  child: Image.memory(
+                                                    _imageBytes[index],
+                                                    fit: BoxFit.cover,
+                                                    width: double.infinity,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          // Cover Photo label
+                                          if (_coverIndex == index)
+                                            Positioned(
+                                              top: 20,
+                                              left: 20,
+                                              child: Container(
+                                                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.darkGray,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: AppColors.white, width: 1),
+                                                ),
+                                                child: const Text(
+                                                  "Cover Photo",
+                                                  style: TextStyle(
+                                                      fontSize: AppSize.size_14,
+                                                      fontFamily: 'Satoshi',
+                                                      color: AppColors.white,
+                                                      height: 1
+                                                  ),
                                                 ),
                                               ),
+                                            ),
 
-                                              // "Set as Cover Photo" button
-                                             /* if (_coverIndex != index)
-                                                TextButton(
-                                                  onPressed: () => _setAsCover(index),
-                                                  child: const Text(
-                                                    "Set as Cover Photo",
-                                                    style: TextStyle(color: Colors.purple),
-                                                  ),
-                                                )
-                                              else
-                                                const Padding(
-                                                  padding: EdgeInsets.all(8.0),
-                                                  child: Text(
-                                                    "Currently Cover Photo",
-                                                    style: TextStyle(
-                                                      color: Colors.green,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),*/
-                                            ],
-                                          ),
-                                        ),
-
-                                        // Cover Photo label
-                                        if (_coverIndex == index)
                                           Positioned(
-                                            top: 20,
-                                            left: 20,
-                                            child: Container(
-                                              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.darkGray,
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: AppColors.white, width: 1),
-                                              ),
-                                              child: const Text(
-                                                "Cover Photo",
-                                                style: TextStyle(
-                                                    fontSize: AppSize.size_14,
-                                                    fontFamily: 'Satoshi',
-                                                    color: AppColors.white,
-                                                    height: 1
-                                                ),
+                                            right: 15,
+                                            top: 15,
+                                            child: GestureDetector(
+                                              onTapDown: (TapDownDetails details) {
+                                                _showCustomMenu(context, details.globalPosition, index);
+                                              },
+                                              child: Container(
+                                                  width: 50,
+                                                  height: 50,
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Image.asset('assets/ic_three_dot.png')
                                               ),
                                             ),
                                           ),
-
-                                        // Delete button
-                                        /*Positioned(
-                                          top: 15,
-                                          right: 15,
-                                          child: InkWell(
-                                            onTap: () => _removeImage(index),
-                                            child: Container(
-                                              width: 50,
-                                              height: 50,
-                                              padding: const EdgeInsets.all(6),
-                                              child: Image.asset('assets/ic_three_dot.png')
-                                            ),
-                                          ),
-                                        ),*/
-
-                                        Positioned(
-                                          right: 15,
-                                          top: 15,
-                                          child: GestureDetector(
-                                            onTapDown: (TapDownDetails details) {
-                                              _showCustomMenu(context, details.globalPosition, index);
-                                            },
-                                            child: Container(
-                                                width: 50,
-                                                height: 50,
-                                                padding: const EdgeInsets.all(6),
-                                                child: Image.asset('assets/ic_three_dot.png')
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     );
                                   },
                                 ),

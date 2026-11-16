@@ -709,16 +709,196 @@ export class BookingsService {
       });
     };
 
+    const greenColor = rgb(0, 0.749, 0.3882);
+    const darkColor = rgb(0.0078, 0.098, 0.1451);
+    const grayColor = rgb(0.35, 0.35, 0.35);
+    const lineGray = rgb(0.78, 0.78, 0.78);
+
+    const statusColor =
+      statement.status.toLowerCase() === "failed"
+        ? rgb(0.92, 0.23, 0.23)
+        : statement.status.toLowerCase() === "pending"
+          ? rgb(0.88, 0.58, 0.0)
+          : greenColor;
+
     // Payout Breakdown (right column)
-    draw(money(statement.grossBookingAmount), 470, 546.36, 95, 20, 552.36);
-    draw(money(statement.activCommission), 470, 519.38, 95, 20, 525.38);
-    draw(money(statement.gstOnCommission), 470, 492.29, 95, 20, 498.29);
-    draw(money(statement.netReceived), 470, 463.01, 95, 20, 469.01, true);
+    const signX = 448;
+    const amountX = 473;
+
+    // Gross booking amount (+ Rs. xxx)
+    page.drawRectangle({
+      x: 440,
+      y: 546.36,
+      width: 115,
+      height: 18,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText("+", {
+      x: signX,
+      y: 552.36,
+      size: 11,
+      font,
+      color: darkColor,
+    });
+    page.drawText(money(statement.grossBookingAmount), {
+      x: amountX,
+      y: 552.36,
+      size: 11,
+      font,
+      color: darkColor,
+    });
+
+    // ACTIV commission (- Rs. xxx)
+    page.drawRectangle({
+      x: 440,
+      y: 519.38,
+      width: 115,
+      height: 18,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText("-", {
+      x: signX + 1,
+      y: 525.38,
+      size: 11,
+      font: boldFont,
+      color: darkColor,
+    });
+    page.drawText(money(statement.activCommission), {
+      x: amountX,
+      y: 525.38,
+      size: 11,
+      font,
+      color: darkColor,
+    });
+
+    // GST on commission (- Rs. xxx) - box stays above divider line y=493.28
+    page.drawRectangle({
+      x: 440,
+      y: 494.5,
+      width: 115,
+      height: 18,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText("-", {
+      x: signX + 1,
+      y: 498.29,
+      size: 11,
+      font: boldFont,
+      color: darkColor,
+    });
+    page.drawText(money(statement.gstOnCommission), {
+      x: amountX,
+      y: 498.29,
+      size: 11,
+      font,
+      color: darkColor,
+    });
+
+    // Full-width divider line above Net Received
+    page.drawLine({
+      start: { x: 317.66, y: 493.28 },
+      end: { x: 550.59, y: 493.28 },
+      thickness: 0.75,
+      color: lineGray,
+    });
+
+    // Net Received amount (bold green)
+    page.drawRectangle({
+      x: 440,
+      y: 462.5,
+      width: 115,
+      height: 20,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(money(statement.netReceived), {
+      x: amountX - 5,
+      y: 469.01,
+      size: 13,
+      font: boldFont,
+      color: greenColor,
+    });
 
     // Transaction Details summary (left column)
-    draw(statusLabel, 82, 546.36, 42, 20, 552.1, true, 10);
-    draw(money(statement.amountReceived), 40, 503.49, 240, 20, 509.49, true);
-    draw(payoutDateLabel, 40, 462.21, 240, 20, 468.21);
+    const leftX = 47.5;
+
+    // Status: Success | Non-GST Registered Venue (single line, Success in green)
+    page.drawRectangle({
+      x: 40,
+      y: 546.36,
+      width: 245,
+      height: 18,
+      color: rgb(1, 1, 1),
+    });
+    const statusPrefix = "Status: ";
+    const venueTypeSuffix = statement.isGstRegistered
+      ? " | GST Registered Venue"
+      : " | Non-GST Registered Venue";
+    const statusY = 552.36;
+    const statusFontSize = 10;
+
+    page.drawText(statusPrefix, {
+      x: leftX,
+      y: statusY,
+      size: statusFontSize,
+      font: boldFont,
+      color: darkColor,
+    });
+    const statusPrefixW = boldFont.widthOfTextAtSize(
+      statusPrefix,
+      statusFontSize,
+    );
+
+    page.drawText(statusLabel, {
+      x: leftX + statusPrefixW,
+      y: statusY,
+      size: statusFontSize,
+      font: boldFont,
+      color: statusColor,
+    });
+    const statusLabelW = boldFont.widthOfTextAtSize(
+      statusLabel,
+      statusFontSize,
+    );
+
+    page.drawText(venueTypeSuffix, {
+      x: leftX + statusPrefixW + statusLabelW,
+      y: statusY,
+      size: statusFontSize,
+      font,
+      color: grayColor,
+    });
+
+    // Amount Received (aligned at leftX, bold green)
+    page.drawRectangle({
+      x: 40,
+      y: 503.49,
+      width: 245,
+      height: 22,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(money(statement.amountReceived), {
+      x: leftX,
+      y: 509.49,
+      size: 14,
+      font: boldFont,
+      color: greenColor,
+    });
+
+    // Payout Date (aligned at leftX, reduced font size)
+    page.drawRectangle({
+      x: 40,
+      y: 462.21,
+      width: 245,
+      height: 20,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(payoutDateLabel, {
+      x: leftX,
+      y: 468.21,
+      size: 9.5,
+      font,
+      color: darkColor,
+    });
 
     // Transaction & Slot Details
     draw(statement.activityName, 438, 405.16, 127, 16, 410.16);

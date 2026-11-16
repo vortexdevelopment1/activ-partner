@@ -27,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _uploading = false,
       _teamMember = false,
       _verified = false;
-  String _name = '', _email = '', _phone = '';
+  String _name = '', _displayName = '', _email = '', _phone = '';
   String _venuePhone = '', _avatar = '', _role = '';
   String? _error, _venueError;
 
@@ -81,6 +81,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _name = names.isNotEmpty
           ? names
           : (profile['fullName'] ?? profile['name'] ?? '').toString();
+      _displayName = (profile['businessName'] ??
+              profile['venueName'] ??
+              profile['companyName'] ??
+              '')
+          .toString();
       _email = (profile['email'] ?? '').toString();
       _phone = (profile['phone'] ??
               profile['mobile'] ??
@@ -121,6 +126,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? matching.first
               : (venues.isNotEmpty ? venues.first : null);
           _venuePhone = (venue?['venuePhone'] ?? '').toString();
+          if (_displayName.isEmpty && venue != null) {
+            _displayName =
+                (venue['name'] ?? venue['venueName'] ?? '').toString();
+          }
         } catch (_) {
           _venueError = 'Unable to load venue number';
         }
@@ -377,13 +386,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SizedBox(height: mini ? 10 : (compact ? 20 : 32)),
         if (_verified) ...[
           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
               decoration: BoxDecoration(
                   color: Colors.white, borderRadius: BorderRadius.circular(24)),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.verified, color: Color(0xFF19BC45), size: 13),
-                const SizedBox(width: 9),
-                Text('Verified', style: _text(13, bold: true)),
+                SvgPicture.asset(
+                  'assets/verified.svg',
+                  width: 14,
+                  height: 14,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(width: 6),
+                Text('Verified Partner', style: _text(13, bold: true)),
               ])),
           SizedBox(height: mini ? 6 : (compact ? 10 : 16)),
         ],
@@ -431,7 +445,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : const Icon(Icons.camera_alt,
                                     color: _purple, size: 18)))),
             ])),
-        SizedBox(height: mini ? 8 : (compact ? 14 : 22)),
+        if (_displayName.isNotEmpty) ...[
+          SizedBox(height: mini ? 8 : (compact ? 12 : 16)),
+          Text(_displayName,
+              style: _text(mini ? 18 : (compact ? 19 : 20), bold: true),
+              textAlign: TextAlign.center),
+        ],
+        SizedBox(height: mini ? 4 : (compact ? 6 : 8)),
         Text(_email,
             style: _text(mini ? 14 : (compact ? 15 : 16)),
             textAlign: TextAlign.center),
