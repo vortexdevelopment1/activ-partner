@@ -15,8 +15,6 @@ import '../../StringExtensions.dart';
 import 'ActivityManagementScreen.dart';
 import 'AddActivities/AddListActivityTypeScreen.dart';
 import 'AddActivities/AddActivitySubmissionResultScreen.dart';
-import 'AddActivities/AddActivityConfigureScreen.dart';
-import 'AddActivities/AddSelectedVenueFormScreen.dart';
 import '../../../Utills/activity_resume_navigator.dart';
 import '../../../Utills/activity_flow_checkpoint.dart';
 import '../../../Utills/activity_image_draft_store.dart';
@@ -117,8 +115,11 @@ class _State extends State<VenueActivityListScreen> {
                 service['activityReference'] ?? service['publicReference'],
             'venue_reference':
                 venue['venueReference'] ?? venue['publicReference'],
-            'operate_value': {'id': categoryId, 'title': title,
-              'categoryName': category?['name']},
+            'operate_value': {
+              'id': categoryId,
+              'title': title,
+              'categoryName': category?['name']
+            },
             'activity_status': 'true',
             'description': service['description'] ?? '',
             'images': [
@@ -192,8 +193,10 @@ class _State extends State<VenueActivityListScreen> {
       await SharedPreference.addStringToSF(key, '');
     }
     if (!mounted) return;
-    await Navigator.push(context,
-        MaterialPageRoute<void>(builder: (_) => AddListActivityTypeScreen(client: widget.client)));
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => AddListActivityTypeScreen(client: widget.client)));
     if (mounted) fetchActivities();
   }
 
@@ -380,7 +383,9 @@ class _State extends State<VenueActivityListScreen> {
                               borderRadius: BorderRadius.circular(8))),
                       child: const Text('Add New Activity',
                           style: TextStyle(
-                              fontFamily: 'Satoshi', fontSize: 16))))),
+                              fontFamily: 'Satoshi',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold))))),
         ]),
       ))),
     );
@@ -514,7 +519,8 @@ class _State extends State<VenueActivityListScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: const Color(0xFFE8FF28),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
@@ -571,8 +577,9 @@ class _State extends State<VenueActivityListScreen> {
     final url = (cover?['url'] ?? first?['url'])?.toString();
     final bookings = num.tryParse(info['bookings']?.toString() ?? '') ?? 0;
     final earnings = num.tryParse(info['earnings']?.toString() ?? '') ?? 0;
-    final fallback = Image.asset(activityLogoAsset(activity.title,
-        category: activity.operateValue['categoryName']?.toString()),
+    final fallback = Image.asset(
+        activityLogoAsset(activity.title,
+            category: activity.operateValue['categoryName']?.toString()),
         fit: BoxFit.contain);
     return Material(
       color: Colors.white,
@@ -584,14 +591,16 @@ class _State extends State<VenueActivityListScreen> {
         onLongPress: () => _deleteActivity(activity),
         onTap: () async {
           if (status == 'Draft') {
-            final checkpoint = await ActivityFlowCheckpoint.read(activity.activityId);
+            final checkpoint =
+                await ActivityFlowCheckpoint.read(activity.activityId);
             final explicitDraft = await SharedPreference.readStr(
                 'activity_draft_resume_${activity.activityId}');
             if (checkpoint != null &&
                 checkpoint.interrupted &&
                 (explicitDraft == null || explicitDraft.isEmpty)) {
               try {
-                await ActivityResumeNavigator.open(context, checkpoint, widget.client);
+                await ActivityResumeNavigator.open(
+                    context, checkpoint, widget.client);
                 if (mounted) fetchActivities();
                 return;
               } catch (_) {}
@@ -603,7 +612,8 @@ class _State extends State<VenueActivityListScreen> {
                   builder: (_) => status == 'Draft'
                       ? AddActivitySubmissionResultScreen(
                           activityId: activity.activityId,
-                          activityName: activity.title, savedAsDraft: true,
+                          activityName: activity.title,
+                          savedAsDraft: true,
                           client: widget.client)
                       : ActivityManagementScreen(
                           activity: activity,
@@ -678,8 +688,7 @@ class _State extends State<VenueActivityListScreen> {
                                   child: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
-                                      child: Text(
-                                          currency.format(earnings),
+                                      child: Text(currency.format(earnings),
                                           style: const TextStyle(
                                               fontFamily: 'Satoshi',
                                               fontSize: 12,
@@ -699,12 +708,10 @@ class _State extends State<VenueActivityListScreen> {
                                       horizontal: 8, vertical: 1.5),
                                   decoration: BoxDecoration(
                                       color: statusColor,
-                                      borderRadius:
-                                          BorderRadius.circular(12)),
+                                      borderRadius: BorderRadius.circular(12)),
                                   child: FittedBox(
                                       fit: BoxFit.scaleDown,
-                                      child: Text(
-                                          displayStatus,
+                                      child: Text(displayStatus,
                                           style: const TextStyle(
                                               fontFamily: 'Satoshi',
                                               fontSize: 11.5,

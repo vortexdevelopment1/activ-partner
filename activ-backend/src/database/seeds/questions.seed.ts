@@ -70,7 +70,7 @@ const ACTIVITY_CONFIG: Record<string, [string, string]> = {
   Equestrian: ['Horses Available', 'Arena Type'],
   Paintball: ['Fields', 'Field Type'],
   'Adventure Sports': ['Activities Offered', 'Adventure Type'],
-  'Other Activity': ['Max Participants', 'Activity Category'],
+  Others: ['Max Participants', 'Activity Category'],
 };
 
 const buildQuestions = (

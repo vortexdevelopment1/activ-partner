@@ -15,6 +15,8 @@ import 'Home/HomeScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'TellUsAboutScreen.dart';
 import 'VenueScreen.dart';
+import 'VenueApprovedCongratsScreen.dart';
+import '../Utills/venue_session_ownership.dart';
 import 'VenuePhotoListViewScreen.dart';
 import 'MobileNumberScreen.dart';
 import '../Utills/venue_onboarding_draft.dart';
@@ -292,6 +294,7 @@ class _State extends State<OTPVerificationScreen> {
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");
           if (!await _syncFirebasePartnerMapping(body['data']?['partner'])) {
+            if (!mounted) return;
             _showMessage(context,
                 'OTP verified, but account synchronization failed. Please try again.');
             return;
@@ -303,13 +306,41 @@ class _State extends State<OTPVerificationScreen> {
         if (isTeamMember) {
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
               context, ManagerHomeScreen(client: widget.client));
-        } else if (!isProfileComplete) {
-          CommonUtilities.NavigateWithPush(context, TellUsAboutScreen());
-        } else if (!isUserActive) {
-          await _checkVenueAndNavigate(token);
         } else {
-          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, HomeScreen());
+          final unseenVenue =
+              await checkUnseenApprovedVenue(token, client: widget.client);
+          if (unseenVenue != null) {
+            final venueId = unseenVenue['id']?.toString() ?? '';
+            final venueRef = unseenVenue['publicReference']?.toString() ??
+                unseenVenue['venueReference']?.toString() ??
+                (venueId.length >= 6
+                    ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase()
+                    : venueId);
+            await SharedPreference.addStringToSF("is_active", "true");
+            await SharedPreference.addStringToSF("user_type", "partner");
+            await SharedPreference.addStringToSF("permissions", "{}");
+            if (!mounted) return;
+            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+              context,
+              VenueApprovedCongratsScreen(
+                venueId: venueId,
+                venueReference: venueRef,
+                venueName: unseenVenue['name']?.toString(),
+                client: widget.client,
+              ),
+            );
+            return;
+          }
+
+          if (!mounted) return;
+          if (!isProfileComplete) {
+            CommonUtilities.NavigateWithPush(context, TellUsAboutScreen());
+          } else if (!isUserActive) {
+            await _checkVenueAndNavigate(token);
+          } else {
+            CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+                context, HomeScreen(client: widget.client));
+          }
         }
       } else {
         final body = jsonDecode(response.body);
@@ -355,6 +386,32 @@ class _State extends State<OTPVerificationScreen> {
 
         if (items.isNotEmpty && items.first is Map) {
           await restoreVenueOnboardingDraft(Map<String, dynamic>.from(items.first));
+        }
+
+        final approvedVenue = items.firstWhere(
+          (item) => item is Map && item['status']?.toString().toLowerCase() == 'approved',
+          orElse: () => null,
+        );
+        if (approvedVenue is Map) {
+          final venueId = approvedVenue['id']?.toString() ?? '';
+          final venueRef = approvedVenue['publicReference']?.toString() ??
+              approvedVenue['venueReference']?.toString() ??
+              (venueId.length >= 6
+                  ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase()
+                  : venueId);
+          await SharedPreference.addStringToSF("is_active", "true");
+          await SharedPreference.addStringToSF("user_type", "partner");
+          if (!mounted) return;
+          CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+            context,
+            VenueApprovedCongratsScreen(
+              venueId: venueId,
+              venueReference: venueRef,
+              venueName: approvedVenue['name']?.toString(),
+              client: widget.client,
+            ),
+          );
+          return;
         }
 
         if (total == 1 && firstStatus == 'pending') {

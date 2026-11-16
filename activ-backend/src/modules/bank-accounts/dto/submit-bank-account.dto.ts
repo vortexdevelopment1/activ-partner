@@ -1,6 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 
+export const SUPPORTED_BANK_ACCOUNT_TYPES = [
+  'Savings Account',
+  'Current Account',
+  'Salary Account',
+  'Zero Balance Account / BSBDA',
+] as const;
+
+export type SupportedBankAccountType = (typeof SUPPORTED_BANK_ACCOUNT_TYPES)[number];
+
+export const ALLOWED_BANK_ACCOUNT_TYPES_INPUT = [
+  ...SUPPORTED_BANK_ACCOUNT_TYPES,
+  'Saving Account', // legacy backward compatibility
+] as const;
+
 export class SubmitBankAccountDto {
   @ApiProperty({ example: 'Rahul Sharma' })
   @IsNotEmpty()
@@ -24,8 +38,15 @@ export class SubmitBankAccountDto {
   @IsString()
   ifscCode: string;
 
-  @ApiProperty({ example: 'Saving Account' })
-  @IsIn(['Saving Account', 'Current Account'])
+  @ApiProperty({
+    example: 'Savings Account',
+    enum: SUPPORTED_BANK_ACCOUNT_TYPES,
+    description: 'Account type eligible for Razorpay settlements: Savings Account, Current Account, Salary Account, Zero Balance Account / BSBDA',
+  })
+  @IsIn(ALLOWED_BANK_ACCOUNT_TYPES_INPUT, {
+    message:
+      'accountType must be one of the following eligible settlement account types: Savings Account, Current Account, Salary Account, Zero Balance Account / BSBDA',
+  })
   @IsNotEmpty()
   @IsString()
   accountType: string;

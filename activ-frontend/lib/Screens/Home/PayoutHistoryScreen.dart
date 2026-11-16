@@ -179,11 +179,12 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
     });
     try {
       final token = await SharedPreference.readStr('jwt_token') ?? '';
-      final uri = Uri.parse('$BASE_URL/bookings/payout-history').replace(queryParameters: {
-        ..._filters(_range, _status),
-        'page': '$page',
-        'limit': '20'
-      });
+      final uri = Uri.parse('$BASE_URL/bookings/payout-history').replace(
+          queryParameters: {
+            ..._filters(_range, _status),
+            'page': '$page',
+            'limit': '20'
+          });
       final response = await (widget.client?.get ?? http.get)(uri,
               headers: {'Authorization': 'Bearer $token'})
           .timeout(const Duration(seconds: 20));
@@ -524,7 +525,8 @@ class _PayoutTransactionDetailsScreenState
       );
 
   Widget _line(String label, dynamic value,
-          {bool bold = false, Color? valueColor}) => Padding(
+          {bool bold = false, Color? valueColor}) =>
+      Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -532,8 +534,8 @@ class _PayoutTransactionDetailsScreenState
               child: FittedBox(
                   alignment: Alignment.centerLeft,
                   fit: BoxFit.scaleDown,
-                  child: Text(label,
-                      maxLines: 1, style: _text(14, bold: bold)))),
+                  child:
+                      Text(label, maxLines: 1, style: _text(14, bold: bold)))),
           const SizedBox(width: 8),
           Expanded(
               flex: 4,
@@ -543,8 +545,9 @@ class _PayoutTransactionDetailsScreenState
                   child: Text(value?.toString() ?? '-',
                       maxLines: 1,
                       textAlign: TextAlign.right,
-                      style: _text(14, bold: bold, color: valueColor ??
-                          const Color(0xFF202020)))))
+                      style: _text(14,
+                          bold: bold,
+                          color: valueColor ?? const Color(0xFF202020)))))
         ]),
       );
 
@@ -862,13 +865,12 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                                 colors: [
-                                  Color(0xFF424242),
-                                  Color(0xFFB9D749),
-                                ])
+                                    Color(0xFF424242),
+                                    Color(0xFFB9D749),
+                                  ])
                             : null,
-                        color: _format == format
-                            ? null
-                            : const Color(0xFFD5DADA),
+                        color:
+                            _format == format ? null : const Color(0xFFD5DADA),
                         borderRadius: BorderRadius.circular(24)),
                     child: Material(
                       color: Colors.white,

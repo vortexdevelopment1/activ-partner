@@ -65,7 +65,16 @@ export class BankAccountsController {
         bankName:          { type: 'string', example: 'HDFC Bank' },
         accountNumber:     { type: 'string', example: '1234567890' },
         ifscCode:          { type: 'string', example: 'HDFC0001234' },
-        accountType:       { type: 'string', example: 'Saving Account' },
+        accountType:       {
+          type: 'string',
+          enum: [
+            'Savings Account',
+            'Current Account',
+            'Salary Account',
+            'Zero Balance Account / BSBDA',
+          ],
+          example: 'Savings Account',
+        },
         branchName:        { type: 'string', example: 'Kormangala, Bengaluru' },
         cancelledCheque:   { type: 'string', format: 'binary' },
       },

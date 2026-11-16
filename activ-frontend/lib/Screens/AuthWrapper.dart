@@ -209,6 +209,28 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _finish(ManagerHomeScreen(client: widget.client));
         return;
       }
+      // Check immediately if partner has an approved venue waiting for the welcome screen!
+      // Must be shown immediately when approved, without waiting for profile completion.
+      final unseenVenue =
+          await checkUnseenApprovedVenue(token, client: widget.client);
+      if (unseenVenue != null) {
+        final venueId = unseenVenue['id']?.toString() ?? '';
+        final venueRef = unseenVenue['publicReference']?.toString() ??
+            unseenVenue['venueReference']?.toString() ??
+            (venueId.length >= 6
+                ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase()
+                : venueId);
+        await SharedPreference.addStringToSF("is_active", "true");
+        await SharedPreference.addStringToSF("user_type", "partner");
+        _finish(VenueApprovedCongratsScreen(
+          venueId: venueId,
+          venueReference: venueRef,
+          venueName: unseenVenue['name']?.toString(),
+          client: widget.client,
+        ));
+        return;
+      }
+
       if (!await validateSavedVenueOwnership(client: widget.client)) {
         _finish(profileData?['isProfileComplete'] == true
             ? VenueScreen(client: widget.client)
@@ -230,27 +252,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await SharedPreference.addStringToSF(
           "is_active", apiIsActive ? "true" : "false");
 
-      final needsReviewRefresh = apiIsProfileComplete && !apiIsActive &&
+      final needsReviewRefresh = apiIsProfileComplete &&
+          !apiIsActive &&
           stack.any((entry) => entry['page'] == 'submitted');
-      if (!needsReviewRefresh && stack.isNotEmpty && _restoreStack(stack)) return;
+      if (!needsReviewRefresh && stack.isNotEmpty && _restoreStack(stack))
+        return;
 
       if (!apiIsProfileComplete) {
         _finish(TellUsAboutScreen());
-        return;
-      }
-
-      final unseenVenue = await _checkUnseenApprovedVenue(token);
-      if (unseenVenue != null) {
-        final venueId = unseenVenue['id']?.toString() ?? '';
-        final venueRef = unseenVenue['publicReference']?.toString() ??
-            unseenVenue['venueReference']?.toString() ??
-            (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
-        _finish(VenueApprovedCongratsScreen(
-          venueId: venueId,
-          venueReference: venueRef,
-          venueName: unseenVenue['name']?.toString(),
-          client: widget.client,
-        ));
         return;
       }
 
@@ -265,13 +274,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       CommonUtilities.showLog("AuthWrapper init error: $e");
       _finish(const LoginScreen());
     }
-  }
-
-  Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
-    return VenueApprovalService.checkUnseenApprovedVenue(
-      token: token,
-      client: widget.client,
-    );
   }
 
   Future<void> _checkVenueStatus(String token) async {
@@ -309,9 +311,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
           }
           _finish(const ContactSupportScreen());
         } else if (total == 1 && firstStatus == 'draft') {
-          await restoreVenueOnboardingDraft(Map<String, dynamic>.from(items.first));
+          await restoreVenueOnboardingDraft(
+              Map<String, dynamic>.from(items.first));
           if (!mounted) return;
-          _finish(VenueScreen(changeReason: items.first['changesRequested'] == true ? items.first['rejectionReason']?.toString() : null));
+          _finish(VenueScreen(
+              changeReason: items.first['changesRequested'] == true
+                  ? items.first['rejectionReason']?.toString()
+                  : null));
         } else if (total == 0) {
           // Profile complete but no venue yet — continue onboarding
           _finish(VenueScreen());

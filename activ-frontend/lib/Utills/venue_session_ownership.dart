@@ -48,3 +48,56 @@ Future<bool> validateSavedVenueOwnership({http.Client? client}) async {
   }
   return false;
 }
+
+/// Check if the partner has an approved venue that has not yet seen the
+/// congratulations / welcome screen.
+Future<Map<String, dynamic>?> checkUnseenApprovedVenue(
+  String token, {
+  http.Client? client,
+}) async {
+  try {
+    final response = await (client?.get ?? http.get)(
+      Uri.parse(MY_APPROVED_VENUES_URL),
+      headers: {
+        'accept': '*/*',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final body = jsonDecode(response.body);
+      final list = (body['data'] is List) ? body['data'] as List : [];
+      for (final item in list) {
+        if (item is Map) {
+          final venueMap = Map<String, dynamic>.from(item);
+          final venueId = venueMap['id']?.toString() ?? '';
+          final venueRef = venueMap['publicReference']?.toString() ??
+              venueMap['venueReference']?.toString() ??
+              '';
+          final bool hasSeenBackend = venueMap['hasSeenWelcome'] == true;
+          final seenById = venueId.isNotEmpty
+              ? await SharedPreference.readStr('venue_approved_seen_$venueId')
+              : null;
+          final seenByRef = venueRef.isNotEmpty
+              ? await SharedPreference.readStr('venue_approved_seen_$venueRef')
+              : null;
+          final seenByHashRef = venueRef.isNotEmpty
+              ? await SharedPreference.readStr('venue_approved_seen_#$venueRef')
+              : null;
+
+          if (hasSeenBackend ||
+              seenById == 'true' ||
+              seenByRef == 'true' ||
+              seenByHashRef == 'true') {
+            continue;
+          }
+          if (venueId.isNotEmpty) {
+            return venueMap;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Graceful fallback
+  }
+  return null;
+}

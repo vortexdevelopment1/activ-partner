@@ -89,6 +89,11 @@ class _State extends State<AddListActivityTypeScreen> {
               ? venues.first['id'].toString()
               : null;
       resultList = categories
+          .where((c) {
+            final name = c['name']?.toString().toLowerCase().trim() ?? '';
+            final slug = c['slug']?.toString().toLowerCase().trim() ?? '';
+            return name != 'other activity' && slug != 'other-activity';
+          })
           .map((c) => VenueTypeModel(
               id: c['id'].toString(),
               title: c['name'].toString(),

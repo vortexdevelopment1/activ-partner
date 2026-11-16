@@ -14,6 +14,10 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../../common/domain-types';
 import { PartnerEmailService } from '../mail/partner-email.service';
+import {
+  normalizeBankAccountType,
+  validateRazorpaySettlementEligibility,
+} from './razorpay-settlement-eligibility';
 
 @Injectable()
 export class BankAccountsService {
@@ -33,6 +37,11 @@ export class BankAccountsService {
       if (response.status === 404) throw new BadRequestException('Invalid IFSC code');
       if (!response.ok) throw new Error(`Razorpay IFSC lookup failed: ${response.status}`);
       const data = await response.json() as Record<string, unknown>;
+      if (data.NEFT === false && data.RTGS === false && data.IMPS === false) {
+        throw new BadRequestException(
+          'This bank branch does not support electronic settlements (NEFT/RTGS/IMPS). Please provide an IFSC for a settlement-enabled branch.',
+        );
+      }
       return {
         ifsc: code,
         bank: String(data.BANK ?? ''),
@@ -40,6 +49,9 @@ export class BankAccountsService {
         address: String(data.ADDRESS ?? ''),
         city: String(data.CITY ?? ''),
         state: String(data.STATE ?? ''),
+        neft: data.NEFT !== false,
+        rtgs: data.RTGS !== false,
+        imps: data.IMPS !== false,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -72,7 +84,13 @@ export class BankAccountsService {
   }
 
   async submit(partnerId: string, dto: SubmitBankAccountDto, cancelledChequeUrl?: string) {
-    await this.lookupIfsc(dto.ifscCode);
+    const ifscData = await this.lookupIfsc(dto.ifscCode);
+    validateRazorpaySettlementEligibility({
+      accountNumber: dto.accountNumber,
+      accountType: dto.accountType,
+      ifscData,
+    });
+    const normalizedAccountType = normalizeBankAccountType(dto.accountType);
     const existing = await this.prisma.partner_bank_accounts.findFirst({
       where: { partner_id: partnerId, status: 'UNDER_REVIEW' },
     });
@@ -83,7 +101,7 @@ export class BankAccountsService {
         id: randomUUID(), partner_id: partnerId,
         account_holder_name: dto.accountHolderName.trim(), bank_name: dto.bankName.trim(),
         account_number: dto.accountNumber, ifsc_code: dto.ifscCode,
-        account_type: dto.accountType, branch_name: dto.branchName?.trim() || null,
+        account_type: normalizedAccountType, branch_name: dto.branchName?.trim() || null,
         cancelled_cheque_url: cancelledChequeUrl, status: 'UNDER_REVIEW', updated_at: new Date(),
       } });
       await this.adminNotificationsService.notify(
@@ -113,7 +131,13 @@ export class BankAccountsService {
     dto: SubmitBankAccountDto,
     cancelledChequeUrl: string,
   ) {
-    await this.lookupIfsc(dto.ifscCode);
+    const ifscData = await this.lookupIfsc(dto.ifscCode);
+    validateRazorpaySettlementEligibility({
+      accountNumber: dto.accountNumber,
+      accountType: dto.accountType,
+      ifscData,
+    });
+    const normalizedAccountType = normalizeBankAccountType(dto.accountType);
     const existing = await this.prisma.partner_bank_accounts.findFirst({
       where: { id, partner_id: partnerId },
     });
@@ -139,7 +163,7 @@ export class BankAccountsService {
           bank_name: dto.bankName.trim(),
           account_number: dto.accountNumber,
           ifsc_code: dto.ifscCode,
-          account_type: dto.accountType,
+          account_type: normalizedAccountType,
           branch_name: dto.branchName?.trim() || null,
           cancelled_cheque_url: cancelledChequeUrl,
           status: 'UNDER_REVIEW',

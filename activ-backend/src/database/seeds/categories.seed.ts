@@ -120,5 +120,18 @@ export async function seedCategories(prisma: PrismaClient) {
     else created++;
   }
 
+  // Ensure legacy 'other-activity' is archived so only 'others' remains active
+  await prisma.partner_service_categories.updateMany({
+    where: { slug: "other-activity" },
+    data: {
+      status: PartnerVenueServiceStatus.ARCHIVED,
+      updated_at: new Date(),
+    },
+  });
+  await prisma.activities.updateMany({
+    where: { sport_code: "other-activity" },
+    data: { status: CatalogueStatus.ARCHIVED },
+  });
+
   console.log(`Categories/activities created: ${created}; updated: ${updated}`);
 }

@@ -237,7 +237,16 @@ class _AddActivityDetailsScreenState extends State<AddActivityDetailsScreen> {
           padding: EdgeInsets.fromLTRB(activityDetailsGutter(context), 0, activityDetailsGutter(context), 80),
           children: [
             ActivityDetailsHeading(name: _activityName, bookingType: _bookingType),
-            if (_questions.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No extra details needed')),
+            if (_questions.isEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.only(top: 20, bottom: 8),
+                child: Text('No extra details needed', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Text('You can continue to choose amenities for $_activityName.'),
+              ),
+            ],
             for (final question in _questions) _buildQuestionItem(question),
           ],
         )),

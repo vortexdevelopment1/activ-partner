@@ -16,6 +16,7 @@ import 'Home/HomeScreen.dart';
 import 'Home/ManagerHomeScreen.dart';
 import 'MobileNumberScreen.dart';
 import 'VenueApprovedCongratsScreen.dart';
+import '../Utills/venue_session_ownership.dart';
 import '../Database/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -342,12 +343,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) async {
-    return VenueApprovalService.checkUnseenApprovedVenue(
-      token: token,
-      client: widget.client,
-    );
-  }
+  Future<Map<String, dynamic>?> _checkUnseenApprovedVenue(String token) =>
+      checkUnseenApprovedVenue(token, client: widget.client);
 
   void _showMessage(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
@@ -412,7 +409,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       CommonUtilities.showLog("Partner Login status: ${response.statusCode}");
-      CommonUtilities.showLog("Partner Login completed: ${response.statusCode}");
+      CommonUtilities.showLog(
+          "Partner Login completed: ${response.statusCode}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
@@ -454,25 +452,22 @@ class _LoginScreenState extends State<LoginScreen> {
             _showMessage(context,
                 'Your account is not active yet. Please wait for approval.');
           }
-        } else if (isPartnerActive) {
-          if (!await _syncFirebasePartnerMapping(data)) {
-            _showMessage(context,
-                'Login succeeded, but account synchronization failed. Please try again.');
-            return;
-          }
-          await SharedPreference.addStringToSF("is_active", "true");
-          await SharedPreference.addStringToSF("user_type", "partner");
-          await SharedPreference.addStringToSF("permissions", "{}");
-          if (!mounted) return;
-
+        } else {
           final unseenVenue = await _checkUnseenApprovedVenue(token);
           if (!mounted) return;
 
           if (unseenVenue != null) {
+            await _syncFirebasePartnerMapping(data);
+            await SharedPreference.addStringToSF("is_active", "true");
+            await SharedPreference.addStringToSF("user_type", "partner");
+            await SharedPreference.addStringToSF("permissions", "{}");
             final venueId = unseenVenue['id']?.toString() ?? '';
             final venueRef = unseenVenue['publicReference']?.toString() ??
                 unseenVenue['venueReference']?.toString() ??
-                (venueId.length >= 6 ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase() : venueId);
+                (venueId.length >= 6
+                    ? venueId.replaceAll('-', '').substring(0, 6).toUpperCase()
+                    : venueId);
+            if (!mounted) return;
             CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
               context,
               VenueApprovedCongratsScreen(
@@ -482,15 +477,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 client: widget.client,
               ),
             );
-          } else {
+            return;
+          }
+
+          if (isPartnerActive) {
+            if (!await _syncFirebasePartnerMapping(data)) {
+              if (!mounted) return;
+              _showMessage(context,
+                  'Login succeeded, but account synchronization failed. Please try again.');
+              return;
+            }
+            await SharedPreference.addStringToSF("is_active", "true");
+            await SharedPreference.addStringToSF("user_type", "partner");
+            await SharedPreference.addStringToSF("permissions", "{}");
+            if (!mounted) return;
             CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
                 context, HomeScreen(client: widget.client));
+          } else {
+            await SharedPreference.addStringToSF("is_active", "false");
+            if (!mounted) return;
+            _showMessage(context,
+                'Your account is not active yet. Please wait for approval.');
           }
-        } else {
-          await SharedPreference.addStringToSF("is_active", "false");
-          if (!mounted) return;
-          _showMessage(context,
-              'Your account is not active yet. Please wait for approval.');
         }
       } else {
         final body = jsonDecode(response.body);

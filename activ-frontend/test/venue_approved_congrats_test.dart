@@ -10,6 +10,7 @@ import 'package:activ_app/Screens/AuthWrapper.dart';
 import 'package:activ_app/Screens/Home/HomeScreen.dart';
 import 'package:activ_app/Screens/LoginScreen.dart';
 import 'package:activ_app/Screens/VenueApprovedCongratsScreen.dart';
+import 'package:activ_app/Screens/OTPVerificationScreen.dart';
 import 'package:activ_app/api_calling/api_request.dart';
 
 Finder findRichText(String text) => find.byWidgetPredicate(
@@ -332,6 +333,109 @@ void main() {
       // Should NOT show congrats screen, should go to HomeScreen
       expect(find.byType(VenueApprovedCongratsScreen), findsNothing);
       expect(find.byType(HomeScreen), findsOneWidget);
+    });
+  });
+
+  group('Immediate approved venue display tests', () {
+    testWidgets(
+        'AuthWrapper shows VenueApprovedCongratsScreen immediately even if profile was not marked complete',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({'jwt_token': 'active-token'});
+
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/auth-profile')) {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'isProfileComplete': false,
+                'partner': {'isActive': false},
+              }
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/my-approved-venues')) {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'venue-approved-1',
+                  'name': 'FitZone Central',
+                  'publicReference': '998877',
+                  'hasSeenWelcome': false,
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('{"data":[]}', 200);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AuthWrapper(client: client),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VenueApprovedCongratsScreen), findsOneWidget);
+    });
+
+    testWidgets(
+        'OTPVerificationScreen navigates to congrats screen immediately upon login after approval',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/verify-otp')) {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'jwt_token': 'test-otp-token',
+                'userType': 'partner',
+                'isProfileComplete': false,
+                'partner': {
+                  'id': 'partner-1',
+                  'isActive': false,
+                },
+              }
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/my-approved-venues')) {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'venue-approved-otp',
+                  'name': 'FitZone OTP',
+                  'publicReference': '554433',
+                  'hasSeenWelcome': false,
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('{"data":[]}', 200);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OTPVerificationScreen(client: client),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (int i = 0; i < 4; i++) {
+        await tester.enterText(find.byType(TextField).at(i), '${i + 1}');
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VenueApprovedCongratsScreen), findsOneWidget);
+      expect(findRichText('554433'), findsOneWidget);
     });
   });
 }

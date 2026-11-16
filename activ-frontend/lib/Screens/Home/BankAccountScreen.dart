@@ -707,8 +707,9 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
       _confirm.text = _number.text;
       _ifsc.text = (account['ifscCode'] ?? '').toString();
       final type = (account['accountType'] ?? '').toString();
-      _type = type.trim().isEmpty ? null : type;
-      _typeController.text = type;
+      final normalized = normalizeBankAccountType(type);
+      _type = (normalized?.trim().isEmpty ?? true) ? null : normalized;
+      _typeController.text = _type ?? '';
       _branch.text = (account['branchName'] ?? '').toString();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _ifsc.text.isNotEmpty) _ifscChanged(_ifsc.text);
@@ -1071,6 +1072,94 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
     ));
   }
 
+  void _showAccountTypePicker() {
+    FocusScope.of(context).unfocus();
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Select Account Type', style: _text(18, bold: true)),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Select an eligible account type for Razorpay settlements.',
+                  style: _text(12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                ...supportedBankAccountTypes.map((type) {
+                  final isSelected = _type == type ||
+                      normalizeBankAccountType(_typeController.text) == type;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      type,
+                      style: _text(15,
+                          bold: isSelected,
+                          color: isSelected ? _purple : Colors.black87),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(Icons.check_circle,
+                            color: Color(0xFF673AB7))
+                        : const Icon(Icons.radio_button_unchecked,
+                            color: Colors.grey),
+                    onTap: () {
+                      setState(() {
+                        _type = type;
+                        _typeController.text = type;
+                      });
+                      _validateLive();
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Jan Dhan, NRE/NRO, FD/RD, and Cash Credit/Overdraft accounts are not eligible.',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.amber.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _field(String label, String hint, TextEditingController controller,
           {bool required = true,
           bool numeric = false,
@@ -1080,6 +1169,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
           Widget? suffixIcon,
           String? helperText,
           Color? helperColor,
+          VoidCallback? onTap,
           ValueChanged<String>? onChanged}) =>
       Padding(
           padding: const EdgeInsets.only(bottom: 14),
@@ -1096,6 +1186,7 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                   controller: controller,
                   enabled: !_saving,
                   readOnly: readOnly,
+                  onTap: onTap,
                   enableInteractiveSelection: false,
                   contextMenuBuilder: (_, __) => const SizedBox.shrink(),
                   autocorrect: false,
@@ -1179,10 +1270,16 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                         readOnly: true),
                     _field('Account Number', '1234567890', _number,
                         numeric: true,
-                        validator: (value) => RegExp(r'^[0-9]{6,20}$')
-                                .hasMatch((value ?? '').trim())
-                            ? null
-                            : 'Enter a valid account number.'),
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (!RegExp(r'^[0-9]{6,20}$').hasMatch(text)) {
+                            return 'Enter a valid account number.';
+                          }
+                          if (RegExp(r'^0+$').hasMatch(text)) {
+                            return 'Account number cannot consist of only zeros.';
+                          }
+                          return null;
+                        }),
                     _field('Confirm Account Number', '1234567890', _confirm,
                         numeric: true,
                         suffixIcon: _accountMatchIcon(),
@@ -1232,21 +1329,25 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
                                 _ifscValid
                             ? null
                             : 'Enter a valid IFSC code.'),
-                    _field('Account Type', 'e.g. Savings or Current',
-                        _typeController,
-                        onChanged: (value) {
-                          _type = value.trim().isEmpty ? null : value;
-                          _validateLive();
-                        },
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) return 'Enter account type.';
-                          if (!bankAccountTypeCharacters.hasMatch(text) ||
-                              text.length < 3) {
-                            return 'Enter a valid account type.';
-                          }
-                          return null;
-                        }),
+                    _field(
+                      'Account Type',
+                      'Select Account Type',
+                      _typeController,
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: Colors.grey),
+                        onPressed: _showAccountTypePicker,
+                      ),
+                      onChanged: (value) {
+                        _type = value.trim().isEmpty ? null : value;
+                        _validateLive();
+                      },
+                      helperText:
+                          'Eligible: Savings, Current, Salary, Zero Balance/BSBDA',
+                      helperColor: Colors.grey.shade600,
+                      validator: (value) =>
+                          validateRazorpaySettlementAccountType(value),
+                    ),
                     const SizedBox(height: 14),
                     _field('Branch Name', 'Kormangala, Bengaluru', _branch,
                         required: false, readOnly: true),

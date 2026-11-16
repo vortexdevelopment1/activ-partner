@@ -560,33 +560,18 @@ class _UnitPicker extends StatelessWidget {
   void _showUnitMenu(BuildContext context) async {
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
-    final translation = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-    final media = MediaQuery.of(context);
-    final screenHeight = media.size.height;
-    final screenWidth = media.size.width;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
 
-    final estimatedMenuHeight = units.length * 48.0 + 16.0;
-    final bottomBarThreshold = screenHeight - (media.padding.bottom + 100.0);
-    final openUpwards =
-        (translation.dy + size.height + estimatedMenuHeight) > bottomBarThreshold;
-
-    final RelativeRect position;
-    if (openUpwards) {
-      position = RelativeRect.fromLTRB(
-        translation.dx,
-        0,
-        screenWidth - translation.dx - size.width,
-        screenHeight - translation.dy + 4,
-      );
-    } else {
-      position = RelativeRect.fromLTRB(
-        translation.dx,
-        translation.dy + size.height + 4,
-        screenWidth - translation.dx - size.width,
-        0,
-      );
-    }
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        renderBox.localToGlobal(Offset.zero, ancestor: overlay),
+        renderBox.localToGlobal(renderBox.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
 
     final selected = await showMenu<String>(
       context: context,
