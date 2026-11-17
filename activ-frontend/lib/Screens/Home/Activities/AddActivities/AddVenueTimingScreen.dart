@@ -16,6 +16,7 @@ import '../../../../Style/app_size.dart';
 import 'AddActivityConfigureScreen.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../../Utills/slot_timing_draft.dart';
+import '../../../../Utills/slot_price_validation.dart';
 import '../../../onboarding_widgets.dart';
 
 class DayTiming {
@@ -213,6 +214,7 @@ class _State extends State<AddVenueTimingScreen> {
   bool _validateTimings() {
     for (var day in selectedDays) {
       var slots = timings[day]!.timeSlots;
+      final ranges = <(DateTime, DateTime)>[];
       if (slots.isEmpty) {
         _showError('Please add a time range for $day');
         return false;
@@ -226,8 +228,12 @@ class _State extends State<AddVenueTimingScreen> {
           return false;
         }
 
-        DateTime openTime = DateFormat("hh:mm a").parse(open);
-        DateTime closeTime = DateFormat("hh:mm a").parse(close);
+        final openTime = DateFormat('hh:mm a').tryParseStrict(open);
+        final closeTime = DateFormat('hh:mm a').tryParseStrict(close);
+        if (openTime == null || closeTime == null) {
+          _showError('Please select valid Open and Close times for $day');
+          return false;
+        }
 
         if (openTime.isAfter(closeTime) ||
             openTime.isAtSameMomentAs(closeTime)) {
@@ -235,20 +241,24 @@ class _State extends State<AddVenueTimingScreen> {
               "In $day, Opening time must be earlier than closing time.");
           return false;
         }
-        if (int.tryParse(slot['capacity'] ?? '') == null ||
-            int.parse(slot['capacity']!) <= 0) {
-          _showError("Enter the maximum members allowed per slot for $day");
+        if (ranges.any((range) => openTime.isBefore(range.$2) && closeTime.isAfter(range.$1))) {
+          _showError('Time ranges for $day must not overlap or repeat.');
           return false;
         }
-        if (double.tryParse(slot['price'] ?? '') == null ||
-            double.parse(slot['price']!) <= 0) {
-          _showError("Enter a valid base slot price for $day");
+        ranges.add((openTime, closeTime));
+        final capacityError = validateSlotCapacity(slot['capacity']);
+        if (capacityError != null) {
+          _showError('$day: $capacityError');
           return false;
         }
-        final price = double.parse(slot['price']!);
-        final discounted = double.tryParse(slot['discountedPrice'] ?? '') ?? price;
-        if (discounted < 0 || discounted > price) {
-          _showError("Discounted slot price must be between 0 and the base price for $day");
+        final priceError = validateSlotPrice(slot['price']);
+        if (priceError != null) {
+          _showError('$day: $priceError');
+          return false;
+        }
+        final discountError = validateDiscountedSlotPrice(slot['discountedPrice'], slot['price']);
+        if (discountError != null) {
+          _showError('$day: $discountError');
           return false;
         }
       }
@@ -1076,7 +1086,12 @@ class _State extends State<AddVenueTimingScreen> {
               initialValue: slot[key] ?? '',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: OnboardingStyles.inputDecoration(hintText: hint),
+              decoration: OnboardingStyles.inputDecoration(hintText: hint).copyWith(
+                errorMaxLines: 2,
+                errorText: key == 'capacity' ? validateSlotCapacity(slot[key])
+                    : key == 'price' ? validateSlotPrice(slot[key])
+                    : validateDiscountedSlotPrice(slot[key], slot['price']),
+              ),
               onChanged: (value) => setState(() => slot[key] = value),
             ),
           ],
@@ -1106,7 +1121,7 @@ class _State extends State<AddVenueTimingScreen> {
             Builder(builder: (_) {
               final base = double.tryParse(slot['price'] ?? '');
               final discounted = double.tryParse(slot['discountedPrice'] ?? '');
-              final percent = base != null && base > 0 && discounted != null && discounted >= 0 && discounted <= base
+              final percent = base != null && base.isFinite && base > 0 && discounted != null && discounted.isFinite && discounted >= 0 && discounted <= base
                   ? ((base - discounted) / base * 100).round() : 0;
               return Container(
                 width: double.infinity,

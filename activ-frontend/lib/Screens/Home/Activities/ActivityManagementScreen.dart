@@ -390,81 +390,72 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _delete() async {
-    final confirmed = await showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-        builder: (context) => SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                      width: 54,
-                      height: 5,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFDADADA),
-                          borderRadius: BorderRadius.circular(99))),
-                  const SizedBox(height: 36),
-                  Container(
-                      width: 78,
-                      height: 78,
-                      decoration: const BoxDecoration(
-                          color: Color(0xFFFFEFEF), shape: BoxShape.circle),
-                      child: const Icon(Icons.delete_outline,
-                          color: Colors.redAccent, size: 42)),
-                  const SizedBox(height: 28),
-                  const Text('Delete Activity?',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontSize: 22,
-                          color: Colors.redAccent)),
-                  const SizedBox(height: 22),
-                  const Text(
-                      'This will permanently delete this activity and all associated data including bookings history, slot configurations and images. This action cannot be undone.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontSize: 14,
-                          height: 1.45,
-                          color: Color(0xFF777777))),
-                  const SizedBox(height: 34),
-                  Row(children: [
-                    Expanded(
-                        child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            style: ElevatedButton.styleFrom(
-                                elevation: 0,
-                                minimumSize: const Size(0, 56),
-                                backgroundColor: const Color(0xFFFFF8C8),
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10))),
-                            child: const Text('Cancel',
-                                style: TextStyle(
-                                    fontFamily: 'Satoshi', fontSize: 16)))),
-                    const SizedBox(width: 18),
-                    Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: ElevatedButton.styleFrom(
-                                elevation: 0,
-                                minimumSize: const Size(0, 56),
-                                backgroundColor: const Color(0xFF1F1F1F),
-                                foregroundColor: const Color(0xFFD8F34A),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10))),
-                            child: const Text('Delete Activity',
-                                style: TextStyle(
-                                    fontFamily: 'Satoshi', fontSize: 16)))),
-                  ]),
-                ]),
+        surfaceTintColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 428),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(28, 42, 28, 28),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 88, height: 88,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFCEBEC), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_outline,
+                  color: Color(0xFFFF3333), size: 42),
               ),
-            ));
+              const SizedBox(height: 18),
+              _text('Delete Activity', size: 22, bold: true,
+                color: const Color(0xFFFF3333)),
+              const SizedBox(height: 18),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: const Text(
+                'Are you sure you want to delete your activity? This action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 14,
+                  height: 1.45, color: Color(0xFF777777)),
+                ),
+              ),
+              const SizedBox(height: 30),
+              Row(children: [
+                Expanded(flex: 2, child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 56),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                    backgroundColor: const Color(0xFFFDF6DE),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.black)),
+                  ),
+                  child: _text('Cancel', size: 16, bold: true),
+                )),
+                const SizedBox(width: 12),
+                Expanded(flex: 5, child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 56),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                    backgroundColor: Colors.black,
+                    foregroundColor: const Color(0xFFDAFF50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _text('Delete Activity', size: 16, bold: true,
+                    color: const Color(0xFFDAFF50)),
+                )),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
     if (confirmed == true && await _save({}, delete: true) && mounted) {
       Navigator.pop(context, true);
     }
@@ -1251,9 +1242,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           _text('What happens next?', bold: true),
           const SizedBox(height: 20),
           _effect(Icons.calendar_today_outlined,
-              'New bookings are paused. Existing bookings are preserved.'),
+              'Upcoming bookings will be blocked during in-activ period'),
           _effect(Icons.visibility_off_outlined,
-              'This activity is hidden from search & discovery'),
+              'Venue will be hidden from search & discovery'),
           _effect(
               Icons.notifications_none, 'ACTIV team may reach out if required'),
         ],

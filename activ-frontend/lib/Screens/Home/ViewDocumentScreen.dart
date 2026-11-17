@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../Utills/manual_entry_only.dart';
+import 'bank_account_input.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -496,8 +498,20 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
               ],
               Text('GSTIN Number', style: _text(14)),
               const SizedBox(height: 8),
-              TextFormField(
+              ManualEntryOnly(
+                child: TextFormField(
                   controller: _gstNumber,
+                  inputFormatters: [
+                    BankAccountInputFormatter(
+                        allowed: RegExp(r'^[A-Z0-9]*$'),
+                        maxLength: 15,
+                        uppercase: true),
+                  ],
+                  enableInteractiveSelection: false,
+                  contextMenuBuilder: null,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: const <String>[],
                   readOnly: _gstPending || _submitting,
                   textCapitalization: TextCapitalization.characters,
                   style: _text(14),
@@ -506,6 +520,7 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
                       isValidGstin(value ?? '')
                           ? null
                           : 'Enter a valid GSTIN number.'),
+              ),
               const SizedBox(height: 22),
               Text('Business Name (As per GST)', style: _text(14)),
               const SizedBox(height: 8),

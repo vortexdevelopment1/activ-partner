@@ -59,9 +59,22 @@ void main() {
   }
 
   String? toast;
+  String clipboard = '';
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     toast = null;
+    clipboard = '';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard = call.arguments['text'] as String;
+      }
+      if (call.method == 'Clipboard.getData') return {'text': clipboard};
+      if (call.method == 'Clipboard.hasStrings') {
+        return {'value': clipboard.isNotEmpty};
+      }
+      return null;
+    });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
             const MethodChannel('PonnamKarthik/fluttertoast'), (call) async {
@@ -69,10 +82,13 @@ void main() {
       return true;
     });
   });
-  tearDown(() => TestDefaultBinaryMessengerBinding
-      .instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(
-          const MethodChannel('PonnamKarthik/fluttertoast'), null));
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('PonnamKarthik/fluttertoast'), null);
+  });
 
   Future<void> open(WidgetTester tester, {Dio? client}) async {
     tester.view.devicePixelRatio = 1;
@@ -104,13 +120,98 @@ void main() {
   Future<void> enterGstin(WidgetTester tester, String value) async {
     final dynamic state = tester.state(find.byType(LegalInformationScreen));
     final field = find.byWidgetPredicate((widget) =>
-        widget is TextFormField &&
-        widget.controller == state.gstINController);
+        widget is TextFormField && widget.controller == state.gstINController);
     await tester.scrollUntilVisible(field, 200,
         scrollable: find.byType(Scrollable).first);
-    await tester.enterText(field, value);
+    await tester.showKeyboard(field);
+    tester.testTextInput.updateEditingValue(TextEditingValue.empty);
+    await tester.pump();
+    for (final character in value.runes) {
+      final text = state.gstINController.text + String.fromCharCode(character);
+      tester.testTextInput.updateEditingValue(TextEditingValue(
+          text: text, selection: TextSelection.collapsed(offset: text.length)));
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+      'Aadhaar PAN and GSTIN allow typing but block clipboard actions and bulk insertion',
+      (tester) async {
+    await open(tester);
+    final dynamic state = tester.state(find.byType(LegalInformationScreen));
+    for (final entry in [
+      (
+        state.aadhaarNumberController as TextEditingController,
+        '123456789012',
+        '1234-5678-9012'
+      ),
+      (
+        state.panCardNumberController as TextEditingController,
+        'aapfu0939f',
+        'AAPFU0939F'
+      ),
+      (
+        state.gstINController as TextEditingController,
+        '27aapfu0939f1zv',
+        '27AAPFU0939F1ZV'
+      ),
+    ]) {
+      final controller = entry.$1;
+      controller.clear();
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
+      final field = find.byWidgetPredicate((widget) =>
+          widget is TextFormField && widget.controller == controller);
+      await tester.scrollUntilVisible(field, 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.enterText(field, entry.$2);
+      expect(controller.text, isEmpty);
+      for (final character in entry.$2.runes) {
+        final text = controller.text + String.fromCharCode(character);
+        tester.testTextInput.updateEditingValue(TextEditingValue(
+            text: text,
+            selection: TextSelection.collapsed(offset: text.length)));
+        await tester.pump();
+      }
+      expect(controller.text, entry.$3);
+      final input = tester.widget<TextField>(
+          find.descendant(of: field, matching: find.byType(TextField)));
+      expect(input.enableInteractiveSelection, isFalse);
+      expect(input.enableSuggestions, isFalse);
+      expect(input.autocorrect, isFalse);
+      controller.selection =
+          TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+      await Clipboard.setData(const ClipboardData(text: 'clipboard unchanged'));
+      for (final intent in [
+        CopySelectionTextIntent.copy,
+        const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard),
+        const PasteTextIntent(SelectionChangedCause.keyboard)
+      ]) {
+        Actions.invoke(
+            tester.element(find.descendant(
+                of: field, matching: find.byType(EditableText))),
+            intent);
+        await tester.pumpAndSettle();
+        expect(controller.text, entry.$3);
+        expect((await Clipboard.getData(Clipboard.kTextPlain))!.text,
+            'clipboard unchanged');
+      }
+      await tester.longPress(field);
+      await tester.pumpAndSettle();
+      expect(find.text('Paste'), findsNothing);
+      expect(find.text('Copy'), findsNothing);
+      expect(find.text('Cut'), findsNothing);
+      controller.selection =
+          TextSelection.collapsed(offset: controller.text.length);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('invalid GSTIN blocks Next even with its document uploaded',
       (tester) async {

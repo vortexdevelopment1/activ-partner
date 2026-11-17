@@ -420,14 +420,18 @@ class _State extends State<VenueActivityListScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    fontFamily: 'Satoshi',
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF303030),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF303030),
+                    ),
                   ),
                 ),
               ),
@@ -447,14 +451,18 @@ class _State extends State<VenueActivityListScreen> {
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF202020))))),
           const SizedBox(height: 6),
-          Text(
-            caption,
-            maxLines: 1,
-            style: const TextStyle(
-              fontFamily: 'Satoshi',
-              fontSize: 8.5,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF858585),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              caption,
+              maxLines: 1,
+              style: const TextStyle(
+                fontFamily: 'Satoshi',
+                fontSize: 8.5,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF858585),
+              ),
             ),
           ),
         ]),

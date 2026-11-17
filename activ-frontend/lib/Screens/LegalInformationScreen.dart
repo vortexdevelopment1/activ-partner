@@ -11,6 +11,8 @@ import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import '../Utills/manual_entry_only.dart';
+import 'Home/bank_account_input.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -992,14 +994,20 @@ class _State extends State<LegalInformationScreen> {
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
         padding: const EdgeInsets.only(left: 10, right: 10),
-        child: Container(
+        child: ManualEntryOnly(
           child: TextFormField(
             controller: aadhaarNumberController,
+            enableInteractiveSelection: false,
+            contextMenuBuilder: null,
+            autocorrect: false,
+            enableSuggestions: false,
+            autofillHints: const <String>[],
             textInputAction: TextInputAction.next,
             textCapitalization: TextCapitalization.sentences,
             keyboardType: TextInputType.number,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
+              BankAccountInputFormatter(allowed: RegExp(r'^[0-9-]*$'), maxLength: 14),
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(14), // 12 digits + 2 hyphens
               AadhaarNumberFormatter(),
@@ -1074,14 +1082,20 @@ class _State extends State<LegalInformationScreen> {
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
         padding: const EdgeInsets.only(left: 10, right: 10),
-        child: Container(
+        child: ManualEntryOnly(
           child: TextFormField(
             controller: panCardNumberController,
+            enableInteractiveSelection: false,
+            contextMenuBuilder: null,
+            autocorrect: false,
+            enableSuggestions: false,
+            autofillHints: const <String>[],
             textInputAction: TextInputAction.done,
             textCapitalization: TextCapitalization.characters,
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
+              BankAccountInputFormatter(allowed: RegExp(r'^[A-Z0-9]*$'), maxLength: 10, uppercase: true),
               FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9]')),
               LengthLimitingTextInputFormatter(10),
             ],
@@ -1605,9 +1619,14 @@ class _State extends State<LegalInformationScreen> {
           border: Border.all(color: AppColors.gray, width: 1)),
       child: Padding(
         padding: const EdgeInsets.only(left: 10, right: 10),
-        child: Container(
+        child: ManualEntryOnly(
           child: TextFormField(
             controller: gstINController,
+            enableInteractiveSelection: false,
+            contextMenuBuilder: null,
+            autocorrect: false,
+            enableSuggestions: false,
+            autofillHints: const <String>[],
             key: _gstinFieldKey,
             autovalidateMode: AutovalidateMode.onUserInteraction,
             validator: (value) => (value ?? '').trim().isEmpty || isValidGstin(value!)
@@ -1617,6 +1636,7 @@ class _State extends State<LegalInformationScreen> {
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
+              BankAccountInputFormatter(allowed: RegExp(r'^[A-Z0-9]*$'), maxLength: 15, uppercase: true),
               LengthLimitingTextInputFormatter(15),
             ],
             style: TextStyle(

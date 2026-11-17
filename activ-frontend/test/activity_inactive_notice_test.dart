@@ -60,9 +60,9 @@ void main() {
       expect(find.text('What happens next?'), expected);
       expect(
           find.text(
-              'New bookings are paused. Existing bookings are preserved.'),
+              'Upcoming bookings will be blocked during in-activ period'),
           expected);
-      expect(find.text('This activity is hidden from search & discovery'),
+      expect(find.text('Venue will be hidden from search & discovery'),
           expected);
       expect(find.text('ACTIV team may reach out if required'), expected);
     });
@@ -93,7 +93,7 @@ void main() {
     pending.complete(http.Response('{"data":{}}', 200));
     await tester.pumpAndSettle();
     expect(find.text('What happens next?'), findsNothing);
-    expect(find.text('This activity is hidden from search & discovery'),
+    expect(find.text('Venue will be hidden from search & discovery'),
         findsNothing);
     expect(tester.takeException(), isNull);
   });

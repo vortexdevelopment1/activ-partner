@@ -76,6 +76,33 @@ describe('relational venue data', () => {
     expect(availabilityRows('venue', 'category', { Monday: [range], Tuesday: [range] })).toHaveLength(2);
   });
 
+  it.each([
+    { capacity: 'PDF document' }, { capacity: 0 }, { capacity: -1 },
+    { capacity: 1.5 }, { capacity: 2147483648 }, { capacity: true },
+    { capacity: null }, { capacity: [] }, { price: 'PDF or CSV' },
+    { price: '' }, { price: null }, { price: 0 }, { price: -1 },
+    { price: NaN }, { price: Infinity }, { price: 1e308 }, { price: true },
+    { price: [] }, { discountedPrice: 'PDF or CSV' },
+    { discountedPrice: null }, { discountedPrice: true },
+    { discountedPrice: [] }, { discountedPrice: -1 },
+    { discountedPrice: Infinity }, { discountedPrice: NaN },
+    { discountedPrice: 501 },
+  ])('rejects invalid slot field values %j', values => {
+    expect(() => availabilityRows('venue', 'category', { Monday: [{
+      open: '09:00 AM', close: '07:00 PM', capacity: 20, price: 500, ...values,
+    }] })).toThrow(BadRequestException);
+  });
+
+  it.each([undefined, '', 0, 500, 350.5])('accepts valid optional discounted price %s', discountedPrice => {
+    const [row] = availabilityRows('venue', 'category', { Monday: [{
+      open: '09:00 AM', close: '07:00 PM', capacity: '20', price: '500', discountedPrice,
+    }] });
+    expect(row.capacity).toBe(20);
+    expect(row.price_paise).toBe(50000n);
+    expect(row.discounted_price_paise).toBe(BigInt(Math.round(
+      (discountedPrice === undefined || discountedPrice === '' ? 500 : Number(discountedPrice)) * 100)));
+  });
+
   it('updates only requested categories, including clearing a closed schedule', async () => {
     const tx = { partner_venue_availability: { deleteMany: jest.fn(), createMany: jest.fn() },
       partner_venue_services: { updateMany: jest.fn() } };

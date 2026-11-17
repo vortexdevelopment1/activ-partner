@@ -55,12 +55,23 @@ export function availabilityRows(venueId: string, categoryId: string, days: Reco
           throw new BadRequestException('Invalid slot size or time range shorter than slot size');
         }
       }
-      const numbers = [slot.capacity ?? 0, slot.price ?? 0,
-        slot.discountedPrice === undefined ? (slot.price ?? 0) : slot.discountedPrice].map(Number);
-      if (numbers.some((value) => !Number.isFinite(value) || value < 0) || !Number.isInteger(numbers[0])) {
+      const values = [slot.capacity === undefined ? 0 : slot.capacity,
+        slot.price === undefined ? 0 : slot.price,
+        slot.discountedPrice === undefined || slot.discountedPrice === ''
+          ? (slot.price === undefined ? 0 : slot.price) : slot.discountedPrice];
+      if (values.some(value => typeof value !== 'number' &&
+          (typeof value !== 'string' || !/^[+-]?\d+(?:\.\d+)?$/.test(value.trim())))) {
         throw new BadRequestException('Invalid capacity or price');
       }
-      if (numbers[1] > 0 && numbers[2] > numbers[1]) throw new BadRequestException('Discounted price must not exceed slot price');
+      const numbers = values.map(Number);
+      if (numbers.some(value => !Number.isFinite(value) || value < 0) ||
+          !Number.isInteger(numbers[0]) || numbers[0] > 2147483647 ||
+          (slot.capacity !== undefined && numbers[0] <= 0) ||
+          (slot.price !== undefined && numbers[1] <= 0) ||
+          numbers.slice(1).some(value => !Number.isSafeInteger(Math.round(value * 100)))) {
+        throw new BadRequestException('Enter a positive whole-number capacity and a valid positive slot price');
+      }
+      if (numbers[2] > numbers[1]) throw new BadRequestException('Discounted price must not exceed slot price');
       return { id: randomUUID(), venue_id: venueId, service_category_id: categoryId,
         day: day.toLowerCase(), sort_order: index, open_time: slot.open, close_time: slot.close,
         capacity: numbers[0], price_paise: BigInt(Math.round(numbers[1] * 100)),
