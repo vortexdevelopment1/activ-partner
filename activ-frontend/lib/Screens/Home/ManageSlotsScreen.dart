@@ -6,6 +6,7 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../onboarding_widgets.dart';
 import '../../Utills/slot_timing_draft.dart';
+import '../../Utills/app_time_picker.dart';
 
 class _Slot {
   String open, close;
@@ -340,158 +341,15 @@ class _State extends State<ManageSlotsScreen> {
                 borderSide: const BorderSide(color: _purple))),
       );
   Future<void> _pickTime(String value, ValueChanged<String?> change) async {
-    final parts = value.split(' ');
-    final clock = parts.first.split(':');
-    final parsedHour = int.tryParse(clock.first) ?? 9;
-    final parsedMinute = int.tryParse(clock.length > 1 ? clock[1] : '0') ?? 0;
-    var selectedHour = parsedHour.clamp(1, 12).toInt();
-    var selectedMinute = parsedMinute.clamp(0, 59).toInt();
-    var selectedPeriod =
-        parts.length > 1 && parts[1].toUpperCase() == 'PM' ? 1 : 0;
-
-    final result = await showModalBottomSheet<String>(
+    final minutes = _minutes(value);
+    final result = await showAppTimePicker(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final hourController =
-            FixedExtentScrollController(initialItem: selectedHour - 1);
-        final minuteController =
-            FixedExtentScrollController(initialItem: selectedMinute);
-        final periodController =
-            FixedExtentScrollController(initialItem: selectedPeriod);
-
-        return StatefulBuilder(
-          builder: (context, setSheetState) => SafeArea(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF4FBD7),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8F9690),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('Select Time',
-                            style: _heading.copyWith(fontSize: 22)),
-                      ),
-                      IconButton(
-                        tooltip: 'Close',
-                        onPressed: () => Navigator.pop(sheetContext),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(child: _pickerLabel('Hour')),
-                      Expanded(child: _pickerLabel('Minute')),
-                      Expanded(child: _pickerLabel('AM / PM')),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    height: 180,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _timeWheel(
-                            controller: hourController,
-                            itemCount: 12,
-                            label: (index) =>
-                                (index + 1).toString().padLeft(2, '0'),
-                            onChanged: (index) =>
-                                setSheetState(() => selectedHour = index + 1),
-                          ),
-                        ),
-                        Expanded(
-                          child: _timeWheel(
-                            controller: minuteController,
-                            itemCount: 60,
-                            label: (index) => index.toString().padLeft(2, '0'),
-                            onChanged: (index) =>
-                                setSheetState(() => selectedMinute = index),
-                          ),
-                        ),
-                        Expanded(
-                          child: _timeWheel(
-                            controller: periodController,
-                            itemCount: 2,
-                            label: (index) => index == 0 ? 'AM' : 'PM',
-                            onChanged: (index) =>
-                                setSheetState(() => selectedPeriod = index),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Selected: ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')} ${selectedPeriod == 0 ? 'AM' : 'PM'}',
-                    style: OnboardingStyles.body
-                        .copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(sheetContext),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: const BorderSide(color: Colors.black26),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(
-                            sheetContext,
-                            '${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')} ${selectedPeriod == 0 ? 'AM' : 'PM'}',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: const Color(0xFFD7FF35),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: const Text('Confirm'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
     );
-    if (result != null && !_saving) change(result);
+    if (result != null && mounted && !_saving) {
+      change(_normalTime('${result.hour}:${result.minute.toString().padLeft(2, '0')}'));
+    }
   }
-
-  Widget _pickerLabel(String label) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Text(label,
-            textAlign: TextAlign.center,
-            style: OnboardingStyles.body.copyWith(
-                color: const Color(0xFF69706A), fontWeight: FontWeight.w600)),
-      );
 
   Future<void> _confirmCopyToAll(String day) async {
     if (_saving) return;
@@ -553,27 +411,6 @@ class _State extends State<ManageSlotsScreen> {
       }
     });
   }
-
-  Widget _timeWheel({
-    required FixedExtentScrollController controller,
-    required int itemCount,
-    required String Function(int) label,
-    required ValueChanged<int> onChanged,
-  }) =>
-      ListWheelScrollView.useDelegate(
-        controller: controller,
-        itemExtent: 44,
-        diameterRatio: 1.5,
-        physics: const FixedExtentScrollPhysics(),
-        onSelectedItemChanged: onChanged,
-        childDelegate: ListWheelChildBuilderDelegate(
-          childCount: itemCount,
-          builder: (context, index) => Center(
-            child: Text(label(index),
-                style: OnboardingStyles.body.copyWith(fontSize: 18)),
-          ),
-        ),
-      );
 
   Widget _time(String value, ValueChanged<String?> change) => InkWell(
         onTap: _saving ? null : () => _pickTime(value, change),

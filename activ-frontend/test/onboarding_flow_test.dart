@@ -2117,8 +2117,9 @@ void main() {
       expect(timeField.hitTestable(), findsOneWidget);
       await tester.tap(timeField);
       await tester.pumpAndSettle();
-      expect(find.byType(TimePickerDialog), findsOneWidget);
-      Navigator.of(tester.element(find.byType(TimePickerDialog))).pop();
+      expect(find.text('Select Time'), findsOneWidget);
+      expect(find.byType(ListWheelScrollView), findsNWidgets(3));
+      await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
     }
   });

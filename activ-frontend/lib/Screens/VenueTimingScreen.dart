@@ -154,9 +154,10 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   /// Time Picker
   Future<String?> _pickTime(BuildContext context, String? initial) async {
+    final savedTime = DateFormat('hh:mm a').tryParseStrict(initial ?? '');
     TimeOfDay? picked = await showAppTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialTime: savedTime == null ? TimeOfDay.now() : TimeOfDay.fromDateTime(savedTime),
     );
 
     if (picked != null) {
