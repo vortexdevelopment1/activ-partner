@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:activ_app/Beans/activity_model.dart';
 import 'package:activ_app/Screens/Home/Activities/ActivityManagementScreen.dart';
 import 'package:activ_app/api_calling/api_constant.dart';
@@ -7,6 +8,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+
+class _PhotoPicker extends ImagePicker {
+  _PhotoPicker(this.photos);
+  final List<XFile> photos;
+  @override
+  Future<List<XFile>> pickMultiImage({double? maxWidth, double? maxHeight,
+    int? imageQuality, int? limit, bool requestFullMetadata = true}) async => photos;
+}
 
 void main() {
   const first = 'https://images.test/first.jpg';
@@ -16,7 +26,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'jwt_token': 'session'});
     BASE_URL = 'https://backend.test/api/v1';
   });
-  Future<void> open(WidgetTester tester, http.Client client) async {
+  Future<void> open(WidgetTester tester, http.Client client, {ImagePicker? picker}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 1000);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -24,7 +34,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: ActivityManagementScreen(
       activity: ActivityModel.fromJson({'activity_id': 'activity',
         'operate_value': {'title': 'Adventure Sports'}}),
-      venueId: 'venue', client: client,
+      venueId: 'venue', client: client, imagePicker: picker,
     )));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Manage Images'));
@@ -48,6 +58,25 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
   }
+
+  testWidgets('Manage Images rejects an already saved photo and retains the image count', (tester) async {
+    var uploads = 0;
+    final bytes = Uint8List.fromList([1, 2, 3]);
+    final client = MockClient((request) async {
+      if (request.method == 'POST') uploads++;
+      if (request.url.host == 'images.test') return http.Response.bytes(bytes, 200);
+      return details(first);
+    });
+    await open(tester, client, picker: _PhotoPicker([
+      XFile.fromData(bytes, name: 'renamed-copy.jpg'),
+    ]));
+    await tester.tap(find.byTooltip('Upload images'));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo already added. Please choose a different photo.'), findsOneWidget);
+    expect(find.text('3 / 12 Images Uploaded'), findsOneWidget);
+    expect(uploads, 0);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('dragging a photo to first sets cover only when saved and survives reopening', (tester) async {
     var cover = first;

@@ -23,7 +23,7 @@ describe('activity photo review uploads', () => {
   });
 
   it('preserves append behavior for other callers', async () => {
-    await controller.uploadActivityImages('activity', { id: 'partner' }, [{}] as Express.Multer.File[]);
+    await controller.uploadActivityImages('activity', { id: 'partner' }, [{ buffer: Buffer.from('photo') }] as Express.Multer.File[]);
     expect(venuesService.uploadActivityImages).toHaveBeenCalledWith(
       'activity', ['photo-url'], 'partner', false,
     );
@@ -34,5 +34,23 @@ describe('activity photo review uploads', () => {
       .rejects.toBeInstanceOf(BadRequestException);
     expect(cloudinaryService.uploadFiles).not.toHaveBeenCalled();
     expect(venuesService.uploadActivityImages).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate bytes even with different filenames before uploading', async () => {
+    const files = ['original.jpg', 'copy.jpg'].map(originalname => ({
+      originalname, buffer: Buffer.from('same photo'),
+    })) as Express.Multer.File[];
+    await expect(controller.uploadActivityImages('activity', { id: 'partner' }, files))
+      .rejects.toThrow('Photo already added');
+    expect(cloudinaryService.uploadFiles).not.toHaveBeenCalled();
+    expect(venuesService.uploadActivityImages).not.toHaveBeenCalled();
+  });
+
+  it('allows different photos with the same filename', async () => {
+    const files = ['first photo', 'second photo'].map(content => ({
+      originalname: 'photo.jpg', buffer: Buffer.from(content),
+    })) as Express.Multer.File[];
+    await controller.uploadActivityImages('activity', { id: 'partner' }, files);
+    expect(cloudinaryService.uploadFiles).toHaveBeenCalledWith(files, 'activ/services', 'image');
   });
 });

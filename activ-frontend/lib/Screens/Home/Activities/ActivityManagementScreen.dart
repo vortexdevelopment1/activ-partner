@@ -11,6 +11,7 @@ import '../../../Beans/activity_model.dart';
 import '../../../Style/activity_logos.dart';
 import '../../../api_calling/api_constant.dart';
 import '../../../api_calling/api_request.dart';
+import '../../../api_calling/activity_photo_upload.dart';
 import '../ManageSlotsScreen.dart';
 import 'DirectBookSlotScreen.dart';
 import '../../CategoryQuestionsScreen.dart';
@@ -33,12 +34,14 @@ class ActivityManagementScreen extends StatefulWidget {
       required this.activity,
       this.initialStatus = 'Active',
       this.venueId = '',
+      this.imagePicker,
       this.client});
 
   final ActivityModel activity;
   final String initialStatus;
   final String venueId;
   final http.Client? client;
+  final ImagePicker? imagePicker;
 
   @override
   State<ActivityManagementScreen> createState() => _ActivityManagementState();
@@ -506,6 +509,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   Future<void> _upload() async {
+    if (_saving) return;
+    setState(() => _saving = true);
     try {
       final currentCount = _images.length;
       if (currentCount >= 12) {
@@ -513,7 +518,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
             'You can upload a maximum of 12 images. Remove an image before adding more.');
         return;
       }
-      final photos = await ImagePicker().pickMultiImage(imageQuality: 85);
+      final photos = await (widget.imagePicker ?? ImagePicker())
+          .pickMultiImage(imageQuality: 85);
       if (photos.isEmpty || !mounted) return;
       if (photos.length > 10) {
         _message('Select up to 10 images at a time.');
@@ -524,23 +530,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
             'You can upload ${12 - currentCount} more image${12 - currentCount == 1 ? '' : 's'}.');
         return;
       }
-      setState(() => _saving = true);
-      final request = http.MultipartRequest(
-          'POST',
-          Uri.parse(
-              '$BASE_URL/venues/activities/${widget.activity.activityId}/images'));
-      request.headers.addAll(await _headers());
-      request.headers.remove('Content-Type');
-      for (final photo in photos) {
-        final bytes = await photo.readAsBytes();
-        if (bytes.length > 10 * 1024 * 1024) {
-          throw Exception('Each image must be under 10 MB.');
-        }
-        request.files.add(http.MultipartFile.fromBytes('images', bytes,
-            filename: photo.name));
-      }
-      _response(await http.Response.fromStream(
-          await _client.send(request).timeout(const Duration(seconds: 30))));
+      final headers = await _headers();
+      await ActivityPhotoUploader(client: _client, baseUrl: BASE_URL)
+          .uploadImages(
+        token: (headers['Authorization'] ?? '').replaceFirst('Bearer ', ''),
+        serviceId: widget.activity.activityId,
+        images: photos,
+        replaceImages: false,
+        existingImageUrls: _images,
+      );
       _changed = true;
       if (mounted) await _load();
     } catch (e) {

@@ -88,6 +88,7 @@ class _EditActivityPhotosScreenState extends State<EditActivityPhotosScreen> {
         serviceId: widget.activityId,
         images: photos,
         replaceImages: false,
+        existingImageUrls: _urls,
       );
       if (mounted) setState(() => _urls = urls);
     } catch (error) {

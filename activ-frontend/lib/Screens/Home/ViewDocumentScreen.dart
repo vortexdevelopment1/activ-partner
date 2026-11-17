@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../Utills/common_utilities.dart';
+import '../../Utills/gstin_validation.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../ContactSupportFormScreen.dart';
@@ -502,8 +503,7 @@ class _ViewDocumentScreenState extends State<ViewDocumentScreen> {
                   style: _text(14),
                   decoration: _input('e.g. 27AAPFU0939F1ZV'),
                   validator: (value) =>
-                      RegExp(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$')
-                              .hasMatch((value ?? '').trim().toUpperCase())
+                      isValidGstin(value ?? '')
                           ? null
                           : 'Enter a valid GSTIN number.'),
               const SizedBox(height: 22),

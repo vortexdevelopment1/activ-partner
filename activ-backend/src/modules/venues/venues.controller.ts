@@ -31,6 +31,8 @@ import {
   FileFieldsInterceptor,
 } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
+import { createHash } from "crypto";
+import { isValidGstin } from '../../common/utils/gstin-validation';
 import { VenuesService } from "./venues.service";
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
@@ -107,7 +109,7 @@ export class VenuesController {
         aadhaarName: { type: "string", example: "Virat Kohli" },
         aadhaarNumber: { type: "string", example: "1234-5678-9101" },
         panNumber: { type: "string", example: "ABCDE1234F" },
-        gstNumber: { type: "string", example: "BQRTA557T" },
+        gstNumber: { type: "string", example: "27AAPFU0939F1ZV" },
         panCard: { type: "string", format: "binary" },
         aadhaarCard: { type: "string", format: "binary" },
         gstinDoc: { type: "string", format: "binary" },
@@ -141,7 +143,12 @@ export class VenuesController {
     if (body.aadhaarNumber !== undefined)
       legalData.aadhaarNumber = body.aadhaarNumber;
     if (body.panNumber !== undefined) legalData.panNumber = body.panNumber;
-    if (body.gstNumber !== undefined) legalData.gstNumber = body.gstNumber;
+    if (body.gstNumber !== undefined) {
+      if (typeof body.gstNumber !== 'string' || (body.gstNumber.trim() && !isValidGstin(body.gstNumber))) {
+        throw new BadRequestException('Enter a valid 15-character GSTIN.');
+      }
+      legalData.gstNumber = body.gstNumber.trim().toUpperCase();
+    }
     if (body.gstName !== undefined) legalData.gstName = body.gstName;
     if (body.clearPanCard === "true") legalData.panCardUrl = null;
     if (body.clearAadhaarCard === "true") legalData.aadhaarCardUrl = null;
@@ -895,6 +902,14 @@ export class VenuesController {
   ) {
     if (!files?.length) {
       throw new BadRequestException("Please select at least one image");
+    }
+    const fingerprints = new Set<string>();
+    for (const file of files) {
+      const fingerprint = createHash('sha256').update(file.buffer).digest('hex');
+      if (fingerprints.has(fingerprint)) {
+        throw new BadRequestException('Photo already added. Please choose a different photo.');
+      }
+      fingerprints.add(fingerprint);
     }
     const urls = await this.cloudinaryService.uploadFiles(
       files,

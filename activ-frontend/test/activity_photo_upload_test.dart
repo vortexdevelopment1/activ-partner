@@ -92,6 +92,109 @@ void main() {
             .having((e) => e.message, 'message', contains('4 and 12'))));
   });
 
+  test('rejects renamed duplicate files before any upload', () async {
+    final client =
+        MockClient((_) async => throw StateError('Unexpected request'));
+    await expectLater(
+      ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
+        token: 'session',
+        serviceId: 'activity',
+        images: [
+          photos.first,
+          XFile.fromData(await photos.first.readAsBytes(), name: 'renamed.png'),
+        ],
+      ),
+      throwsA(isA<ActivityUploadException>().having(
+          (e) => e.message, 'message', contains('Photo already added'))),
+    );
+  });
+
+  test(
+      'rejects a photo already saved to the activity without sending auth to the CDN',
+      () async {
+    var uploads = 0;
+    final client = MockClient((request) async {
+      if (request.method == 'POST') uploads++;
+      expect(request.url.host, 'images.test');
+      expect(request.headers.containsKey('Authorization'), isFalse);
+      return http.Response.bytes(await photos.first.readAsBytes(), 200);
+    });
+    await expectLater(
+      ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
+        token: 'session',
+        serviceId: 'activity',
+        images: [photos.first],
+        replaceImages: false,
+        existingImageUrls: ['https://images.test/saved.png'],
+      ),
+      throwsA(isA<ActivityUploadException>().having(
+          (e) => e.message, 'message', contains('Photo already added'))),
+    );
+    expect(uploads, 0);
+  });
+
+  test('distinct content uploads even when filenames match', () async {
+    var uploads = 0;
+    final saved = ['https://images.test/old.png'];
+    final client = MockClient((request) async {
+      if (request.method == 'GET') return http.Response.bytes([9, 8, 7], 200);
+      uploads++;
+      expect(request.headers['Authorization'], 'Bearer session');
+      expect(latin1.decode(request.bodyBytes),
+          contains('name="replaceImages"\r\n\r\nfalse'));
+      return json({
+        'imageUrls': [...saved, 'new-1', 'new-2']
+      });
+    });
+    final urls = await ActivityPhotoUploader(client: client, baseUrl: BASE_URL)
+        .uploadImages(
+      token: 'session',
+      serviceId: 'activity',
+      replaceImages: false,
+      existingImageUrls: saved,
+      images: [
+        for (final bytes in [
+          [1, 2],
+          [3, 4]
+        ])
+          XFile.fromData(Uint8List.fromList(bytes), name: 'photo.png')
+      ],
+    );
+    expect(uploads, 1);
+    expect(urls, [...saved, 'new-1', 'new-2']);
+  });
+
+  test('failed saved-photo check prevents uploading and allows retry',
+      () async {
+    var fail = true;
+    var uploads = 0;
+    final uploader = ActivityPhotoUploader(
+        baseUrl: BASE_URL,
+        client: MockClient((request) async {
+          if (request.method == 'GET') {
+            return fail
+                ? http.Response('', 503)
+                : http.Response.bytes([9], 200);
+          }
+          uploads++;
+          return json({
+            'imageUrls': ['old', 'new']
+          });
+        }));
+    Future<List<String>> add() => uploader.uploadImages(
+          token: 'session',
+          serviceId: 'activity',
+          replaceImages: false,
+          existingImageUrls: ['https://images.test/old.png'],
+          images: [photos.first],
+        );
+    await expectLater(add(), throwsA(isA<ActivityUploadException>()));
+    expect(uploads, 0);
+    fail = false;
+    expect(await add(), ['old', 'new']);
+    expect(uploads, 1);
+  });
+
   test('expired session and backend validation explain how to recover',
       () async {
     for (final status in [401, 400]) {

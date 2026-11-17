@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../Utills/venue_photo_duplicates.dart';
+
 class ActivityUploadException implements Exception {
   const ActivityUploadException(this.message);
   final String message;
@@ -112,27 +114,44 @@ class ActivityPhotoUploader {
     required String serviceId,
     required List<XFile> images,
     bool replaceImages = true,
+    List<String> existingImageUrls = const [],
   }) async {
     final files = <http.MultipartFile>[];
-    final uniqueImages = <XFile>[];
     final seenImages = <String>{};
-    for (final image in images) {
+    for (var index = 0; index < images.length; index++) {
+      final image = images[index];
       final bytes = await image.readAsBytes();
-      final key = base64Encode(bytes);
-      if (seenImages.add(key)) uniqueImages.add(image);
-    }
-
-    for (var index = 0; index < uniqueImages.length; index++) {
-      final image = uniqueImages[index];
-      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+        throw const ActivityUploadException(
+            'Each image must be non-empty and less than 5 MB.');
+      }
+      if (!seenImages.add(venuePhotoFingerprint(bytes))) {
+        throw const ActivityUploadException(
+            'Photo already added. Please choose a different photo.');
+      }
       final name = image.name.isEmpty ? 'activity_$index.jpg' : image.name;
       final extension = name.split('.').last.toLowerCase();
       final type = image.mimeType ??
-          {'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}[
-              extension] ??
+          {
+            'png': 'image/png',
+            'webp': 'image/webp',
+            'gif': 'image/gif'
+          }[extension] ??
           'image/jpeg';
       files.add(http.MultipartFile.fromBytes('images', bytes,
           filename: name, contentType: MediaType.parse(type)));
+    }
+    for (final url in existingImageUrls.toSet()) {
+      final saved =
+          await client.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (saved.statusCode != 200 || saved.bodyBytes.isEmpty) {
+        throw const ActivityUploadException(
+            'Unable to check saved photos. Please try again.');
+      }
+      if (seenImages.contains(venuePhotoFingerprint(saved.bodyBytes))) {
+        throw const ActivityUploadException(
+            'Photo already added. Please choose a different photo.');
+      }
     }
     final response = await client
         .send(http.MultipartRequest(
@@ -145,12 +164,15 @@ class ActivityPhotoUploader {
         .then(http.Response.fromStream)
         .timeout(const Duration(minutes: 2));
     final uploaded = _data(response);
-    if (uploaded is! Map || uploaded['imageUrls'] is! List ||
-        (uploaded['imageUrls'] as List).length < uniqueImages.length) {
+    if (uploaded is! Map ||
+        uploaded['imageUrls'] is! List ||
+        (uploaded['imageUrls'] as List).length < images.length) {
       throw const ActivityUploadException(
           'The photos were not saved. Please try again.');
     }
-    return (uploaded['imageUrls'] as List).map((url) => url.toString()).toList();
+    return (uploaded['imageUrls'] as List)
+        .map((url) => url.toString())
+        .toList();
   }
 
   Future<String> upload({

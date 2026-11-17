@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Matches } from 'class-validator';
+import { IsNotEmpty, IsString, ValidateBy } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { isValidGstin } from '../../../common/utils/gstin-validation';
 
 export class SubmitGstVerificationDto {
   @ApiProperty({ example: '27AAPFU0939F1ZV' })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, {
-    message: 'Invalid GST number format',
+  @Transform(({ value }) => typeof value === 'string' ? value.trim().toUpperCase() : value)
+  @ValidateBy({ name: 'isGstin', validator: { validate: isValidGstin } }, {
+    message: 'Enter a valid 15-character GSTIN.',
   })
   gstNumber: string;
 

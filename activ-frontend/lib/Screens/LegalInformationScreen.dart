@@ -17,6 +17,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import '../Style/app_size.dart';
 import '../Utills/common_utilities.dart';
+import '../Utills/gstin_validation.dart';
 import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'AadhaarNumberFormatter.dart';
@@ -27,9 +28,10 @@ import 'onboarding_widgets.dart';
 
 
 class LegalInformationScreen extends StatefulWidget {
-  const LegalInformationScreen({super.key, this.imagePicker, this.filePicker});
+  const LegalInformationScreen({super.key, this.imagePicker, this.filePicker, this.client});
   final ImagePicker? imagePicker;
   final FilePicker? filePicker;
+  final dio_pkg.Dio? client;
 
   @override
   State<LegalInformationScreen> createState() => _State();
@@ -44,6 +46,8 @@ class _State extends State<LegalInformationScreen> {
   TextEditingController panCardNumberController = TextEditingController();
   TextEditingController gstINController = TextEditingController();
   bool isButtonEnabled = false;
+  bool _saving = false;
+  final _gstinFieldKey = GlobalKey<FormFieldState<String>>();
   bool isChecked = false;
   String phoneCode = "", userMobileNumber = "";
   String? panCardFileExtension = "";
@@ -592,12 +596,12 @@ class _State extends State<LegalInformationScreen> {
                                         child: InkWell(
                                             onTap: ()
                                             async {
-                                              if(validation(context))
+                                              if(!_saving && validation(context))
                                               {
-                                                _saveLegalInfoToApi();
+                                                await _saveLegalInfoToApi();
                                               }
                                             },
-                                            child: getButtonBlack(context, "Next", "legalInformation")
+                                            child: getButtonBlack(context, _saving ? 'Saving...' : 'Next', "legalInformation")
                                         ),
                                       )
                                     ],
@@ -1604,8 +1608,12 @@ class _State extends State<LegalInformationScreen> {
         child: Container(
           child: TextFormField(
             controller: gstINController,
+            key: _gstinFieldKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            validator: (value) => (value ?? '').trim().isEmpty || isValidGstin(value!)
+                ? null : 'Enter a valid 15-character GSTIN.',
             textInputAction: TextInputAction.done,
-            textCapitalization: TextCapitalization.sentences,
+            textCapitalization: TextCapitalization.characters,
             keyboardType: TextInputType.text,
             cursorColor: AppColors.cursorBlack,
             inputFormatters: [
@@ -1685,8 +1693,13 @@ class _State extends State<LegalInformationScreen> {
       CommonUtilities.createSnackBar(context, ConstantsMessages.validationPanCardPDF);
       return false;
     }
+    else if (gstINController.text.trim().isNotEmpty && !isValidGstin(gstINController.text)) {
+      _gstinFieldKey.currentState?.validate();
+      CommonUtilities.createSnackBar(context, 'Enter a valid 15-character GSTIN.');
+      return false;
+    }
     else if (gstINController.text.toString().trim().isEmpty && _gstinCardBytes != null) {
-      CommonUtilities.createSnackBar(context, ConstantsMessages.validationGSTINCardPDF);
+      CommonUtilities.createSnackBar(context, 'Enter the GSTIN for the uploaded document.');
       return false;
     }
     else if (gstINController.text.toString().trim().isNotEmpty && _gstinCardBytes == null) {
@@ -1700,24 +1713,26 @@ class _State extends State<LegalInformationScreen> {
   // ─── Save Legal Info to REST API ─────────────────────────────────────────
 
   Future<void> _saveLegalInfoToApi() async {
-    final venueId = checkString(await SharedPreference.readStr("venue_id"));
-    final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
-
-    if (venueId.isEmpty) {
-      if (!mounted) return;
-      CommonUtilities.createSnackBar(context, 'Venue not found. Please restart setup.');
-      return;
-    }
-
-    if (!mounted) return;
+    if (_saving) return;
+    setState(() => _saving = true);
     try {
+      final venueId = checkString(await SharedPreference.readStr("venue_id"));
+      final jwtToken = checkString(await SharedPreference.readStr("jwt_token"));
+
+      if (venueId.isEmpty) {
+        if (!mounted) return;
+        CommonUtilities.createSnackBar(context, 'Venue not found. Please restart setup.');
+        return;
+      }
+
+      if (!mounted) return;
       final formData = dio_pkg.FormData();
       // Text fields (per API spec)
       formData.fields.add(MapEntry('aadhaarName', fullNameController.text.trim()));
       formData.fields.add(MapEntry('aadhaarNumber', aadhaarNumberController.text.trim().replaceAll('-', '')));
       formData.fields.add(MapEntry('panNumber', panCardNumberController.text.trim()));
       if (gstINController.text.trim().isNotEmpty) {
-        formData.fields.add(MapEntry('gstNumber', gstINController.text.trim()));
+        formData.fields.add(MapEntry('gstNumber', gstINController.text.trim().toUpperCase()));
       }
       if (_panChanged && _panCardBytes == null && _existingPanUrl == null) {
         formData.fields.add(const MapEntry('clearPanCard', 'true'));
@@ -1751,21 +1766,24 @@ class _State extends State<LegalInformationScreen> {
       CommonUtilities.showLog('Sending fields: ${formData.fields.map((e) => e.key).toList()}');
       CommonUtilities.showLog('Sending files: ${formData.files.map((e) => e.key).toList()}');
 
-      final dio = dio_pkg.Dio();
-      final request = dio.patch(
+      final dio = widget.client ?? dio_pkg.Dio();
+      final response = await dio.patch(
         '$BASE_URL/venues/$venueId/legal',
         data: formData,
         options: dio_pkg.Options(
           headers: {'Authorization': 'Bearer $jwtToken'},
+          sendTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
           validateStatus: (_) => true,
         ),
       );
-      unawaited(request.then((response) {
-        CommonUtilities.showLog('Legal info status: ${response.statusCode}');
-        CommonUtilities.showLog('Legal info response: ${response.data}');
-      }).catchError((error) {
-        CommonUtilities.showLog('❌ Legal info error: $error');
-      }));
+      if (!mounted) return;
+      if (response.statusCode == null || response.statusCode! < 200 || response.statusCode! >= 300) {
+        final message = response.data is Map ? response.data['message'] : null;
+        CommonUtilities.createSnackBar(context, message is List
+            ? message.join(', ') : message is String ? message : 'Unable to save legal information. Please try again.');
+        return;
+      }
 
       if (mounted) {
         CommonUtilities.NavigateWithPush(context, ReviewVenueDetailsScreen());
@@ -1776,6 +1794,8 @@ class _State extends State<LegalInformationScreen> {
         CommonUtilities.createSnackBar(
             context, 'Network error. Please check your connection.');
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
