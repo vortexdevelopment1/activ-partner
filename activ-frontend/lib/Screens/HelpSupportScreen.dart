@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:activ_app/Utills/app_time_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -42,7 +43,7 @@ class HelpSupportScreen extends StatelessWidget {
               icon: Icons.mail_outline_rounded,
               title: 'Email Us',
               subtitle:
-                  "Send us an email and we'll get back to you at your\npreferred time",
+                  "Send us an email and we'll get back to you at your preferred time",
               onTap: () => CommonUtilities.NavigateWithPush(
                 context,
                 EmailUsScreen(client: client),
@@ -53,7 +54,7 @@ class HelpSupportScreen extends StatelessWidget {
               icon: Icons.phone_rounded,
               title: 'Request Call Back',
               subtitle:
-                  'Fill In your details and our team will call you at you at\nyour preferred time',
+                  'Fill In your details and our team will call you at your preferred time',
               onTap: () => CommonUtilities.NavigateWithPush(
                 context,
                 RequestCallbackScreen(client: client),
@@ -577,12 +578,13 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    final picked = await showAppTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 10, minute: 0),
     );
     if (picked != null) {
-      _time.text = picked.format(context);
+      _time.text = MaterialLocalizations.of(context)
+          .formatTimeOfDay(picked, alwaysUse24HourFormat: false);
       setState(() {});
     }
   }
@@ -1442,7 +1444,7 @@ Future<void> _showCallbackDialog(BuildContext context) {
               ),
               const SizedBox(height: 24),
               SizedBox(
-                width: 210,
+                width: 200,
                 height: 72,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
@@ -1458,7 +1460,7 @@ Future<void> _showCallbackDialog(BuildContext context) {
                     'Okay',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

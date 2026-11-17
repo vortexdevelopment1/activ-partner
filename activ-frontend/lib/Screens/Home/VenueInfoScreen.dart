@@ -801,7 +801,7 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
     return _notice(
         Icons.schedule,
         LayoutBuilder(
-            builder: (context, constraints) => constraints.maxWidth < 260 ||
+            builder: (context, constraints) => constraints.maxWidth < 220 ||
                     MediaQuery.textScalerOf(context).scale(16) > 20
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -811,14 +811,14 @@ class _VenueInfoScreenState extends State<VenueInfoScreen> {
                         content.last
                       ])
                 : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(flex: 8, child: content.first),
+                    Expanded(child: content.first),
                     Container(
                       width: 1,
                       height: 66,
-                      margin: const EdgeInsets.symmetric(horizontal: 14),
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
                       color: _accent.withValues(alpha: 0.45),
                     ),
-                    Expanded(flex: 10, child: content.last)
+                    Expanded(child: content.last)
                   ])),
         centerIcon: true);
   }

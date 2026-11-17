@@ -7,6 +7,8 @@ import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/Utills/timing_copy_confirmation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:activ_app/Utills/app_time_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../Style/app_colors.dart';
@@ -165,33 +167,9 @@ class _State extends State<AddVenueTimingScreen> {
 
   /// Time Picker
   Future<String?> _pickTime(BuildContext context, String? initial) async {
-    TimeOfDay? picked = await showTimePicker(
-      //context: context,
-      //initialTime: TimeOfDay.now(),
+    TimeOfDay? picked = await showAppTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.green,
-              onPrimary: AppColors.white,
-              onSurface: AppColors.black1,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.green,
-              ),
-            ),
-          ),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              alwaysUse24HourFormat: false,
-            ),
-            child: child!,
-          ),
-        );
-      },
     );
 
     if (picked != null) {
@@ -1096,6 +1074,7 @@ class _State extends State<AddVenueTimingScreen> {
               key: ValueKey('slot-${day}-${key}-${slotIndex}'),
               initialValue: slot[key] ?? '',
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: OnboardingStyles.inputDecoration(hintText: hint),
               onChanged: (value) => setState(() => slot[key] = value),
             ),

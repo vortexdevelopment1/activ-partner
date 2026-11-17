@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:activ_app/Utills/app_time_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../api_calling/api_constant.dart';
@@ -164,7 +165,7 @@ class _State extends State<ManagePricingScreen> {
   }
 
   Future<void> _pickTime(TimeOfDay initial, ValueChanged<TimeOfDay> onPicked) async {
-    final t = await showTimePicker(context: context, initialTime: initial);
+    final t = await showAppTimePicker(context: context, initialTime: initial);
     if (t != null) onPicked(t);
   }
 

@@ -1378,6 +1378,20 @@ void main() {
     expect(tester.widget<TextFormField>(venueField('name')).enabled, isTrue);
   });
 
+  testWidgets('pending review details stay side by side on standard phones', (tester) async {
+    seedVenueInfo();
+    for (final width in [360.0, 384.0, 430.0]) {
+      await showScreen(tester, VenueInfoScreen(client: updateClient(requests: [pendingUpdate])), size: Size(width, 1562));
+      await tester.ensureVisible(find.text('Review ETA'));
+      await tester.pumpAndSettle();
+      final submitted = tester.getTopLeft(find.text('Submitted on'));
+      final eta = tester.getTopLeft(find.text('Review ETA'));
+      expect(eta.dy, closeTo(submitted.dy, 0.1));
+      expect(eta.dx, greaterThan(submitted.dx));
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('venue update layouts fit smaller phones, keyboard and enlarged text', (tester) async {
     seedVenueInfo();
     for (final size in [const Size(320, 640), const Size(430, 932), const Size(800, 932)]) {

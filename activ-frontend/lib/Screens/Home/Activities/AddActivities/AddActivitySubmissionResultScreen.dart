@@ -210,7 +210,7 @@ class _AddActivitySubmissionResultScreenState
                         draft
                             ? SvgPicture.asset('assets/save_as_draft.svg',
                                 width: 72, height: 72)
-                            : SvgPicture.asset('success_purple.svg',
+                            : SvgPicture.asset('assets/success_purple.svg',
                                 width: 72, height: 72),
                         const SizedBox(height: 8),
                         Text(
@@ -354,6 +354,25 @@ class _AddActivitySubmissionResultScreenState
                         color: AppColors.hintColor,
                       ),
                     ),
+                    if (draft) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.purple,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Draft',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'Satoshi',
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

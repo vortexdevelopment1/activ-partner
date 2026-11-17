@@ -6,6 +6,7 @@ import 'package:activ_app/Style/constants_messages.dart';
 import 'package:activ_app/Utills/common_utilities.dart';
 import 'package:activ_app/Utills/timing_copy_confirmation.dart';
 import 'package:flutter/material.dart';
+import 'package:activ_app/Utills/app_time_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -153,33 +154,9 @@ class _VenueTimingScreenState extends State<VenueTimingScreen> {
 
   /// Time Picker
   Future<String?> _pickTime(BuildContext context, String? initial) async {
-    TimeOfDay? picked = await showTimePicker(
-      //context: context,
-      //initialTime: TimeOfDay.now(),
+    TimeOfDay? picked = await showAppTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.green,
-              onPrimary: AppColors.white,
-              onSurface: AppColors.black1,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.green,
-              ),
-            ),
-          ),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              alwaysUse24HourFormat: false,
-            ),
-            child: child!,
-          ),
-        );
-      },
     );
 
     if (picked != null) {

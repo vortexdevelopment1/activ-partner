@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:activ_app/Utills/app_time_picker.dart';
 import 'package:flutter/rendering.dart' show MatrixUtils;
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter/services.dart';
@@ -1025,13 +1026,14 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
   }
 
   Future<void> _pickCallbackTime() async {
-    final picked = await showTimePicker(
+    final picked = await showAppTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 10, minute: 0),
     );
     if (picked == null || !mounted) return;
     setState(() {
-      _callbackTime = picked.format(context);
+      _callbackTime = MaterialLocalizations.of(context)
+          .formatTimeOfDay(picked, alwaysUse24HourFormat: false);
     });
   }
 

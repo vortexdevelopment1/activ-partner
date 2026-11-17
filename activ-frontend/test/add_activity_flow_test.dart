@@ -38,6 +38,36 @@ void main() {
   http.Response response(Object? data, [int status = 200]) =>
       http.Response(jsonEncode({'data': data}), status);
 
+  testWidgets('timing prices and capacity accept digits only', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(const MaterialApp(
+      home: AddVenueTimingScreen(activityId: 'activity', initialTiming: {
+        'Monday': [
+          {'open': '09:00 AM', 'close': '06:00 PM', 'capacity': '20',
+            'price': '500', 'discountedPrice': '350'}
+        ],
+      }),
+    ));
+    await tester.pumpAndSettle();
+    for (final key in ['capacity', 'price', 'discountedPrice']) {
+      final field = find.byKey(ValueKey('slot-Mon-$key-0'));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, 'a50.0-6,4 b');
+      await tester.pump();
+      expect(tester.widget<EditableText>(find.descendant(
+              of: field, matching: find.byType(EditableText))).controller.text,
+          '50064');
+      await tester.enterText(field, '250');
+      await tester.pump();
+      final dynamic state = tester.state(find.byType(AddVenueTimingScreen));
+      expect(state.timings['Mon'].timeSlots.first[key], '250');
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   for (final back in ['button', 'system', 'root']) {
     testWidgets('add another activity returns to management using $back back',
         (tester) async {
