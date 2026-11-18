@@ -1099,6 +1099,8 @@ class _State extends State<AddVenueTimingScreen> {
     }
 
     return Column(
+      // Reset initialValue fields when copying replaces the slot map.
+      key: ObjectKey(slot),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         field(

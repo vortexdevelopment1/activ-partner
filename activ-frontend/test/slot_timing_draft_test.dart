@@ -117,20 +117,49 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    String displayed(String day, String field) => tester
+        .widget<TextField>(find.descendant(
+            of: find.byKey(Key('slot-$day-$field-0')),
+            matching: find.byType(TextField)))
+        .controller!
+        .text;
+
     await copy(0);
     final dynamic state = tester.state(find.byType(add.AddVenueTimingScreen));
     expect(state.timings['Mon'].timeSlots.first['price'], '100');
     expect(state.timings['Tue'].timeSlots.first['price'], '100');
+    expect(displayed('Tue', 'price'), '100');
     await tester.enterText(find.byKey(const Key('slot-Mon-price-0')), '350');
     await copy(0);
     expect(state.timings['Mon'].timeSlots.first['price'], '350');
     expect(state.timings['Tue'].timeSlots.first['price'], '350');
+    expect(displayed('Tue', 'price'), '350');
     await tester.enterText(find.byKey(const Key('slot-Tue-price-0')), '475');
     expect(state.timings['Mon'].timeSlots.first['price'], '350');
     await copy(1);
     expect(state.timings['Mon'].timeSlots.first['price'], '475');
     expect(state.timings['Tue'].timeSlots.first['price'], '475');
     expect(state.timings['Mon'].timeSlots.first['capacity'], '4');
+    expect(displayed('Mon', 'price'), '475');
+
+    for (final discount in ['250', '350']) {
+      await tester.enterText(
+          find.byKey(const Key('slot-Mon-discountedPrice-0')), discount);
+      await copy(0);
+      expect(displayed('Mon', 'discountedPrice'), discount);
+      expect(displayed('Tue', 'discountedPrice'), discount);
+      expect(state.timings['Tue'].timeSlots.first['discountedPrice'], discount);
+      final percent = ((475 - int.parse(discount)) / 475 * 100).round();
+      expect(find.text('User will see Flat $percent% OFF', findRichText: true),
+          findsNWidgets(2));
+    }
+    await tester.enterText(
+        find.byKey(const Key('slot-Tue-discountedPrice-0')), '200');
+    expect(displayed('Mon', 'discountedPrice'), '350');
+    await copy(1);
+    expect(displayed('Mon', 'discountedPrice'), '200');
+    expect(displayed('Tue', 'discountedPrice'), '200');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
