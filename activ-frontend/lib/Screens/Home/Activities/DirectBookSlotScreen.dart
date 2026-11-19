@@ -100,6 +100,15 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
     return matches.where((slot) => !_hasEnded(slot)).toList();
   }
 
+  String get _courtLabel {
+    if (_courts.contains(_selectedCourt)) return _selectedCourt;
+    final name = _selectedCourt.replaceFirst(RegExp(r'\s+\([^()]*\)$'), '');
+    return _courts.firstWhere(
+      (court) => court == name || court.startsWith('$name ('),
+      orElse: () => _selectedCourt,
+    );
+  }
+
   List<_BookableSlot> _slotsFromDayMap(Map value, String day) {
     final directDay = value.entries
         .where((entry) => entry.key.toString().toLowerCase() == day)
@@ -472,7 +481,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
       isScrollControlled: true,
       builder: (context) => _CourtPickerSheet(
         courts: _courts,
-        selectedCourt: _selectedCourt,
+        selectedCourt: _courtLabel,
       ),
     );
     if (court != null && mounted) {
@@ -498,7 +507,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
         builder: (_) => _WalkInParticipantScreen(
           venueName: widget.venueName,
           date: _selectedDate,
-          court: _selectedCourt,
+          court: _courtLabel,
           slots: _selectedSlots.map((slot) => slot.label).toList(),
           onReserve: (participant) async {
             if (_selectedSlots.isEmpty || chosenSlots.any(_hasEnded)) {
@@ -645,7 +654,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
           venueId: widget.venueId,
           serviceId: _serviceId,
           venueName: widget.venueName,
-          court: _selectedCourt,
+          court: _courtLabel,
           client: widget.client,
         ),
       ),
@@ -803,7 +812,7 @@ class _DirectBookSlotScreenState extends State<DirectBookSlotScreen> with Widget
                       const SizedBox(height: 24),
                       _label('Select Court', required: true),
                       _picker(
-                          _selectedCourt, Icons.keyboard_arrow_down, _pickCourt),
+                          _courtLabel, Icons.keyboard_arrow_down, _pickCourt),
                       const SizedBox(height: 24),
                       _label('Select Date', required: true),
                       _picker(DateFormat('dd MMMM yyyy').format(_selectedDate),

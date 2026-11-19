@@ -283,6 +283,65 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
   }
 
   Future<void> _deleteMember(_TeamMember member, BuildContext dialogContext) async {
+    if (_loading) return;
+    Navigator.pop(dialogContext);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      builder: (confirmationContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        constraints: const BoxConstraints(maxWidth: 400),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        titlePadding: const EdgeInsets.fromLTRB(18, 14, 10, 0),
+        title: Row(children: [
+          const Expanded(child: Text('Are you sure?', style: TextStyle(
+            fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w700,
+            color: _ink,
+          ))),
+          IconButton(
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(confirmationContext, false),
+            icon: const Icon(Icons.close, size: 20, color: _ink),
+          ),
+        ]),
+        contentPadding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
+        content: const Text(
+          'This action cannot be undone. This will permanently delete the member from your team.',
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, height: 1.5, color: AppColors.black1),
+        ),
+        actionsPadding: const EdgeInsets.all(18),
+        actions: [Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: () => Navigator.pop(confirmationContext, false),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _ink,
+              side: const BorderSide(color: AppColors.black1),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size.fromHeight(40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              textStyle: const TextStyle(fontFamily: 'Satoshi', fontSize: 13),
+            ),
+            child: const Text('Cancel'),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: ElevatedButton(
+            onPressed: () => Navigator.pop(confirmationContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.red, foregroundColor: Colors.white, elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size.fromHeight(40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              textStyle: const TextStyle(fontFamily: 'Satoshi', fontSize: 13),
+            ),
+            child: const Text("Yes, I'm sure"),
+          )),
+        ])],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _loading = true);
     try {
       final response = await (widget.client?.delete ?? http.delete)(
         Uri.parse('$TEAM_URL/${member.id}'),
@@ -290,9 +349,8 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
       );
       CommonUtilities.showLog('DELETE team ${response.statusCode}');
 
-      if (!mounted || !dialogContext.mounted) return;
+      if (!mounted) return;
       if (response.statusCode == 200 || response.statusCode == 204) {
-        Navigator.pop(dialogContext);
         await _loadMembers();
       } else {
         _showApiError(response.body, 'Failed to delete member');
@@ -300,6 +358,8 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
     } catch (error) {
       CommonUtilities.showLog('Manage team delete error: $error');
       if (mounted) CommonUtilities.createSnackBar(context, 'Failed to delete member');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -554,7 +614,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   }
 
   Future<void> _delete() async {
-    if (widget.onDelete == null) return;
+    if (widget.onDelete == null || _saving || _deleting) return;
     setState(() => _deleting = true);
     await widget.onDelete!();
     if (mounted) setState(() => _deleting = false);
@@ -745,7 +805,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                         width: double.infinity,
                         height: 58,
                         child: OutlinedButton(
-                          onPressed: _delete,
+                          onPressed: _saving ? null : _delete,
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppColors.red),
                             shape: RoundedRectangleBorder(

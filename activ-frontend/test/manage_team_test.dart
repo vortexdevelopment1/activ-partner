@@ -38,6 +38,79 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> openDeleteConfirmation(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Delete Member'));
+    await tester.tap(find.text('Delete Member'));
+    await tester.pumpAndSettle();
+  }
+
+  for (final dismiss in ['cancel', 'close', 'back']) {
+    testWidgets('member deletion confirmation $dismiss sends no DELETE request', (tester) async {
+      var deletes = 0;
+      await show(tester, MockClient((request) async {
+        if (request.method == 'DELETE') deletes++;
+        return http.Response(jsonEncode({'data': [member]}), 200);
+      }));
+      await openDeleteConfirmation(tester);
+      expect(find.text('Are you sure?'), findsOneWidget);
+      expect(find.text('This action cannot be undone. This will permanently delete the member from your team.'), findsOneWidget);
+      expect(find.text("Yes, I'm sure"), findsOneWidget);
+      expect(find.text('Edit member details'), findsNothing);
+      expect(find.text('Team members (1)'), findsOneWidget);
+      expect(deletes, 0);
+      if (dismiss == 'cancel') {
+        await tester.tap(find.text('Cancel'));
+      } else if (dismiss == 'close') {
+        await tester.tap(find.byTooltip('Close'));
+      } else {
+        Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Are you sure?'), findsNothing);
+      expect(find.text('+919876543210'), findsOneWidget);
+      expect(deletes, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final success in [true, false]) {
+    testWidgets('confirmed deletion ${success ? 'refreshes members' : 'preserves members on failure'}', (tester) async {
+      final pending = Completer<http.Response>();
+      var deletes = 0;
+      var deleted = false;
+      Uri? deleteUrl;
+      String? authorization;
+      await show(tester, MockClient((request) async {
+        if (request.method == 'DELETE') {
+          deletes++;
+          deleteUrl = request.url;
+          authorization = request.headers['Authorization'];
+          return pending.future;
+        }
+        return http.Response(jsonEncode({'data': deleted ? [] : [member]}), 200);
+      }));
+      await openDeleteConfirmation(tester);
+      await tester.tap(find.text("Yes, I'm sure"));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(deletes, 1);
+      expect(deleteUrl!.path, endsWith('/team/staff-1'));
+      expect(authorization, 'Bearer token');
+      expect(find.text("Yes, I'm sure"), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      deleted = success;
+      pending.complete(http.Response(success ? '{}' : '{"message":"Unable to delete member"}', success ? 200 : 500));
+      await tester.pumpAndSettle();
+      expect(deletes, 1);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('+919876543210'), success ? findsNothing : findsOneWidget);
+      if (!success) expect(messages, contains('Unable to delete member'));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('database outage shows Retry without claiming the team is empty', (tester) async {
     var unavailable = true;
     await show(tester, MockClient((_) async => unavailable

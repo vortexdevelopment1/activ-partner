@@ -4725,6 +4725,7 @@ export class VenuesService {
 
     let countFromAnswers = 0;
     let detailFromAnswers = "";
+    let typeFromAnswers = "";
 
     for (const item of savedAnswers) {
       const q = (item.partner_service_questions?.question ?? "").toLowerCase();
@@ -4749,12 +4750,12 @@ export class VenuesService {
         q.includes("match format") ||
         q.includes("turf size") ||
         q.includes("court size") ||
-        q.includes("table size") ||
-        q.includes("court type")
+        q.includes("table size")
       ) {
-        if (typeof ans === "string" && ans.trim()) {
-          detailFromAnswers = ans.trim();
-        }
+        const detail = this.answerAsText(ans).trim();
+        if (detail) detailFromAnswers = detail;
+      } else if (q.includes("court type")) {
+        typeFromAnswers = this.answerAsText(ans).trim();
       }
     }
 
@@ -4765,8 +4766,10 @@ export class VenuesService {
     const detail =
       (typeof data.matchFormat === "string" && data.matchFormat.trim()) ||
       (typeof data.turfSize === "string" && data.turfSize.trim()) ||
+      (typeof data.courtSize === "string" && data.courtSize.trim()) ||
+      detailFromAnswers ||
       (typeof data.courtType === "string" && data.courtType.trim()) ||
-      detailFromAnswers;
+      typeFromAnswers;
     const suffix = detail ? ` (${detail})` : "";
 
     return Array.from(

@@ -98,6 +98,44 @@ void main() {
     });
   }
 
+  for (final role in {
+    'manager': 'Manager',
+    'receptionist': 'Receptionist',
+    'trainer': 'Trainer',
+    'staff': 'Staff',
+    'floor_manager': 'Floor Manager',
+    'security': 'Security',
+  }.entries) {
+    testWidgets('team profile shows assigned ${role.value} role instead of permissions', (tester) async {
+      SharedPreferences.setMockInitialValues({'jwt_token': 'token', 'user_type': 'team_member'});
+      final teamClient = MockClient((_) async => http.Response(jsonEncode({'data': {'member': {
+        'fullName': 'Test Member', 'role': role.key,
+        'permissions': {'bookingManagement': true, 'pricingControl': true},
+      }}}), 200));
+      await show(tester, teamClient, const Size(430, 932), GlobalKey());
+      await tester.scrollUntilVisible(find.text('Role'), 180);
+      expect(find.text(role.value), findsOneWidget);
+      expect(find.textContaining('Booking Management'), findsNothing);
+      expect(find.textContaining('Pricing Control'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final designation in ['', 'floor_manager']) {
+    testWidgets('team profile role fallback uses designation "$designation"', (tester) async {
+      SharedPreferences.setMockInitialValues({'jwt_token': 'token', 'user_type': 'team_member'});
+      final teamClient = MockClient((_) async => http.Response(jsonEncode({'data': {'member': {
+        'fullName': 'Test Member', 'role': '', 'designation': designation,
+        'permissions': {'bookingManagement': true},
+      }}}), 200));
+      await show(tester, teamClient, const Size(430, 932), GlobalKey());
+      await tester.scrollUntilVisible(find.text('Role'), 180);
+      expect(find.text(designation.isEmpty ? 'Team Member' : 'Floor Manager'), findsOneWidget);
+      expect(find.textContaining('Booking Management'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
       'reference layout displays real locked details and selected venue phone',
       (tester) async {

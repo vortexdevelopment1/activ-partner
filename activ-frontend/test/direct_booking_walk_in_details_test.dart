@@ -4,12 +4,66 @@ import 'package:activ_app/Beans/activity_model.dart';
 import 'package:activ_app/Screens/Home/Activities/DirectBookSlotScreen.dart';
 import 'package:activ_app/api_calling/api_constant.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUpAll(() async {
+    await (FontLoader('Satoshi')
+          ..addFont(rootBundle.load('fonts/Satoshi-Medium.otf')))
+        .load();
+  });
+
+  for (final court in ['Court 01 (6*6)', 'Court 01']) {
+    testWidgets('participant details retain the server court label: $court', (tester) async {
+      SharedPreferences.setMockInitialValues({'jwt_token': 'session'});
+      BASE_URL = 'https://backend.test/api/v1';
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 950);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final requestedCourts = <String?>[];
+      final client = MockClient((request) async {
+        requestedCourts.add(request.url.queryParameters['court']);
+        return http.Response(jsonEncode({'data': {
+          'courts': [court], 'slots': [
+            {'startTime': '16:00', 'endTime': '17:00', 'status': 'available'},
+            {'startTime': '17:00', 'endTime': '18:00', 'status': 'available'},
+          ],
+        }}), 200);
+      });
+      await tester.pumpWidget(MaterialApp(home: DirectBookSlotScreen(
+        activity: ActivityModel.fromJson({
+          'activity_id': 'activity', 'operate_value': {'title': 'Badminton'},
+        }),
+        activityData: const {}, venueId: 'venue', venueName: 'Sports Arena Complex',
+        client: client, now: () => DateTime(2026, 6, 16, 10),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text(court), findsOneWidget);
+      expect(requestedCourts, ['Court 01']);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+      await tester.pumpAndSettle();
+      for (final time in ['04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM']) {
+        await tester.ensureVisible(find.text(time));
+        await tester.tap(find.text(time));
+        await tester.pump();
+      }
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reserve Walk-In Slot'), findsOneWidget);
+      expect(find.text(court), findsOneWidget);
+      expect(find.text('Sports Arena Complex'), findsOneWidget);
+      expect(find.text('04:00 PM - 05:00 PM'), findsOneWidget);
+      expect(find.text('05:00 PM - 06:00 PM'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets(
       'tapping Walk-In Reserved row opens details, and removing reservation deletes it and refreshes slot to available',
       (tester) async {

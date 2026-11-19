@@ -137,6 +137,7 @@ import 'package:overlay_support/overlay_support.dart';
 
 import 'Screens/splash_screen.dart';
 import 'Screens/session_navigation.dart';
+import 'Screens/team_session_guard.dart';
 import 'Style/app_colors.dart';
 import 'api_calling/api_constant.dart';
 
@@ -186,6 +187,10 @@ class MyApp extends StatelessWidget {
             fontFamily: 'Satoshi',
           ),
           navigatorKey: NavigationService.navigationKey,
+          builder: (context, child) => TeamSessionGuard(
+            navigatorKey: NavigationService.navigationKey,
+            child: child ?? const SizedBox.shrink(),
+          ),
           navigatorObservers: [SessionNavigation.instance],
           home: const SplashScreen(),
           // home: new GetStartedScreen(),

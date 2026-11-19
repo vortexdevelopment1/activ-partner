@@ -11,6 +11,7 @@ import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../ContactSupportFormScreen.dart';
 import '../default_partner_avatar.dart';
+import '../StringExtensions.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.client});
@@ -97,15 +98,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (_avatar.startsWith('/')) {
         _avatar = Uri.parse(BASE_URL).resolve(_avatar).toString();
       }
-      _role = (profile['role'] ?? 'Team Member').toString();
-      final permissions = profile['permissions'];
-      if (_teamMember && permissions is Map) {
-        final roles = <String>[
-          if (permissions['bookingManagement'] == true) 'Booking Management',
-          if (permissions['pricingControl'] == true) 'Pricing Control',
-        ];
-        _role = roles.isEmpty ? 'Team Member' : roles.join(', ');
-      }
+      final role = [profile['role'], profile['designation']]
+          .map((value) => (value ?? '').toString().trim())
+          .firstWhere((value) => value.isNotEmpty, orElse: () => 'Team Member');
+      _role = role.split(RegExp(r'[_\s]+')).map((word) => word.capitalize()).join(' ');
       _verified = !_teamMember &&
           (profile['isVerified'] ?? profile['isActive']) == true;
       if (!_teamMember) {

@@ -27,6 +27,13 @@ describe('team session authorization', () => {
     current = null;
     await expect(strategy.validate({ sub: 'staff', role: 'team_member', type: 'team_member' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
+  it('does not revive an old member token when the same user is added again', async () => {
+    current = { ...row(), id: 'new-staff' };
+    (strategy as any).prisma.partner_staff_profiles.findUnique.mockImplementation(async ({ where }) =>
+      where.id === current.id ? current : null);
+    await expect(strategy.validate({ sub: 'staff', role: 'team_member', type: 'team_member' })).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(strategy.validate({ sub: 'new-staff', role: 'team_member', type: 'team_member' })).resolves.toMatchObject({ id: 'new-staff' });
+  });
   it('changes the password for the authenticated member under its actual partner', async () => {
     const service = { changePartnerPassword: jest.fn().mockResolvedValue({}) };
     const controller = new AuthController(service as any, {} as any);
