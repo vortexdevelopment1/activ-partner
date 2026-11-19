@@ -175,32 +175,37 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
       title: 'Email Us',
       footer: Row(
         children: [
-          SizedBox(
-            width: 150,
-            height: 58,
-            child: OutlinedButton(
-              onPressed: _sending ? null : () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.darkBlack,
-                side: const BorderSide(color: AppColors.darkBlack),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          Expanded(
+            flex: 2,
+            child: SizedBox(
+              height: 58,
+              child: OutlinedButton(
+                onPressed: _sending ? null : () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  foregroundColor: AppColors.darkBlack,
+                  side: const BorderSide(color: AppColors.darkBlack),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 22),
+          const SizedBox(width: 16),
           Expanded(
+            flex: 3,
             child: _PrimaryButton(
               text: _sending ? 'Sending...' : 'Send Email',
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               onPressed: _sending ? null : _send,
             ),
           ),
@@ -480,6 +485,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
   final _time = TextEditingController();
   String _phoneCode = 'IND (+91)';
   bool _submitting = false;
+  bool _loadingDetails = true;
+  bool _detailsUnavailable = false;
 
   @override
   void initState() {
@@ -488,6 +495,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
   }
 
   Future<void> _loadSavedDetails() async {
+    if (!mounted) return;
+    setState(() => _loadingDetails = true);
     final name = checkString(await SharedPreference.readStr('owner_full_name'));
     final email = checkString(await SharedPreference.readStr('owner_email'));
     final phone =
@@ -497,6 +506,7 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
         checkString(await SharedPreference.readStr('venue_details'));
     final savedVenueName =
         checkString(await SharedPreference.readStr('venue_name'));
+    if (!mounted) return;
     try {
       final venue = rawVenue.isEmpty ? {} : jsonDecode(rawVenue);
       if (venue is Map) {
@@ -505,30 +515,87 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
         _venue.text = venueName.isEmpty ? savedVenueName : venueName;
         _city.text = city.isEmpty ? checkString(venue['city']) : city;
       }
-    } catch (_) {}
+    } catch (_) {
+      CommonUtilities.showLog('Cached callback venue details unavailable.');
+    }
     if (_venue.text.trim().isEmpty) _venue.text = savedVenueName;
     _partner.text = name;
     _email.text = email;
-    _phone.text = phone.replaceAll('-', '');
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    _phone.text = digits.length == 12 && digits.startsWith('91')
+        ? digits.substring(2) : digits;
     if (code.isNotEmpty) _phoneCode = code;
-    await _loadVenueIdentityFromApi();
-    if (mounted) setState(() {});
+    setState(() {});
+    await _refreshDetails();
+  }
+
+  Future<void> _refreshDetails() async {
+    if (!mounted) return;
+    setState(() => _loadingDetails = true);
+    await Future.wait([
+      _loadPartnerIdentityFromApi(),
+      _loadVenueIdentityFromApi(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _loadingDetails = false;
+        _detailsUnavailable = [_partner, _venue, _city]
+            .any((field) => field.text.trim().isEmpty);
+      });
+    }
+  }
+
+  Future<void> _loadPartnerIdentityFromApi() async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    if (token.isEmpty || !mounted) return;
+    final initialPhone = _phone.text;
+    final initialEmail = _email.text;
+    try {
+      final response = await (widget.client?.get ?? http.get)(
+        Uri.parse(AUTH_PROFILE_URL),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted || response.statusCode != 200) return;
+      final data = jsonDecode(response.body)['data'];
+      if (data is! Map) return;
+      final profile = data['member'] ?? data['partner'] ?? data;
+      if (profile is! Map) return;
+      final name = [profile['firstName'], profile['lastName']]
+          .map(checkString).where((part) => part.isNotEmpty).join(' ');
+      final fullName = name.isEmpty
+          ? checkString(profile['fullName'] ?? profile['name']) : name;
+      if (fullName.isNotEmpty) _partner.text = fullName;
+      final email = checkString(profile['email']);
+      if (email.isNotEmpty && _email.text == initialEmail) _email.text = email;
+      final digits = checkString(profile['phone']).replaceAll(RegExp(r'\D'), '');
+      if (digits.isNotEmpty && _phone.text == initialPhone) {
+        _phone.text = digits.length == 12 && digits.startsWith('91')
+            ? digits.substring(2) : digits;
+      }
+    } catch (_) {
+      CommonUtilities.showLog('Callback profile details unavailable.');
+    }
   }
 
   Future<void> _loadVenueIdentityFromApi() async {
     final token = checkString(await SharedPreference.readStr('jwt_token'));
-    if (token.isEmpty) return;
+    final selectedId = checkString(await SharedPreference.readStr('venue_id'));
+    if (token.isEmpty || !mounted) return;
     try {
       final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(MY_VENUES_URL),
+        Uri.parse(selectedId.isEmpty
+            ? MY_VENUES_URL : '$CREATE_VENUE_URL/${Uri.encodeComponent(selectedId)}'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200 && response.statusCode != 201) return;
+      if (!mounted || (response.statusCode != 200 && response.statusCode != 201)) return;
       final body = jsonDecode(response.body);
       final data = body is Map ? body['data'] : null;
-      final items = data is Map ? data['items'] : data;
-      if (items is! List || items.isEmpty || items.last is! Map) return;
-      final venue = Map<String, dynamic>.from(items.last as Map);
+      final items = selectedId.isNotEmpty && data is Map
+          ? [data] : (data is Map ? data['items'] : data);
+      if (items is! List || items.isEmpty) return;
+      final venues = items.whereType<Map>();
+      if (venues.isEmpty) return;
+      final venue = venues.first;
       final venueName = checkString(venue['name']).isEmpty
           ? checkString(venue['venue_name'])
           : checkString(venue['name']);
@@ -537,16 +604,9 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
           : checkString(venue['city']);
       if (venueName.isNotEmpty) _venue.text = venueName;
       if (city.isNotEmpty) _city.text = city;
-      if (venueName.isNotEmpty || city.isNotEmpty) {
-        await SharedPreference.addStringToSF('venue_name', venueName);
-        await SharedPreference.addStringToSF(
-            'venue_details',
-            jsonEncode({
-              'venue_name': venueName,
-              'venue_city': city,
-            }));
-      }
-    } catch (_) {}
+    } catch (_) {
+      CommonUtilities.showLog('Callback venue details unavailable.');
+    }
   }
 
   @override
@@ -647,7 +707,7 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
       title: 'Request Callback',
       footer: _PrimaryButton(
         text: _submitting ? 'Requesting...' : 'Request Call Back',
-        onPressed: _submitting ? null : _submit,
+        onPressed: _submitting || _loadingDetails ? null : _submit,
       ),
       child: SingleChildScrollView(
         key: const Key('callback-form-scroll'),
@@ -656,6 +716,15 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_loadingDetails) const LinearProgressIndicator(),
+            if (_detailsUnavailable && !_loadingDetails)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Unable to load all your details. Please try again.'),
+                  TextButton(onPressed: _refreshDetails, child: const Text('Retry')),
+                ],
+              ),
             _Input(
               label: 'Venue Partner Name',
               required: true,
@@ -1277,10 +1346,11 @@ class _FaqTile extends StatelessWidget {
 }
 
 class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.text, required this.onPressed});
+  const _PrimaryButton({required this.text, required this.onPressed, this.padding});
 
   final String text;
   final VoidCallback? onPressed;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -1290,6 +1360,7 @@ class _PrimaryButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
+          padding: padding,
           backgroundColor: Colors.black,
           foregroundColor: const Color(0xFFD8F34A),
           disabledBackgroundColor: Colors.black54,

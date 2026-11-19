@@ -225,7 +225,9 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
   final _searchCtrl = TextEditingController();
   final _money = NumberFormat.currency(
       locale: 'en_IN', symbol: '\u20b9', decimalDigits: 2);
-  final _tabs = ['All', 'Upcoming', 'Past'];
+  List<String> get _tabs => widget.managerLayout
+      ? const ['Today', 'Upcoming', 'Past', 'All']
+      : const ['All', 'Upcoming', 'Past'];
   final List<_Booking> _bookings = [];
   int _selectedTab = 0;
   bool _loading = true;
@@ -364,14 +366,18 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
           booking.id.toLowerCase().contains(q) ||
           booking.activity.toLowerCase().contains(q);
     }).toList();
-    if (_selectedTab == 1) {
+    final selected = _tabs[_selectedTab];
+    if (selected == 'Today') {
+      final today = DateFormat('dd MMM yyyy').format(_indiaTime(DateTime.now()));
+      list = list.where((booking) => booking.date == today).toList();
+    } else if (selected == 'Upcoming') {
       list = list
           .where((booking) =>
               booking.status == _BookingStatus.upcoming ||
               booking.status == _BookingStatus.ongoing ||
               booking.status == _BookingStatus.pending)
           .toList();
-    } else if (_selectedTab == 2) {
+    } else if (selected == 'Past') {
       list = list
           .where((booking) =>
               booking.status == _BookingStatus.completed ||
@@ -797,7 +803,35 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     );
   }
 
-  Widget _buildTabs() => Container(
+  Widget _buildTabs() {
+    if (widget.managerLayout) {
+      return Row(
+        children: List.generate(_tabs.length, (index) => Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: index == _tabs.length - 1 ? 0 : 8),
+            child: SizedBox(
+              height: 34,
+              child: ElevatedButton(
+                onPressed: () => setState(() => _selectedTab = index),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: index == _selectedTab
+                      ? const Color(0xFF9D38EB) : Colors.white,
+                  foregroundColor: index == _selectedTab
+                      ? Colors.white : const Color(0xFF3F3F3F),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  elevation: 2,
+                  shadowColor: Colors.black12,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  textStyle: const TextStyle(fontFamily: 'Satoshi', fontSize: 12),
+                ),
+                child: Text(_tabs[index], maxLines: 1),
+              ),
+            ),
+          ),
+        )),
+      );
+    }
+    return Container(
       height: widget.managerLayout ? 38 : 58,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
@@ -827,6 +861,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
                                 ? Colors.white
                                 : const Color(0xFF3F3F3F))))));
       })));
+  }
 
   Widget _buildSearch() => Container(
       height: widget.managerLayout ? 38 : 56,

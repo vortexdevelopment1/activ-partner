@@ -2104,6 +2104,20 @@ void main() {
     }
   });
 
+  testWidgets('email footer keeps Send Email centered on one line on narrow screens', (tester) async {
+    for (final width in [320.0, 360.0, 412.0]) {
+      await showScreen(tester, const EmailUsScreen(), size: Size(width, 800));
+      final label = find.text('Send Email');
+      final button = find.ancestor(of: label, matching: find.byType(ElevatedButton));
+      final paragraph = tester.renderObject<RenderParagraph>(label);
+      expect(paragraph.getBoxesForSelection(const TextSelection(baseOffset: 0, extentOffset: 10)), hasLength(1));
+      expect(tester.getCenter(label).dx, closeTo(tester.getCenter(button).dx, 1));
+      expect(tester.getCenter(label).dy, closeTo(tester.getCenter(button).dy, 1));
+      expect(tester.getSize(button).height, 58);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('callback form scrolls to time picker with fixed submit button', (tester) async {
     for (final keyboardHeight in [0.0, 220.0]) {
       await showScreen(tester, const RequestCallbackScreen(), size: const Size(320, 568), textScale: 1.5, keyboardHeight: keyboardHeight);

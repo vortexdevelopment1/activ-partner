@@ -37,7 +37,6 @@ class _TeamMember {
     required this.status,
     required this.createdAt,
     required this.bookingManagement,
-    this.deliverySummary,
   });
 
   final String id;
@@ -48,7 +47,6 @@ class _TeamMember {
   final String status;
   final String createdAt;
   final bool bookingManagement;
-  final String? deliverySummary;
 
   factory _TeamMember.fromJson(Map<String, dynamic> json) {
     final permissions = json['permissions'] is Map<String, dynamic>
@@ -66,9 +64,6 @@ class _TeamMember {
       status: status.isEmpty ? 'invite_sent' : status,
       createdAt: _formatDate(checkString(json['createdAt'])),
       bookingManagement: permissions['bookingManagement'] == true,
-      deliverySummary: json['invitationDelivery'] is Map
-          ? 'Last invite: Email ${json['invitationDelivery']['emailSent'] == true ? 'sent' : 'not confirmed'}, SMS ${smsSummary(json['invitationDelivery'])}'
-          : null,
     );
   }
 
@@ -238,24 +233,6 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         'Email: $email. SMS: $sms. The member can sign in using their phone OTP.');
   }
 
-  Future<void> _resendInvitation(_TeamMember member, BuildContext dialogContext) async {
-    try {
-      final response = await (widget.client?.post ?? http.post)(
-        Uri.parse('$TEAM_URL/${member.id}/invite'), headers: await _authHeaders(),
-      );
-      if (!mounted || !dialogContext.mounted) return;
-      if (response.statusCode == 200) {
-        Navigator.pop(dialogContext);
-        await _loadMembers();
-        if (mounted) _showInvitationResult(jsonDecode(response.body)['data']);
-      } else {
-        _showApiError(response.body, 'Unable to resend invitation');
-      }
-    } catch (_) {
-      if (mounted) CommonUtilities.createSnackBar(context, 'Unable to resend invitation');
-    }
-  }
-
   Future<void> _updateMember(
     _TeamMember member,
     _TeamMemberFormData data,
@@ -386,8 +363,6 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         return _TeamMemberDialog(
           roles: _roles,
           member: member,
-          onResend: member == null || member.status == 'active'
-              ? null : () => _resendInvitation(member, dialogContext),
           onSubmit: (data) {
             if (member == null) {
               return _createMember(data, dialogContext);
@@ -410,6 +385,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
         systemNavigationBarColor: _background,
       ),
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         backgroundColor: _background,
         body: SafeArea(
           child: Center(
@@ -524,14 +500,12 @@ class _TeamMemberDialog extends StatefulWidget {
     required this.onSubmit,
     this.member,
     this.onDelete,
-    this.onResend,
   });
 
   final List<_RoleOption> roles;
   final _TeamMember? member;
   final Future<void> Function(_TeamMemberFormData data) onSubmit;
   final Future<void> Function()? onDelete;
-  final Future<void> Function()? onResend;
 
   @override
   State<_TeamMemberDialog> createState() => _TeamMemberDialogState();
@@ -592,10 +566,10 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
     }
     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phoneDigits)) {
       CommonUtilities.createSnackBar(
-          context, 'Enter a valid phone number with country code, e.g. +919876543210');
+          context, 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9');
       return;
     }
-    if ((!_isEdit || email.isNotEmpty) && !RegExp(r'^\S+@\S+\.\S+$').hasMatch(email)) {
+    if (email.isNotEmpty && !RegExp(r'^\S+@\S+\.\S+$').hasMatch(email)) {
       CommonUtilities.createSnackBar(context, 'Enter a valid email address');
       return;
     }
@@ -628,13 +602,13 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
 
     return Dialog(
       alignment: Alignment.center,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 520, maxHeight: maxHeight),
+        constraints: BoxConstraints(maxWidth: 440, maxHeight: maxHeight),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,92 +621,71 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                       style: const TextStyle(
                         color: _ManageTeamScreenState._ink,
                         fontFamily: 'Satoshi',
-                        fontSize: 18,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Close',
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(24, 24),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, size: 24),
+                    icon: const Icon(Icons.close_rounded, size: 20),
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               const _RequiredLabel('Full Name'),
               _InputBox(
                 controller: _nameController,
                 hint: 'e.g. Abhishek Sharma',
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               const _RequiredLabel('Mobile Number'),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 48,
-                    width: 92,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _ManageTeamScreenState._line),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '+91',
-                          style: TextStyle(
-                            color: _ManageTeamScreenState._ink,
-                            fontFamily: 'Satoshi',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(width: 6),
-                        Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _InputBox(
-                      controller: _phoneController,
-                      hint: '9876543210',
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(12),
-                      ],
-                    ),
-                  ),
+              _InputBox(
+                controller: _phoneController,
+                hint: '9900990099',
+                prefixText: '+91-',
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  TextInputFormatter.withFunction((oldValue, newValue) {
+                    if (newValue.text.length != 12 || !newValue.text.startsWith('91')) {
+                      return newValue;
+                    }
+                    final digits = _phoneDigits(newValue.text);
+                    return TextEditingValue(
+                      text: digits,
+                      selection: TextSelection.collapsed(offset: digits.length),
+                    );
+                  }),
+                  LengthLimitingTextInputFormatter(10),
                 ],
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Sending or resending an invite creates a new password and replaces the existing account password. Login details are sent by SMS and email.',
-                style: TextStyle(
-                  color: _ManageTeamScreenState._muted,
-                  fontFamily: 'Satoshi',
-                  fontSize: 13,
+              if (_isEdit) ...[
+                const SizedBox(height: 14),
+                const Text('Email Address (optional)', style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 8),
+                _InputBox(
+                  controller: _emailController,
+                  hint: 'member@example.com',
+                  keyboardType: TextInputType.emailAddress,
                 ),
-              ),
-              const SizedBox(height: 18),
-              const _RequiredLabel('Email Address'),
-              _InputBox(
-                controller: _emailController,
-                hint: 'member@example.com',
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 18),
+              ],
+              const SizedBox(height: 14),
               const _RequiredLabel('Role'),
               _RoleDropdown(
                 value: _role,
                 roles: widget.roles,
                 onChanged: (value) => setState(() => _role = value),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               const Divider(height: 1, color: _ManageTeamScreenState._line),
               const SizedBox(height: 20),
               const Text(
@@ -740,11 +693,11 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                 style: TextStyle(
                   color: _ManageTeamScreenState._ink,
                   fontFamily: 'Satoshi',
-                  fontSize: 18,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   const Expanded(
@@ -756,7 +709,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                           style: TextStyle(
                             color: _ManageTeamScreenState._ink,
                             fontFamily: 'Satoshi',
-                            fontSize: 15,
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -766,34 +719,31 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                           style: TextStyle(
                             color: _ManageTeamScreenState._muted,
                             fontFamily: 'Satoshi',
-                            fontSize: 13,
+                            fontSize: 11,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Switch(
-                    value: _bookingManagement,
-                    activeTrackColor: AppColors.purple,
-                    activeThumbColor: Colors.white,
-                    inactiveThumbColor: Colors.white,
-                    inactiveTrackColor: const Color(0xFFE7E7E7),
-                    onChanged: (value) {
-                      setState(() => _bookingManagement = value);
-                    },
+                  SizedBox(
+                    width: 36,
+                    height: 32,
+                    child: FittedBox(
+                      child: Switch(
+                        value: _bookingManagement,
+                        activeTrackColor: AppColors.purple,
+                        activeThumbColor: Colors.white,
+                        inactiveThumbColor: Colors.white,
+                        inactiveTrackColor: const Color(0xFFE7E7E7),
+                        onChanged: (value) {
+                          setState(() => _bookingManagement = value);
+                        },
+                      ),
+                    ),
                   ),
                 ],
               ),
               if (_isEdit) ...[
-                if (widget.onResend != null)
-                  TextButton(
-                    onPressed: _saving || _deleting ? null : () async {
-                      setState(() => _saving = true);
-                      await widget.onResend!();
-                      if (mounted) setState(() => _saving = false);
-                    },
-                    child: const Text('Resend Invite'),
-                  ),
                 const SizedBox(height: 26),
                 _deleting
                     ? const Center(
@@ -831,6 +781,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                     )
                   : _PurpleButton(
                       label: _isEdit ? 'Save Changes' : 'Send Invite',
+                      compact: true,
                       onTap: _submit,
                     ),
             ],
@@ -982,9 +933,10 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isActive = member.status.toLowerCase() == 'active';
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1005,7 +957,7 @@ class _MemberCard extends StatelessWidget {
                         style: const TextStyle(
                           color: _ManageTeamScreenState._ink,
                           fontFamily: 'Satoshi',
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1014,7 +966,7 @@ class _MemberCard extends StatelessWidget {
                         style: TextStyle(
                           color: _ManageTeamScreenState._muted,
                           fontFamily: 'Satoshi',
-                          fontSize: 14,
+                          fontSize: 12,
                         ),
                       ),
                       TextSpan(
@@ -1022,7 +974,7 @@ class _MemberCard extends StatelessWidget {
                         style: const TextStyle(
                           color: _ManageTeamScreenState._ink,
                           fontFamily: 'Satoshi',
-                          fontSize: 14,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -1033,41 +985,37 @@ class _MemberCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF1BF),
+                  color: isActive
+                      ? _ManageTeamScreenState._purpleSoft
+                      : const Color(0xFFFFF1BF),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
                   member.statusLabel,
-                  style: const TextStyle(
-                    color: Color(0xFFC98500),
+                  style: TextStyle(
+                    color: isActive
+                        ? AppColors.purple
+                        : const Color(0xFFC98500),
                     fontFamily: 'Satoshi',
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
-            'Added ${member.createdAt}',
+            '${isActive ? 'Joined' : 'Added'} ${member.createdAt}',
             style: const TextStyle(
               color: _ManageTeamScreenState._muted,
               fontFamily: 'Satoshi',
-              fontSize: 13,
+              fontSize: 11,
             ),
           ),
-          if (member.email.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(member.email, style: const TextStyle(fontSize: 13, color: _ManageTeamScreenState._muted)),
-          ],
-          if (member.deliverySummary != null) ...[
-            const SizedBox(height: 8),
-            Text(member.deliverySummary!, style: const TextStyle(fontSize: 12, color: _ManageTeamScreenState._muted)),
-          ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Row(
             children: [
               const Icon(
@@ -1082,19 +1030,19 @@ class _MemberCard extends StatelessWidget {
                   style: const TextStyle(
                     color: _ManageTeamScreenState._muted,
                     fontFamily: 'Satoshi',
-                    fontSize: 13,
+                    fontSize: 11,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
           InkWell(
             onTap: onEdit,
             borderRadius: BorderRadius.circular(24),
             child: Container(
-              width: 48,
-              height: 48,
+              width: 36,
+              height: 36,
               decoration: const BoxDecoration(
                 color: _ManageTeamScreenState._purpleSoft,
                 shape: BoxShape.circle,
@@ -1102,7 +1050,7 @@ class _MemberCard extends StatelessWidget {
               child: const Icon(
                 Icons.edit_outlined,
                 color: AppColors.purple,
-                size: 22,
+                size: 18,
               ),
             ),
           ),
@@ -1175,7 +1123,7 @@ class _RequiredLabel extends StatelessWidget {
               style: const TextStyle(
                 color: _ManageTeamScreenState._ink,
                 fontFamily: 'Satoshi',
-                fontSize: 15,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1184,7 +1132,7 @@ class _RequiredLabel extends StatelessWidget {
               style: TextStyle(
                 color: AppColors.red,
                 fontFamily: 'Satoshi',
-                fontSize: 15,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1200,18 +1148,20 @@ class _InputBox extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.keyboardType,
+    this.prefixText,
     this.inputFormatters,
   });
 
   final TextEditingController controller;
   final String hint;
   final TextInputType? keyboardType;
+  final String? prefixText;
   final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 58,
+      height: 38,
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
@@ -1219,18 +1169,29 @@ class _InputBox extends StatelessWidget {
         style: const TextStyle(
           color: _ManageTeamScreenState._ink,
           fontFamily: 'Satoshi',
-          fontSize: 16,
+          fontSize: 13,
         ),
         decoration: InputDecoration(
           hintText: hint,
+          prefixIcon: prefixText == null
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: Text(prefixText!, style: const TextStyle(
+                    color: _ManageTeamScreenState._ink,
+                    fontFamily: 'Satoshi',
+                    fontSize: 13,
+                  )),
+                ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           hintStyle: const TextStyle(
             color: Color(0xFFA0A0A0),
             fontFamily: 'Satoshi',
-            fontSize: 15,
+            fontSize: 12,
           ),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: _ManageTeamScreenState._line),
@@ -1263,8 +1224,8 @@ class _RoleDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -1280,7 +1241,7 @@ class _RoleDropdown extends StatelessWidget {
           style: const TextStyle(
             color: _ManageTeamScreenState._ink,
             fontFamily: 'Satoshi',
-            fontSize: 16,
+            fontSize: 13,
           ),
           items: roles
               .map(
@@ -1303,30 +1264,32 @@ class _PurpleButton extends StatelessWidget {
   const _PurpleButton({
     required this.label,
     required this.onTap,
+    this.compact = false,
   });
 
   final String label;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(compact ? 6 : 10),
       child: Container(
-        height: 48,
+        height: compact ? 36 : 48,
         width: double.infinity,
         decoration: BoxDecoration(
           color: AppColors.purple,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(compact ? 6 : 10),
         ),
         child: Center(
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontFamily: 'Satoshi',
-              fontSize: 17,
+              fontSize: compact ? 13 : 17,
               fontWeight: FontWeight.w700,
             ),
           ),

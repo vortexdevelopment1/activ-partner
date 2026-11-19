@@ -38,6 +38,45 @@ void main() {
         {'id': 'swimming-category', 'name': 'Swimming'}
       ]);
 
+  for (final useHandle in [true, false]) {
+    testWidgets('photo review swaps cover using ${useHandle ? 'the visible handle' : 'a long press'}', (tester) async {
+      SharedPreferences.setMockInitialValues({'operate_value': jsonEncode({'title': 'Gym'})});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 1100);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final images = ['swimming', 'tennis', 'yoga', 'volleyball']
+          .map((name) => XFile('assets/activities/$name.png')).toList();
+      List<XFile>? changed;
+      await tester.pumpWidget(MaterialApp(home: AddVenuePhotoListViewScreen(
+        images: images, onPhotosChanged: (photos) => changed = photos,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('drag the handle to reorder'), findsOneWidget);
+      final handles = find.byType(ReorderableDragStartListener);
+      final from = useHandle
+          ? tester.getCenter(handles.at(1))
+          : tester.getCenter(find.byType(Card).at(1));
+      final to = tester.getCenter(handles.first);
+      if (useHandle) expect(handles.at(1).hitTestable(), findsOneWidget);
+      final gesture = await tester.startGesture(from);
+      if (!useHandle) await tester.pump(const Duration(milliseconds: 650));
+      await gesture.moveBy(const Offset(0, -20));
+      await tester.pump();
+      await gesture.moveTo(to);
+      await tester.pump(const Duration(milliseconds: 500));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(changed?.map((image) => image.path), [
+        images[1].path, images[0].path, images[2].path, images[3].path,
+      ]);
+      expect(find.descendant(
+          of: find.byKey(ValueKey('img_1_${images[1].path}')),
+          matching: find.text('Cover Photo')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test('uploads ordered photos with MIME types, auth and replacement on retry',
       () async {
     var uploads = 0;

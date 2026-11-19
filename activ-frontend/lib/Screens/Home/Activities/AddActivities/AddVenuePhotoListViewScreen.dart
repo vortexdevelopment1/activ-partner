@@ -90,6 +90,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   void setAsCover(int index) {
+    if (_isUploading) return;
     setState(() {
       //_coverIndex = index;
       _coverIndex = 0; // new cover will always be at top
@@ -110,6 +111,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   void deletePhoto(int index) {
+    if (_isUploading) return;
     setState(() {
       _images.removeAt(index);
       _imageIds.removeAt(index);
@@ -131,6 +133,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   void onReorder(int oldIndex, int newIndex) {
+    if (_isUploading) return;
     setState(() {
       if (newIndex > oldIndex) {
         newIndex -= 1;
@@ -258,6 +261,13 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                   getText(),
 
                                   getSubText(),
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: 12),
+                                    child: Text(
+                                      'Long press a photo or drag the handle to reorder. The first photo is the cover.',
+                                      style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: AppColors.black1),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -282,40 +292,64 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                     );
                                   },
                                   itemBuilder: (context, index) {
-                                    return ReorderableDelayedDragStartListener(
+                                    return KeyedSubtree(
                                       key: ValueKey(_imageIds[index]),
-                                      index: index,
                                       child: Stack(
                                         children: [
-                                          Card(
-                                            margin: const EdgeInsets.all(10),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            clipBehavior: Clip.antiAlias,
-                                            child: Column(
-                                              children: [
+                                          ReorderableDelayedDragStartListener(
+                                            index: index,
+                                            enabled: !_isUploading,
+                                            child: Card(
+                                              margin: const EdgeInsets.all(10),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              clipBehavior: Clip.antiAlias,
+                                              child: Column(
+                                                children: [
 
-                                                AspectRatio(
-                                                  aspectRatio: 16/9,
-                                                  child: kIsWeb
-                                                      ? Image.network(
-                                                          _images[index].path,
-                                                          fit: BoxFit.cover,
-                                                          width: double.infinity,
-                                                          height: 200,
-                                                        )
-                                                      : Image.file(
-                                                          File(_images[index].path),
-                                                          fit: BoxFit.cover,
-                                                          width: double.infinity,
-                                                          height: 200,
-                                                        ),
-                                                ),
-                                              ],
+                                                  AspectRatio(
+                                                    aspectRatio: 16/9,
+                                                    child: kIsWeb
+                                                        ? Image.network(
+                                                            _images[index].path,
+                                                            fit: BoxFit.cover,
+                                                            width: double.infinity,
+                                                            height: 200,
+                                                          )
+                                                        : Image.file(
+                                                            File(_images[index].path),
+                                                            fit: BoxFit.cover,
+                                                            width: double.infinity,
+                                                            height: 200,
+                                                          ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
+
                                           ),
 
+                                          Positioned(
+                                            left: 20,
+                                            bottom: 20,
+                                            child: ReorderableDragStartListener(
+                                              index: index,
+                                              enabled: !_isUploading,
+                                              child: Semantics(
+                                                label: 'Drag to reorder photo ${index + 1}',
+                                                child: Container(
+                                                  width: 48,
+                                                  height: 48,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: const Icon(Icons.drag_indicator, color: AppColors.purple),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                           // Cover Photo label
                                           if (_coverIndex == index)
                                             Positioned(

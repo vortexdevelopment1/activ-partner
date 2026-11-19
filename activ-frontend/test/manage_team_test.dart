@@ -9,6 +9,9 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUpAll(() async {
+    await (FontLoader('Satoshi')..addFont(rootBundle.load('fonts/Satoshi-Medium.otf'))).load();
+  });
   final messages = <String>[];
   setUp(() {
     SharedPreferences.setMockInitialValues({'jwt_token': 'token'});
@@ -126,7 +129,7 @@ void main() {
   });
 
   testWidgets(
-      'adding a member sends a normalized phone and email invitation',
+      'adding a member sends a normalized phone without requiring email',
       (tester) async {
     final rows = <Map<String, dynamic>>[];
     var writes = 0;
@@ -135,7 +138,7 @@ void main() {
         writes++;
         final body = jsonDecode(request.body);
         expect(body['phone'], '+919876543210');
-        expect(body['email'], 'staff@example.com');
+        expect(body.containsKey('email'), isFalse);
         expect(body['fullName'], 'Test Staff');
         expect(body['role'], 'manager');
         expect(request.headers['Authorization'], 'Bearer token');
@@ -148,11 +151,10 @@ void main() {
     await tester.tap(find.text('+ New Member'));
     await tester.pumpAndSettle();
     expect(find.text('Mobile Number*'), findsOneWidget);
-    expect(find.textContaining('replaces the existing account password'), findsOneWidget);
-    expect(find.textContaining('Email Address'), findsOneWidget);
+    expect(find.textContaining('replaces the existing account password'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(2));
     await tester.enterText(find.byType(TextField).at(0), 'Test Staff');
     await tester.enterText(find.byType(TextField).at(1), '98765 43210');
-    await tester.enterText(find.byType(TextField).at(2), 'Staff@Example.com');
     await tester.ensureVisible(find.text('Send Invite'));
     await tester.tap(find.text('Send Invite'));
     await tester.pumpAndSettle();
@@ -161,6 +163,58 @@ void main() {
     expect(find.text('+919876543210'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('mobile input limits digits, normalizes country code and rejects invalid numbers', (tester) async {
+    var writes = 0;
+    await show(tester, MockClient((request) async {
+      if (request.method == 'POST') writes++;
+      return http.Response('{"data":[]}', 200);
+    }));
+    await tester.tap(find.text('+ New Member'));
+    await tester.pumpAndSettle();
+    final mobile = find.byType(TextField).at(1);
+    await tester.enterText(find.byType(TextField).first, 'Test Staff');
+    for (final value in ['', '123', '5123456789']) {
+      await tester.enterText(mobile, value);
+      await tester.tap(find.text('Send Invite'));
+      await tester.pumpAndSettle();
+      expect(writes, 0);
+      expect(messages.last, 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9');
+    }
+    for (final entry in {
+      '747065099400': '7470650994',
+      '+91 98765 43210': '9876543210',
+      'abc98765xyz43210': '9876543210',
+    }.entries) {
+      await tester.enterText(mobile, '');
+      await tester.enterText(mobile, entry.key);
+      expect(tester.widget<TextField>(mobile).controller!.text, entry.value);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final keyboard in [false, true]) {
+    testWidgets('invite modal fits reference viewport with keyboard $keyboard', (tester) async {
+      await show(tester, MockClient((_) async => http.Response('{"data":[]}', 200)));
+      tester.view.physicalSize = const Size(366, 780);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('+ New Member'));
+      await tester.pumpAndSettle();
+      if (keyboard) {
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpAndSettle();
+      }
+      expect(find.byType(TextField), findsNWidgets(2));
+      expect(find.text('Role*'), findsOneWidget);
+      expect(find.text('Permissions'), findsOneWidget);
+      expect(find.textContaining('Sending or resending'), findsNothing);
+      await tester.ensureVisible(find.text('Send Invite'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.text('Send Invite')).bottom, lessThan(keyboard ? 480 : 780));
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('editing persists phone and blocks invalid numbers locally',
       (tester) async {
@@ -184,12 +238,15 @@ void main() {
     await show(tester, client);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
+    expect(find.text('Resend Invite'), findsNothing);
+    expect(find.text('Delete Member'), findsOneWidget);
+    expect(find.text('Save Changes'), findsOneWidget);
     await tester.enterText(find.byType(TextField).at(1), '123');
     await tester.ensureVisible(find.text('Save Changes'));
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(writes, 0);
-    expect(messages, contains('Enter a valid phone number with country code, e.g. +919876543210'));
+    expect(messages, contains('Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9'));
     await tester.enterText(find.byType(TextField).at(1), '+91 9123456789');
     await tester.ensureVisible(find.text('Save Changes'));
     await tester.tap(find.text('Save Changes'));
@@ -199,58 +256,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('resending uses the owned invitation endpoint and reports partial failure', (tester) async {
-    var resends = 0;
+  testWidgets('invalid edited email is blocked before saving a member', (tester) async {
+    var writes = 0;
     await show(tester, MockClient((request) async {
-      if (request.method == 'POST') {
-        resends++;
-        expect(request.url.path, endsWith('/team/staff-1/invite'));
-        return http.Response(jsonEncode({'data': {...member,
-          'invitationDelivery': {'emailSent': true, 'smsSent': false}}}), 200);
-      }
+      if (request.method == 'PATCH') writes++;
       return http.Response(jsonEncode({'data': [member]}), 200);
     }));
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Resend Invite'));
-    await tester.tap(find.text('Resend Invite'));
-    await tester.pumpAndSettle();
-    expect(resends, 1);
-    expect(messages.any((message) => message.contains('Email: sent. SMS: not confirmed.')), isTrue);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('invalid invitation email is blocked before creating a member', (tester) async {
-    var writes = 0;
-    await show(tester, MockClient((request) async {
-      if (request.method == 'POST') writes++;
-      return http.Response('{"data":[]}', 200);
-    }));
-    await tester.tap(find.text('+ New Member'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Alex');
     await tester.enterText(find.byType(TextField).at(1), '9876543210');
     await tester.enterText(find.byType(TextField).at(2), 'invalid');
-    await tester.ensureVisible(find.text('Send Invite'));
-    await tester.tap(find.text('Send Invite'));
+    await tester.ensureVisible(find.text('Save Changes'));
+    await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(writes, 0);
     expect(messages, contains('Enter a valid email address'));
-  });
-
-  testWidgets('existing account SMS unavailability is explained after resend', (tester) async {
-    await show(tester, MockClient((request) async => http.Response(jsonEncode({
-      'data': request.method == 'POST' ? {...member, 'invitationDelivery': {
-        'emailSent': true, 'smsSent': false,
-        'smsUnavailableReason': 'password_template_requires_new_account',
-      }} : [member],
-    }), 200)));
-    await tester.tap(find.byIcon(Icons.edit_outlined));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Resend Invite'));
-    await tester.tap(find.text('Resend Invite'));
-    await tester.pumpAndSettle();
-    expect(messages.any((message) => message.contains('SMS: unavailable for existing accounts/resends')), isTrue);
   });
 
   testWidgets('pending Send Invite blocks duplicate submissions and reports acceptance', (tester) async {
@@ -266,7 +287,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Test Staff');
     await tester.enterText(find.byType(TextField).at(1), '9876543210');
-    await tester.enterText(find.byType(TextField).at(2), 'staff@example.com');
     await tester.ensureVisible(find.text('Send Invite'));
     await tester.tap(find.text('Send Invite'));
     await tester.pump();

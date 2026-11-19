@@ -552,13 +552,18 @@ class _PayoutTransactionDetailsScreenState
       );
 
   Widget _gstLine({required bool gstRegistered, required dynamic value}) {
+    const heading = 'GST on Commission (18%):';
     final message = gstRegistered
-        ? 'GST on Commission (18%): GST is charged on the ACTIV Platform '
+        ? '$heading GST is charged on the ACTIV Platform '
             'Service Fee (Commission). GST-registered venues may claim this '
             'amount as Input Tax Credit (ITC), subject to applicable GST laws.'
-        : 'GST on Commission (18%): GST is charged on the ACTIV Platform '
+        : '$heading GST is charged on the ACTIV Platform '
             'Service Fee (Commission). Since this venue is not registered '
             'under GST, this amount is not eligible for Input Tax Credit (ITC).';
+    final richMessage = TextSpan(children: [
+      const TextSpan(text: heading, style: TextStyle(fontWeight: FontWeight.w700)),
+      TextSpan(text: message.substring(heading.length)),
+    ]);
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -568,10 +573,10 @@ class _PayoutTransactionDetailsScreenState
                 Text('GST on Commission (18%)', style: _text(14)),
                 const SizedBox(width: 4),
                 Tooltip(
-                    message: message,
+                    richMessage: richMessage,
                     child: InkWell(
                         borderRadius: BorderRadius.circular(20),
-                        onTap: () => _showGstInfo(gstRegistered, message),
+                        onTap: () => _showGstInfo(gstRegistered, richMessage),
                         child: const Icon(Icons.info_outline,
                             color: _purple, size: 21)))
               ])),
@@ -588,7 +593,7 @@ class _PayoutTransactionDetailsScreenState
         ]));
   }
 
-  Future<void> _showGstInfo(bool gstRegistered, String message) async {
+  Future<void> _showGstInfo(bool gstRegistered, InlineSpan message) async {
     await showDialog<void>(
         context: context,
         barrierColor: Colors.black54,
@@ -611,7 +616,7 @@ class _PayoutTransactionDetailsScreenState
                   const SizedBox(height: 24),
                   Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(message,
+                      child: Text.rich(message,
                           style: _text(16).copyWith(height: 1.45))),
                   const SizedBox(height: 22),
                   Align(

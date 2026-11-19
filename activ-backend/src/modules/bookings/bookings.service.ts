@@ -675,12 +675,14 @@ export class BookingsService {
       statement.status.charAt(0).toUpperCase() + statement.status.slice(1);
     const payoutDateLabel = statement.payoutDate
       ? new Date(statement.payoutDate).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
           day: "2-digit",
-          month: "long",
+          month: "short",
           year: "numeric",
           hour: "2-digit",
           minute: "2-digit",
-        })
+          hour12: true,
+        }).replace(/\b(am|pm)\b/g, (value) => value.toUpperCase()) + " IST"
       : "-";
 
     const draw = (
@@ -692,19 +694,24 @@ export class BookingsService {
       textY: number,
       bold = false,
       size = 11,
+      background = rgb(1, 1, 1),
     ) => {
       page.drawRectangle({
         x,
         y: boxY,
         width: boxW,
         height: boxH,
-        color: rgb(1, 1, 1),
+        color: background,
       });
+      const textFont = bold ? boldFont : font;
+      const textSize = Math.min(size, size * (boxW - 12) /
+        Math.max(1, textFont.widthOfTextAtSize(text, size)));
+      const textWidth = textFont.widthOfTextAtSize(text, textSize);
       page.drawText(text, {
-        x: x + 3,
+        x: x + (boxW - textWidth) / 2,
         y: textY,
-        size,
-        font: bold ? boldFont : font,
+        size: textSize,
+        font: textFont,
         color: rgb(0.12, 0.12, 0.12),
       });
     };
@@ -773,9 +780,9 @@ export class BookingsService {
 
     // GST on commission (- Rs. xxx) - box stays above divider line y=493.28
     page.drawRectangle({
-      x: 440,
+      x: 446,
       y: 494.5,
-      width: 115,
+      width: 109,
       height: 18,
       color: rgb(1, 1, 1),
     });
@@ -887,40 +894,32 @@ export class BookingsService {
     // Payout Date (aligned at leftX, reduced font size)
     page.drawRectangle({
       x: 40,
-      y: 462.21,
+      y: 465.21,
       width: 245,
-      height: 20,
+      height: 18,
       color: rgb(1, 1, 1),
     });
     page.drawText(payoutDateLabel, {
       x: leftX,
-      y: 468.21,
+      y: 471.21,
       size: 9.5,
       font,
       color: darkColor,
     });
 
-    // Transaction & Slot Details
-    draw(statement.activityName, 438, 405.16, 127, 16, 410.16);
-    draw(statement.slotDate, 438, 381.16, 127, 16, 386.16);
-    draw(statement.slotTime, 438, 357.16, 127, 16, 362.16);
-    draw(money(statement.slotBasePrice), 438, 333.16, 127, 16, 338.16);
-    draw(statement.bookingId, 438, 309.16, 127, 16, 314.16, false, 10);
-    draw(statement.transactionId, 438, 285.17, 127, 16, 290.17, false, 10);
+    // Measured from both templates: inset fills preserve the grid and row shading.
+    const rowBackground = (index: number) => index % 2
+      ? rgb(246 / 255, 244 / 255, 244 / 255) : rgb(1, 1, 1);
+    [statement.activityName, statement.slotDate, statement.slotTime,
+      money(statement.slotBasePrice), statement.bookingId, statement.transactionId,
+    ].forEach((value, index) => draw(value, 123, 402.66 - index * 24.009,
+      442, 22, 409.16 - index * 24.009, false, 10, rowBackground(index)));
 
-    // Credited Bank Account Details
-    draw(statement.bank?.accountHolderName ?? "-", 470, 224.2, 95, 16, 229.2);
-    draw(statement.bank?.bankName ?? "-", 470, 200.2, 95, 16, 205.2);
-    draw(statement.bank?.accountNumber ?? "-", 470, 176.2, 95, 16, 181.2);
-    draw(statement.bank?.ifscCode ?? "-", 470, 152.2, 106, 16, 157.2);
-    draw(
+    [statement.bank?.accountHolderName ?? "-", statement.bank?.bankName ?? "-",
+      statement.bank?.accountNumber ?? "-", statement.bank?.ifscCode ?? "-",
       statement.bank?.verified ? "Verified" : "Unverified",
-      470,
-      128.2,
-      106,
-      16,
-      133.2,
-    );
+    ].forEach((value, index) => draw(value, 124, 221.7 - index * 24.009,
+      444, 22, 228.2 - index * 24.009, false, 10, rowBackground(index)));
 
     const pdfBytes = await outDoc.save();
     return {

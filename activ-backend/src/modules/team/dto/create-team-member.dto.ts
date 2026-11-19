@@ -35,7 +35,7 @@ export class CreateTeamMemberDto {
 
   @ApiProperty({ example: '+919876543210', description: 'Mobile number in E.164 format' })
   @IsNotEmpty()
-  @Matches(/^\+[1-9]\d{9,14}$/, { message: 'Phone must be in E.164 format, e.g. +919876543210' })
+  @Matches(/^\+(?:91[6-9]\d{9}|(?!91)[1-9]\d{9,14})$/, { message: 'Enter a valid phone number; Indian mobiles must have 10 digits starting with 6-9 after +91' })
   phone: string;
 
   @ApiProperty({ enum: TeamMemberRole, example: TeamMemberRole.MANAGER })
