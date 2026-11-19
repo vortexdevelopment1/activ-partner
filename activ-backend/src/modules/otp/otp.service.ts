@@ -1,130 +1,92 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { isProductionEnvironment } from '../../config/environment';
+import { isMsg91TemplateId, MSG91_TIMEOUT_MS, PHONE_OTP_LENGTH, PHONE_OTP_EXPIRY_MS } from '../../config/msg91';
 
-/**
- * Wraps MSG91's server-side Send OTP / Verify OTP REST API.
- * MSG91 generates, delivers and tracks the OTP itself — this service never
- * sees or stores the OTP value, it only forwards phone/otp to MSG91 and
- * relays the verdict.
- *
- * Docs: https://docs.msg91.com/otp
- */
+/** MSG91 owns OTP generation and verification; local challenges gate app login. */
 @Injectable()
-export class OtpService {
+export class OtpService implements OnModuleInit {
   private readonly logger = new Logger(OtpService.name);
 
   constructor(private configService: ConfigService) {}
 
-  async sendOtp(phone: string): Promise<void> {
-    if (!this.isMsg91Enabled()) {
-      // Mock mode: OTP is deterministically the last 4 digits of the phone number.
-      // Nothing to actually send — verifyOtp() below recomputes the same value.
-      this.logger.warn(`MSG91 disabled — mock OTP for ${phone} is its last 4 digits.`);
-      return;
+  onModuleInit(): void {
+    this.isMsg91Enabled();
+    if (this.isProduction() && !isMsg91TemplateId(this.configService.get<string>('MSG91_TEAM_INVITE_TEMPLATE_ID')?.trim())) {
+      throw new ServiceUnavailableException('Production requires a valid MSG91_TEAM_INVITE_TEMPLATE_ID');
     }
+  }
 
-    const authkey = this.configService.get<string>('MSG91_AUTHKEY');
-    const templateId = this.configService.get<string>('MSG91_OTP_TEMPLATE_ID');
-    const mobile = this.toMsg91Format(phone);
-
-    const params = new URLSearchParams({ template_id: templateId, mobile });
-
-    try {
-      const response = await fetch(`https://control.msg91.com/api/v5/otp?${params.toString()}`, {
-        method: 'POST',
-        headers: {
-          authkey,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-      });
-      const result = (await response.json()) as any;
-
-      if (!response.ok || result?.type !== 'success') {
-        this.logger.error(`MSG91 send OTP failed for ${mobile}: ${JSON.stringify(result)}`);
-        throw new BadRequestException('Failed to send OTP. Please try again.');
-      }
-
-      this.logger.log(`OTP sent to ${mobile} via MSG91`);
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      this.logger.error(`Failed to send OTP to ${mobile}: ${error.message}`);
+  async sendOtp(phone: string): Promise<void> {
+    if (!this.isMsg91Enabled()) return;
+    const params = new URLSearchParams({
+      template_id: this.configService.get<string>('MSG91_OTP_TEMPLATE_ID').trim(),
+      mobile: this.toMsg91Format(phone),
+      otp_length: String(PHONE_OTP_LENGTH),
+      otp_expiry: String(PHONE_OTP_EXPIRY_MS / 60_000),
+    });
+    if (!await this.request('otp', params, 'POST', 'request_id')) {
       throw new BadRequestException('Failed to send OTP. Please try again.');
     }
   }
 
   async verifyOtp(phone: string, otp: string): Promise<boolean> {
-    if (!this.isMsg91Enabled()) {
-      const mockOtp = phone.replace(/\D/g, '').slice(-4);
-      return otp === mockOtp;
-    }
-
-    const authkey = this.configService.get<string>('MSG91_AUTHKEY');
-    const mobile = this.toMsg91Format(phone);
-
-    const params = new URLSearchParams({ mobile, otp });
-
-    try {
-      const response = await fetch(`https://control.msg91.com/api/v5/otp/verify?${params.toString()}`, {
-        method: 'GET',
-        headers: { authkey, Accept: 'application/json' },
-      });
-      const result = (await response.json()) as any;
-
-      if (result?.type === 'success') return true;
-
-      const message = String(result?.message ?? '').toLowerCase();
-      if (message.includes('already verified')) {
-        this.logger.warn(`MSG91 reports ${mobile} was already verified; continuing local OTP completion.`);
-        return true;
-      }
-
-      this.logger.warn(`MSG91 OTP verify failed for ${mobile}: ${JSON.stringify(result)}`);
-      return false;
-    } catch (error) {
-      this.logger.error(`Failed to verify OTP for ${mobile}: ${error.message}`);
-      return false;
-    }
+    const enabled = this.isMsg91Enabled();
+    if (!new RegExp(`^\\d{${PHONE_OTP_LENGTH}}$`).test(otp)) return false;
+    if (!enabled) return otp === phone.replace(/\D/g, '').slice(-PHONE_OTP_LENGTH);
+    return this.request('otp/verify', new URLSearchParams({ mobile: this.toMsg91Format(phone), otp }), 'GET');
   }
 
   async resendOtp(phone: string, retryType: 'text' | 'voice' = 'text'): Promise<void> {
-    if (!this.isMsg91Enabled()) {
-      this.logger.warn(`MSG91 disabled — mock OTP for ${phone} is its last 4 digits (nothing to resend).`);
-      return;
-    }
-
-    const authkey = this.configService.get<string>('MSG91_AUTHKEY');
-    const mobile = this.toMsg91Format(phone);
-
-    const params = new URLSearchParams({ mobile, retrytype: retryType });
-
-    try {
-      const response = await fetch(`https://control.msg91.com/api/v5/otp/retry?${params.toString()}`, {
-        method: 'POST',
-        headers: { authkey, Accept: 'application/json' },
-      });
-      const result = (await response.json()) as any;
-
-      if (!response.ok || result?.type !== 'success') {
-        this.logger.error(`MSG91 resend OTP failed for ${mobile}: ${JSON.stringify(result)}`);
-        throw new BadRequestException('Failed to resend OTP. Please try again.');
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      this.logger.error(`Failed to resend OTP to ${mobile}: ${error.message}`);
+    if (!this.isMsg91Enabled()) return;
+    if (!await this.request('otp/retry', new URLSearchParams({ mobile: this.toMsg91Format(phone), retrytype: retryType }), 'GET')) {
       throw new BadRequestException('Failed to resend OTP. Please try again.');
     }
   }
 
-  /** Toggle via MSG91_OTP_ENABLED=true|false. Defaults to disabled (mock OTP) until configured. */
-  private isMsg91Enabled(): boolean {
-    return this.configService.get<string>('MSG91_OTP_ENABLED') === 'true';
+  private async request(endpoint: string, params: URLSearchParams, method: 'POST' | 'GET', idField?: string): Promise<boolean> {
+    try {
+      const response = await fetch(`https://control.msg91.com/api/v5/${endpoint}?${params}`, {
+        method,
+        signal: AbortSignal.timeout(MSG91_TIMEOUT_MS),
+        headers: {
+          authkey: this.configService.get<string>('MSG91_AUTHKEY').trim(),
+          'Content-Type': 'application/json', Accept: 'application/json',
+        },
+      });
+      const result = await response.json();
+      const accepted = response.ok && result?.type === 'success' &&
+        (!idField || (typeof result[idField] === 'string' && result[idField].trim().length > 0));
+      if (!accepted) this.logger.warn(`MSG91 ${endpoint} rejected (HTTP ${response.status})`);
+      return accepted;
+    } catch {
+      // Provider errors/URLs can contain OTPs and phone numbers; never log them.
+      this.logger.warn(`MSG91 ${endpoint} failed or timed out`);
+      return false;
+    }
   }
 
-  /** MSG91 expects the number as country-code + digits, no leading '+'. Defaults to India (91). */
+  private isProduction(): boolean {
+    return isProductionEnvironment({
+      NODE_ENV: this.configService.get<string>('NODE_ENV'),
+      APP_ENV: this.configService.get<string>('APP_ENV'),
+    });
+  }
+
+  private isMsg91Enabled(): boolean {
+    const enabled = this.configService.get<string>('MSG91_OTP_ENABLED') === 'true';
+    if (!enabled && this.isProduction()) {
+      throw new ServiceUnavailableException('Production requires MSG91_OTP_ENABLED=true');
+    }
+    if (enabled && (!this.configService.get<string>('MSG91_AUTHKEY')?.trim() ||
+      !isMsg91TemplateId(this.configService.get<string>('MSG91_OTP_TEMPLATE_ID')?.trim()))) {
+      throw new ServiceUnavailableException('MSG91 OTP configuration is incomplete');
+    }
+    return enabled;
+  }
+
   private toMsg91Format(phone: string): string {
     const digits = phone.replace(/\D/g, '');
-    if (digits.length === 10) return `91${digits}`;
-    return digits;
+    return digits.length === 10 ? `91${digits}` : digits;
   }
 }

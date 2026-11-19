@@ -14,6 +14,7 @@ import { randomInt, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { TeamService } from '../team/team.service';
 import { OtpService } from '../otp/otp.service';
+import { PHONE_OTP_COOLDOWN_MS, PHONE_OTP_EXPIRY_MS, PHONE_OTP_MAX_ATTEMPTS } from '../../config/msg91';
 import { MailService } from '../mail/mail.service';
 import { TeamMemberRecord as TeamMember, TeamMemberStatus } from '../../common/domain-types';
 import type { PartnerRecord as Partner } from '../../common/domain-types';
@@ -374,55 +375,50 @@ export class AuthService {
       }
     }
 
-    const now = new Date();
-    const latestChallenge = await this.prisma.otp_challenges.findFirst({
-      where: { phone_e164: phone, consumed_at: null },
-      orderBy: { created_at: 'desc' },
-    });
-
-    if (
-      latestChallenge &&
-      latestChallenge.created_at.getTime() > now.getTime() - 60 * 1000
-    ) {
-      throw new BadRequestException('Please wait before requesting another OTP.');
-    }
-
-    await this.otpService.sendOtp(phone);
-    await this.prisma.otp_challenges.create({
-      data: {
-        id: randomUUID(),
-        phone_e164: phone,
-        code_hash: 'managed-by-msg91',
-        expires_at: new Date(now.getTime() + 10 * 60 * 1000),
-      },
-    });
+    await this.prisma.$transaction(async tx => {
+      // Serialize sends/retries across backend instances for this phone.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`phone-otp:${phone}`}, 0))`;
+      const now = new Date();
+      const latestChallenge = await tx.otp_challenges.findFirst({
+        where: { phone_e164: phone }, orderBy: { created_at: 'desc' },
+      });
+      if (latestChallenge && latestChallenge.created_at.getTime() > now.getTime() - PHONE_OTP_COOLDOWN_MS) {
+        throw new BadRequestException('Please wait 60 seconds before requesting another OTP.');
+      }
+      await this.otpService.sendOtp(phone);
+      await tx.otp_challenges.updateMany({
+        where: { phone_e164: phone, consumed_at: null }, data: { consumed_at: now },
+      });
+      await tx.otp_challenges.create({ data: {
+        id: randomUUID(), phone_e164: phone, code_hash: 'managed-by-msg91',
+        expires_at: new Date(now.getTime() + PHONE_OTP_EXPIRY_MS),
+      } });
+    }, { timeout: 15_000 });
 
     return { phone };
   }
 
   async resendOtp(dto: RequestOtpDto) {
     const phone = this.normalizePhone(dto.phone);
-    const challenge = await this.prisma.otp_challenges.findFirst({
-      where: { phone_e164: phone, consumed_at: null },
-      orderBy: { created_at: 'desc' },
-    });
-
-    if (!challenge || challenge.expires_at <= new Date()) {
-      throw new BadRequestException('Phone number not found. Please request OTP first.');
-    }
-    if (challenge.created_at.getTime() > Date.now() - 60 * 1000) {
-      throw new BadRequestException('Please wait before requesting another OTP.');
-    }
-
-    await this.otpService.resendOtp(phone);
-    await this.prisma.otp_challenges.create({
-      data: {
-        id: randomUUID(),
-        phone_e164: phone,
-        code_hash: 'managed-by-msg91',
-        expires_at: new Date(Date.now() + 10 * 60 * 1000),
-      },
-    });
+    await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`phone-otp:${phone}`}, 0))`;
+      const challenge = await tx.otp_challenges.findFirst({
+        where: { phone_e164: phone }, orderBy: { created_at: 'desc' },
+      });
+      if (!challenge || challenge.consumed_at || challenge.expires_at <= new Date() || challenge.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+        throw new BadRequestException('Invalid or expired OTP. Please request a new OTP.');
+      }
+      if (challenge.created_at.getTime() > Date.now() - PHONE_OTP_COOLDOWN_MS) {
+        throw new BadRequestException('Please wait 60 seconds before requesting another OTP.');
+      }
+      await this.otpService.resendOtp(phone);
+      // MSG91 retries the same OTP: retain its challenge, attempt budget and expiry.
+      const updated = await tx.otp_challenges.updateMany({
+        where: { id: challenge.id, consumed_at: null, expires_at: { gt: new Date() } },
+        data: { created_at: new Date() },
+      });
+      if (updated.count !== 1) throw new BadRequestException('Invalid or expired OTP.');
+    }, { timeout: 15_000 });
 
     return { phone };
   }
@@ -432,12 +428,19 @@ export class AuthService {
     const challenge = await this.prisma.otp_challenges.findFirst({
       where: {
         phone_e164: phone,
-        consumed_at: null,
-        expires_at: { gt: new Date() },
       },
       orderBy: { created_at: 'desc' },
     });
-    if (!challenge) throw new BadRequestException('Invalid or expired OTP.');
+    if (!challenge || challenge.consumed_at || challenge.expires_at <= new Date() || challenge.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+      throw new BadRequestException('Invalid or expired OTP.');
+    }
+
+    // Reserve an attempt atomically BEFORE calling MSG91, including concurrent guesses.
+    const attempt = await this.prisma.otp_challenges.updateMany({
+      where: { id: challenge.id, consumed_at: null, expires_at: { gt: new Date() }, attempts: { lt: PHONE_OTP_MAX_ATTEMPTS } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (attempt.count !== 1) throw new BadRequestException('Invalid or expired OTP.');
 
     const isValid = await this.otpService.verifyOtp(phone, dto.otp);
     if (!isValid) {

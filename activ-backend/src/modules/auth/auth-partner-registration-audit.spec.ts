@@ -5,7 +5,7 @@ describe('partner registration audit', () => {
     const notify = jest.fn();
     const service = Object.assign(Object.create(AuthService.prototype), {
       prisma: {
-        otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'challenge' }) },
+        otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'challenge' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         $transaction: jest.fn().mockRejectedValue(new Error('Signup failed')),
       },
       teamService: { findByPhone: jest.fn().mockResolvedValue(null) },
@@ -26,7 +26,7 @@ describe('partner registration audit', () => {
       audit_events: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'challenge', expires_at: new Date(Date.now() + 60000) }) },
+      otp_challenges: { findFirst: jest.fn().mockResolvedValue({ id: 'challenge', expires_at: new Date(Date.now() + 60000) }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn((callback) => callback(tx)),
     };
     const service = Object.assign(Object.create(AuthService.prototype), {

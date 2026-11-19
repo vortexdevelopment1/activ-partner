@@ -18,6 +18,7 @@ import 'package:activ_app/Screens/Menu/MenuScreen.dart';
 import 'package:activ_app/Screens/Menu/SettingsScreen.dart';
 import 'package:activ_app/Screens/Home/VenueInfoScreen.dart';
 import 'package:activ_app/Screens/Home/HomeScreen.dart';
+import 'package:activ_app/Screens/Home/ManagerHomeScreen.dart';
 import 'package:activ_app/Screens/Home/dashboard_setup_cards.dart';
 import 'package:activ_app/Screens/Home/ManagePricingScreen.dart';
 import 'package:activ_app/Screens/Home/ManageSlotsScreen.dart';
@@ -2011,7 +2012,7 @@ void main() {
     expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
     expect(find.text('Edit Number'), findsOneWidget);
     expect(find.text('2/10'), findsOneWidget);
-    expect(find.text('Resend OTP in 40s'), findsOneWidget);
+    expect(find.text('Resend OTP in 60s'), findsOneWidget);
     for (var i = 0; i < 4; i++) {
       expect(tester.getSize(digit(i)), const Size(50, 50));
       expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
@@ -2508,21 +2509,49 @@ void main() {
         return http.Response('{"message":"Invalid code"}', 400);
       }
       calls++;
-      expect(request.url.path, endsWith('/request-otp'));
+      expect(request.url.path, endsWith('/resend-otp'));
       expect(jsonDecode(request.body), {'phone': '9876544567'});
       return http.Response('{}', 200);
     })));
     expect(find.byKey(const Key('otp-resend')), findsNothing);
     await tester.enterText(digit(0), '1234');
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 40));
+    await tester.pump(const Duration(seconds: 59));
+    expect(find.byKey(const Key('otp-resend')), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.byKey(const Key('otp-resend')));
     await tester.pumpAndSettle();
     expect(calls, 1);
-    expect(find.text('Resend OTP in 40s'), findsOneWidget);
+    expect(find.text('Resend OTP in 60s'), findsOneWidget);
     for (var i = 0; i < 4; i++) {
       expect(tester.widget<TextField>(digit(i)).controller!.text, isEmpty);
     }
+  });
+
+  testWidgets('staff OTP login opens the team dashboard with assigned permissions', (tester) async {
+    String? intent;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/verify-otp')) {
+        intent = request.url.queryParameters['intent'];
+        return http.Response(jsonEncode({'data': {
+          'jwt_token': 'staff-token', 'userType': 'team_member',
+          'member': {'id': 'staff-1', 'role': 'manager'},
+          'permissions': {'bookingManagement': true, 'pricingControl': false},
+        }}), 200);
+      }
+      return http.Response(jsonEncode({'data': []}), 200);
+    });
+    await showScreen(tester, OTPVerificationScreen(client: client));
+    await tester.enterText(digit(0), '1234');
+    await tester.pumpAndSettle();
+    expect(find.byType(ManagerHomeScreen), findsOneWidget);
+    expect(intent, 'login');
+    expect(find.byType(HomeScreen), findsNothing);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('jwt_token'), 'staff-token');
+    expect(preferences.getString('user_type'), 'team_member');
+    expect(jsonDecode(preferences.getString('permissions')!), {'bookingManagement': true, 'pricingControl': false});
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('venue commission uses city and state and shows the admin 5 percent rate', (tester) async {

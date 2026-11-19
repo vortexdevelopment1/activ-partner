@@ -45,7 +45,7 @@ class _State extends State<OTPVerificationScreen> {
 
   bool _isSubmitting = false;
   bool _isResending = false;
-  int _resendSeconds = 40;
+  int _resendSeconds = 60;
   Timer? _resendTimer;
 
   @override
@@ -68,7 +68,7 @@ class _State extends State<OTPVerificationScreen> {
 
   void _startResendCountdown() {
     _resendTimer?.cancel();
-    _resendSeconds = 40;
+    _resendSeconds = 60;
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -89,7 +89,7 @@ class _State extends State<OTPVerificationScreen> {
     setState(() => _isResending = true);
     try {
       final response = await (widget.client?.post ?? http.post)(
-        Uri.parse(REQUEST_OTP_URL),
+        Uri.parse(RESEND_OTP_URL),
         headers: {'accept': '*/*', 'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': userMobileNumber.replaceAll(RegExp(r'\D'), ''),

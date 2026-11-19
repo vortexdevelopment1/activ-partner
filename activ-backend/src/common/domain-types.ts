@@ -49,7 +49,7 @@ export enum GstVerificationStatus { PENDING = 'pending', APPROVED = 'approved', 
 export enum VenueUpdateRequestStatus { PENDING = 'pending', APPROVED = 'approved', REJECTED = 'rejected' }
 
 export interface TeamMemberRecord {
-    invitationDelivery?: { emailSent: boolean; smsSent: boolean };
+    invitationDelivery?: { emailSent: boolean; smsSent: boolean; smsUnavailableReason?: 'password_template_requires_new_account' };
   id: string; partnerId: string; fullName: string; email?: string | null;
   phone?: string | null; avatarUrl?: string; role: string;
   status: TeamMemberStatus; isActive: boolean; permissions: Record<string, boolean>;

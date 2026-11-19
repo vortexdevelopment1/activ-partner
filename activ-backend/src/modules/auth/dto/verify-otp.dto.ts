@@ -10,6 +10,6 @@ export class VerifyOtpDto {
   @ApiProperty({ example: '3210', description: 'OTP received via SMS' })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^\d{4,6}$/, { message: 'OTP must be 4 to 6 digits' })
+  @Matches(/^\d{4}$/, { message: 'OTP must be 4 digits' })
   otp: string;
 }

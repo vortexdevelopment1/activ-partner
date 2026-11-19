@@ -67,9 +67,16 @@ class _TeamMember {
       createdAt: _formatDate(checkString(json['createdAt'])),
       bookingManagement: permissions['bookingManagement'] == true,
       deliverySummary: json['invitationDelivery'] is Map
-          ? 'Last invite: Email ${json['invitationDelivery']['emailSent'] == true ? 'sent' : 'not confirmed'}, SMS ${json['invitationDelivery']['smsSent'] == true ? 'sent' : 'not confirmed'}'
+          ? 'Last invite: Email ${json['invitationDelivery']['emailSent'] == true ? 'sent' : 'not confirmed'}, SMS ${smsSummary(json['invitationDelivery'])}'
           : null,
     );
+  }
+
+  static String smsSummary(Map delivery) {
+    if (delivery['smsUnavailableReason'] == 'password_template_requires_new_account') {
+      return 'unavailable for existing accounts/resends';
+    }
+    return delivery['smsSent'] == true ? 'accepted; delivery unconfirmed' : 'not confirmed';
   }
 
   static String _formatDate(String value) {
@@ -226,7 +233,7 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
     final delivery = member is Map ? member['invitationDelivery'] : null;
     if (delivery is! Map) return;
     final email = delivery['emailSent'] == true ? 'sent' : 'not confirmed';
-    final sms = delivery['smsSent'] == true ? 'sent' : 'not confirmed';
+    final sms = _TeamMember.smsSummary(delivery);
     CommonUtilities.createSnackBar(context,
         'Email: $email. SMS: $sms. The member can sign in using their phone OTP.');
   }
@@ -523,7 +530,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
       CommonUtilities.createSnackBar(context, 'Full name is required');
       return;
     }
-    if (phoneDigits.length != 10) {
+    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phoneDigits)) {
       CommonUtilities.createSnackBar(
           context, 'Enter a valid phone number with country code, e.g. +919876543210');
       return;
@@ -644,7 +651,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'An invitation will be sent by SMS and email. Members can sign in using phone OTP.',
+                'Sending or resending an invite creates a new password and replaces the existing account password. Login details are sent by SMS and email.',
                 style: TextStyle(
                   color: _ManageTeamScreenState._muted,
                   fontFamily: 'Satoshi',

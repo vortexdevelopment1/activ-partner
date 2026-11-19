@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:activ_app/Screens/Home/ManageTeamScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,6 +75,7 @@ void main() {
     await tester.tap(find.text('+ New Member'));
     await tester.pumpAndSettle();
     expect(find.text('Mobile Number*'), findsOneWidget);
+    expect(find.textContaining('replaces the existing account password'), findsOneWidget);
     expect(find.textContaining('Email Address'), findsOneWidget);
     await tester.enterText(find.byType(TextField).at(0), 'Test Staff');
     await tester.enterText(find.byType(TextField).at(1), '98765 43210');
@@ -161,5 +163,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(writes, 0);
     expect(messages, contains('Enter a valid email address'));
+  });
+
+  testWidgets('existing account SMS unavailability is explained after resend', (tester) async {
+    await show(tester, MockClient((request) async => http.Response(jsonEncode({
+      'data': request.method == 'POST' ? {...member, 'invitationDelivery': {
+        'emailSent': true, 'smsSent': false,
+        'smsUnavailableReason': 'password_template_requires_new_account',
+      }} : [member],
+    }), 200)));
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Resend Invite'));
+    await tester.tap(find.text('Resend Invite'));
+    await tester.pumpAndSettle();
+    expect(messages.any((message) => message.contains('SMS: unavailable for existing accounts/resends')), isTrue);
+  });
+
+  testWidgets('pending Send Invite blocks duplicate submissions and reports acceptance', (tester) async {
+    final pending = Completer<http.Response>();
+    var writes = 0;
+    var reads = 0;
+    await show(tester, MockClient((request) async {
+      if (request.method == 'POST') { writes++; return pending.future; }
+      reads++;
+      return http.Response(jsonEncode({'data': []}), 200);
+    }));
+    await tester.tap(find.text('+ New Member'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Test Staff');
+    await tester.enterText(find.byType(TextField).at(1), '9876543210');
+    await tester.enterText(find.byType(TextField).at(2), 'staff@example.com');
+    await tester.ensureVisible(find.text('Send Invite'));
+    await tester.tap(find.text('Send Invite'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Send Invite'), findsNothing);
+    expect(writes, 1);
+    pending.complete(http.Response(jsonEncode({'data': {...member,
+      'invitationDelivery': {'emailSent': false, 'smsSent': true}}}), 201));
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    expect(messages.any((message) => message.contains('SMS: accepted; delivery unconfirmed')), isTrue);
+    expect(tester.takeException(), isNull);
   });
 }

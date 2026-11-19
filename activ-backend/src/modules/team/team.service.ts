@@ -134,8 +134,7 @@ export class TeamService {
     dto: CreateTeamMemberDto,
   ): Promise<TeamMember> {
     try {
-      const temporaryPassword = `Activ@${randomBytes(18).toString('base64url')}`;
-      const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+      const { password: temporaryPassword, passwordHash } = await this.createInvitationPassword();
       const email = dto.email?.trim().toLowerCase();
       const prepared = await this.prisma.$transaction(async (tx) => {
         const user = await tx.users.findUnique({
@@ -171,6 +170,11 @@ export class TeamService {
               updated_at: now,
             },
           }));
+        if (user) {
+          await tx.users.update({
+            where: { id: user.id }, data: { password_hash: passwordHash, updated_at: now },
+          });
+        }
         const link = await tx.partner_users.create({
           data: {
             id: randomUUID(),
@@ -199,7 +203,7 @@ export class TeamService {
           },
           include: this.include,
         });
-        const password = user ? undefined : temporaryPassword;
+        const password = temporaryPassword;
         const deliveryId = email ? await this.mailService.prepareTeamMemberInviteEmail({
           toEmail: email, phone: dto.phone, fullName: dto.fullName, role: dto.role, password,
           deliveryKey: `team-invite:${row.id}:${randomUUID()}`,
@@ -214,7 +218,12 @@ export class TeamService {
     }
   }
 
-  private async deliverInvitation(row: any, password?: string, deliveryId?: string): Promise<TeamMember> {
+  private async createInvitationPassword() {
+    const password = `Activ@${randomBytes(18).toString('base64url')}`;
+    return { password, passwordHash: await bcrypt.hash(password, 12) };
+  }
+
+  private async deliverInvitation(row: any, password: string, deliveryId?: string): Promise<TeamMember> {
     const member = this.toMember(row);
     const results = await Promise.allSettled([
       deliveryId ? this.mailService.deliverPreparedEmail(deliveryId) : Promise.resolve(false),
@@ -224,7 +233,9 @@ export class TeamService {
       const result = results[index];
       return result.status === 'fulfilled' && result.value === true;
     };
-    const invitationDelivery = { emailSent: sent(0), smsSent: sent(1) };
+    const invitationDelivery: NonNullable<TeamMember['invitationDelivery']> = {
+      emailSent: sent(0), smsSent: sent(1),
+    };
     let status = invitationDelivery.emailSent || invitationDelivery.smsSent
       ? TeamMemberStatus.INVITE_SENT : TeamMemberStatus.INVITE_PENDING;
     try {
@@ -243,6 +254,7 @@ export class TeamService {
   }
 
   async resendInvitation(id: string, partnerId: string): Promise<TeamMember> {
+    const { password, passwordHash } = await this.createInvitationPassword();
     const prepared = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM partner_staff_profiles WHERE id = ${id}::uuid FOR UPDATE`;
       const row = await tx.partner_staff_profiles.findFirst({
@@ -250,13 +262,22 @@ export class TeamService {
       });
       if (!row) throw new NotFoundException('Team member not found');
       const settings = (row.permissions || {}) as Record<string, any>;
+      if (settings.isActive === false || row.partner_users.role !== PartnerRole.PARTNER_USER ||
+          row.partner_users.users.status !== 'ACTIVE' || row.partner_users.users.is_admin) {
+        throw new BadRequestException('This account is unavailable for invitation');
+      }
       if (settings.setupStatus === TeamMemberStatus.ACTIVE) throw new BadRequestException('This member has already joined');
       if (settings.lastInvitationAt && Date.parse(settings.lastInvitationAt) > Date.now() - 60000) {
         throw new BadRequestException('Wait one minute before resending the invitation');
       }
+      await tx.users.update({
+        where: { id: row.partner_users.user_id },
+        data: { password_hash: passwordHash, updated_at: new Date() },
+      });
       const email = row.partner_users.users.email;
       const deliveryId = email ? await this.mailService.prepareTeamMemberInviteEmail({
         toEmail: email, phone: row.contact_phone_e164, fullName: row.display_name, role: row.designation,
+        password,
         deliveryKey: `team-invite:${id}:${randomUUID()}`,
       }, tx) : undefined;
       await tx.partner_staff_profiles.update({ where: { id }, data: {
@@ -264,7 +285,7 @@ export class TeamService {
       } });
       return { row, deliveryId };
     });
-    return this.deliverInvitation(prepared.row, undefined, prepared.deliveryId);
+    return this.deliverInvitation(prepared.row, password, prepared.deliveryId);
   }
 
   async update(

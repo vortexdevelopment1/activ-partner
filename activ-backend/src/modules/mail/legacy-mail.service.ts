@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { indianMobileDigits, isMsg91TemplateId, MSG91_TIMEOUT_MS } from '../../config/msg91';
 import * as nodemailer from "nodemailer";
 import { GoogleOAuthService } from "./google-oauth.service";
 import * as path from 'path';
@@ -415,24 +416,19 @@ export class LegacyMailService {
     const templateId = this.configService
       .get<string>("MSG91_TEAM_INVITE_TEMPLATE_ID")
       ?.trim();
-    const appLink = this.configService.get<string>(
-      "PARTNER_APP_URL",
-      "https://activ.co.in/login",
-    );
-
-    if (!authkey || !templateId) {
+    // Invitation creation/resend commits this generated password's hash first.
+    // Never insert OTP instructions into the approved password variable.
+    if (!params.password) return false;
+    if (!authkey || !isMsg91TemplateId(templateId)) {
       this.logger.error(
         "Team invite SMS was not sent: MSG91_AUTHKEY or MSG91_TEAM_INVITE_TEMPLATE_ID is missing.",
       );
       return false;
     }
 
-    const digits = params.phone.replace(/\D/g, "");
-    const mobile = digits.length === 10 ? `91${digits}` : digits;
-    if (mobile.length < 10) {
-      this.logger.error(
-        `Team invite SMS was not sent: invalid phone ${params.phone}`,
-      );
+    const mobile = indianMobileDigits(params.phone);
+    if (!mobile) {
+      this.logger.error('Team invite SMS was not sent: invalid Indian mobile number');
       return false;
     }
 
@@ -442,10 +438,8 @@ export class LegacyMailService {
       recipients: [
         {
           mobiles: mobile,
-          VAR1: params.fullName,
-          VAR2: params.role,
-          VAR3: appLink,
-          VAR4: params.password || 'Use phone OTP to sign in',
+          var1: mobile.slice(-10),
+          var2: params.password,
         },
       ],
     };
@@ -453,6 +447,7 @@ export class LegacyMailService {
     try {
       const response = await fetch("https://control.msg91.com/api/v5/flow", {
         method: "POST",
+        signal: AbortSignal.timeout(MSG91_TIMEOUT_MS),
         headers: {
           authkey,
           "Content-Type": "application/json",
@@ -461,7 +456,8 @@ export class LegacyMailService {
         body: JSON.stringify(body),
       });
       const result = (await response.json()) as any;
-      const accepted = response.ok && result?.type !== "error";
+      const accepted = response.ok && result?.type === "success" &&
+        typeof result?.message === 'string' && /^[a-f\d]{24}$/i.test(result.message);
       if (!accepted) {
         this.logger.error(
           `MSG91 team invite SMS was not accepted (HTTP ${response.status})`,
@@ -469,7 +465,7 @@ export class LegacyMailService {
         return false;
       }
 
-      this.logger.log(`Team invite SMS accepted by MSG91 for ${mobile}`);
+      this.logger.log(`Team invite SMS accepted by MSG91 (request ID: ${result.message}); delivery is not yet confirmed`);
       return true;
     } catch (error) {
       this.logger.error(

@@ -10,8 +10,10 @@ describe('OTP access to venue corrections', () => {
     prisma = {
       users: { findUnique: jest.fn(async () => ({ id: 'owner', partner_users: [{ role: 'PARTNER_ADMIN', partners: partner }] })) },
       venues: { findFirst: jest.fn().mockResolvedValue({ id: 'venue' }) },
-      otp_challenges: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      otp_challenges: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $executeRaw: jest.fn(),
     };
+    prisma.$transaction = jest.fn(callback => callback(prisma));
     service = Object.assign(Object.create(AuthService.prototype), {
       prisma, otpService: { sendOtp: jest.fn() },
     });

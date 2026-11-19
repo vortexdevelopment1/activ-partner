@@ -121,6 +121,7 @@ String _localUrlForCurrentPlatform(String localUrl) {
 }
 
 String get REQUEST_OTP_URL => "$BASE_URL/auth/partner/request-otp";
+String get RESEND_OTP_URL => "$BASE_URL/auth/partner/resend-otp";
 String get VERIFY_OTP_URL => "$BASE_URL/auth/partner/verify-otp";
 String get COMPLETE_PROFILE_URL => "$BASE_URL/auth/partner/complete-profile";
 String get PARTNER_LOGIN_URL => "$BASE_URL/auth/partner/login";

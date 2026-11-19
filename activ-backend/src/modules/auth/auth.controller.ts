@@ -14,6 +14,7 @@ import {
 import type { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { PhoneOtpRateLimitGuard } from './phone-otp-rate-limit.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterPartnerDto } from './dto/register-partner.dto';
@@ -156,12 +157,13 @@ export class AuthController {
 
   @Public()
   @Post('partner/request-otp')
+  @UseGuards(PhoneOtpRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Step 1 — Request OTP for partner phone registration',
     description:
       'Send your phone number to receive an OTP via SMS (delivered through MSG91). ' +
-      'If MSG91_OTP_ENABLED=false on the server, no SMS is sent and the OTP is the last 4 digits of the phone number (dev/mock mode).',
+      'Development can use an offline mock; production requires configured MSG91 OTP delivery.',
   })
   async requestOtp(
     @Body() dto: RequestOtpDto,
@@ -173,6 +175,7 @@ export class AuthController {
 
   @Public()
   @Post('partner/verify-otp')
+  @UseGuards(PhoneOtpRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Step 2 — Verify OTP and receive JWT token',
@@ -189,6 +192,7 @@ export class AuthController {
 
   @Public()
   @Post('partner/resend-otp')
+  @UseGuards(PhoneOtpRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Resend OTP to a phone number that already has a pending verification',

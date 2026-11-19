@@ -8,6 +8,7 @@ import { EmailDeliveriesController } from './email-deliveries.controller';
 import { EmailDeliveryService } from './email-delivery.service';
 import { AuthController } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
+import { PhoneOtpRateLimitGuard } from '../auth/phone-otp-rate-limit.guard';
 import { GoogleOAuthService } from './google-oauth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -30,7 +31,8 @@ describe('protected email operations', () => {
     const module = await Test.createTestingModule({ imports: [PassportModule],
       controllers: [EmailDeliveriesController, AuthController], providers: [TestStrategy, JwtAuthGuard, RolesGuard,
         { provide: EmailDeliveryService, useValue: deliveries }, { provide: GoogleOAuthService, useValue: oauth },
-        { provide: AuthService, useValue: {} }] }).compile();
+        { provide: AuthService, useValue: {} }] })
+      .overrideGuard(PhoneOtpRateLimitGuard).useValue({ canActivate: () => true }).compile();
     app = module.createNestApplication({ logger: false });
     app.setGlobalPrefix('api/v1');
     app.useGlobalGuards(new JwtAuthGuard(app.get(Reflector)), new RolesGuard(app.get(Reflector)));
