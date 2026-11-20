@@ -9,19 +9,23 @@ describe('merged facility slot availability', () => {
     };
     const prisma: any = {
       partner_venue_services: { findFirst: jest.fn().mockResolvedValue(activity) },
-      partner_venue_availability: { findMany: jest.fn().mockResolvedValue([
-        { open_time: '06:00', close_time: '07:00' },
-      ]) },
-      slots: { findMany: jest.fn().mockResolvedValue([{
-        starts_at: new Date('2030-01-01T00:30:00Z'),
-        ends_at: new Date('2030-01-01T01:30:00Z'),
-        status: 'AVAILABLE', capacity: 1, booked_quantity: 0,
-      }]) },
+      partner_venue_availability: {
+        findMany: jest.fn().mockResolvedValue([
+          { open_time: '06:00', close_time: '07:00' },
+        ])
+      },
+      slots: {
+        findMany: jest.fn().mockResolvedValue([{
+          starts_at: new Date('2030-01-01T00:30:00Z'),
+          ends_at: new Date('2030-01-01T01:30:00Z'),
+          status: 'AVAILABLE', capacity: 1, booked_quantity: 0,
+        }])
+      },
       bookings: { findMany: jest.fn().mockResolvedValue([]) },
       partner_walk_in_reservations: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const service = Object.assign(Object.create(VenuesService.prototype), { prisma }) as VenuesService;
-    const load = () => service.getActivitySlots('venue', 'activity', 'partner', '2030-01-01', 'Court 01');
+    const load = (court = 'Court 01') => service.getActivitySlots('venue', 'activity', 'partner', '2030-01-01', court);
     return { prisma, load, activity };
   }
 
@@ -39,8 +43,10 @@ describe('merged facility slot availability', () => {
     prisma.partner_walk_in_reservations.findMany.mockResolvedValue([{
       id: 'reservation', starts_at: new Date('2030-01-01T00:30:00Z'),
       ends_at: new Date('2030-01-01T01:30:00Z'),
+      notes: 'Court: Court 01',
     }]);
     expect((await load()).slots[0]).toMatchObject({ status: 'walk_in_reserved', reservationId: 'reservation' });
+    expect((await load('Court 02')).slots[0]).toMatchObject({ status: 'available' });
   });
 
   it.each([true, false])('detects ACTIV bookings with generated slots = %s', async (generated) => {
@@ -60,10 +66,12 @@ describe('merged facility slot availability', () => {
   it('uses the saved match format before the court surface, including array answers', async () => {
     const { activity, prisma, load } = setup();
     activity.onboarding_data = { courtType: 'Wooden' };
-    prisma.partner_venue_answers = { findMany: jest.fn().mockResolvedValue([
-      { answer: ['6*6'], partner_service_questions: { question: 'Match Format' } },
-      { answer: 'Wooden', partner_service_questions: { question: 'Court Type' } },
-    ]) };
+    prisma.partner_venue_answers = {
+      findMany: jest.fn().mockResolvedValue([
+        { answer: ['6*6'], partner_service_questions: { question: 'Match Format' } },
+        { answer: 'Wooden', partner_service_questions: { question: 'Court Type' } },
+      ])
+    };
     expect((await load()).courts).toEqual(['Court 01 (6*6)']);
   });
   it('retains explicit court names without duplicating their saved detail', async () => {

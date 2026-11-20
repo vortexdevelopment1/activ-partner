@@ -53,3 +53,5 @@ replay_pid*
 
 # Old performance reports
 ACTIV_PARTNER_*PERFORMANCE*.md
+
+.DS_Store

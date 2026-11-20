@@ -16,7 +16,6 @@ import '../../api_calling/api_request.dart';
 import '../CommonCode.dart';
 import '../Menu/MenuScreen.dart';
 import '../default_partner_avatar.dart';
-import 'ManagePricingScreen.dart';
 import 'ManageTeamScreen.dart';
 import 'ManageSlotsScreen.dart';
 import 'ManageBookingsScreen.dart';
@@ -670,7 +669,7 @@ class _State extends State<HomeScreen> {
                           teamRequired: _needsTeam,
                           bankAccountRequired: _needsBankAccount,
                           onPricing: () => _openSetup(
-                              ManagePricingScreen(client: widget.client)),
+                              ManageSlotsScreen(client: widget.client)),
                           onTeam: () => _openSetup(
                               ManageTeamScreen(client: widget.client)),
                           onBankAccount: () => _openSetup(
@@ -1334,8 +1333,7 @@ class _State extends State<HomeScreen> {
           const SizedBox(height: 16),
           GestureDetector(
             onTap: _permPricing
-                ? () => CommonUtilities.NavigateWithPush(
-                    context, const ManagePricingScreen())
+                ? () => _openSetup(ManageSlotsScreen(client: widget.client))
                 : _noAccess,
             child: Container(
               width: 350,

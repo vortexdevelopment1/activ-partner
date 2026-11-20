@@ -1761,6 +1761,52 @@ export class VenuesService {
       }
     });
     await this.syncLegacyActivitySlots(venueId);
+    try {
+      const allWindows = await this.prisma.partner_venue_availability.findMany({
+        where: { venue_id: venueId },
+      });
+      const approvedServices =
+        await this.prisma.partner_venue_services.findMany({
+          where: { venue_id: venueId, status: "APPROVED", is_active: true },
+          select: { service_category_id: true },
+        });
+      const approvedCategoryIds = new Set(
+        approvedServices.map((s) => s.service_category_id.toLowerCase()),
+      );
+      let maxDiscountPct = 0;
+      for (const w of allWindows) {
+        if (!approvedCategoryIds.has(w.service_category_id.toLowerCase())) {
+          continue;
+        }
+        const price = Number(w.price_paise);
+        const disc = Number(w.discounted_price_paise);
+        if (price > 0 && disc > 0 && disc < price) {
+          const pct = Math.round(((price - disc) / price) * 100);
+          if (pct > maxDiscountPct) maxDiscountPct = pct;
+        }
+      }
+      const currentVenue = await this.prisma.venues.findUnique({
+        where: { id: venueId },
+        select: { metadata: true },
+      });
+      if (currentVenue) {
+        const currentMeta = (currentVenue.metadata as Record<string, any>) ?? {};
+        const updatedMeta = { ...currentMeta };
+        if (maxDiscountPct > 0) {
+          updatedMeta.discount = `${maxDiscountPct}% OFF`;
+          updatedMeta.discountPercent = maxDiscountPct;
+        } else {
+          delete updatedMeta.discount;
+          delete updatedMeta.discountPercent;
+        }
+        await this.prisma.venues.update({
+          where: { id: venueId },
+          data: { metadata: updatedMeta },
+        });
+      }
+    } catch {
+      // Ignored
+    }
     const availability = mapVenueAvailability(
       await this.prisma.partner_venue_availability.findMany({
         where: { venue_id: venueId },
@@ -3221,10 +3267,10 @@ export class VenuesService {
             },
           }),
           this.prisma.reviews.findMany({
-            where: { bookings: where, status: "PUBLISHED" },
+            where: { bookings: where, status: { not: "REJECTED" } },
             orderBy: { created_at: "desc" },
             take: 100,
-            include: { users: { select: { name: true } } },
+            include: { users: { select: { name: true, phone_e164: true } } },
           }),
           this.prisma.slots.aggregate({
             where: {
@@ -3435,7 +3481,7 @@ export class VenuesService {
       ),
       reviews: reviews.map((r) => ({
         id: r.id,
-        name: r.users.name ?? "Customer",
+        name: (r.users?.name || "").trim() || r.users?.phone_e164 || "Customer",
         rating: r.rating,
         body: r.body ?? "",
         createdAt: r.created_at,
@@ -4587,16 +4633,67 @@ export class VenuesService {
         })
       : [];
 
-    // Walk-in reservations for this service+date+court
+    const savedAnswers = this.prisma.partner_venue_answers
+      ? await this.prisma.partner_venue_answers.findMany({
+          where: {
+            venue_id: venueId,
+            OR: [
+              { venue_service_id: service.id },
+              {
+                venue_service_id: null,
+                partner_service_questions: {
+                  service_category_id: service.service_category_id,
+                },
+              },
+            ],
+          },
+          include: { partner_service_questions: true },
+        })
+      : [];
+    const courts = this.courtsFromOnboardingData(
+      service.onboarding_data,
+      savedAnswers,
+    );
+
+    // Load every reservation so availability reflects the whole court pool.
     const walkIns = await this.prisma.partner_walk_in_reservations.findMany({
       where: {
         venue_service_id: serviceId,
         status: "RESERVED",
         starts_at: { lt: facilityDayEnd },
         ends_at: { gt: facilityDayStart },
-        notes: court ? { contains: `Court: ${court}` } : undefined,
       },
     });
+
+    const statusFor = (startMin: number, endMin: number) => {
+      const overlappingWalkIns = walkIns.filter(
+        (reservation) =>
+          startMin < this.istDateTimeToMinutes(reservation.ends_at) &&
+          endMin > this.istDateTimeToMinutes(reservation.starts_at),
+      );
+      const matchedWalkIn = court
+        ? (overlappingWalkIns.find(
+            (reservation) => this.walkInCourt(reservation.notes) === court,
+          ) ?? (courts.length === 1 ? overlappingWalkIns.find((r) => this.walkInCourt(r.notes) === null) : undefined))
+        : undefined;
+      const activCount = activBookings.filter(
+        (booking) =>
+          startMin < this.istDateTimeToMinutes(booking.slots.ends_at) &&
+          endMin > this.istDateTimeToMinutes(booking.slots.starts_at),
+      ).length;
+      const walkInCourts = new Set(
+        overlappingWalkIns
+          .map((reservation) => this.walkInCourt(reservation.notes))
+          .filter((name): name is string => Boolean(name)),
+      );
+      const activCourts = courts.filter((name) => !walkInCourts.has(name));
+      const hasActivBooking = court
+        ? activCourts.slice(0, activCount).includes(court)
+        : false;
+      const fullyBooked =
+        !court && overlappingWalkIns.length + activCount >= courts.length;
+      return { matchedWalkIn, hasActivBooking, fullyBooked };
+    };
 
     const slots: Array<{
       startTime: string;
@@ -4609,15 +4706,9 @@ export class VenuesService {
       for (const slot of exactFacilitySlots) {
         const startMin = this.istDateTimeToMinutes(slot.starts_at);
         const endMin = this.istDateTimeToMinutes(slot.ends_at);
-        const hasActivBooking = activBookings.some(
-          (booking) =>
-            startMin < this.istDateTimeToMinutes(booking.slots.ends_at) &&
-            endMin > this.istDateTimeToMinutes(booking.slots.starts_at),
-        );
-        const matchedWalkIn = walkIns.find(
-          (reservation) =>
-            startMin < this.istDateTimeToMinutes(reservation.ends_at) &&
-            endMin > this.istDateTimeToMinutes(reservation.starts_at),
+        const { matchedWalkIn, hasActivBooking, fullyBooked } = statusFor(
+          startMin,
+          endMin,
         );
         const status =
           slot.status === "BLOCKED"
@@ -4626,7 +4717,7 @@ export class VenuesService {
               ? "activ_booking"
               : matchedWalkIn
                 ? "walk_in_reserved"
-                : slot.booked_quantity >= slot.capacity
+                : fullyBooked
                   ? "fully_booked"
                   : "available";
         slots.push({
@@ -4646,15 +4737,9 @@ export class VenuesService {
           startMin += slotDurationMinutes
         ) {
           const endMin = startMin + slotDurationMinutes;
-          const hasActivBooking = activBookings.some((b) => {
-            const bStart = this.istDateTimeToMinutes(b.slots.starts_at);
-            const bEnd = this.istDateTimeToMinutes(b.slots.ends_at);
-            return startMin < bEnd && endMin > bStart;
-          });
-          const matchedWalkIn = walkIns.find(
-            (w) =>
-              startMin < this.istDateTimeToMinutes(w.ends_at) &&
-              endMin > this.istDateTimeToMinutes(w.starts_at),
+          const { matchedWalkIn, hasActivBooking, fullyBooked } = statusFor(
+            startMin,
+            endMin,
           );
           slots.push({
             startTime: this.minutesToTime(startMin),
@@ -4663,40 +4748,21 @@ export class VenuesService {
               ? "activ_booking"
               : matchedWalkIn
                 ? "walk_in_reserved"
-                : "available",
+                : fullyBooked
+                  ? "fully_booked"
+                  : "available",
             ...(matchedWalkIn ? { reservationId: matchedWalkIn.id } : {}),
           });
         }
       }
     }
 
-    const savedAnswers = this.prisma.partner_venue_answers
-      ? await this.prisma.partner_venue_answers.findMany({
-          where: {
-            venue_id: venueId,
-            OR: [
-              { venue_service_id: service.id },
-              {
-                venue_service_id: null,
-                partner_service_questions: {
-                  service_category_id: service.service_category_id,
-                },
-              },
-            ],
-          },
-          include: { partner_service_questions: true },
-        })
-      : [];
-
     return {
       serviceId,
       date,
       court: court ?? null,
       slotDurationMinutes,
-      courts: this.courtsFromOnboardingData(
-        service.onboarding_data,
-        savedAnswers,
-      ),
+      courts,
       slots,
     };
   }
@@ -4707,6 +4773,14 @@ export class VenuesService {
 
   private dateTimeToMinutes(value: Date): number {
     return value.getUTCHours() * 60 + value.getUTCMinutes();
+  }
+
+  private walkInCourt(notes: string | null): string | null {
+    return (
+      String(notes ?? "")
+        .match(/^Court: (.+)$/m)?.[1]
+        ?.trim() || null
+    );
   }
 
   private courtsFromOnboardingData(
@@ -4737,11 +4811,7 @@ export class VenuesService {
         q.includes("table") ||
         q.includes("ground")
       ) {
-        if (
-          q.includes("no.") ||
-          q.includes("number") ||
-          q.includes("total")
-        ) {
+        if (q.includes("no.") || q.includes("number") || q.includes("total")) {
           const parsed = Number(ans);
           if (Number.isFinite(parsed) && parsed > 0) countFromAnswers = parsed;
         }
@@ -4795,6 +4865,28 @@ export class VenuesService {
       throw new BadRequestException("Bookings are paused for this venue");
     if (service.status !== "APPROVED")
       throw new BadRequestException("Activity must be approved");
+
+    const savedAnswers = this.prisma.partner_venue_answers
+      ? await this.prisma.partner_venue_answers.findMany({
+          where: {
+            venue_id: venueId,
+            OR: [
+              { venue_service_id: service.id },
+              {
+                venue_service_id: null,
+                partner_service_questions: {
+                  service_category_id: service.service_category_id,
+                },
+              },
+            ],
+          },
+          include: { partner_service_questions: true },
+        })
+      : [];
+    const courtCount = this.courtsFromOnboardingData(
+      service.onboarding_data,
+      savedAnswers,
+    ).length;
 
     const requestedSlots = dto.slots.map((slot) => ({
       ...slot,
@@ -4943,7 +5035,7 @@ export class VenuesService {
           });
           if (
             normalizedSlot.status !== "AVAILABLE" ||
-            occupancy + 1 > normalizedSlot.capacity
+            occupancy + 1 > courtCount
           ) {
             throw new ConflictException(
               "One or more selected slots are unavailable",
@@ -4994,21 +5086,23 @@ export class VenuesService {
           },
           include: { slots: true },
         });
-        if (
-          activBookings.some((booking) =>
-            requestedSlots.some(
-              (slot) =>
-                this.istWallTimeToUtc(
-                  dayStart,
-                  this.timeToMinutes(slot.startTime),
-                ) < booking.slots.ends_at &&
-                this.istWallTimeToUtc(
-                  dayStart,
-                  this.timeToMinutes(slot.endTime),
-                ) > booking.slots.starts_at,
-            ),
-          )
-        ) {
+        const requestedSlotIsFull = requestedSlots.some((slot) => {
+          const start = this.istWallTimeToUtc(
+            dayStart,
+            this.timeToMinutes(slot.startTime),
+          );
+          const end = this.istWallTimeToUtc(
+            dayStart,
+            this.timeToMinutes(slot.endTime),
+          );
+          return (
+            activBookings.filter(
+              (booking) =>
+                start < booking.slots.ends_at && end > booking.slots.starts_at,
+            ).length >= courtCount
+          );
+        });
+        if (requestedSlotIsFull) {
           throw new ConflictException(
             "One or more selected slots are already booked by ACTIV",
           );
@@ -5145,12 +5239,8 @@ export class VenuesService {
       if (siblings.length > 1) {
         const base = this.mapWalkInReservation(reservation);
         base.slots = siblings.map((r) => ({
-          startTime: this.minutesToTime(
-            this.istDateTimeToMinutes(r.starts_at),
-          ),
-          endTime: this.minutesToTime(
-            this.istDateTimeToMinutes(r.ends_at),
-          ),
+          startTime: this.minutesToTime(this.istDateTimeToMinutes(r.starts_at)),
+          endTime: this.minutesToTime(this.istDateTimeToMinutes(r.ends_at)),
         }));
         details = base;
       }

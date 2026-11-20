@@ -34,9 +34,33 @@ class _State extends State<AddListActivityTypeScreen> {
   late final ActivitySetupApi _api;
   List<Map<String, dynamic>> _venues = [];
   String? _venueId, _loadError;
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedFilter = 'All';
+
+  static const List<String> _filterLabels = [
+    'All',
+    'Indoor Sports',
+    'Outdoor Sports',
+    'Water Sports',
+  ];
+
+  static const Map<String, List<String>> _filterKeywords = {
+    'Indoor Sports': [
+      'gym', 'yoga', 'pilates', 'zumba', 'dance', 'crossfit', 'hiit',
+      'badminton', 'squash', 'table tennis', 'padel', 'pickle', 'martial',
+      'boxing', 'mma', 'billiard', 'bowling', 'shooting', 'archery',
+      'boulder', 'climbing',
+    ],
+    'Outdoor Sports': [
+      'football', 'basketball', 'tennis', 'hockey', 'volleyball', 'frisbee',
+      'cricket', 'adventure', 'equestrian', 'paintball',
+    ],
+    'Water Sports': ['swimming', 'diving', 'water', 'aquatic', 'pool'],
+  };
   @override
   void dispose() {
     _api.dispose();
+    _searchController.dispose();
     scrollController.dispose();
     super.dispose();
   }
@@ -97,7 +121,8 @@ class _State extends State<AddListActivityTypeScreen> {
           .map((c) => VenueTypeModel(
               id: c['id'].toString(),
               title: c['name'].toString(),
-              type: c['type']?.toString() ?? ''))
+              type: c['type']?.toString() ?? '',
+              description: c['description']?.toString() ?? ''))
           .toList();
       if (venues.isEmpty)
         _loadError = 'Your venue must be approved before adding an activity.';
@@ -173,6 +198,8 @@ class _State extends State<AddListActivityTypeScreen> {
                                     }))),
                       getOperateText(),
                       getOperateSubText(),
+                      getSearchBar(),
+                      getFilterChips(),
                       isShimmerLoading == true
                           ? buildShimmer(context)
                           : Expanded(
@@ -260,6 +287,7 @@ class _State extends State<AddListActivityTypeScreen> {
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
             height: 1.2),
         textAlign: TextAlign.left,
@@ -282,6 +310,79 @@ class _State extends State<AddListActivityTypeScreen> {
     );
   }
 
+  Widget getSearchBar() {
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.fromLTRB(15, 2, 15, 0),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.gray, width: 1),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (_) => setState(() {}),
+        cursorColor: AppColors.cursorBlack,
+        style: const TextStyle(
+          fontSize: 14,
+          fontFamily: 'Satoshi',
+          color: AppColors.darkBlack,
+        ),
+        decoration: const InputDecoration(
+          hintText: 'Search activities...',
+          hintStyle: TextStyle(
+            fontSize: 14,
+            fontFamily: 'Satoshi',
+            color: AppColors.hintColor,
+          ),
+          prefixIcon: Icon(Icons.search, color: AppColors.hintColor, size: 22),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 13),
+        ),
+      ),
+    );
+  }
+
+  Widget getFilterChips() {
+    return SizedBox(
+      height: 46,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(15, 8, 15, 0),
+        scrollDirection: Axis.horizontal,
+        itemCount: _filterLabels.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final label = _filterLabels[index];
+          final selected = label == _selectedFilter;
+          return InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => setState(() => _selectedFilter = label),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.purple : AppColors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: selected ? AppColors.purple : AppColors.darkBlack,
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w400,
+                  color: selected ? AppColors.white : AppColors.darkBlack,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// To get the List
   Widget getList(BuildContext context) {
     if (_loadError != null)
@@ -290,14 +391,20 @@ class _State extends State<AddListActivityTypeScreen> {
         Text(_loadError!),
         TextButton(onPressed: fetchData, child: const Text('Retry'))
       ]));
-    final activeList = resultList
-        .where(
-            (model) => model.active && !_existingCategories.contains(model.id))
-        .toList();
+    final query = _searchController.text.trim().toLowerCase();
+    final activeList = resultList.where((model) {
+      if (!model.active || _existingCategories.contains(model.id)) return false;
+      final searchable = '${model.title} ${model.description}'.toLowerCase();
+      final matchesSearch = query.isEmpty || searchable.contains(query);
+      final matchesFilter = _selectedFilter == 'All' ||
+          (_filterKeywords[_selectedFilter] ?? const <String>[])
+              .any(searchable.contains);
+      return matchesSearch && matchesFilter;
+    }).toList();
     if (activeList.isEmpty)
       return const Center(
           child: Text(
-              'All available sports are already active or under review at this venue.'));
+              'No activities match your search or filter.'));
 
     return Container(
       margin: EdgeInsets.fromLTRB(10, 0, 10, 0),
@@ -322,8 +429,8 @@ class _State extends State<AddListActivityTypeScreen> {
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisExtent: 180,
-              mainAxisSpacing: 1.0,
-              crossAxisSpacing: 1.0,
+              mainAxisSpacing: 8.0,
+              crossAxisSpacing: 8.0,
               childAspectRatio: 1.0,
             ),
             itemBuilder: (BuildContext ctxt, int index) {
@@ -412,8 +519,8 @@ class _State extends State<AddListActivityTypeScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
       child: SizedBox(
-        width: 46,
-        height: 59,
+        width: 48,
+        height: 48,
         child: Image.asset(
           setTypeImages(model),
           fit: BoxFit.contain,
@@ -424,15 +531,16 @@ class _State extends State<AddListActivityTypeScreen> {
 
   Widget getTitle(VenueTypeModel model, BuildContext context) {
     return Container(
-      margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
+      margin: const EdgeInsets.fromLTRB(5, 5, 5, 0),
       child: Text(
         (model.title != "") ? model.title : "",
         textAlign: TextAlign.center,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: AppSize.size_16,
+          fontSize: 14,
           fontFamily: 'Satoshi',
+          fontWeight: FontWeight.w400,
           color: AppColors.darkBlack,
         ),
       ),
@@ -441,16 +549,18 @@ class _State extends State<AddListActivityTypeScreen> {
 
   Widget getDescription(VenueTypeModel model, BuildContext context) {
     return Container(
-      margin: EdgeInsets.fromLTRB(5, 8, 5, 0),
+      margin: const EdgeInsets.fromLTRB(5, 4, 5, 0),
       child: Text(
         (model.description != "") ? model.description : "",
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: AppSize.size_14,
+          fontSize: 12,
           fontFamily: 'Satoshi',
+          fontWeight: FontWeight.w400,
           color: AppColors.black1,
+          height: 1.2,
         ),
       ),
     );

@@ -2012,59 +2012,91 @@ class _ReviewsPage extends StatelessWidget {
   Widget _ratingBars() => Column(
         children: [
           for (var star = 5; star >= 1; star--)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(children: [
-                SizedBox(
-                    width: 24, child: _text('$star', bold: true, size: 18)),
-                const Icon(Icons.star, size: 14, color: Color(0xFF202124)),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                            minHeight: 7,
-                            value: reviews.isEmpty ? 0 : .2,
-                            backgroundColor: Colors.white,
-                            color: const Color(0xFFD8F34A)))),
-              ]),
-            )
+            Builder(builder: (context) {
+              final count = reviews.where((r) =>
+                  (num.tryParse(r['rating']?.toString() ?? '') ?? 0).round() ==
+                  star).length;
+              final pct = reviews.isEmpty ? 0.0 : count / reviews.length;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  SizedBox(
+                      width: 24, child: _text('$star', bold: true, size: 18)),
+                  const Icon(Icons.star, size: 14, color: Color(0xFF202124)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                      child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                              minHeight: 7,
+                              value: pct,
+                              backgroundColor: Colors.white,
+                              color: const Color(0xFFD8F34A)))),
+                ]),
+              );
+            }),
         ],
       );
 
-  Widget _reviewCard(Map<String, dynamic> review) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: _panel(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const CircleAvatar(
-                backgroundColor: Color(0xFFD9D9D9),
-                child: Icon(Icons.person, color: Colors.white)),
-            const SizedBox(width: 12),
-            Expanded(
-                child: _text(review['name']?.toString() ?? 'Customer',
-                    bold: true, size: 16)),
-            _text(review['createdAgo']?.toString() ?? '',
-                size: 10, color: Colors.black87),
-          ]),
-          const SizedBox(height: 8),
-          Row(
+  Widget _reviewCard(Map<String, dynamic> review) {
+    String dateStr = review['createdAgo']?.toString() ?? '';
+    if (dateStr.isEmpty && review['createdAt'] != null) {
+      final dt = DateTime.tryParse(review['createdAt'].toString());
+      if (dt != null) {
+        final diff = DateTime.now().difference(dt.toLocal());
+        if (diff.inDays > 30) {
+          dateStr = '${(diff.inDays / 30).floor()}mo ago';
+        } else if (diff.inDays > 0) {
+          dateStr = '${diff.inDays}d ago';
+        } else if (diff.inHours > 0) {
+          dateStr = '${diff.inHours}h ago';
+        } else if (diff.inMinutes > 0) {
+          dateStr = '${diff.inMinutes}m ago';
+        } else {
+          dateStr = 'Just now';
+        }
+      }
+    }
+    final body = review['body']?.toString().trim() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: _panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const CircleAvatar(
+                  backgroundColor: Color(0xFFD9D9D9),
+                  child: Icon(Icons.person, color: Colors.white)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _text(review['name']?.toString() ?? 'Customer',
+                      bold: true, size: 16)),
+              _text(dateStr, size: 10, color: Colors.black87),
+            ]),
+            const SizedBox(height: 8),
+            Row(
               children: List.generate(
-                  5,
-                  (i) => Icon(
-                      i <
-                              (num.tryParse(
-                                      review['rating']?.toString() ?? '') ??
-                                  0)
-                          ? Icons.star
-                          : Icons.star_border,
-                      color: const Color(0xFFD8F34A),
-                      size: 16))),
-          const SizedBox(height: 8),
-          _text(review['body']?.toString() ?? '', size: 13),
-        ])),
-      );
+                5,
+                (i) => Icon(
+                  i < (num.tryParse(review['rating']?.toString() ?? '') ?? 0)
+                      ? Icons.star
+                      : Icons.star_border,
+                  color: const Color(0xFFD8F34A),
+                  size: 16,
+                ),
+              ),
+            ),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _text(body, size: 13),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ImagesPage extends StatefulWidget {

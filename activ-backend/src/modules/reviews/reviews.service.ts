@@ -31,6 +31,7 @@ export class ReviewsService {
             bookings: {
               slots: { facility_id: service.facility_id },
             },
+            status: { not: 'REJECTED' },
           },
           include: { users: true },
           orderBy: { created_at: 'desc' },

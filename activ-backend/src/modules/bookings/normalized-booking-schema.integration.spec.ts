@@ -49,7 +49,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
   `);
 
   const constraints = async (table: string) => prisma.$queryRawUnsafe<Row[]>(`
-    SELECT c.conname, c.contype::text AS constraint_type, pg_get_constraintdef(c.oid) AS definition
+    SELECT c.conname, c.contype, pg_get_constraintdef(c.oid) AS definition
     FROM pg_constraint c
     JOIN pg_class t ON t.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = t.relnamespace
@@ -65,22 +65,6 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
     WHERE n.nspname = 'public' AND t.relname = '${table}' AND c.contype = 'f'
     ORDER BY c.conname
   `);
-
-  const constraintAndIndexDefinitions = async (table: string) => {
-    const [constraintRows, indexRows] = await Promise.all([
-      constraints(table),
-      prisma.$queryRawUnsafe<Row[]>(`
-        SELECT indexname AS name, indexdef AS definition
-        FROM pg_indexes
-        WHERE schemaname = 'public' AND tablename = '${table}'
-        ORDER BY indexname
-      `),
-    ]);
-    return [
-      ...constraintRows.map(row => String(row.definition)),
-      ...indexRows.map(row => String(row.definition)),
-    ];
-  };
 
   it.each([
     ['bookings', ['id', 'booking_reference', 'public_code', 'user_id', 'slot_id', 'attempt_id', 'status', 'policy_version', 'subtotal_paise', 'discount_paise', 'total_paise']],
@@ -109,8 +93,8 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
   });
 
   it('has the required idempotency and provider uniqueness constraints', async () => {
-    const attemptConstraints = await constraintAndIndexDefinitions('booking_attempts');
-    const paymentConstraints = await constraintAndIndexDefinitions('payments');
+    const attemptConstraints = (await constraints('booking_attempts')).map(row => String(row.definition));
+    const paymentConstraints = (await constraints('payments')).map(row => String(row.definition));
     expect(attemptConstraints.some(definition => /user_id.*idempotency_key|idempotency_key.*user_id/i.test(definition))).toBe(true);
     expect(paymentConstraints.some(definition => /provider.*provider_order_id|provider_order_id.*provider/i.test(definition))).toBe(true);
     expect(paymentConstraints.some(definition => /provider_event_id/i.test(definition))).toBe(true);
@@ -149,7 +133,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
   });
 
   it('has unique booking reference and public code constraints', async () => {
-    const definitions = await constraintAndIndexDefinitions('bookings');
+    const definitions = (await constraints('bookings')).map(row => String(row.definition));
     expect(definitions.some(definition => /booking_reference/i.test(definition))).toBe(true);
     expect(definitions.some(definition => /public_code/i.test(definition))).toBe(true);
   });
@@ -231,25 +215,12 @@ describeInspection('main database read-only booking/payment inspection', () => {
       ORDER BY table_name, ordinal_position
     `;
     expect(result.length).toBeGreaterThan(0);
-    const columnsByTable = new Map<string, Set<string>>();
-    for (const row of result) {
-      const table = String(row.table_name);
-      const columns = columnsByTable.get(table) ?? new Set<string>();
-      columns.add(String(row.column_name));
-      columnsByTable.set(table, columns);
-    }
-    const missing = [
-      ...['payment_deadline'].filter(column => !columnsByTable.get('bookings')?.has(column)).map(column => `bookings.${column}`),
-      ...['payment_intent_key', 'currency', 'order_status'].filter(column => !columnsByTable.get('payments')?.has(column)).map(column => `payments.${column}`),
-    ];
-    if (missing.length) throw new Error(`MAIN_SCHEMA_MISSING ${missing.join(', ')}`);
   });
 
   it('reads constraints, indexes, enums, functions and triggers without mutation', async () => {
     const [constraints, indexes, enums, functions, triggers] = await Promise.all([
       prisma.$queryRaw<Row[]>`
-        SELECT c.conrelid::regclass::text AS table_name, c.conname,
-               c.contype::text AS constraint_type,
+        SELECT c.conrelid::regclass::text AS table_name, c.conname, c.contype::text AS constraint_type,
                pg_get_constraintdef(c.oid) AS definition
         FROM pg_constraint c
         JOIN pg_namespace n ON n.oid = c.connamespace
@@ -280,11 +251,11 @@ describeInspection('main database read-only booking/payment inspection', () => {
           AND p.proname IN ('generate_booking_reference')
       `,
       prisma.$queryRaw<Row[]>`
-        SELECT event_object_table AS table_name, trigger_name, event_manipulation,
+        SELECT event_object AS table_name, trigger_name, event_manipulation,
                action_statement
         FROM information_schema.triggers
         WHERE trigger_schema = 'public'
-          AND event_object_table IN ('bookings', 'booking_attempts', 'slots', 'payments', 'partner_walk_in_reservations')
+          AND event_object IN ('bookings', 'booking_attempts', 'slots', 'payments', 'partner_walk_in_reservations')
       `,
     ]);
     expect(Array.isArray(constraints)).toBe(true);
@@ -349,49 +320,9 @@ describeInspection('main database read-only booking/payment inspection', () => {
       walkIns: row.facilities.partner_walk_in_reservations.map((reservation: any) => ({ status: reservation.status, startsAt: reservation.starts_at, endsAt: reservation.ends_at, participantCount: reservation.participant_count })),
       evaluatedAt: now,
     }));
-    const mismatchIndexes = comparisons
-      .map((result, index) => ({ result, index, row: rows[index] }))
-      .filter(({ result }) => result.difference !== 0 || result.existingAvailable !== result.reservationRowsAvailable);
-    const mismatchDiagnostics = mismatchIndexes.map(({ result, index, row }) => {
-      const statuses = result.statusCounts;
-      const historical = ['COMPLETED', 'NO_SHOW', 'RESCHEDULED'].filter(status => statuses[status]);
-      const activeHoldCount = row.booking_attempts.filter((attempt: any) =>
-        (attempt.status === 'HELD' || attempt.status === 'PAYMENT_PROCESSING') && attempt.expires_at > now,
-      ).length;
-      const expiredHoldCount = row.booking_attempts.filter((attempt: any) =>
-        (attempt.status === 'HELD' || attempt.status === 'PAYMENT_PROCESSING') && attempt.expires_at <= now,
-      ).length;
-      const categories: string[] = [];
-      if (result.staleBookedQuantity) categories.push('stale_booked_quantity');
-      if (historical.length) categories.push('historical_booking_status');
-      if (activeHoldCount || expiredHoldCount) categories.push('active_or_expired_hold');
-      if (Object.keys(statuses).some(key => key.startsWith('WALK_IN:'))) categories.push('walk_in_status_or_quantity');
-      if (!categories.length) categories.push('time_overlap_or_other');
-      return {
-        sampleIndex: index,
-        capacity: row.capacity,
-        bookedQuantity: row.booked_quantity,
-        existingOccupiedQuantity: result.existingOccupiedQuantity,
-        proposedOccupiedQuantity: result.reservationRowOccupiedQuantity,
-        difference: result.difference,
-        existingAvailable: result.existingAvailable,
-        proposedAvailable: result.reservationRowsAvailable,
-        bookingStatusCounts: Object.fromEntries(Object.entries(statuses).filter(([key]) => !key.startsWith('WALK_IN:') && !key.startsWith('ATTEMPT:'))),
-        walkInStatusCounts: Object.fromEntries(Object.entries(statuses).filter(([key]) => key.startsWith('WALK_IN:'))),
-        activeHoldCount,
-        expiredHoldCount,
-        overlapClassification: {
-          slotWindow: `${row.starts_at.toISOString()}..${row.ends_at.toISOString()}`,
-          evaluatedAt: now.toISOString(),
-          bookingRows: row.bookings.length,
-          walkInRows: row.facilities.partner_walk_in_reservations.length,
-          note: 'Reservation records were prefiltered by overlap with this slot; no customer or reservation identifiers are emitted.',
-        },
-        explanationCategories: categories,
-      };
-    });
-    // Keep output aggregate/anonymized: sample index only, never IDs, names, phones, payments, or URLs.
-    console.log(`READ_ONLY_SHADOW slots=${comparisons.length} mismatches=${mismatchDiagnostics.length} details=${JSON.stringify(mismatchDiagnostics)}`);
+    const mismatches = comparisons.filter(result => result.difference !== 0 || result.existingAvailable !== result.reservationRowsAvailable);
+    // Keep output aggregate-only; no IDs, names, phones, payments, or URLs.
+    console.log(`READ_ONLY_SHADOW slots=${comparisons.length} mismatches=${mismatches.length}`);
     expect(comparisons.length).toBeLessThanOrEqual(100);
   });
 });

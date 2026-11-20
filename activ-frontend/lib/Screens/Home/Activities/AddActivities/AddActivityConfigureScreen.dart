@@ -462,14 +462,14 @@ class _State extends State<AddActivityConfigureScreen> {
                                           slot['discountedPrice']
                                               ?.toString()
                                               .trim();
-                                      final slotPrice = (priceVal != null &&
-                                              priceVal.isNotEmpty &&
-                                              priceVal != '-')
-                                          ? priceVal
-                                          : (discountedVal != null &&
-                                                  discountedVal.isNotEmpty &&
-                                                  discountedVal != '-')
-                                              ? discountedVal
+                                      final slotPrice = (discountedVal != null &&
+                                              discountedVal.isNotEmpty &&
+                                              discountedVal != '-')
+                                          ? discountedVal
+                                          : (priceVal != null &&
+                                                  priceVal.isNotEmpty &&
+                                                  priceVal != '-')
+                                              ? priceVal
                                               : '-';
 
                                       return Padding(

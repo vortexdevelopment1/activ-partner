@@ -220,6 +220,7 @@ class _AddActivitySubmissionResultScreenState
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 20,
+                            fontWeight: FontWeight.bold,
                             fontFamily: 'Satoshi',
                             color: AppColors.darkBlack,
                           ),
@@ -390,7 +391,7 @@ class _AddActivitySubmissionResultScreenState
                 : 'Within 24-48 hours',
           ),
           if (!draft) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _detailRow('Current Status', 'Pending Approval', badge: true),
           ],
         ],
@@ -476,36 +477,33 @@ class _AddActivitySubmissionResultScreenState
 
   Widget _detailRow(String label, String value, {bool badge = false}) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontFamily: 'Satoshi',
-              color: AppColors.black1,
-            ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontFamily: 'Satoshi',
+            color: AppColors.black1,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
-          flex: 3,
           child: badge
               ? Align(
                   alignment: Alignment.centerRight,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFF9E2C),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       value,
                       style: const TextStyle(
-                        fontSize: AppSize.size_14,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                         fontFamily: 'Satoshi',
                         color: AppColors.white,
                       ),

@@ -264,7 +264,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                   const Padding(
                                     padding: EdgeInsets.only(bottom: 12),
                                     child: Text(
-                                      'Long press a photo or drag the handle to reorder. The first photo is the cover.',
+                                      'Long press a photo to reorder. The first photo is the cover.',
                                       style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: AppColors.black1),
                                     ),
                                   ),
@@ -330,26 +330,6 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                           ),
 
-                                          Positioned(
-                                            left: 20,
-                                            bottom: 20,
-                                            child: ReorderableDragStartListener(
-                                              index: index,
-                                              enabled: !_isUploading,
-                                              child: Semantics(
-                                                label: 'Drag to reorder photo ${index + 1}',
-                                                child: Container(
-                                                  width: 48,
-                                                  height: 48,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius: BorderRadius.circular(12),
-                                                  ),
-                                                  child: const Icon(Icons.drag_indicator, color: AppColors.purple),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
                                           // Cover Photo label
                                           if (_coverIndex == index)
                                             Positioned(
@@ -570,6 +550,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
         style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
             height: 1.2
         ),

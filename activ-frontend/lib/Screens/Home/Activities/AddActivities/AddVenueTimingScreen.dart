@@ -27,7 +27,11 @@ class DayTiming {
 class AddVenueTimingScreen extends StatefulWidget {
   final String activityId;
   const AddVenueTimingScreen(
-      {super.key, required this.activityId, this.client, this.initialTiming, this.isEdit = false});
+      {super.key,
+      required this.activityId,
+      this.client,
+      this.initialTiming,
+      this.isEdit = false});
   final Map<String, dynamic>? initialTiming;
   final http.Client? client;
   final bool isEdit;
@@ -41,6 +45,7 @@ class AddVenueTimingScreen extends StatefulWidget {
 
 class _State extends State<AddVenueTimingScreen> {
   bool _submitting = false;
+  bool _showSlotValidationErrors = false;
   late final ActivitySetupApi _api;
   bool _draftReady = false;
   String get _draftKey => 'add_slot_timing_${widget.activityId}';
@@ -55,19 +60,27 @@ class _State extends State<AddVenueTimingScreen> {
     final draft = widget.isEdit ? null : await SlotTimingDraft.read(_draftKey);
     if (!mounted) return;
     final checkpoint = draft == null && widget.initialTiming == null
-        ? await ActivityFlowCheckpoint.read(widget.activityId) : null;
+        ? await ActivityFlowCheckpoint.read(widget.activityId)
+        : null;
     if (!mounted) return;
-    final saved = widget.initialTiming ?? draft?['timings'] ?? checkpoint?.data['timing'];
+    final saved =
+        widget.initialTiming ?? draft?['timings'] ?? checkpoint?.data['timing'];
     if (saved is Map) {
       timings.clear();
       selectedDays.clear();
       for (final day in days) {
         final slots = saved[day] ?? saved[dayMap[day]];
         if (slots is! List) continue;
-        final values = slots.whereType<Map>().where((slot) => slot['open'] != '-').map(
-          (slot) => slot.map((key, value) => MapEntry(key.toString(), value?.toString() ?? '')),
-        ).toList();
-        if (values.isNotEmpty || (draft?['days'] as List? ?? []).contains(day)) {
+        final values = slots
+            .whereType<Map>()
+            .where((slot) => slot['open'] != '-')
+            .map(
+              (slot) => slot.map((key, value) =>
+                  MapEntry(key.toString(), value?.toString() ?? '')),
+            )
+            .toList();
+        if (values.isNotEmpty ||
+            (draft?['days'] as List? ?? []).contains(day)) {
           selectedDays.add(day);
           timings[day] = DayTiming(timeSlots: values);
         }
@@ -76,7 +89,9 @@ class _State extends State<AddVenueTimingScreen> {
     _draftReady = true;
     setState(() {});
     if (!ActivityFlowCheckpoint.restoring) {
-      ActivityFlowCheckpoint.save(activityId: widget.activityId, step: 'timing',
+      ActivityFlowCheckpoint.save(
+          activityId: widget.activityId,
+          step: 'timing',
           data: {'timing': buildVenueTiming()});
     }
   }
@@ -85,12 +100,17 @@ class _State extends State<AddVenueTimingScreen> {
     if (!_draftReady) return;
     SlotTimingDraft.save(_draftKey, {
       'days': selectedDays,
-      'timings': {for (final entry in timings.entries) entry.key: entry.value.timeSlots},
+      'timings': {
+        for (final entry in timings.entries) entry.key: entry.value.timeSlots
+      },
     });
   }
 
   @override
-  void setState(VoidCallback fn) { super.setState(fn); _saveTimings(); }
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _saveTimings();
+  }
 
   @override
   void dispose() {
@@ -101,6 +121,9 @@ class _State extends State<AddVenueTimingScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return;
+    if (!_showSlotValidationErrors) {
+      setState(() => _showSlotValidationErrors = true);
+    }
     if (!hasAnyTimingSelected() || !_validateTimings()) return;
     _saveTimings();
     setState(() => _submitting = true);
@@ -108,11 +131,15 @@ class _State extends State<AddVenueTimingScreen> {
       final newTiming = buildVenueTiming();
       SlotTimingDraft.save(_draftKey, {
         'days': selectedDays,
-        'timings': {for (final entry in timings.entries) entry.key: entry.value.timeSlots},
+        'timings': {
+          for (final entry in timings.entries) entry.key: entry.value.timeSlots
+        },
       });
       if (mounted) {
-        await ActivityFlowCheckpoint.save(activityId: widget.activityId,
-            step: 'timing', data: {'timing': newTiming});
+        await ActivityFlowCheckpoint.save(
+            activityId: widget.activityId,
+            step: 'timing',
+            data: {'timing': newTiming});
       }
       if (widget.isEdit) {
         if (mounted) Navigator.pop(context, newTiming);
@@ -121,17 +148,18 @@ class _State extends State<AddVenueTimingScreen> {
       final activity = await _api.activity(widget.activityId);
       if (!mounted) return;
       await Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => AddActivityConfigureScreen(
-            activityId: widget.activityId,
-            timing: newTiming,
-            activityName: (activity['name'] ?? activity['title'] ?? 'Activity')
-                .toString(),
-            client: widget.client,
-            hasPreviousTimingRoute: true,
-          ),
-        ));
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => AddActivityConfigureScreen(
+              activityId: widget.activityId,
+              timing: newTiming,
+              activityName:
+                  (activity['name'] ?? activity['title'] ?? 'Activity')
+                      .toString(),
+              client: widget.client,
+              hasPreviousTimingRoute: true,
+            ),
+          ));
     } catch (error) {
       if (mounted) _showError(error.toString());
     } finally {
@@ -171,7 +199,9 @@ class _State extends State<AddVenueTimingScreen> {
     final savedTime = DateFormat('hh:mm a').tryParseStrict(initial ?? '');
     TimeOfDay? picked = await showAppTimePicker(
       context: context,
-      initialTime: savedTime == null ? TimeOfDay.now() : TimeOfDay.fromDateTime(savedTime),
+      initialTime: savedTime == null
+          ? TimeOfDay.now()
+          : TimeOfDay.fromDateTime(savedTime),
     );
 
     if (picked != null) {
@@ -241,7 +271,8 @@ class _State extends State<AddVenueTimingScreen> {
               "In $day, Opening time must be earlier than closing time.");
           return false;
         }
-        if (ranges.any((range) => openTime.isBefore(range.$2) && closeTime.isAfter(range.$1))) {
+        if (ranges.any((range) =>
+            openTime.isBefore(range.$2) && closeTime.isAfter(range.$1))) {
           _showError('Time ranges for $day must not overlap or repeat.');
           return false;
         }
@@ -256,7 +287,8 @@ class _State extends State<AddVenueTimingScreen> {
           _showError('$day: $priceError');
           return false;
         }
-        final discountError = validateDiscountedSlotPrice(slot['discountedPrice'], slot['price']);
+        final discountError =
+            validateDiscountedSlotPrice(slot['discountedPrice'], slot['price']);
         if (discountError != null) {
           _showError('$day: $discountError');
           return false;
@@ -511,7 +543,9 @@ class _State extends State<AddVenueTimingScreen> {
                                               // Copy To All Text
                                               InkWell(
                                                 onTap: hasAnyTimingSelected()
-                                                    ? () => _copyTimingsToAllDays(day)
+                                                    ? () =>
+                                                        _copyTimingsToAllDays(
+                                                            day)
                                                     : null,
                                                 child: Visibility(
                                                   visible: true,
@@ -856,7 +890,9 @@ class _State extends State<AddVenueTimingScreen> {
                                             ),
                                           ),
 
-                                          if (timings[day]!.timeSlots.isNotEmpty)
+                                          if (timings[day]!
+                                              .timeSlots
+                                              .isNotEmpty)
                                             Padding(
                                               padding: const EdgeInsets.only(
                                                   top: 4, bottom: 12),
@@ -960,8 +996,8 @@ class _State extends State<AddVenueTimingScreen> {
                                     }
                                   },
                                   child: hasAnyTimingSelected() && !_submitting
-                                      ? getButtonBlack(context, "Next",
-                                          "venueAvailability")
+                                      ? getButtonBlack(
+                                          context, "Next", "venueAvailability")
                                       : getButtonGray(
                                           context,
                                           _submitting
@@ -1000,7 +1036,8 @@ class _State extends State<AddVenueTimingScreen> {
             "close": slot["close"] ?? "-",
             "capacity": slot["capacity"] ?? "-",
             "price": price.isEmpty ? "-" : price,
-            "discountedPrice": discounted.isEmpty ? (price.isEmpty ? "-" : price) : discounted,
+            "discountedPrice":
+                discounted.isEmpty ? (price.isEmpty ? "-" : price) : discounted,
           };
         }).toList();
       } else {
@@ -1023,7 +1060,7 @@ class _State extends State<AddVenueTimingScreen> {
         style: TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
             height: 1.2),
         textAlign: TextAlign.left,
@@ -1048,7 +1085,7 @@ class _State extends State<AddVenueTimingScreen> {
 
   Future<void> _copyTimingsToAllDays(String sourceDay) async {
     if (selectedDays.isEmpty) return;
-    final confirmed = await confirmCopyTimingsToAllDays(context);
+    final confirmed = await confirmCopyTimingsToAllDays(context, sourceDay: dayMap[sourceDay] ?? sourceDay);
     if (!mounted || !confirmed || selectedDays.isEmpty) return;
     final source = timings[sourceDay]!;
     if (source.timeSlots.isEmpty) return;
@@ -1074,28 +1111,38 @@ class _State extends State<AddVenueTimingScreen> {
   }
 
   Widget _slotDetails(String day, Map<String, String> slot, int slotIndex) {
-    Widget field({required String label, required String hint, required String key}) {
+    Widget field(
+        {required String label, required String hint, required String key}) {
       return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: AppSize.size_14,
-                fontFamily: 'Satoshi', color: AppColors.darkBlack)),
-            const SizedBox(height: 6),
-            TextFormField(
-              key: ValueKey('slot-${day}-${key}-${slotIndex}'),
-              initialValue: slot[key] ?? '',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: OnboardingStyles.inputDecoration(hintText: hint).copyWith(
-                errorMaxLines: 2,
-                errorText: key == 'capacity' ? validateSlotCapacity(slot[key])
-                    : key == 'price' ? validateSlotPrice(slot[key])
-                    : validateDiscountedSlotPrice(slot[key], slot['price']),
-              ),
-              onChanged: (value) => setState(() => slot[key] = value),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: AppSize.size_14,
+                  fontFamily: 'Satoshi',
+                  color: AppColors.darkBlack)),
+          const SizedBox(height: 6),
+          TextFormField(
+            key: ValueKey('slot-${day}-${key}-${slotIndex}'),
+            initialValue: slot[key] ?? '',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration:
+                OnboardingStyles.inputDecoration(hintText: hint).copyWith(
+              errorMaxLines: 2,
+              errorText: _showSlotValidationErrors
+                  ? key == 'capacity'
+                      ? validateSlotCapacity(slot[key])
+                      : key == 'price'
+                          ? validateSlotPrice(slot[key])
+                          : validateDiscountedSlotPrice(
+                              slot[key], slot['price'])
+                  : null,
             ),
-          ],
-        );
+            onChanged: (value) => setState(() => slot[key] = value),
+          ),
+        ],
+      );
     }
 
     return Column(
@@ -1115,31 +1162,57 @@ class _State extends State<AddVenueTimingScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.gray),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             field(label: 'Slot Price (₹)', hint: '₹ 500', key: 'price'),
             const SizedBox(height: 16),
-            field(label: 'Discounted Slot Price (₹)', hint: '₹ 350', key: 'discountedPrice'),
+            field(
+                label: 'Discounted Slot Price (₹)',
+                hint: '₹ 350',
+                key: 'discountedPrice'),
             const SizedBox(height: 14),
             Builder(builder: (_) {
               final base = double.tryParse(slot['price'] ?? '');
               final discounted = double.tryParse(slot['discountedPrice'] ?? '');
-              final percent = base != null && base.isFinite && base > 0 && discounted != null && discounted.isFinite && discounted >= 0 && discounted <= base
-                  ? ((base - discounted) / base * 100).round() : 0;
+              final percent = base != null &&
+                      base.isFinite &&
+                      base > 0 &&
+                      discounted != null &&
+                      discounted.isFinite &&
+                      discounted >= 0 &&
+                      discounted <= base
+                  ? ((base - discounted) / base * 100).round()
+                  : 0;
               return Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF9EEFF),
-                  border: Border.all(color: const Color(0xFF9D38EB), width: 1.4),
+                  border:
+                      Border.all(color: const Color(0xFF9D38EB), width: 1.4),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(children: [
-                  const Icon(Icons.local_offer_outlined, color: Color(0xFF9D38EB), size: 25),
+                  const Icon(Icons.local_offer_outlined,
+                      color: Color(0xFF9D38EB), size: 25),
                   const SizedBox(width: 10),
-                  Expanded(child: Text.rich(TextSpan(children: [
-                    const TextSpan(text: 'User will see ', style: TextStyle(color: Color(0xFFA45BDB), fontSize: 16)),
-                    TextSpan(text: 'Flat $percent% OFF', style: const TextStyle(color: Color(0xFFA45BDB), fontSize: 17, fontWeight: FontWeight.w700)),
-                  ]), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                  Expanded(
+                      child: Text.rich(
+                          TextSpan(children: [
+                            const TextSpan(
+                                text: 'User will see ',
+                                style: TextStyle(
+                                    color: Color(0xFFA45BDB), fontSize: 16)),
+                            TextSpan(
+                                text: 'Flat $percent% OFF',
+                                style: const TextStyle(
+                                    color: Color(0xFFA45BDB),
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700)),
+                          ]),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis)),
                 ]),
               );
             }),
