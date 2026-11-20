@@ -65,6 +65,7 @@ void main() {
       expect(find.text('Venue will be hidden from search & discovery'),
           expected);
       expect(find.text('ACTIV team may reach out if required'), expected);
+      expect(find.text('Pause multiple activities'), findsNothing);
     });
   }
 
@@ -107,96 +108,6 @@ void main() {
             (_) async => http.Response('{"message":"Unavailable"}', 503)));
     expect(find.text('What happens next?'), findsNothing);
   });
-
-  for (final failSecond in [false, true]) {
-    testWidgets(
-        'multi activity pause reports saved results, second fails=$failSecond',
-        (tester) async {
-      final active = {'activity': true, 'other': true, 'unselected': true};
-      final writes = <String>[];
-      await open(tester, MockClient((request) async {
-        if (request.method == 'PATCH') {
-          final id =
-              request.url.pathSegments[request.url.pathSegments.length - 2];
-          writes.add(id);
-          expect(jsonDecode(request.body),
-              {'isActive': false, 'reason': 'Maintenance'});
-          if (failSecond && id == 'other')
-            return http.Response('{"message":"Try again"}', 503);
-          active[id] = false;
-          return http.Response('{"data":{}}', 200);
-        }
-        if (request.url.path.endsWith('/my-approved-venues')) {
-          return http.Response(
-              jsonEncode({
-                'data': [
-                  {
-                    'id': 'venue',
-                    'bookingAccept': true,
-                    'services': [
-                      for (final id in active.keys)
-                        {
-                          'id': id,
-                          'name': id == 'activity' ? 'Adventure Sports' : id,
-                          'status': 'approved',
-                          'isActive': active[id]
-                        },
-                      {
-                        'id': 'draft',
-                        'name': 'Draft activity',
-                        'status': 'draft'
-                      },
-                    ],
-                  },
-                  {
-                    'id': 'another-venue',
-                    'services': [
-                      {
-                        'id': 'unrelated',
-                        'name': 'Unrelated',
-                        'status': 'approved'
-                      }
-                    ]
-                  }
-                ]
-              }),
-              200);
-        }
-        return response({
-          'status': 'approved',
-          'isActive': active['activity'],
-          'bookingAccept': true
-        });
-      }));
-      await tester.ensureVisible(find.text('Pause multiple activities'));
-      await tester.tap(find.text('Pause multiple activities'));
-      await tester.pumpAndSettle();
-      expect(find.text('Draft activity'), findsNothing);
-      expect(find.text('Unrelated'), findsNothing);
-      expect(
-          tester
-              .widget<FilledButton>(
-                  find.widgetWithText(FilledButton, 'Pause selected'))
-              .onPressed,
-          isNull);
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'other'));
-      await tester.enterText(find.byType(TextField), 'Maintenance');
-      await tester.pump();
-      await tester.tap(find.text('Pause selected'));
-      await tester.pumpAndSettle();
-      expect(writes, ['activity', 'other']);
-      expect(active['activity'], isFalse);
-      expect(active['other'], failSecond);
-      expect(active['unselected'], isTrue);
-      expect(find.text('Resume Booking'), findsOneWidget);
-      expect(
-          find.text(failSecond
-              ? '1 activity paused. Could not pause: other. Please retry.'
-              : '2 activities paused. Existing bookings are preserved.'),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  }
 
   testWidgets('single activity pause waits for server and refreshes status',
       (tester) async {

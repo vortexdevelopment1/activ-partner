@@ -2533,7 +2533,7 @@ void main() {
     await tester.pump(const Duration(seconds: 59));
     expect(find.byKey(const Key('otp-resend')), findsNothing);
     await tester.pump(const Duration(seconds: 1));
-    await tester.tap(find.byKey(const Key('otp-resend')));
+    await tester.tap(find.byKey(const Key('otp-resend')));  
     await tester.pumpAndSettle();
     expect(calls, 1);
     expect(find.text('Resend OTP in 60s'), findsOneWidget);

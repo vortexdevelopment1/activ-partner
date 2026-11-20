@@ -16,6 +16,7 @@ import {
   Link2,
   CheckSquare,
   ShieldCheck,
+  Radio,
   Trash2,
   RefreshCw,
   FileText,
@@ -98,6 +99,8 @@ export const VenueDetail: React.FC = () => {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [detailsEmailOpen, setDetailsEmailOpen] = useState(false);
 
   const { data, isLoading, isError, error: loadError, refetch, isFetching } = useQuery({
     queryKey: ['venue', id],
@@ -132,6 +135,26 @@ export const VenueDetail: React.FC = () => {
       setRejectOpen(false);
     },
     onError: (err: any) => error(err?.response?.data?.message ?? (isSuspending ? 'Failed to suspend' : 'Failed to reject')),
+  });
+
+  const liveMutation = useMutation({
+    mutationFn: () => venuesApi.makeLive(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['venue', id] });
+      queryClient.invalidateQueries({ queryKey: ['venues'] });
+      success('Venue is now live for users.');
+      setLiveOpen(false);
+    },
+    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to make venue live'),
+  });
+
+  const detailsEmailMutation = useMutation({
+    mutationFn: () => venuesApi.requestLiveDetails(id!),
+    onSuccess: () => {
+      success('Partner was emailed the remaining details to complete.');
+      setDetailsEmailOpen(false);
+    },
+    onError: (err: any) => error(err?.response?.data?.message ?? 'Failed to email partner'),
   });
 
   const requestChangesMutation = useMutation({
@@ -287,6 +310,23 @@ export const VenueDetail: React.FC = () => {
           >
             <Trash2 size={14} /> Delete Venue
           </button>
+          {venue.status === 'approved' &&
+            (venue.bookingAccept === false || venue.liveReady === false) && (
+            <button
+              onClick={() => setLiveOpen(true)}
+              className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 sm:px-4"
+            >
+              <Radio size={14} /> Live Venue
+            </button>
+          )}
+          {venue.status === 'approved' && venue.liveMissing?.length ? (
+            <button
+              onClick={() => setDetailsEmailOpen(true)}
+              className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 sm:px-4"
+            >
+              Request Details
+            </button>
+          ) : null}
           {venue.status === 'pending' || venue.status === 'draft' ? (
             <>
               <button
@@ -325,6 +365,17 @@ export const VenueDetail: React.FC = () => {
           ) : null}
         </div>
       </div>
+
+      {venue.status === 'approved' && venue.liveMissing?.length ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-800">
+            Complete these details before making the venue live:
+          </p>
+          <p className="mt-1 text-sm text-amber-700">
+            {venue.liveMissing.join(', ')}
+          </p>
+        </div>
+      ) : null}
 
       {/* Rejection reason banner */}
       {venue.rejectionReason && (
@@ -834,6 +885,26 @@ export const VenueDetail: React.FC = () => {
         loading={requestChangesMutation.isPending}
         onConfirm={(reason) => requestChangesMutation.mutate(reason)}
         onCancel={() => setChangesOpen(false)}
+      />
+      <ConfirmDialog
+        open={detailsEmailOpen}
+        title="Request Partner Details"
+        message={`Email the partner with the remaining details required before "${venue.name}" can go live?`}
+        confirmLabel="Email Partner"
+        variant="warning"
+        loading={detailsEmailMutation.isPending}
+        onConfirm={() => detailsEmailMutation.mutate()}
+        onCancel={() => setDetailsEmailOpen(false)}
+      />
+      <ConfirmDialog
+        open={liveOpen}
+        title="Make Venue Live"
+        message={`Make "${venue.name}" live? Users will be able to see the venue and book its activities.`}
+        confirmLabel="Yes, Make Live"
+        variant="warning"
+        loading={liveMutation.isPending}
+        onConfirm={() => liveMutation.mutate()}
+        onCancel={() => setLiveOpen(false)}
       />
       <ConfirmDialog
         open={deleteOpen}

@@ -57,6 +57,43 @@ import { paymentMethodLabel } from "../payments/payment-method";
 import { lockSlotsForCapacity } from "../bookings/slot-capacity-coordinator";
 import { effectiveSlotOccupancy } from "../bookings/slot-capacity";
 
+const missingLiveDetails = (profile: any, legal: any, bank: any) =>
+  [
+    !profile?.business_name && "business name",
+    !profile?.owner_name && "owner name",
+    !profile?.phone_e164 && "partner phone",
+    !profile?.email && "partner email",
+    !profile?.address_line_1 && "partner address",
+    !profile?.city && "partner city",
+    !profile?.state && "partner state",
+    !profile?.postal_code && "partner postal code",
+    !legal?.aadhaar_name && "Aadhaar name",
+    !legal?.aadhaar_number && "Aadhaar number",
+    !legal?.aadhaar_card_url && "Aadhaar document",
+    !legal?.pan_number && "PAN number",
+    !legal?.pan_card_url && "PAN document",
+    !bank?.account_holder_name && "approved bank account",
+    !bank?.bank_name && "approved bank account",
+    !bank?.account_number && "approved bank account",
+    !bank?.ifsc_code && "approved bank account",
+  ].filter((value): value is string => Boolean(value));
+
+const liveProfile = (businessProfile: any, partner: any, venueProfile?: any, venue?: any) => ({
+  business_name:
+    businessProfile?.business_name || partner?.legal_name || venueProfile?.display_name || venue?.name,
+  owner_name:
+    businessProfile?.owner_name || partner?.partner_users?.[0]?.users?.name,
+  phone_e164:
+    businessProfile?.phone_e164 || partner?.partner_users?.[0]?.users?.phone_e164 || partner?.phone,
+  email:
+    businessProfile?.email || partner?.partner_users?.[0]?.users?.email || partner?.email,
+  address_line_1: businessProfile?.address_line_1 || venueProfile?.address_line_1 || venue?.address,
+  city: businessProfile?.city || venueProfile?.city || venue?.city,
+  state: businessProfile?.state || venueProfile?.state || venue?.state,
+  postal_code:
+    businessProfile?.postal_code || venueProfile?.postal_code || venue?.zipCode,
+});
+
 @Injectable()
 export class VenuesService {
   private readonly logger = new Logger(VenuesService.name);
@@ -929,6 +966,120 @@ export class VenuesService {
     return saved;
   }
 
+  async makeLive(id: string, adminId: string): Promise<Venue> {
+    const venue = await this.prisma.venues.findUnique({
+      where: { id },
+      include: {
+        partner_venue_legal_documents: true,
+        partners: {
+          include: {
+            partner_business_profiles: true,
+            partner_users: { include: { users: true } },
+            partner_bank_accounts: {
+              where: { status: "APPROVED" },
+              orderBy: [{ is_primary: "desc" }, { created_at: "desc" }],
+              take: 1,
+            },
+          },
+        },
+        partner_venue_profiles: true,
+      },
+    });
+    if (!venue) throw new NotFoundException(`Venue with id ${id} not found`);
+    if (venue.status !== "PUBLISHED")
+      throw new BadRequestException("Only approved venues can go live");
+
+    const profile = liveProfile(
+      venue.partners.partner_business_profiles,
+      venue.partners,
+      venue.partner_venue_profiles,
+      venue,
+    );
+    const legal = venue.partner_venue_legal_documents;
+    const bank = venue.partners.partner_bank_accounts[0];
+    const missing = missingLiveDetails(profile, legal, bank);
+    if (missing.length) {
+      throw new BadRequestException(
+        `Complete the partner details before making this venue live: ${[
+          ...new Set(missing),
+        ].join(", ")}.`,
+      );
+    }
+    if (venue.booking_accept) return this.findOne(id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
+      await tx.venues.update({ where: { id }, data: { booking_accept: true } });
+      await syncLegacyActivityVisibility(tx, id);
+      await tx.audit_events.create({
+        data: {
+          id: randomUUID(),
+          action: "venue.live",
+          entity_type: "venues",
+          entity_id: id,
+          actor_id: adminId,
+          after_json: { bookingAccept: true },
+        },
+      });
+    });
+
+    const updated = await this.findOne(id);
+    try {
+      await this.mailService.sendTemplateEmail(
+        updated.partner?.email,
+        "venue_live",
+        {
+          partnerName: [updated.partner?.firstName, updated.partner?.lastName]
+            .filter(Boolean)
+            .join(" "),
+          venueName: updated.name,
+          deliveryKey: `venue-live:${id}:${new Date().toISOString()}`,
+        },
+      );
+    } catch {
+      this.logger.warn("Venue is live; partner notification email is pending");
+    }
+    return updated;
+  }
+
+  async requestLiveDetailsEmail(id: string): Promise<void> {
+    const venue = await this.findOne(id);
+    const [profile, legal, bank] = await Promise.all([
+      this.prisma.partner_business_profiles.findUnique({
+        where: { partner_id: venue.partnerId },
+      }),
+      this.prisma.partner_venue_legal_documents.findUnique({
+        where: { venue_id: id },
+      }),
+      this.prisma.partner_bank_accounts.findFirst({
+        where: { partner_id: venue.partnerId, status: "APPROVED" },
+        orderBy: [{ is_primary: "desc" }, { created_at: "desc" }],
+      }),
+    ]);
+    const missing = missingLiveDetails(
+      liveProfile(profile, venue.partner, undefined, venue),
+      legal,
+      bank,
+    );
+    if (!missing.length) {
+      throw new BadRequestException("Partner details are already complete");
+    }
+    await this.mailService.sendTemplateEmail(
+      venue.partner?.email,
+      "venue_details_required",
+      {
+        partnerName: [venue.partner?.firstName, venue.partner?.lastName]
+          .filter(Boolean)
+          .join(" "),
+        venueName: venue.name,
+        reason: `Please complete the following before your venue can go live: ${[
+          ...new Set(missing),
+        ].join(", ")}.`,
+        deliveryKey: `venue-live-details:${id}:${new Date().toISOString()}`,
+      },
+    );
+  }
+
   async markWelcomeSeen(venueId: string, partnerId: string): Promise<Venue> {
     const venue = await this.findOne(venueId);
     if (venue.partnerId !== partnerId) {
@@ -1078,8 +1229,20 @@ export class VenuesService {
           updatedAt: bankAccount.updated_at,
         }
       : null;
+    const businessProfile = partnerId && this.prisma.partner_business_profiles
+      ? await this.prisma.partner_business_profiles.findUnique({
+          where: { partner_id: partnerId },
+        })
+      : null;
+    const liveMissing = missingLiveDetails(
+      liveProfile(businessProfile, venue.partner, undefined, venue),
+      legal,
+      bankAccount?.status === "APPROVED" ? bankAccount : null,
+    );
     return {
       ...venue,
+      liveReady: liveMissing.length === 0,
+      liveMissing,
       status:
         review.status === "DRAFT" && review.submitted_at
           ? VenueStatus.PENDING
@@ -2338,6 +2501,7 @@ export class VenuesService {
           where: { id },
           data: {
             status: "PUBLISHED",
+            booking_accept: false,
             approved_at: now,
             approved_by: adminId,
             rejection_reason: null,
@@ -2385,7 +2549,7 @@ export class VenuesService {
           outcome.partnerId,
           NotificationType.VENUE_APPROVED,
           "Venue approved",
-          `${outcome.venueName} has been approved and is now live on ACTIV`,
+          `${outcome.venueName} has been approved and is ready to go live on ACTIV`,
           { venueId: id },
         );
       } catch {
@@ -2395,7 +2559,7 @@ export class VenuesService {
         await this.pushNotificationsService.sendToPartner(
           outcome.partnerId,
           "Venue approved",
-          `${outcome.venueName} has been approved and is now live on ACTIV`,
+          `${outcome.venueName} has been approved and is ready to go live on ACTIV`,
           { type: "venue_approved", venueId: id },
         );
       } catch {

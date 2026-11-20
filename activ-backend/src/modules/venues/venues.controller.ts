@@ -32,7 +32,7 @@ import {
 } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { createHash } from "crypto";
-import { isValidGstin } from '../../common/utils/gstin-validation';
+import { isValidGstin } from "../../common/utils/gstin-validation";
 import { VenuesService } from "./venues.service";
 import { CreateVenueDto } from "./dto/create-venue.dto";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
@@ -48,7 +48,7 @@ import { ActivityApprovalDto } from "./dto/activity-approval.dto";
 import { ActivityReviewQueryDto } from "./dto/activity-review-query.dto";
 import { CreateWalkInReservationDto } from "./dto/create-walk-in-reservation.dto";
 import { AdminVenuesQueryDto } from "./dto/admin-venues-query.dto";
-import { VenueUpdateRequestStatus } from '../../common/domain-types';
+import { VenueUpdateRequestStatus } from "../../common/domain-types";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -144,8 +144,11 @@ export class VenuesController {
       legalData.aadhaarNumber = body.aadhaarNumber;
     if (body.panNumber !== undefined) legalData.panNumber = body.panNumber;
     if (body.gstNumber !== undefined) {
-      if (typeof body.gstNumber !== 'string' || (body.gstNumber.trim() && !isValidGstin(body.gstNumber))) {
-        throw new BadRequestException('Enter a valid 15-character GSTIN.');
+      if (
+        typeof body.gstNumber !== "string" ||
+        (body.gstNumber.trim() && !isValidGstin(body.gstNumber))
+      ) {
+        throw new BadRequestException("Enter a valid 15-character GSTIN.");
       }
       legalData.gstNumber = body.gstNumber.trim().toUpperCase();
     }
@@ -905,9 +908,13 @@ export class VenuesController {
     }
     const fingerprints = new Set<string>();
     for (const file of files) {
-      const fingerprint = createHash('sha256').update(file.buffer).digest('hex');
+      const fingerprint = createHash("sha256")
+        .update(file.buffer)
+        .digest("hex");
       if (fingerprints.has(fingerprint)) {
-        throw new BadRequestException('Photo already added. Please choose a different photo.');
+        throw new BadRequestException(
+          "Photo already added. Please choose a different photo.",
+        );
       }
       fingerprints.add(fingerprint);
     }
@@ -965,22 +972,50 @@ export class VenuesController {
   @ApiBearerAuth()
   @Roles(UserRole.PARTNER)
   @ApiConsumes("multipart/form-data")
-  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   async uploadActivityAnswerFile(
     @Param("serviceId", ParseUUIDPipe) serviceId: string,
     @Param("questionId", ParseUUIDPipe) questionId: string,
     @CurrentUser() user: any,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const questions = await this.venuesService.getActivityQuestions(serviceId, user.id);
-    if (!questions.some(question => question.id === questionId && question.questionType?.toLowerCase() === "file")) {
-      throw new BadRequestException("File question does not belong to this activity");
+    const questions = await this.venuesService.getActivityQuestions(
+      serviceId,
+      user.id,
+    );
+    if (
+      !questions.some(
+        (question) =>
+          question.id === questionId &&
+          question.questionType?.toLowerCase() === "file",
+      )
+    ) {
+      throw new BadRequestException(
+        "File question does not belong to this activity",
+      );
     }
-    if (!file || !["application/pdf", "image/jpeg", "image/png"].includes(file.mimetype)) {
-      throw new BadRequestException("Please select a PDF, JPG or PNG file under 5 MB");
+    if (
+      !file ||
+      !["application/pdf", "image/jpeg", "image/png"].includes(file.mimetype)
+    ) {
+      throw new BadRequestException(
+        "Please select a PDF, JPG or PNG file under 5 MB",
+      );
     }
-    const url = await this.cloudinaryService.uploadFile(file, "activ/activity-answers", "auto");
-    return { message: "Activity document uploaded successfully", data: { url } };
+    const url = await this.cloudinaryService.uploadFile(
+      file,
+      "activ/activity-answers",
+      "auto",
+    );
+    return {
+      message: "Activity document uploaded successfully",
+      data: { url },
+    };
   }
 
   @Post("activities/:serviceId/answers")
@@ -1395,6 +1430,31 @@ export class VenuesController {
     };
   }
 
+  @Patch("admin/:id/live")
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Make an approved venue visible to users (Admin only)",
+  })
+  async makeLive(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    const data = await this.venuesService.makeLive(id, user.id);
+    return { message: "Venue is now live", data };
+  }
+
+  @Post("admin/:id/live-details-email")
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Ask a partner to complete details before going live",
+  })
+  async requestLiveDetailsEmail(@Param("id", ParseUUIDPipe) id: string) {
+    await this.venuesService.requestLiveDetailsEmail(id);
+    return { message: "Partner was asked to complete the remaining details" };
+  }
+
   @Get("admin/:id")
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
@@ -1410,10 +1470,14 @@ export class VenuesController {
   @Get("admin/activities/pending")
   @ApiBearerAuth()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: "List activity submissions by review status (Admin only)" })
+  @ApiOperation({
+    summary: "List activity submissions by review status (Admin only)",
+  })
   async getPendingActivities(@Query() pagination: ActivityReviewQueryDto) {
-    const [items, total] =
-      await this.venuesService.findPendingActivities(pagination, pagination.status);
+    const [items, total] = await this.venuesService.findPendingActivities(
+      pagination,
+      pagination.status,
+    );
     return {
       message: "Activity submissions fetched successfully",
       data: {
@@ -1622,13 +1686,19 @@ export class VenuesController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Delete venue (Partner can delete own, Admin can delete any)',
-    description: 'Admin deletion permanently removes the venue and its associated data in one request. Active bookings block permanent deletion. Partner deletion archives the venue and disables new bookings.',
+    summary: "Delete venue (Partner can delete own, Admin can delete any)",
+    description:
+      "Admin deletion permanently removes the venue and its associated data in one request. Active bookings block permanent deletion. Partner deletion archives the venue and disables new bookings.",
   })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+  async remove(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
     const result = await this.venuesService.remove(id, user);
     return {
-      message: result.permanentlyDeleted ? 'Venue permanently deleted successfully' : 'Venue archived successfully',
+      message: result.permanentlyDeleted
+        ? "Venue permanently deleted successfully"
+        : "Venue archived successfully",
       data: result,
     };
   }

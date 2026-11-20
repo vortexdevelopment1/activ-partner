@@ -217,25 +217,6 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
     return e.toString().replaceFirst("Exception: ", "");
   }
 
-  Future<http.Response> _getWithRetry(String url,
-      {int retries = 2, Duration timeout = const Duration(seconds: 25)}) async {
-    final headers = await _headers();
-    dynamic lastError;
-    for (var attempt = 0; attempt <= retries; attempt++) {
-      try {
-        return await _client
-            .get(Uri.parse(url), headers: headers)
-            .timeout(timeout);
-      } catch (e) {
-        lastError = e;
-        if (attempt < retries) {
-          await Future.delayed(Duration(milliseconds: 400 * (attempt + 1)));
-        }
-      }
-    }
-    throw lastError;
-  }
-
   void _message(String message) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(message)));
 
@@ -253,139 +234,6 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   Future<void> _resumeBooking() async {
     if (await _save({"isActive": true}) && mounted) {
       _message("Bookings resumed for this activity.");
-    }
-  }
-
-  Future<void> _pauseMultiple() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      final response = await _getWithRetry(MY_APPROVED_VENUES_URL);
-      final venues = (_response(response) as List).whereType<Map>();
-      final venue = venues
-          .where((venue) => (venue["services"] as List? ?? [])
-              .whereType<Map>()
-              .any((service) => service["id"] == widget.activity.activityId))
-          .firstOrNull;
-      if (venue == null) {
-        throw Exception("Unable to find this activity. Please refresh.");
-      }
-      final services = (venue["services"] as List? ?? [])
-          .whereType<Map>()
-          .where((service) =>
-              service["status"]?.toString().toLowerCase() == "approved" &&
-              service["isActive"] != false &&
-              venue["bookingAccept"] != false)
-          .toList();
-      if (!mounted) return;
-      if (services.isEmpty) {
-        _message("All activities are already paused.");
-        return;
-      }
-      final selected = <String>{
-        if (services
-            .any((service) => service["id"] == widget.activity.activityId))
-          widget.activity.activityId,
-      };
-      var reason = "";
-      Map<String, dynamic>? selection;
-      selection = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-            builder: (dialogContext, update) => AlertDialog(
-                  title: const Text("Pause activities"),
-                  content: SizedBox(
-                      width: 400,
-                      child: SingleChildScrollView(
-                          child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                              "Select activities to pause. Existing bookings will be preserved."),
-                          CheckboxListTile(
-                              title: const Text("Select all"),
-                              value: selected.length == services.length,
-                              onChanged: (value) => update(() {
-                                    selected.clear();
-                                    if (value == true) {
-                                      selected.addAll(services.map((service) =>
-                                          service["id"].toString()));
-                                    }
-                                  })),
-                          for (final service in services)
-                            CheckboxListTile(
-                                title: Text(
-                                    service["name"]?.toString() ?? "Activity"),
-                                value:
-                                    selected.contains(service["id"].toString()),
-                                onChanged: (value) => update(() {
-                                      if (value == true) {
-                                        selected.add(service["id"].toString());
-                                      } else {
-                                        selected
-                                            .remove(service["id"].toString());
-                                      }
-                                    })),
-                          TextField(
-                              maxLength: 500,
-                              decoration: const InputDecoration(
-                                  labelText: "Pause reason",
-                                  hintText: "For example, maintenance"),
-                              onChanged: (value) =>
-                                  update(() => reason = value)),
-                        ],
-                      ))),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text("Cancel")),
-                    FilledButton(
-                        onPressed: selected.isEmpty || reason.trim().isEmpty
-                            ? null
-                            : () => Navigator.pop(dialogContext, {
-                                  "ids": selected.toList(),
-                                  "reason": reason.trim()
-                                }),
-                        child: const Text("Pause selected")),
-                  ],
-                )),
-      );
-      if (selection == null || !mounted) return;
-      final failed = <String>[];
-      var paused = 0;
-      final headers = await _headers();
-      for (final id in selection["ids"] as List) {
-        try {
-          final result = await _client
-              .patch(
-                Uri.parse("$BASE_URL/venues/activities/$id/management"),
-                headers: headers,
-                body: jsonEncode(
-                    {"isActive": false, "reason": selection["reason"]}),
-              )
-              .timeout(const Duration(seconds: 20));
-          _response(result);
-          paused++;
-          _changed = true;
-        } catch (_) {
-          failed.add(services
-                  .firstWhere((service) => service["id"] == id,
-                      orElse: () => {"name": "Activity"})["name"]
-                  ?.toString() ??
-              "Activity");
-        }
-      }
-      if (!mounted) return;
-      await _load();
-      if (mounted) {
-        _message(failed.isEmpty
-            ? "$paused ${paused == 1 ? "activity" : "activities"} paused. Existing bookings are preserved."
-            : "$paused ${paused == 1 ? "activity" : "activities"} paused. Could not pause: ${failed.join(", ")}. Please retry.");
-      }
-    } catch (e) {
-      if (mounted) _message(_friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -1248,15 +1096,6 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
           _effect(
               Icons.notifications_none, 'ACTIV team may reach out if required'),
         ],
-        if (_canControl) ...[
-          const SizedBox(height: 12),
-          TextButton.icon(
-              onPressed: _saving ? null : _pauseMultiple,
-              icon: const Icon(Icons.pause_circle_outline),
-              label: Text(_saving
-                  ? 'Updating bookings...'
-                  : 'Pause multiple activities')),
-        ],
       ]));
 
   Future<void> _showPauseReasonSheet() async {
@@ -1950,6 +1789,26 @@ class _ReviewsPage extends StatelessWidget {
     return total / reviews.length;
   }
 
+  Map<int, int> get _ratingCounts => {
+        for (var star = 1; star <= 5; star++)
+          star: reviews.where((review) =>
+              (num.tryParse(review['rating']?.toString() ?? '') ?? 0) == star).length,
+      };
+
+  String _reviewValue(Map<String, dynamic> review, String key,
+          [String fallback = '']) =>
+      review[key]?.toString().trim().isNotEmpty == true
+          ? review[key].toString()
+          : fallback;
+
+  String _reviewAge(Map<String, dynamic> review) {
+    final created = DateTime.tryParse(_reviewValue(review, 'createdAt'));
+    if (created == null) return _reviewValue(review, 'createdAgo');
+    final days = DateTime.now().difference(created.toLocal()).inDays;
+    if (days == 0) return 'Just now';
+    return '$days ${days == 1 ? 'Day' : 'Days'} Ago';
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: _background,
@@ -1958,30 +1817,32 @@ class _ReviewsPage extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 600),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
+                padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
                 children: [
                   Row(children: [
                     Material(
                         color: Colors.white,
                         shape: const CircleBorder(),
-                        elevation: 2,
+                        elevation: 1,
                         child: IconButton(
                             tooltip: 'Back',
                             onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.arrow_back, size: 24))),
-                    const SizedBox(width: 22),
+                            icon: const Icon(Icons.arrow_back, size: 20))),
+                    const SizedBox(width: 12),
                     Expanded(
                         child:
-                            _text('Reviews & Ratings', bold: true, size: 28)),
+                            _text('Reviews & Ratings', bold: true, size: 20)),
                   ]),
-                  const SizedBox(height: 28),
-                  _text(activityName, bold: true, size: 20),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+                  _text(activityName, bold: true, size: 13),
+                  const SizedBox(height: 14),
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                        child: _panel(
-                            child: Column(children: [
-                      _text(rating.toStringAsFixed(1), bold: true, size: 44),
+                    SizedBox(
+                        width: 134,
+                        height: 102,
+                        child: _reviewPanel(
+                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      _text(rating.toStringAsFixed(1), bold: true, size: 30),
                       Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
@@ -1990,14 +1851,14 @@ class _ReviewsPage extends StatelessWidget {
                                   i < rating.round()
                                       ? Icons.star
                                       : Icons.star_border,
-                                  color: const Color(0xFFD8F34A)))),
-                      const SizedBox(height: 8),
-                      _text('(${reviews.length} Review)', size: 14),
+                                  color: const Color(0xFFD8F34A), size: 14))),
+                      const SizedBox(height: 6),
+                      _text('(${reviews.length} Review)', size: 9),
                     ]))),
-                    const SizedBox(width: 18),
+                    const SizedBox(width: 14),
                     Expanded(child: _ratingBars()),
                   ]),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   if (reviews.isEmpty)
                     Center(child: _text('No reviews yet', color: Colors.grey))
                   else
@@ -2012,91 +1873,76 @@ class _ReviewsPage extends StatelessWidget {
   Widget _ratingBars() => Column(
         children: [
           for (var star = 5; star >= 1; star--)
-            Builder(builder: (context) {
-              final count = reviews.where((r) =>
-                  (num.tryParse(r['rating']?.toString() ?? '') ?? 0).round() ==
-                  star).length;
-              final pct = reviews.isEmpty ? 0.0 : count / reviews.length;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: [
-                  SizedBox(
-                      width: 24, child: _text('$star', bold: true, size: 18)),
-                  const Icon(Icons.star, size: 14, color: Color(0xFF202124)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                      child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                              minHeight: 7,
-                              value: pct,
-                              backgroundColor: Colors.white,
-                              color: const Color(0xFFD8F34A)))),
-                ]),
-              );
-            }),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                SizedBox(
+                    width: 14, child: _text('$star', bold: true, size: 12)),
+                const Icon(Icons.star, size: 12, color: Color(0xFF202124)),
+                const SizedBox(width: 4),
+                Expanded(
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                            minHeight: 5,
+                            value: reviews.isEmpty
+                                ? 0
+                                : _ratingCounts[star]! / reviews.length,
+                            backgroundColor: Colors.white,
+                            color: const Color(0xFFD8F34A)))),
+                const SizedBox(width: 4),
+                SizedBox(
+                    width: 18,
+                    child: _text(
+                        '${reviews.isEmpty ? 0 : ((_ratingCounts[star]! / reviews.length) * 100).round()}%',
+                        size: 7)),
+              ]),
+            )
         ],
       );
 
-  Widget _reviewCard(Map<String, dynamic> review) {
-    String dateStr = review['createdAgo']?.toString() ?? '';
-    if (dateStr.isEmpty && review['createdAt'] != null) {
-      final dt = DateTime.tryParse(review['createdAt'].toString());
-      if (dt != null) {
-        final diff = DateTime.now().difference(dt.toLocal());
-        if (diff.inDays > 30) {
-          dateStr = '${(diff.inDays / 30).floor()}mo ago';
-        } else if (diff.inDays > 0) {
-          dateStr = '${diff.inDays}d ago';
-        } else if (diff.inHours > 0) {
-          dateStr = '${diff.inHours}h ago';
-        } else if (diff.inMinutes > 0) {
-          dateStr = '${diff.inMinutes}m ago';
-        } else {
-          dateStr = 'Just now';
-        }
-      }
-    }
-    final body = review['body']?.toString().trim() ?? '';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: _panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const CircleAvatar(
-                  backgroundColor: Color(0xFFD9D9D9),
-                  child: Icon(Icons.person, color: Colors.white)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _text(review['name']?.toString() ?? 'Customer',
-                      bold: true, size: 16)),
-              _text(dateStr, size: 10, color: Colors.black87),
-            ]),
-            const SizedBox(height: 8),
-            Row(
+  Widget _reviewCard(Map<String, dynamic> review) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: _reviewPanel(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const CircleAvatar(
+                radius: 12,
+                backgroundColor: Color(0xFFD9D9D9),
+                child: Icon(Icons.person, color: Colors.white, size: 16)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _text(_reviewValue(review, 'name', 'Customer'),
+                    bold: true, size: 10)),
+            _text(_reviewAge(review), size: 7, color: Colors.black87),
+          ]),
+          const SizedBox(height: 5),
+          Row(
               children: List.generate(
-                5,
-                (i) => Icon(
-                  i < (num.tryParse(review['rating']?.toString() ?? '') ?? 0)
-                      ? Icons.star
-                      : Icons.star_border,
-                  color: const Color(0xFFD8F34A),
-                  size: 16,
-                ),
-              ),
-            ),
-            if (body.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _text(body, size: 13),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+                  5,
+                  (i) => Icon(
+                      i <
+                              (num.tryParse(
+                                      review['rating']?.toString() ?? '') ??
+                                  0)
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: const Color(0xFFD8F34A),
+                      size: 11))),
+          const SizedBox(height: 5),
+          _text(_reviewValue(review, 'body', _reviewValue(review, 'comment')),
+              size: 9),
+        ])),
+      );
+
+  Widget _reviewPanel({required Widget child}) => Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _border)),
+      child: child);
 }
 
 class _ImagesPage extends StatefulWidget {

@@ -39,6 +39,8 @@ export const venuesApi = {
     api.patch(`/venues/admin/${id}/approval`, data),
   approve: (id: string) =>
     api.patch(`/venues/admin/${id}/approval`, { status: 'approved' }),
+  makeLive: (id: string) => api.patch(`/venues/admin/${id}/live`),
+  requestLiveDetails: (id: string) => api.post(`/venues/admin/${id}/live-details-email`),
   reject: (id: string, reason: string) =>
     api.patch(`/venues/admin/${id}/approval`, { status: 'rejected', reason }),
   requestChanges: (id: string, reason: string) =>

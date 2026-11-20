@@ -201,6 +201,9 @@ export interface Venue {
   approvedBy?: string;
   approvedByName?: string | null;
   isActive: boolean;
+  bookingAccept?: boolean;
+  liveReady?: boolean;
+  liveMissing?: string[];
   images: VenueImage[];
   services: VenueService[];
   answers: VenueAnswer[];

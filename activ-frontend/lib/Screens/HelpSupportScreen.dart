@@ -173,6 +173,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
   Widget build(BuildContext context) {
     return _SupportScaffold(
       title: 'Email Us',
+      compactHeader: true,
       footer: Row(
         children: [
           Expanded(
@@ -212,7 +213,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 36, 28, 0),
+        padding: const EdgeInsets.fromLTRB(16, 30, 16, 0),
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -225,26 +226,26 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     "We're here to help!",
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 30,
+                      fontSize: 24,
                       fontWeight: FontWeight.w700,
                       color: AppColors.darkBlack,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   const Text(
-                    "Send us an email and we'll get back to you as soon\nas possible",
+                    "Send us an email and we'll get back to you as soon as possible",
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 18,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      height: 1.35,
+                      height: 1.3,
                       color: AppColors.darkBlack,
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  const _Label('To'),
-                  const _ReadOnlyBox('support@activ.live'),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 26),
+                  const _Label('To', compact: true),
+                  const _ReadOnlyBox('support@activ.live', compact: true),
+                  const SizedBox(height: 4),
                   const Text(
                     'This is our official support email address.',
                     style: TextStyle(
@@ -253,22 +254,24 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                       color: AppColors.black1,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   _Input(
                     label: 'Subject',
                     required: true,
                     controller: _subject,
                     hint: 'Enter subject',
+                    compact: true,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _Input(
                     label: 'Message',
                     required: true,
                     controller: _message,
                     hint: 'Type your message here...',
                     maxLines: 4,
+                    compact: true,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       const Expanded(
@@ -284,7 +287,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                           ),
                           style: TextStyle(
                             fontFamily: 'Satoshi',
-                            fontSize: 16,
+                            fontSize: 12,
                             color: AppColors.darkBlack,
                           ),
                         ),
@@ -305,7 +308,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     fontFamily: 'Satoshi',
-                                    fontSize: 16,
+                                    fontSize: 12,
                                     color: AppColors.purple,
                                   ),
                                 ),
@@ -322,8 +325,8 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     style: TextStyle(
                       fontFamily: 'Satoshi',
                       fontWeight: FontWeight.w500,
-                      fontSize: 15,
-                      height: 1.35,
+                      fontSize: 12,
+                      height: 1.3,
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -335,8 +338,8 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                       style: TextStyle(
                         fontFamily: 'Satoshi',
                         fontWeight: FontWeight.w500,
-                        fontSize: 15,
-                        height: 1.35,
+                      fontSize: 12,
+                      height: 1.3,
                         color: AppColors.darkBlack,
                       ),
                     ),
@@ -907,12 +910,14 @@ class _SupportScaffold extends StatelessWidget {
     required this.child,
     this.footer,
     this.transparentFooter = false,
+    this.compactHeader = false,
   });
 
   final String title;
   final Widget child;
   final Widget? footer;
   final bool transparentFooter;
+  final bool compactHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -928,7 +933,11 @@ class _SupportScaffold extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(28, 16, 28, 12),
+                padding: EdgeInsets.fromLTRB(
+                    compactHeader ? 16 : 28,
+                    compactHeader ? 12 : 16,
+                    compactHeader ? 16 : 28,
+                    compactHeader ? 8 : 12),
                 child: Row(
                   children: [
                     Material(
@@ -938,21 +947,22 @@ class _SupportScaffold extends StatelessWidget {
                       shadowColor: Colors.black12,
                       child: IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.arrow_back,
                           color: AppColors.darkBlack,
+                          size: compactHeader ? 20 : 24,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 24),
+                    SizedBox(width: compactHeader ? 16 : 24),
                     Expanded(
                       child: Text(
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Satoshi',
-                          fontSize: 25,
+                          fontSize: compactHeader ? 20 : 25,
                           fontWeight: FontWeight.w700,
                           color: AppColors.darkBlack,
                         ),
@@ -1051,10 +1061,11 @@ class _SupportOption extends StatelessWidget {
 }
 
 class _Label extends StatelessWidget {
-  const _Label(this.text, {this.required = false});
+  const _Label(this.text, {this.required = false, this.compact = false});
 
   final String text;
   final bool required;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1066,10 +1077,10 @@ class _Label extends StatelessWidget {
             const TextSpan(text: '*', style: TextStyle(color: AppColors.red)),
         ],
       ),
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Satoshi',
         fontWeight: FontWeight.w500,
-        fontSize: 14,
+        fontSize: compact ? 12 : 14,
         color: AppColors.darkBlack,
       ),
     );
@@ -1077,26 +1088,27 @@ class _Label extends StatelessWidget {
 }
 
 class _ReadOnlyBox extends StatelessWidget {
-  const _ReadOnlyBox(this.text);
+  const _ReadOnlyBox(this.text, {this.compact = false});
 
   final String text;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      height: 50,
+      margin: EdgeInsets.only(top: compact ? 4 : 8),
+      height: compact ? 34 : 50,
       alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16),
       decoration: BoxDecoration(
         color: AppColors.gray2,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Satoshi',
-          fontSize: 16,
+          fontSize: compact ? 11 : 16,
           color: AppColors.darkBlack,
         ),
       ),
@@ -1112,6 +1124,7 @@ class _Input extends StatelessWidget {
     this.hint = '',
     this.maxLines = 1,
     this.readOnly = false,
+    this.compact = false,
   });
 
   final String label;
@@ -1120,19 +1133,21 @@ class _Input extends StatelessWidget {
   final String hint;
   final int maxLines;
   final bool readOnly;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Label(label, required: required),
-        const SizedBox(height: 5),
+        _Label(label, required: required, compact: compact),
+        SizedBox(height: compact ? 4 : 5),
         TextField(
           controller: controller,
           maxLines: maxLines,
           readOnly: readOnly,
-          style: const TextStyle(fontFamily: 'Satoshi', fontSize: 15),
+          style: TextStyle(
+              fontFamily: 'Satoshi', fontSize: compact ? 12 : 15),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(
@@ -1141,8 +1156,8 @@ class _Input extends StatelessWidget {
             ),
             filled: true,
             fillColor: readOnly ? AppColors.gray2 : Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: compact ? 10 : 16, vertical: compact ? 7 : 10),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: AppColors.gray),

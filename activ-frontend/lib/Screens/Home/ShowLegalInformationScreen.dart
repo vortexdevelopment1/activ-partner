@@ -641,6 +641,7 @@ class _State extends State<ShowLegalInformationScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w700,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -723,6 +724,7 @@ class _State extends State<ShowLegalInformationScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w700,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -811,6 +813,7 @@ class _State extends State<ShowLegalInformationScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w700,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -871,7 +874,7 @@ class _State extends State<ShowLegalInformationScreen> {
               color: AppColors.darkBlack,
             ),
             decoration: InputDecoration(
-              hintText: 'Enter Pan Name', // Set the hint label text
+              hintText: 'Enter PAN Name', // Set the hint label text
               hintStyle: TextStyle(
                 fontSize:  AppSize.size_14,
                 fontFamily: 'Satoshi',
@@ -1022,6 +1025,7 @@ class _State extends State<ShowLegalInformationScreen> {
           style: TextStyle(
               fontSize: AppSize.size_14,
               fontFamily: 'Satoshi',
+              fontWeight: FontWeight.w700,
               color: AppColors.black1,
               height: 1
           ),
@@ -1232,6 +1236,7 @@ class _State extends State<ShowLegalInformationScreen> {
           style: TextStyle(
               fontSize: AppSize.size_14,
               fontFamily: 'Satoshi',
+              fontWeight: FontWeight.w700,
               color: AppColors.black1,
               height: 1
           ),
@@ -1323,6 +1328,7 @@ class _State extends State<ShowLegalInformationScreen> {
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.w700,
             color: AppColors.black1,
             height: 1
         ),

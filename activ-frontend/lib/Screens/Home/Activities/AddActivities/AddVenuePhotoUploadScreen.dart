@@ -409,6 +409,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   style: TextStyle(
                                                       fontSize: AppSize.size_16,
                                                       fontFamily: 'Satoshi',
+                                                      fontWeight: FontWeight.w700,
                                                       color: AppColors.darkBlack,
                                                       height: 1
                                                   ),
