@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import type { GstVerification } from '../../types';
 import { isPdfUrl, openPdfDocument, resolveAssetUrl } from '../../utils/documents';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 const GstDocument: React.FC<{ src: string }> = ({ src }) => {
   const [opening, setOpening] = useState(false);
@@ -192,24 +193,12 @@ export const GstVerificationDetail: React.FC = () => {
           <InfoRow label="GST Number" value={request.gstNumber} />
           <InfoRow
             label="Submitted On"
-            value={new Date(request.createdAt).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            value={formatIndiaDateTime(request.createdAt)}
           />
           {request.status === 'approved' && (
             <InfoRow
               label="Approved On"
-              value={new Date(request.updatedAt).toLocaleString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              value={formatIndiaDateTime(request.updatedAt)}
             />
           )}
         </div>
@@ -267,24 +256,12 @@ export const GstVerificationDetail: React.FC = () => {
         </div>
         <InfoRow
           label="Submitted"
-          value={new Date(request.createdAt).toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          value={formatIndiaDateTime(request.createdAt)}
         />
         {request.updatedAt !== request.createdAt && (
           <InfoRow
             label="Last Updated"
-            value={new Date(request.updatedAt).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            value={formatIndiaDateTime(request.updatedAt)}
           />
         )}
       </div>

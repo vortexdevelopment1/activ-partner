@@ -10,6 +10,7 @@ import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
 
 import '../../Utills/common_utilities.dart';
+import '../../Utills/india_time.dart';
 import '../../Utills/performance_logger.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
@@ -442,13 +443,10 @@ class _State extends State<HomeScreen> {
     }
   }
 
-  DateTime _indiaTime(DateTime value) =>
-      value.toUtc().add(const Duration(hours: 5, minutes: 30));
-
   _BookingItem _bookingFromManagement(
       Map<String, dynamic> json, String fallbackActivity) {
     final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
-    final local = startsAt == null ? null : _indiaTime(startsAt);
+    final local = startsAt == null ? null : toIndiaTime(startsAt);
     final bookingDate = json['bookingDate']?.toString();
     final bookingTime = json['bookingTime']?.toString();
     final participants = _asInt(json['participants']);

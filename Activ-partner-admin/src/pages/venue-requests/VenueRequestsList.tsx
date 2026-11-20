@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight, ClipboardList } from 'lucide-react';
 import { venueRequestsApi } from '../../api/venue-requests.api';
 import { Badge } from '../../components/ui/Badge';
+import { formatIndiaDate } from '../../utils/indiaDate';
 import { Pagination } from '../../components/ui/Pagination';
 import type { VenueUpdateRequest } from '../../types';
 
@@ -135,11 +136,7 @@ export const VenueRequestsList: React.FC = () => {
                       <Badge status={req.status} />
                     </td>
                     <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
-                      {new Date(req.createdAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate(req.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
                       <ArrowRight size={14} className="text-gray-300" />

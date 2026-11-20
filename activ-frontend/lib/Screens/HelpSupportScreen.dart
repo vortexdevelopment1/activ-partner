@@ -223,7 +223,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    "We're here to help!",
+                    'We’re here to help!',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
                       fontSize: 24,
@@ -233,12 +233,12 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "Send us an email and we'll get back to you as soon as possible",
+                    'Send us an email and we’ll get back to\nyou as soon as possible',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
                       fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      height: 1.3,
+                      fontWeight: FontWeight.w400,
+                      height: 1.35,
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -273,48 +273,46 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                   ),
                   const SizedBox(height: 14),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Attach ',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              TextSpan(text: '(Optional)'),
-                            ],
-                          ),
-                          style: TextStyle(
-                            fontFamily: 'Satoshi',
-                            fontSize: 12,
-                            color: AppColors.darkBlack,
-                          ),
+                      const Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Attach ',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            TextSpan(text: '(Optional)'),
+                          ],
+                        ),
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 12,
+                          color: AppColors.darkBlack,
                         ),
                       ),
-                      Flexible(
-                        child: InkWell(
-                          onTap: _sending ? null : _pickFile,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.attach_file,
-                                  color: AppColors.purple, size: 22),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  _file == null ? 'Upload File' : _file!.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontFamily: 'Satoshi',
-                                    fontSize: 12,
-                                    color: AppColors.purple,
-                                  ),
+                      InkWell(
+                        onTap: _sending ? null : _pickFile,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.attach_file,
+                                color: AppColors.purple, size: 20),
+                            const SizedBox(width: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 180),
+                              child: Text(
+                                _file == null ? 'Upload File' : _file!.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Satoshi',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.purple,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -324,9 +322,9 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     'You can upload screenshots, invoices,\ndocuments, etc.',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w400,
                       fontSize: 12,
-                      height: 1.3,
+                      height: 1.35,
                       color: AppColors.darkBlack,
                     ),
                   ),
@@ -334,12 +332,12 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      'Supported formats: JPG, PNG, and PDF\n(Max 10MB)',
+                      'Supported formats: JPG, PNG, and PDF (Max 10MB)',
                       style: TextStyle(
                         fontFamily: 'Satoshi',
-                        fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                      height: 1.3,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12,
+                        height: 1.35,
                         color: AppColors.darkBlack,
                       ),
                     ),

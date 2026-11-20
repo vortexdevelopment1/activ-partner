@@ -73,7 +73,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
     ['payments', ['id', 'booking_id', 'provider', 'provider_order_id', 'provider_payment_id', 'provider_event_id', 'status', 'amount_paise']],
     ['facilities', ['id', 'venue_id', 'activity_id', 'capacity']],
     ['venues', ['id', 'partner_id', 'policy_version', 'booking_accept']],
-    ['partner_walk_in_reservations', ['id', 'venue_id', 'facility_id', 'venue_service_id', 'starts_at', 'ends_at', 'status', 'amount_paise']],
+    ['partner_walk_in_reservations', ['id', 'booking_reference', 'venue_id', 'facility_id', 'venue_service_id', 'starts_at', 'ends_at', 'status', 'amount_paise']],
   ] as const)('has required columns: %s', async (table, expected) => {
     const actual = new Set((await columns(table)).map(row => row.column_name));
     for (const column of expected) expect(actual).toContain(column);
@@ -81,6 +81,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
 
   it('has integer paise columns and required booking defaults', async () => {
     const bookingColumns = await columns('bookings');
+    const walkInColumns = await columns('partner_walk_in_reservations');
     const paymentColumns = await columns('payments');
     const byName = (rows: Row[], name: string) => rows.find(row => row.column_name === name);
 
@@ -89,6 +90,7 @@ describeDatabase('normalized booking/payment PostgreSQL contract', () => {
     }
     expect(['int8', 'int4', 'int2']).toContain(byName(paymentColumns, 'amount_paise')?.udt_name);
     expect(byName(bookingColumns, 'booking_reference')?.column_default).toMatch(/generate_booking_reference\s*\(/i);
+    expect(byName(walkInColumns, 'booking_reference')?.column_default).toMatch(/generate_walk_in_booking_reference\s*\(/i);
     expect(byName(bookingColumns, 'public_code')?.is_nullable).toBe('NO');
   });
 
@@ -248,7 +250,7 @@ describeInspection('main database read-only booking/payment inspection', () => {
         FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public'
-          AND p.proname IN ('generate_booking_reference')
+          AND p.proname IN ('generate_booking_reference', 'generate_walk_in_booking_reference')
       `,
       prisma.$queryRaw<Row[]>`
         SELECT event_object AS table_name, trigger_name, event_manipulation,

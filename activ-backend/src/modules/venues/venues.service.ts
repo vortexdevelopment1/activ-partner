@@ -56,6 +56,11 @@ import { attendanceStatus, INDIA_OFFSET_MS } from "../bookings/booking-expiry";
 import { paymentMethodLabel } from "../payments/payment-method";
 import { lockSlotsForCapacity } from "../bookings/slot-capacity-coordinator";
 import { effectiveSlotOccupancy } from "../bookings/slot-capacity";
+import {
+  indiaDateBounds,
+  weekdayForIndiaDate,
+  formatIndiaDate,
+} from "../../common/time/india-time";
 
 const missingLiveDetails = (profile: any, legal: any, bank: any) =>
   [
@@ -1683,13 +1688,19 @@ export class VenuesService {
           },
         },
       });
-      const existingKeys = new Set(
-        existing.map(
-          (slot: any) =>
-            `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`,
-        ),
+      const existingMap = new Map<string, any>(
+        existing.map((slot: any) => [
+          `${slot.starts_at.toISOString()}|${slot.ends_at.toISOString()}`,
+          slot,
+        ]),
       );
+      const existingKeys = new Set(existingMap.keys());
       const data: any[] = [];
+      const updateSlots: Array<{
+        id: string;
+        price_paise: bigint;
+        capacity: number;
+      }> = [];
       const dayNames = [
         "sunday",
         "monday",
@@ -1716,28 +1727,58 @@ export class VenuesService {
             const startsAt = this.istWallTimeToUtc(date, start);
             const endsAt = new Date(startsAt.getTime() + duration * 60_000);
             const key = `${startsAt.toISOString()}|${endsAt.toISOString()}`;
-            if (existingKeys.has(key)) continue;
-            existingKeys.add(key);
             const discounted = Number(window.discounted_price_paise ?? 0);
+            const targetPricePaise = BigInt(
+              discounted > 0
+                ? discounted
+                : Number(
+                    window.price_paise ?? service.price_per_hour_paise ?? 0,
+                  ),
+            );
+            const targetCapacity = Number(
+              window.capacity || service.capacity || 1,
+            );
+
+            if (existingKeys.has(key)) {
+              const existingSlot = existingMap.get(key);
+              if (
+                existingSlot &&
+                existingSlot.booked_quantity === 0 &&
+                existingSlot.status === "AVAILABLE" &&
+                (existingSlot.price_paise !== targetPricePaise ||
+                  existingSlot.capacity !== targetCapacity)
+              ) {
+                updateSlots.push({
+                  id: existingSlot.id,
+                  price_paise: targetPricePaise,
+                  capacity: targetCapacity,
+                });
+              }
+              continue;
+            }
+            existingKeys.add(key);
             data.push({
               id: randomUUID(),
               facility_id: facility.id,
               starts_at: startsAt,
               ends_at: endsAt,
-              capacity: Number(window.capacity || service.capacity || 1),
+              capacity: targetCapacity,
               status: "AVAILABLE",
-              price_paise: BigInt(
-                discounted > 0
-                  ? discounted
-                  : Number(
-                      window.price_paise ?? service.price_per_hour_paise ?? 0,
-                    ),
-              ),
+              price_paise: targetPricePaise,
             });
           }
         }
       }
       if (data.length) await prisma.slots.createMany({ data });
+      for (const update of updateSlots) {
+        await prisma.slots.update({
+          where: { id: update.id },
+          data: {
+            price_paise: update.price_paise,
+            capacity: update.capacity,
+          },
+        });
+      }
 
       // A schedule update can shorten a window (for example 23:00 → 20:00).
       // The old implementation only appended missing slots, leaving those
@@ -4717,19 +4758,11 @@ export class VenuesService {
       );
 
     const slotDurationMinutes = service.min_duration_minutes || 60;
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
-
-    const facilityDayStart = this.istWallTimeToUtc(dayStart, 0);
-    const facilityDayEnd = this.istWallTimeToUtc(dayStart, 24 * 60);
+    const { start: facilityDayStart, end: facilityDayEnd } =
+      indiaDateBounds(date);
 
     // Get operational windows for the date's day of week
-    const dayName = new Date(`${date}T00:00:00.000Z`)
-      .toLocaleDateString("en-US", {
-        weekday: "long",
-        timeZone: "Asia/Kolkata",
-      })
-      .toLowerCase();
+    const dayName = weekdayForIndiaDate(date);
     const availability = await this.prisma.partner_venue_availability.findMany({
       where: {
         venue_id: venueId,
@@ -5065,8 +5098,7 @@ export class VenuesService {
         throw new BadRequestException("Slot end time must be after start time");
       }
     }
-    const dayStart = new Date(`${dto.date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${dto.date}T23:59:59.999Z`);
+    const { start: dayStart, end: dayEnd } = indiaDateBounds(dto.date);
     const notes = [
       dto.court ? `Court: ${dto.court}` : null,
       dto.participantEmail ? `Email: ${dto.participantEmail}` : null,
@@ -5242,27 +5274,20 @@ export class VenuesService {
         const activBookings = await tx.bookings.findMany({
           where: {
             status: { not: "CANCELLED" },
-            starts_at: { lt: this.istWallTimeToUtc(dayStart, 24 * 60) },
+            starts_at: { lt: dayEnd },
             slots: {
               facility_id: service.facility_id,
-              ends_at: { gt: this.istWallTimeToUtc(dayStart, 0) },
+              ends_at: { gt: dayStart },
             },
           },
           include: { slots: true },
         });
         const requestedSlotIsFull = requestedSlots.some((slot) => {
-          const start = this.istWallTimeToUtc(
-            dayStart,
-            this.timeToMinutes(slot.startTime),
-          );
-          const end = this.istWallTimeToUtc(
-            dayStart,
-            this.timeToMinutes(slot.endTime),
-          );
           return (
             activBookings.filter(
               (booking) =>
-                start < booking.slots.ends_at && end > booking.slots.starts_at,
+                slot.startsAt < booking.slots.ends_at &&
+                slot.endsAt > booking.slots.starts_at,
             ).length >= courtCount
           );
         });
@@ -5353,8 +5378,9 @@ export class VenuesService {
       serviceId,
       partnerId,
     );
-    const dayStart = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
-    const dayEnd = date ? new Date(`${date}T23:59:59.999Z`) : undefined;
+    const bounds = date ? indiaDateBounds(date) : undefined;
+    const dayStart = bounds?.start;
+    const dayEnd = bounds?.end;
     const reservations =
       await this.prisma.partner_walk_in_reservations.findMany({
         where: {
@@ -5479,7 +5505,6 @@ export class VenuesService {
   private mapWalkInReservation(reservation: any) {
     const notes = String(reservation.notes ?? "");
     const istStart = new Date(reservation.starts_at.getTime() + 330 * 60_000);
-    const dateCode = istStart.toISOString().slice(0, 10).replace(/-/g, "");
     const courtMatch = notes.match(/^Court: (.+)$/m);
     const emailMatch = notes.match(/^Email: (.+)$/m);
     const paymentMethodMatch = notes.match(/^Payment method: (.+)$/m);
@@ -5487,7 +5512,7 @@ export class VenuesService {
     const idempotencyKeyMatch = notes.match(/^Idempotency-Key: (.+)$/m);
     return {
       id: reservation.id,
-      bookingReference: `WI-${dateCode}-${String(reservation.id).slice(0, 8).toUpperCase()}`,
+      bookingReference: reservation.booking_reference,
       venueServiceId: reservation.venue_service_id,
       venueId: reservation.venue_id,
       partnerId: reservation.partner_id,

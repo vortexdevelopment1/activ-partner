@@ -1038,7 +1038,13 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _text(label, color: Colors.grey, size: 13),
         const SizedBox(height: 5),
-        _text(value, bold: true, size: 15),
+        label == 'Booking ID'
+            ? FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _text(value, bold: true, size: 15),
+              )
+            : _text(value, bold: true, size: 15),
       ]);
 
   Widget _statusPanel() => _panel(
@@ -1770,7 +1776,13 @@ class _BookingsPageState extends State<_BookingsPage> {
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _text(label, size: 13, color: Colors.grey),
         const SizedBox(height: 5),
-        _text(value, bold: true, size: 15),
+        label == 'Booking ID'
+            ? FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _text(value, bold: true, size: 15),
+              )
+            : _text(value, bold: true, size: 15),
       ]);
 }
 

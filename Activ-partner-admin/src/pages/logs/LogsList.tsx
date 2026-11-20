@@ -7,6 +7,7 @@ import { Pagination } from '../../components/ui/Pagination';
 import { Modal } from '../../components/ui/Modal';
 import { SelectMenu } from '../../components/ui/SelectMenu';
 import { actionLabel, localDateBoundary, resourceLabel } from './logPresentation';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 const limit = 25;
 
@@ -136,8 +137,8 @@ export const LogsList: React.FC = () => {
                 : logs.map((log) => {
                   const target = targetLink(log);
                   return <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap" title={new Date(log.createdAt).toLocaleString('en-IN')}>
-                      {new Date(log.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap" title={formatIndiaDateTime(log.createdAt)}>
+                      {formatIndiaDateTime(log.createdAt, { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
                     <td className="px-5 py-3.5 font-medium text-gray-900 min-w-48">{actionLabel(log)}</td>
                     <td className="px-5 py-3.5 text-gray-600 min-w-40">{log.actor || 'System / unknown'}</td>
@@ -175,7 +176,7 @@ export const LogsList: React.FC = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold text-gray-900">{actionLabel(selectedLog)}</h3>
-              <p className="text-sm text-gray-500 mt-1">{new Date(selectedLog.createdAt).toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'medium' })}</p>
+              <p className="text-sm text-gray-500 mt-1">{formatIndiaDateTime(selectedLog.createdAt, { dateStyle: 'full', timeStyle: 'medium' })}</p>
             </div>
           </div>
           <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm border-t border-gray-100 pt-4">

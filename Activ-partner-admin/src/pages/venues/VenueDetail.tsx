@@ -27,6 +27,7 @@ import { PartnerEditor } from '../partners/PartnerEditor';
 import { venuesApi } from '../../api/venues.api';
 import { activityLogoUrl } from '../../utils/activityLogos';
 import { Badge } from '../../components/ui/Badge';
+import { formatIndiaDate } from '../../utils/indiaDate';
 import { ApproveModal } from './ApproveModal';
 import { RejectModal } from './RejectModal';
 import { RequestChangesModal } from './RequestChangesModal';
@@ -768,22 +769,14 @@ export const VenueDetail: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Submitted</span>
                 <span className="text-gray-700">
-                  {new Date(venue.submittedAt ?? venue.createdAt).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                  {formatIndiaDate(venue.submittedAt ?? venue.createdAt)}
                 </span>
               </div>
               {venue.approvedAt && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">Approved</span>
                   <span className="text-gray-700">
-                    {new Date(venue.approvedAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatIndiaDate(venue.approvedAt)}
                   </span>
                 </div>
               )}
@@ -796,11 +789,7 @@ export const VenueDetail: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Last Updated</span>
                 <span className="text-gray-700">
-                  {new Date(venue.updatedAt).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                  {formatIndiaDate(venue.updatedAt)}
                 </span>
               </div>
             </div>
@@ -827,11 +816,7 @@ export const VenueDetail: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-400">Accepted At</span>
                     <span className="text-gray-700">
-                      {new Date((venue as any).termsAcceptedAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate((venue as any).termsAcceptedAt)}
                     </span>
                   </div>
                 )}

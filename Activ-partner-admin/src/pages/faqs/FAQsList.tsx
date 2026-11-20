@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
 import type { FAQ } from '../../types';
+import { formatIndiaDate } from '../../utils/indiaDate';
 
 export const FAQsList: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -170,11 +171,7 @@ export const FAQsList: React.FC = () => {
 
                   {/* Created */}
                   <td className="px-5 py-3.5 text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(item.createdAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatIndiaDate(item.createdAt)}
                   </td>
 
                   {/* Actions */}

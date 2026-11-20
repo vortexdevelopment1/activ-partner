@@ -6,6 +6,7 @@ import { bankAccountsApi } from '../../api/bank-accounts.api';
 import { Modal } from '../../components/ui/Modal';
 import { SelectMenu } from '../../components/ui/SelectMenu';
 import { useToast } from '../../hooks/useToast';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 type Bank = { id?: string; accountHolderName: string; bankName: string; accountNumber: string; ifscCode: string; accountType: string; branchName: string; cancelledChequeUrl: string; upiId: string; status: string; isPrimary: boolean; rejectionReason: string };
 
@@ -280,7 +281,7 @@ export const PartnerEditor: React.FC<{ id: string; onClose: () => void }> = ({ i
         mutation.mutate();
       }}>
         <fieldset disabled={mutation.isPending || uploading} className="space-y-6">
-          <p className="text-xs text-gray-500">Created: {new Date(partner.createdAt).toLocaleString()} | Updated: {new Date(partner.updatedAt).toLocaleString()} | Venues: {partner.venueCount ?? 0}</p>
+          <p className="text-xs text-gray-500">Created: {formatIndiaDateTime(partner.createdAt)} | Updated: {formatIndiaDateTime(partner.updatedAt)} | Venues: {partner.venueCount ?? 0}</p>
           {groups.map(group => <section key={group.title} className="space-y-3">
             <h4 className="font-semibold text-gray-900">{group.title}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{group.fields.map(([key, label]) => {

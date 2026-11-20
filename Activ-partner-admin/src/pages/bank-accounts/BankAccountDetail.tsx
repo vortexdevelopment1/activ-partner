@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { bankAccountsApi } from '../../api/bank-accounts.api';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -277,27 +278,11 @@ export const BankAccountDetail: React.FC = () => {
           <InfoRow label="Reviewed By" value={account.reviewedBy ? account.reviewedByName?.trim() || 'Admin' : undefined} />
           <InfoRow
             label="Reviewed At"
-            value={
-              account.reviewedAt
-                ? new Date(account.reviewedAt).toLocaleString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : undefined
-            }
+            value={account.reviewedAt ? formatIndiaDateTime(account.reviewedAt) : undefined}
           />
           <InfoRow
             label="Submitted At"
-            value={new Date(account.createdAt).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            value={formatIndiaDateTime(account.createdAt)}
           />
         </div>
       )}

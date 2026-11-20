@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../Utills/common_utilities.dart';
+import '../../Utills/india_time.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 
@@ -115,9 +116,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _time(dynamic value) {
-    final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
-    if (date == null) return '';
-    final today = DateUtils.dateOnly(DateTime.now());
+    final parsed = DateTime.tryParse(value?.toString() ?? '');
+    if (parsed == null) return '';
+    final date = toIndiaTime(parsed);
+    final today = DateUtils.dateOnly(nowInIndia());
     final day = DateUtils.dateOnly(date);
     if (day == today) return DateFormat('h:mm a').format(date);
     if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
@@ -125,9 +127,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _groupLabel(dynamic value) {
-    final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
-    if (date == null) return 'Earlier';
-    final today = DateUtils.dateOnly(DateTime.now());
+    final parsed = DateTime.tryParse(value?.toString() ?? '');
+    if (parsed == null) return 'Earlier';
+    final date = toIndiaTime(parsed);
+    final today = DateUtils.dateOnly(nowInIndia());
     final day = DateUtils.dateOnly(date);
     if (day == today) return 'Today';
     if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';

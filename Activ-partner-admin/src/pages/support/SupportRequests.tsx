@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Mail, Paperclip } from 'lucide-react';
 import { supportApi } from '../../api/support.api';
 import { Pagination } from '../../components/ui/Pagination';
 import { resolveAssetUrl } from '../../utils/documents';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 export const SupportRequests: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,7 +48,7 @@ export const SupportRequests: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900 break-words"><Mail size={18} className="inline mr-2" />{request.subject}</h3>
             <span className="text-xs font-medium bg-primary-50 text-primary-700 rounded-full px-3 py-1 self-start">{request.status.replace(/_/g, ' ').toLowerCase()}</span>
           </div>
-          <p className="text-xs text-gray-500">Submitted {new Date(request.created_at).toLocaleString('en-IN')}</p>
+          <p className="text-xs text-gray-500">Submitted {formatIndiaDateTime(request.created_at)}</p>
           <p className="whitespace-pre-wrap break-words text-sm text-gray-800">{request.message}</p>
           {Array.isArray(request.attachments) && request.attachments.length > 0 && (
             <div className="space-y-2 border-t border-gray-100 pt-4">
@@ -64,7 +65,7 @@ export const SupportRequests: React.FC = () => {
             <ul className="divide-y divide-gray-100">
               {requests!.items.map(item => (
                 <li key={item.id}><Link to={`/support/requests/${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-4 p-5 hover:bg-primary-50/40">
-                  <div className="min-w-0"><p className="font-medium text-gray-900 truncate">{item.subject}</p><p className="text-xs text-gray-500 mt-1">{item.status.replace(/_/g, ' ').toLowerCase()} · {new Date(item.created_at).toLocaleString('en-IN')}</p></div>
+                  <div className="min-w-0"><p className="font-medium text-gray-900 truncate">{item.subject}</p><p className="text-xs text-gray-500 mt-1">{item.status.replace(/_/g, ' ').toLowerCase()} · {formatIndiaDateTime(item.created_at)}</p></div>
                   <ArrowRight size={16} className="shrink-0 text-primary-700" />
                 </Link></li>
               ))}

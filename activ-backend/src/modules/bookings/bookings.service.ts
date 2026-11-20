@@ -25,6 +25,7 @@ import { lockSlotsForCapacity } from "./slot-capacity-coordinator";
 import { extractLegacyIdempotencyKey } from "./legacy-idempotency";
 import { assertNormalizedBookingWriteEnabled } from "./normalized-booking-feature";
 import { ConfigService } from "@nestjs/config";
+import { indiaDateBounds, weekdayForIndiaDate } from "../../common/time/india-time";
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
@@ -217,9 +218,7 @@ export class BookingsService {
     if (!categorySchedule) return fallback;
 
     // bookingDate is YYYY-MM-DD — get the weekday name in lowercase
-    const dayName = new Date(bookingDate)
-      .toLocaleDateString("en-US", { weekday: "long" })
-      .toLowerCase();
+    const dayName = weekdayForIndiaDate(bookingDate);
     const dayEntry = categorySchedule.find(
       (d) => d.day.toLowerCase() === dayName,
     );
@@ -253,9 +252,7 @@ export class BookingsService {
     startTime: string,
     fallbackPricePerHour: number,
   ): { price: number; discountedPrice: number } {
-    const dayName = new Date(bookingDate)
-      .toLocaleDateString("en-US", { weekday: "long" })
-      .toLowerCase();
+    const dayName = weekdayForIndiaDate(bookingDate);
     const startMinutes = this.to24hMinutes(startTime);
     const matched = rows.find(
       (row) =>
@@ -712,6 +709,21 @@ export class BookingsService {
       : null;
     const slot = booking.slots;
 
+    const formatTime = (value: Date) =>
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }).format(value);
+    const formatDate = (value: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(value);
+
     return {
       status: this.mapCurrentPayoutStatus(payment.status),
       isGstRegistered,
@@ -723,9 +735,9 @@ export class BookingsService {
       amountReceived: netReceived,
       payoutDate,
       activityName: slot.facilities.activities.name,
-      slotDate: slot.starts_at.toISOString().slice(0, 10),
-      slotTime: `${slot.starts_at.toISOString().slice(11, 16)} to ${slot.ends_at.toISOString().slice(11, 16)}`,
-      slotBasePrice: Number(booking.total_paise) / 100,
+      slotDate: formatDate(slot.starts_at),
+      slotTime: `${formatTime(slot.starts_at)} to ${formatTime(slot.ends_at)}`,
+      slotBasePrice: Number(booking.subtotal_paise ?? slot.price_paise ?? booking.total_paise) / 100,
       bookingId: booking.booking_reference,
       transactionId:
         payment.provider_payment_id ?? payment.provider_order_id ?? "",
@@ -751,13 +763,11 @@ export class BookingsService {
       },
     };
     if (query.startDate || query.endDate) {
+      const start = query.startDate ? indiaDateBounds(query.startDate).start : null;
+      const end = query.endDate ? indiaDateBounds(query.endDate).end : null;
       where.updated_at = {
-        ...(query.startDate
-          ? { gte: new Date(`${query.startDate}T00:00:00.000Z`) }
-          : {}),
-        ...(query.endDate
-          ? { lte: new Date(`${query.endDate}T23:59:59.999Z`) }
-          : {}),
+        ...(start ? { gte: start } : {}),
+        ...(end ? { lt: end } : {}),
       };
     }
     if (query.status === "success") where.status = "CAPTURED";

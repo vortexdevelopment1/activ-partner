@@ -251,11 +251,13 @@ Typing the Partner's full legal name and accepting this Agreement constitutes a 
                           color: AppColors.darkBlack,
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      _AgreementCard(documentScroll: _documentScroll),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: _AgreementCard(documentScroll: _documentScroll),
+                      ),
+                      const SizedBox(height: 14),
                       const _SupportCard(),
-                      const Spacer(),
+                      const SizedBox(height: 16),
                       _PrimaryButton(
                         text: 'Contact Support',
                         onPressed: () => CommonUtilities.NavigateWithPush(
@@ -338,7 +340,7 @@ class _AgreementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -349,8 +351,8 @@ class _AgreementCard extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.description_outlined,
-                  color: _PartnerAgreementScreenState._purple, size: 38),
-              const SizedBox(width: 16),
+                  color: _PartnerAgreementScreenState._purple, size: 36),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text.rich(
                   TextSpan(
@@ -374,7 +376,7 @@ class _AgreementCard extends StatelessWidget {
                   ),
                   style: const TextStyle(
                     fontFamily: 'Satoshi',
-                    fontSize: 16,
+                    fontSize: 15,
                     height: 1.28,
                     color: AppColors.darkBlack,
                   ),
@@ -382,24 +384,29 @@ class _AgreementCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            height: 280,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.gray),
-            ),
-            child: SingleChildScrollView(
-              controller: documentScroll,
-              padding: const EdgeInsets.all(14),
-              child: const SelectableText(
-                _PartnerAgreementScreenState._agreementText,
-                style: TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontSize: 14,
-                  height: 1.32,
-                  color: AppColors.darkBlack,
+          const SizedBox(height: 14),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.gray),
+              ),
+              child: Scrollbar(
+                controller: documentScroll,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: documentScroll,
+                  padding: const EdgeInsets.all(14),
+                  child: const SelectableText(
+                    _PartnerAgreementScreenState._agreementText,
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 13.5,
+                      height: 1.32,
+                      color: AppColors.darkBlack,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -417,38 +424,41 @@ class _SupportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.purple, width: 1.2),
       ),
       child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.support_agent_rounded, color: AppColors.purple, size: 38),
-          SizedBox(width: 18),
+          Icon(Icons.headset_mic_outlined, color: AppColors.purple, size: 30),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Have questions or need to\ndiscuss?',
+                  'Have questions or need to discuss?',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: 'Satoshi',
                     fontWeight: FontWeight.w700,
-                    fontSize: 17,
-                    height: 1.25,
+                    fontSize: 14.5,
                     color: AppColors.purple,
                   ),
                 ),
-                SizedBox(height: 10),
+                SizedBox(height: 4),
                 Text(
                   'If you have any doubts or need clarification about this agreement, our support team is here to help.',
                   style: TextStyle(
                     fontFamily: 'Satoshi',
                     fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                    height: 1.28,
+                    fontSize: 11.5,
+                    height: 1.25,
                     color: AppColors.purple,
                   ),
                 ),

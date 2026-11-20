@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { venuesApi } from '../../api/venues.api';
 import { partnersApi } from '../../api/partners.api';
+import { formatIndiaDate } from '../../utils/indiaDate';
 import { usersApi } from '../../api/users.api';
 import { Badge } from '../../components/ui/Badge';
 import { VenueFilters, defaultVenueFilters, type VenueFilterValues } from '../venues/VenueFilters';
@@ -237,11 +238,7 @@ export const Dashboard: React.FC = () => {
                       <Badge status={venue.status} />
                     </td>
                     <td className="px-5 py-3.5 text-gray-400">
-                      {new Date(venue.createdAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate(venue.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
                       <ArrowRight size={14} className="text-gray-300" />

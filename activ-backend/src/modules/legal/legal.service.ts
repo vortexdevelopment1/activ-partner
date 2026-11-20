@@ -7,6 +7,7 @@ import type { content_documents } from '../../generated/prisma/client';
 import { LegalContentRecord as LegalContent, LegalContentType } from '../../common/domain-types';
 import { UpsertLegalContentDto } from './dto/upsert-legal-content.dto';
 import { FileExport } from '../payouts/payouts.service';
+import { formatIndiaDate } from '../../common/time/india-time';
 
 const LEGAL_TITLES: Record<LegalContentType, string> = {
   [LegalContentType.TERMS_AND_CONDITIONS]: 'Terms & Conditions',
@@ -132,8 +133,8 @@ export class LegalService {
       const usableW   = pageWidth - margin * 2;
       const title     = LEGAL_TITLES[record.type];
       const updatedAt = record.updatedAt
-        ? new Date(record.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
-        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+        ? formatIndiaDate(new Date(record.updatedAt))
+        : formatIndiaDate(new Date());
 
       // ── Brand header bar (page 1 only) ───────────────────────
       doc.fillColor('#1e3a5f').rect(0, 0, pageWidth, 60).fill();

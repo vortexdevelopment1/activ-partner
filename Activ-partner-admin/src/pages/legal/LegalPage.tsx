@@ -4,6 +4,7 @@ import { ScrollText, Save, RefreshCw } from 'lucide-react';
 import { legalApi, type LegalType } from '../../api/legal.api';
 import { useToast } from '../../hooks/useToast';
 import type { LegalDocument } from '../../types';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 const TABS: { type: LegalType; label: string }[] = [
   { type: 'terms_and_conditions', label: 'Terms & Conditions' },
@@ -120,13 +121,7 @@ export const LegalPage: React.FC = () => {
               {activeDoc && (
                 <p className="text-xs text-gray-400 mb-3">
                   Last updated:{' '}
-                  {new Date(activeDoc.updatedAt).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatIndiaDateTime(activeDoc.updatedAt)}
                 </p>
               )}
               <textarea

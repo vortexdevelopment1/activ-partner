@@ -7,6 +7,7 @@ import { SelectMenu } from '../../components/ui/SelectMenu';
 import { Pagination } from '../../components/ui/Pagination';
 import { useToast } from '../../hooks/useToast';
 import type { User } from '../../types';
+import { formatIndiaDate } from '../../utils/indiaDate';
 
 const ROLES = ['All', 'user', 'partner', 'admin'] as const;
 type RoleFilter = (typeof ROLES)[number];
@@ -141,11 +142,7 @@ export const UsersList: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
-                    {new Date(user.createdAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatIndiaDate(user.createdAt)}
                   </td>
                   <td className="px-5 py-3.5">
                     <span

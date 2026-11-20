@@ -4,6 +4,7 @@ import PDFDocument = require('pdfkit');
 import { PrismaService } from '../../prisma/prisma.service';
 import { PayoutQueryDto } from './dto/payout-query.dto';
 import { RecordPayoutDto } from './dto/record-payout.dto';
+import { indiaDateBounds } from '../../common/time/india-time';
 
 export interface FileExport {
   base64: string;
@@ -16,16 +17,16 @@ export class PayoutsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private where(partnerId: string, query: PayoutQueryDto) {
-    const start = query.startDate ? new Date(`${query.startDate}T00:00:00+05:30`) : null;
-    const end = query.endDate ? new Date(`${query.endDate}T00:00:00+05:30`) : null;
-    if ((start && isNaN(start.getTime())) || (end && isNaN(end.getTime())) || (start && end && start > end)) {
+    const start = query.startDate ? indiaDateBounds(query.startDate).start : null;
+    const end = query.endDate ? indiaDateBounds(query.endDate).end : null;
+    if (start && end && start >= end) {
       throw new BadRequestException('Select a valid date range.');
     }
     return {
       partner_id: partnerId,
       ...(query.status && query.status !== 'all' ? { status: query.status.toUpperCase() as 'SUCCESS' | 'PENDING' | 'FAILED' } : {}),
       ...(start || end ? { payout_date: {
-        ...(start ? { gte: start } : {}), ...(end ? { lt: new Date(end.getTime() + 86400000) } : {}),
+        ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}),
       } } : {}),
     };
   }

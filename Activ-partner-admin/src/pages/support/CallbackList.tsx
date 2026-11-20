@@ -5,6 +5,7 @@ import { Search, ArrowRight, PhoneCall } from 'lucide-react';
 import { supportApi } from '../../api/support.api';
 import { Badge } from '../../components/ui/Badge';
 import { Pagination } from '../../components/ui/Pagination';
+import { formatIndiaDate } from '../../utils/indiaDate';
 import type { CallbackRequest } from '../../types';
 
 const TABS = ['All', 'Pending', 'In Progress', 'Resolved', 'Cancelled'] as const;
@@ -143,11 +144,7 @@ export const CallbackList: React.FC = () => {
                       <Badge status={req.status} />
                     </td>
                     <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
-                      {new Date(req.createdAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate(req.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
                       <ArrowRight size={14} className="text-gray-300" />

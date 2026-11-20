@@ -17,6 +17,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import { VENUE_REQUEST_FIELD_KEYS, type Venue, type VenueUpdateRequest } from '../../types';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) =>
   value ? (
@@ -266,24 +267,12 @@ export const VenueRequestDetail: React.FC = () => {
         </div>
         <InfoRow
           label="Submitted"
-          value={new Date(request.createdAt).toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          value={formatIndiaDateTime(request.createdAt)}
         />
         {request.updatedAt !== request.createdAt && (
           <InfoRow
             label="Last Updated"
-            value={new Date(request.updatedAt).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            value={formatIndiaDateTime(request.updatedAt)}
           />
         )}
       </div>

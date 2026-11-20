@@ -4,7 +4,7 @@ import { VenuesService } from './venues.service';
 describe('walk-in booking confirmation', () => {
   function setup(existing = false) {
     const record = {
-      id: 'reservation', amount_paise: 15000n, fees_paise: 0n, tax_paise: 0n,
+      id: 'reservation', booking_reference: 'WI-20261026-0001', amount_paise: 15000n, fees_paise: 0n, tax_paise: 0n,
       starts_at: new Date('2026-10-26T09:00:00Z'), ends_at: new Date('2026-10-26T10:00:00Z'),
       status: 'RESERVED', notes: 'Court: Court 01\nIdempotency-Key: request-key', created_at: new Date(),
     };
@@ -36,7 +36,7 @@ describe('walk-in booking confirmation', () => {
         participantName: 'Test Participant', participantPhone: '+919876543210', idempotencyKey: 'request-key',
       });
       expect(() => JSON.stringify({ message: 'Reserved', data: response })).not.toThrow();
-      expect(response.reservations[0]).toMatchObject({ amountPaise: '15000', status: 'reserved', idempotencyKey: 'request-key' });
+      expect(response.reservations[0]).toMatchObject({ bookingReference: 'WI-20261026-0001', amountPaise: '15000', status: 'reserved', idempotencyKey: 'request-key' });
       expect(prisma.partner_walk_in_reservations.create).toHaveBeenCalledTimes(existing ? 0 : 1);
     });
   }
@@ -50,6 +50,23 @@ describe('walk-in booking confirmation', () => {
     const data = prisma.partner_walk_in_reservations.create.mock.calls[0][0].data;
     expect(data.starts_at).toEqual(new Date('2026-10-26T11:30:00.000Z'));
     expect(data.ends_at).toEqual(new Date('2026-10-26T12:30:00.000Z'));
+  });
+
+  it('queries walk-in conflicts with India business-day bounds', async () => {
+    const { service, prisma } = setup();
+    prisma.partner_venue_availability.findMany.mockResolvedValue([
+      { open_time: '12:00 AM', close_time: '11:59 PM', price_paise: 15000n },
+    ]);
+    await service.createWalkIn('venue', 'activity', 'partner', {
+      date: '2026-11-21', slots: [{ startTime: '01:00', endTime: '02:00' }],
+      participantName: 'Test Participant', participantPhone: '+919876543210',
+    });
+    expect(prisma.partner_walk_in_reservations.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        starts_at: { lt: new Date('2026-11-21T18:30:00.000Z') },
+        ends_at: { gt: new Date('2026-11-20T18:30:00.000Z') },
+      }),
+    }));
   });
 
   it('rejects an ACTIV booking at the same IST time before saving a walk-in', async () => {

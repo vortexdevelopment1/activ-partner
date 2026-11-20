@@ -13,6 +13,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { supportApi } from '../../api/support.api';
+import { formatIndiaDateTime } from '../../utils/indiaDate';
 import { Badge } from '../../components/ui/Badge';
 import { SelectMenu } from '../../components/ui/SelectMenu';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -163,13 +164,7 @@ export const CallbackDetail: React.FC = () => {
           <InfoRow label="Email" value={request.email} />
           <InfoRow
             label="Submitted At"
-            value={new Date(request.createdAt).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            value={formatIndiaDateTime(request.createdAt)}
           />
         </div>
       </div>

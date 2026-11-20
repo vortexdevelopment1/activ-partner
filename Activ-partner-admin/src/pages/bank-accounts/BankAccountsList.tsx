@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight, Landmark } from 'lucide-react';
 import { bankAccountsApi } from '../../api/bank-accounts.api';
 import { Badge } from '../../components/ui/Badge';
+import { formatIndiaDate } from '../../utils/indiaDate';
 import { Pagination } from '../../components/ui/Pagination';
 import type { BankAccount } from '../../types';
 
@@ -147,11 +148,7 @@ export const BankAccountsList: React.FC = () => {
                       <Badge status={account.status} />
                     </td>
                     <td className="px-5 py-3.5 text-gray-400 text-xs">
-                      {new Date(account.createdAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate(account.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
                       <ArrowRight size={14} className="text-gray-300" />

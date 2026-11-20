@@ -822,6 +822,7 @@ model partner_venue_update_requests {
 
 model partner_walk_in_reservations {
   id                     String                         @id @db.Uuid
+  booking_reference      String                         @unique @default(dbgenerated("generate_walk_in_booking_reference()"))
   partner_id             String                         @db.Uuid
   venue_id               String                         @db.Uuid
   facility_id            String?                        @db.Uuid

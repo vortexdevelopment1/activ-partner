@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
+import '../../Utills/india_time.dart';
 
 const _background = Color(0xFFF7FBE3);
 const _purple = Color(0xFFA536E5);
@@ -21,7 +22,7 @@ TextStyle _text(double size,
         color: color);
 
 DateTimeRange _defaultRange() {
-  final today = DateUtils.dateOnly(DateTime.now());
+  final today = DateUtils.dateOnly(nowInIndia());
   return DateTimeRange(
       start: today.subtract(const Duration(days: 30)), end: today);
 }
@@ -30,7 +31,7 @@ Future<DateTimeRange?> _pickRange(BuildContext context, DateTimeRange range) =>
     showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: nowInIndia(),
       initialDateRange: range,
       helpText: 'Select range',
       confirmText: 'Save',
@@ -119,8 +120,8 @@ Widget _shell(BuildContext context, String title, Widget body,
     );
 
 Map<String, String> _filters(DateTimeRange range, String status) => {
-      'startDate': DateFormat('yyyy-MM-dd').format(range.start),
-      'endDate': DateFormat('yyyy-MM-dd').format(range.end),
+      'startDate': indiaDateKey(range.start),
+      'endDate': indiaDateKey(range.end),
       'status': status,
     };
 
@@ -393,7 +394,7 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
                 child: Text(
                     date == null
                         ? '-'
-                        : DateFormat('d MMM yyyy').format(date.toLocal()),
+                        : formatIndiaDate(date, 'd MMM yyyy'),
                     style: _text(18, bold: true))),
             const Icon(Icons.chevron_right, size: 28),
           ]),
@@ -471,7 +472,7 @@ class _PayoutTransactionDetailsScreenState
     final date = DateTime.tryParse(value?.toString() ?? '');
     return date == null
         ? '-'
-        : DateFormat('d MMM yyyy, hh:mm a').format(date.toLocal());
+        : formatIndiaDateTime(date, 'd MMM yyyy, hh:mm a');
   }
 
   Future<void> _downloadStatement() async {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:no_context_navigation/no_context_navigation.dart';
@@ -147,14 +148,9 @@ class _VenueApprovedCongratsScreenState
                 ),
                 const Spacer(flex: 2),
 
-                // Center Celebration Graphic
+                // Center Celebration Graphic with 3D Orbiting Emojis
                 Center(
-                  child: Image.asset(
-                    'assets/venue_approved_celebration.png',
-                    width: isCompact ? 200 : 240,
-                    fit: BoxFit.contain,
-                    semanticLabel: 'Venue approved celebration illustration',
-                  ),
+                  child: _AnimatedCelebrationGraphic(isCompact: isCompact),
                 ),
 
                 const SizedBox(height: 28),
@@ -253,6 +249,421 @@ class _VenueApprovedCongratsScreenState
       ),
     );
   }
+}
+
+/// Renders the 3D center celebration certificate with 8 orbiting sport activity emojis
+/// continuously rotating clockwise around it with 3D depth, realistic shadows, and scale perspective.
+class _AnimatedCelebrationGraphic extends StatefulWidget {
+  final bool isCompact;
+
+  const _AnimatedCelebrationGraphic({required this.isCompact});
+
+  @override
+  State<_AnimatedCelebrationGraphic> createState() =>
+      _AnimatedCelebrationGraphicState();
+}
+
+class _AnimatedCelebrationGraphicState
+    extends State<_AnimatedCelebrationGraphic>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  // 8 activity emoji assets in clockwise order starting from 12 o'clock (top):
+  // 1. Tennis (top / 12:00)
+  // 2. Badminton (top-right / 1:30)
+  // 3. Gym (right / 3:00)
+  // 4. Basketball (bottom-right / 4:30)
+  // 5. Martial Arts (bottom / 6:00)
+  // 6. Cricket (bottom-left / 7:30)
+  // 7. Football (left / 9:00)
+  // 8. Yoga (top-left / 10:30)
+  static const List<String> _activityAssets = [
+    'assets/activities/tennis.png',
+    'assets/activities/badminton.png',
+    'assets/activities/gym.png',
+    'assets/activities/basketball.png',
+    'assets/activities/martial-arts.png',
+    'assets/activities/cricket.png',
+    'assets/activities/football.png',
+    'assets/activities/yoga.png',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompact = widget.isCompact;
+    final double areaWidth = isCompact ? 240 : 270;
+    final double areaHeight = isCompact ? 210 : 240;
+
+    final double cardWidth = isCompact ? 122 : 140;
+    final double cardHeight = isCompact ? 84 : 96;
+
+    final double radiusX = isCompact ? 96 : 108;
+    final double radiusY = isCompact ? 78 : 88;
+
+    final double emojiBaseSize = isCompact ? 32 : 36;
+    final double centerX = areaWidth / 2;
+    final double centerY = areaHeight / 2;
+
+    return SizedBox(
+      width: areaWidth,
+      height: areaHeight,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          // Compute positions, depth, and scales for all 8 emojis
+          final emojiWidgets = <_OrbitItem>[];
+
+          for (int i = 0; i < _activityAssets.length; i++) {
+            // Clockwise rotation starting from top (-pi / 2)
+            final double baseAngle =
+                -math.pi / 2 + (i * 2 * math.pi / _activityAssets.length);
+            final double angle =
+                baseAngle + (_controller.value * 2 * math.pi);
+
+            final double x = centerX + radiusX * math.cos(angle);
+            final double y = centerY + radiusY * math.sin(angle);
+
+            // 3D Depth effect: objects in foreground (sin(angle) > 0, bottom) are larger with longer shadows;
+            // objects in background (sin(angle) < 0, top) are slightly smaller.
+            final double depthNorm =
+                (math.sin(angle) + 1.0) / 2.0; // 0.0 at top (back), 1.0 at bottom (front)
+            final double scale = 0.90 + (0.22 * depthNorm);
+            final double shadowBlur = 4.0 + (5.0 * depthNorm);
+            final double shadowY = 2.0 + (3.5 * depthNorm);
+            final double shadowAlpha = 0.16 + (0.12 * depthNorm);
+            final double tilt =
+                math.sin(angle * 2) * 0.06; // subtle organic floating tilt
+
+            emojiWidgets.add(_OrbitItem(
+              zIndex: depthNorm,
+              widget: Positioned(
+                left: x - (emojiBaseSize / 2),
+                top: y - (emojiBaseSize / 2),
+                child: Transform.rotate(
+                  angle: tilt,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: emojiBaseSize,
+                      height: emojiBaseSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: shadowAlpha),
+                            blurRadius: shadowBlur,
+                            offset: Offset(0, shadowY),
+                          ),
+                        ],
+                      ),
+                      child: Image.asset(
+                        _activityAssets[i],
+                        width: emojiBaseSize,
+                        height: emojiBaseSize,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ));
+          }
+
+          // Separate background emojis (back half, depthNorm < 0.5) and foreground emojis (depthNorm >= 0.5)
+          // so the center certificate card sits naturally in the 3D space between them
+          final backEmojis = emojiWidgets
+              .where((e) => e.zIndex < 0.5)
+              .map((e) => e.widget)
+              .toList();
+          final frontEmojis = emojiWidgets
+              .where((e) => e.zIndex >= 0.5)
+              .map((e) => e.widget)
+              .toList();
+
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              ...backEmojis,
+              // Center Certificate Card
+              _CertificateCard(
+                width: cardWidth,
+                height: cardHeight,
+                isCompact: isCompact,
+              ),
+              ...frontEmojis,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _OrbitItem {
+  final double zIndex;
+  final Widget widget;
+
+  _OrbitItem({required this.zIndex, required this.widget});
+}
+
+class _CertificateCard extends StatelessWidget {
+  final double width;
+  final double height;
+  final bool isCompact;
+
+  const _CertificateCard({
+    required this.width,
+    required this.height,
+    required this.isCompact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: CustomPaint(
+        painter: _ScallopedCertificatePainter(isCompact: isCompact),
+      ),
+    );
+  }
+}
+
+class _ScallopedCertificatePainter extends CustomPainter {
+  final bool isCompact;
+
+  _ScallopedCertificatePainter({required this.isCompact});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double r = isCompact ? 5.0 : 6.0;
+
+    final int countX = (size.width / (2 * r)).round();
+    final double stepX = size.width / countX;
+    final int countY = (size.height / (2 * r)).round();
+    final double stepY = size.height / countY;
+
+    // 1. Scalloped Outer Frame Path
+    final path = Path();
+    path.moveTo(0, 0);
+
+    // Top edge (left to right)
+    for (int i = 0; i < countX; i++) {
+      final double x1 = i * stepX;
+      final double x2 = (i + 1) * stepX;
+      final double xm = (x1 + x2) / 2;
+      path.quadraticBezierTo(xm, -r * 0.9, x2, 0);
+    }
+    // Right edge (top to bottom)
+    for (int i = 0; i < countY; i++) {
+      final double y1 = i * stepY;
+      final double y2 = (i + 1) * stepY;
+      final double ym = (y1 + y2) / 2;
+      path.quadraticBezierTo(size.width + r * 0.9, ym, size.width, y2);
+    }
+    // Bottom edge (right to left)
+    for (int i = 0; i < countX; i++) {
+      final double x1 = size.width - (i * stepX);
+      final double x2 = size.width - ((i + 1) * stepX);
+      final double xm = (x1 + x2) / 2;
+      path.quadraticBezierTo(xm, size.height + r * 0.9, x2, size.height);
+    }
+    // Left edge (bottom to top)
+    for (int i = 0; i < countY; i++) {
+      final double y1 = size.height - (i * stepY);
+      final double y2 = size.height - ((i + 1) * stepY);
+      final double ym = (y1 + y2) / 2;
+      path.quadraticBezierTo(-r * 0.9, ym, 0, y2);
+    }
+    path.close();
+
+    // Frame shadow
+    canvas.drawShadow(
+      path,
+      Colors.black.withValues(alpha: 0.18),
+      12.0,
+      false,
+    );
+
+    // Frame Gold Gradient Fill
+    final goldPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFFFD568),
+          Color(0xFFF5B738),
+          Color(0xFFDC921E),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(path, goldPaint);
+
+    // 2. Inner Parchment Paper
+    final double inset = isCompact ? 7.0 : 8.5;
+    final innerRect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - (inset * 2),
+      size.height - (inset * 2),
+    );
+    final innerRRect =
+        RRect.fromRectAndRadius(innerRect, const Radius.circular(6));
+
+    final paperPaint = Paint()..color = const Color(0xFFFFFDF8);
+    canvas.drawRRect(innerRRect, paperPaint);
+
+    final borderPaint = Paint()
+      ..color = const Color(0xFFF3E2C2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawRRect(innerRRect, borderPaint);
+
+    // 3. Golden 5-point Star (Top Center)
+    final double starY = innerRect.top + (isCompact ? 12 : 14);
+    final double starX = size.width / 2;
+    final double outerR = isCompact ? 6.5 : 8.0;
+    final double innerR = outerR * 0.42;
+
+    final starPath = Path();
+    for (int i = 0; i < 10; i++) {
+      final double rad = -math.pi / 2 + (i * math.pi / 5);
+      final double radius = (i % 2 == 0) ? outerR : innerR;
+      final double sx = starX + radius * math.cos(rad);
+      final double sy = starY + radius * math.sin(rad);
+      if (i == 0) {
+        starPath.moveTo(sx, sy);
+      } else {
+        starPath.lineTo(sx, sy);
+      }
+    }
+    starPath.close();
+
+    final starPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFFFFCA3A), Color(0xFFE8981A)],
+      ).createShader(
+          Rect.fromCircle(center: Offset(starX, starY), radius: outerR));
+    canvas.drawShadow(starPath, const Color(0x33000000), 2.0, false);
+    canvas.drawPath(starPath, starPaint);
+
+    // 4. Four Amber Rounded Lines
+    final double startY = starY + outerR + (isCompact ? 7 : 9);
+    final double lineHeight = isCompact ? 3.0 : 3.5;
+    final double lineSpacing = isCompact ? 4.0 : 4.5;
+    final double maxLineWidth = innerRect.width * 0.68;
+
+    final lineWidths = [
+      maxLineWidth * 0.60,
+      maxLineWidth * 0.95,
+      maxLineWidth * 0.95,
+      maxLineWidth * 0.50,
+    ];
+
+    final linePaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFF3A738), Color(0xFFE58B1C)],
+      ).createShader(innerRect);
+
+    for (int i = 0; i < lineWidths.length; i++) {
+      final double y = startY + i * (lineHeight + lineSpacing);
+      final double w = lineWidths[i];
+      final lineRRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+            center: Offset(starX, y), width: w, height: lineHeight),
+        Radius.circular(lineHeight / 2),
+      );
+      canvas.drawRRect(lineRRect, linePaint);
+    }
+
+    // 5. Rosette Ribbon Award Medal (Bottom Right Corner)
+    final double medalX = size.width - inset - (isCompact ? 4 : 6);
+    final double medalY = size.height - inset - (isCompact ? 2 : 4);
+
+    final ribbonPaint = Paint()..color = const Color(0xFF262626);
+    final double ribbonW = isCompact ? 5.5 : 7.0;
+    final double ribbonL = isCompact ? 14.0 : 18.0;
+
+    // Left ribbon (angled slightly left)
+    final leftRibbon = Path()
+      ..moveTo(medalX - 3, medalY + 2)
+      ..lineTo(medalX - 9, medalY + ribbonL)
+      ..lineTo(medalX - 9 + (ribbonW / 2), medalY + ribbonL - 3)
+      ..lineTo(medalX - 9 + ribbonW, medalY + ribbonL)
+      ..lineTo(medalX + 1, medalY + 2)
+      ..close();
+    canvas.drawPath(leftRibbon, ribbonPaint);
+
+    // Right ribbon (angled slightly right)
+    final rightRibbon = Path()
+      ..moveTo(medalX - 1, medalY + 2)
+      ..lineTo(medalX + 3, medalY + ribbonL)
+      ..lineTo(medalX + 3 + (ribbonW / 2), medalY + ribbonL - 3)
+      ..lineTo(medalX + 3 + ribbonW, medalY + ribbonL)
+      ..lineTo(medalX + 4, medalY + 2)
+      ..close();
+    canvas.drawPath(rightRibbon, ribbonPaint);
+
+    // Rosette circular seal (16-point scalloped star badge)
+    final double rosetteR = isCompact ? 10.5 : 13.0;
+    final double rosetteInnerR = rosetteR * 0.88;
+    final rosettePath = Path();
+    for (int i = 0; i < 32; i++) {
+      final double rad = i * math.pi / 16;
+      final double r = (i % 2 == 0) ? rosetteR : rosetteInnerR;
+      final double rx = medalX + r * math.cos(rad);
+      final double ry = medalY + r * math.sin(rad);
+      if (i == 0) {
+        rosettePath.moveTo(rx, ry);
+      } else {
+        rosettePath.lineTo(rx, ry);
+      }
+    }
+    rosettePath.close();
+
+    canvas.drawShadow(
+        rosettePath, Colors.black.withValues(alpha: 0.25), 3.0, false);
+
+    final rosettePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFFFDF68), Color(0xFFEAA120)],
+      ).createShader(
+          Rect.fromCircle(center: Offset(medalX, medalY), radius: rosetteR));
+    canvas.drawPath(rosettePath, rosettePaint);
+
+    // Rosette Inner Rings
+    final ringPaint = Paint()
+      ..color = const Color(0xFFCA8210)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(Offset(medalX, medalY), rosetteR * 0.65, ringPaint);
+
+    final centerDotPaint = Paint()..color = const Color(0xFFFFD568);
+    canvas.drawCircle(Offset(medalX, medalY), rosetteR * 0.40, centerDotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScallopedCertificatePainter oldDelegate) =>
+      oldDelegate.isCompact != isCompact;
 }
 
 class VenueApprovalService {

@@ -9,6 +9,7 @@ import { ApproveActivityModal } from './ApproveActivityModal';
 import { RejectActivityModal } from './RejectActivityModal';
 import { useToast } from '../../hooks/useToast';
 import { PendingActivity } from '../../types';
+import { formatIndiaDate, formatIndiaDateTime } from '../../utils/indiaDate';
 
 const LIMIT = 15;
 const FILTERS: { value: ActivityReviewFilter; label: string }[] = [
@@ -171,11 +172,7 @@ export const ActivityApprovalList: React.FC = () => {
                     </td>
                     <td className="px-5 py-4 text-gray-500 whitespace-nowrap">
                       {activitySubmittedAt(activity)
-                        ? new Date(activitySubmittedAt(activity)).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })
+                        ? formatIndiaDate(activitySubmittedAt(activity))
                         : '—'}
                     </td>
                     <td className="px-5 py-4">
@@ -255,13 +252,13 @@ export const ActivityApprovalList: React.FC = () => {
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Submitted On</p>
                 <p className="text-gray-900">
                   {activitySubmittedAt(detailTarget)
-                    ? new Date(activitySubmittedAt(detailTarget)).toLocaleString('en-IN')
+                    ? formatIndiaDateTime(activitySubmittedAt(detailTarget))
                     : '—'}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Created On</p>
-                <p className="text-gray-900">{new Date(detailTarget.createdAt).toLocaleDateString('en-IN')}</p>
+                <p className="text-gray-900">{formatIndiaDate(detailTarget.createdAt)}</p>
               </div>
             </div>
 

@@ -8,14 +8,12 @@ import 'package:intl/intl.dart';
 import 'package:flutter_svg/svg.dart';
 
 import '../../Utills/common_utilities.dart';
+import '../../Utills/india_time.dart';
 import '../../api_calling/api_constant.dart';
 import '../../api_calling/api_request.dart';
 import '../Menu/MenuScreen.dart';
 import '../default_partner_avatar.dart';
 import 'NotificationsScreen.dart';
-
-DateTime _indiaTime(DateTime value) =>
-    value.toUtc().add(const Duration(hours: 5, minutes: 30));
 
 enum _BookingStatus { upcoming, ongoing, canceled, noShow, completed, pending }
 
@@ -97,7 +95,7 @@ class _Booking {
       time: _formatTime(json['startTime']?.toString()),
       bookedOn: createdAt == null
           ? '0'
-          : DateFormat('dd MMM yyyy').format(createdAt.toLocal()),
+          : formatIndiaDate(createdAt),
       participants: int.tryParse(json['participants']?.toString() ?? '') ?? 0,
       totalAmount: total,
       commission: total * .15,
@@ -109,7 +107,7 @@ class _Booking {
   factory _Booking.fromManagement(
       Map<String, dynamic> json, String fallbackActivity) {
     final startsAt = DateTime.tryParse(json['startsAt']?.toString() ?? '');
-    final local = startsAt == null ? null : _indiaTime(startsAt);
+    final local = startsAt == null ? null : toIndiaTime(startsAt);
     final total = double.tryParse(json['amount']?.toString() ?? '') ?? 0;
     final bookingDate = json['bookingDate']?.toString();
     final bookingTime = json['bookingTime']?.toString();
@@ -368,7 +366,7 @@ class _ManageBookingsScreenState extends State<ManageBookingsScreen> {
     }).toList();
     final selected = _tabs[_selectedTab];
     if (selected == 'Today') {
-      final today = DateFormat('dd MMM yyyy').format(_indiaTime(DateTime.now()));
+      final today = formatIndiaDate(DateTime.now());
       list = list.where((booking) => booking.date == today).toList();
     } else if (selected == 'Upcoming') {
       list = list
