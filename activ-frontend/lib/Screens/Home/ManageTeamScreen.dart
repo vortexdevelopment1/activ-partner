@@ -514,7 +514,6 @@ class _TeamMemberDialog extends StatefulWidget {
 class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
-  late final TextEditingController _emailController;
   late String _role;
   late bool _bookingManagement;
   bool _saving = false;
@@ -527,7 +526,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
     super.initState();
     final member = widget.member;
     _nameController = TextEditingController(text: member?.name ?? '');
-    _emailController = TextEditingController(text: member?.email ?? '');
     _phoneController = TextEditingController(
       text: _phoneDigits(member?.phone ?? ''),
     );
@@ -542,7 +540,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -558,7 +555,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
     if (_saving || _deleting) return;
     final name = _nameController.text.trim();
     final phoneDigits = _phoneDigits(_phoneController.text);
-    final email = _emailController.text.trim().toLowerCase();
+    final email = widget.member?.email ?? '';
 
     if (name.isEmpty) {
       CommonUtilities.createSnackBar(context, 'Full name is required');
@@ -569,11 +566,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
           context, 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9');
       return;
     }
-    if (email.isNotEmpty && !RegExp(r'^\S+@\S+\.\S+$').hasMatch(email)) {
-      CommonUtilities.createSnackBar(context, 'Enter a valid email address');
-      return;
-    }
-
     setState(() => _saving = true);
     await widget.onSubmit(
       _TeamMemberFormData(
@@ -668,16 +660,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                   LengthLimitingTextInputFormatter(10),
                 ],
               ),
-              if (_isEdit) ...[
-                const SizedBox(height: 14),
-                const Text('Email Address (optional)', style: TextStyle(fontSize: 12)),
-                const SizedBox(height: 8),
-                _InputBox(
-                  controller: _emailController,
-                  hint: 'member@example.com',
-                  keyboardType: TextInputType.emailAddress,
-                ),
-              ],
               const SizedBox(height: 14),
               const _RequiredLabel('Role'),
               _RoleDropdown(
@@ -1223,6 +1205,8 @@ class _RoleDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final menuMaxHeight =
+        (MediaQuery.sizeOf(context).height * .32).clamp(180.0, 280.0).toDouble();
     return Container(
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1236,6 +1220,7 @@ class _RoleDropdown extends StatelessWidget {
           value: value,
           isExpanded: true,
           icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          menuMaxHeight: menuMaxHeight,
           dropdownColor: const Color(0xFFFFF8FF),
           borderRadius: BorderRadius.circular(2),
           style: const TextStyle(

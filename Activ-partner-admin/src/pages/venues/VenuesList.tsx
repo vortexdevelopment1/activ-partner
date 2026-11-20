@@ -129,7 +129,6 @@ export const VenuesList: React.FC = () => {
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                     {categoryName && <span>{categoryName}</span>}
                     {(venue.city || venue.state) && <span>{[venue.city, venue.state].filter(Boolean).join(', ')}</span>}
-                    <span>{venue.services?.length ?? 0} services</span>
                   </div>
                 </div>
                 <ArrowRight size={15} className="mt-3 shrink-0 text-gray-300" />
@@ -143,7 +142,7 @@ export const VenuesList: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                {['Venue', 'Partner', 'Category', 'Location', 'Services', 'Status', 'Created', ''].map(
+                {['Venue', 'Partner', 'Category', 'Location', 'Status', 'Created', ''].map(
                   (h) => (
                     <th
                       key={h}
@@ -158,15 +157,15 @@ export const VenuesList: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16 text-gray-400">
+                  <td colSpan={7} className="text-center py-16 text-gray-400">
                     Loading...
                   </td>
                 </tr>
               ) : isError ? (
-                <tr><td colSpan={8} className="text-center py-16 text-red-500">Unable to load venues. Please try again.</td></tr>
+                <tr><td colSpan={7} className="text-center py-16 text-red-500">Unable to load venues. Please try again.</td></tr>
               ) : venues.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16">
+                  <td colSpan={7} className="text-center py-16">
                     <Building2 size={32} className="mx-auto text-gray-200 mb-2" />
                     <p className="text-gray-400 text-sm">No venues found</p>
                   </td>
@@ -197,9 +196,6 @@ export const VenuesList: React.FC = () => {
                     </td>
                     <td className="px-5 py-3.5 text-gray-600">
                       {venue.city}, {venue.state}
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-600">
-                      {venue.services?.length ?? 0}
                     </td>
                     <td className="px-5 py-3.5">
                       <Badge status={venue.status} />

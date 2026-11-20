@@ -102,9 +102,9 @@ export class SupportController {
 
   @Post('email')
   @ApiBearerAuth()
-  @Roles(UserRole.PARTNER)
+  @Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Submit a support email with optional attachment (Partner only)' })
+  @ApiOperation({ summary: 'Submit a support email with optional attachment (Partner or team member)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

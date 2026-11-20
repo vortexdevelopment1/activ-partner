@@ -515,11 +515,11 @@ class _PayoutTransactionDetailsScreenState
 
   Widget _card(Widget child) => Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFD5DADA))),
         child: child,
       );
@@ -527,7 +527,7 @@ class _PayoutTransactionDetailsScreenState
   Widget _line(String label, dynamic value,
           {bool bold = false, Color? valueColor}) =>
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
               flex: 6,
@@ -535,7 +535,7 @@ class _PayoutTransactionDetailsScreenState
                   alignment: Alignment.centerLeft,
                   fit: BoxFit.scaleDown,
                   child:
-                      Text(label, maxLines: 1, style: _text(14, bold: bold)))),
+                      Text(label, maxLines: 1, style: _text(10, bold: bold)))),
           const SizedBox(width: 8),
           Expanded(
               flex: 4,
@@ -545,7 +545,7 @@ class _PayoutTransactionDetailsScreenState
                   child: Text(value?.toString() ?? '-',
                       maxLines: 1,
                       textAlign: TextAlign.right,
-                      style: _text(14,
+                      style: _text(10,
                           bold: bold,
                           color: valueColor ?? const Color(0xFF202020)))))
         ]),
@@ -570,7 +570,7 @@ class _PayoutTransactionDetailsScreenState
           Expanded(
               flex: 7,
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text('GST on Commission (18%)', style: _text(14)),
+                Text('GST on Commission (18%)', style: _text(10)),
                 const SizedBox(width: 4),
                 Tooltip(
                     richMessage: richMessage,
@@ -578,7 +578,7 @@ class _PayoutTransactionDetailsScreenState
                         borderRadius: BorderRadius.circular(20),
                         onTap: () => _showGstInfo(gstRegistered, richMessage),
                         child: const Icon(Icons.info_outline,
-                            color: _purple, size: 21)))
+                            color: _purple, size: 14)))
               ])),
           const SizedBox(width: 8),
           Expanded(
@@ -589,7 +589,7 @@ class _PayoutTransactionDetailsScreenState
                   child: Text(value?.toString() ?? '-',
                       maxLines: 1,
                       textAlign: TextAlign.right,
-                      style: _text(14, color: const Color(0xFF9C35E8)))))
+                      style: _text(10, color: const Color(0xFF9C35E8)))))
         ]));
   }
 
@@ -639,14 +639,14 @@ class _PayoutTransactionDetailsScreenState
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             const Icon(Icons.account_balance_outlined,
-                color: Color(0xFF8A8A8A), size: 28),
+                color: Color(0xFF8A8A8A), size: 18),
             const SizedBox(width: 8),
             Expanded(
                 child: FittedBox(
                     alignment: Alignment.centerLeft,
                     fit: BoxFit.scaleDown,
                     child: Text('Credited Bank Account Details',
-                        maxLines: 1, style: _text(16, bold: true)))),
+                        maxLines: 1, style: _text(12, bold: true)))),
             const SizedBox(width: 12),
             Container(
                 padding:
@@ -657,16 +657,16 @@ class _PayoutTransactionDetailsScreenState
                         : const Color(0xFFFFB52E),
                     borderRadius: BorderRadius.circular(22)),
                 child: Text(bank['verified'] == true ? 'Verified' : 'Pending',
-                    style: _text(11, bold: true, color: Colors.white))),
+                    style: _text(8, bold: true, color: Colors.white))),
           ]),
           const SizedBox(height: 12),
-          Text(bank['accountHolderName']?.toString() ?? '-', style: _text(16)),
+          Text(bank['accountHolderName']?.toString() ?? '-', style: _text(10)),
           const SizedBox(height: 10),
-          Text(bank['bankName']?.toString() ?? '-', style: _text(16)),
+          Text(bank['bankName']?.toString() ?? '-', style: _text(10)),
           const SizedBox(height: 10),
-          Text('A/C No. ${bank['accountNumber'] ?? '-'}', style: _text(16)),
+          Text('A/C No. ${bank['accountNumber'] ?? '-'}', style: _text(10)),
           const SizedBox(height: 10),
-          Text('IFSC: ${bank['ifscCode'] ?? '-'}', style: _text(16)),
+          Text('IFSC: ${bank['ifscCode'] ?? '-'}', style: _text(10)),
         ]),
       );
 
@@ -688,9 +688,12 @@ class _PayoutTransactionDetailsScreenState
                         _card(Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(children: [
+                              Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                 _statusChip(data['status']),
-                                const SizedBox(width: 64),
                                 Flexible(
                                     child: _statusChip(
                                         data['isGstRegistered'] == true
@@ -700,22 +703,22 @@ class _PayoutTransactionDetailsScreenState
                                             ? _purple
                                             : const Color(0xFFFF5757)))
                               ]),
-                              const SizedBox(height: 16),
-                              Text('Amount Received', style: _text(14)),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 12),
+                              Text('Amount Received', style: _text(10)),
+                              const SizedBox(height: 3),
                               Text('₹${_money(data['amountReceived'])}',
-                                  style: _text(26, bold: true)),
-                              const SizedBox(height: 16),
-                              Text('Payout Date', style: _text(14, bold: true)),
-                              const SizedBox(height: 4),
-                              Text(_date(data['payoutDate']), style: _text(14))
+                                  style: _text(18, bold: true)),
+                              const SizedBox(height: 12),
+                              Text('Payout Date', style: _text(10, bold: true)),
+                              const SizedBox(height: 3),
+                              Text(_date(data['payoutDate']), style: _text(10))
                             ])),
                         _card(Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Payout Breakdown',
-                                  style: _text(16, bold: true)),
-                              const SizedBox(height: 8),
+                                  style: _text(12, bold: true)),
+                              const SizedBox(height: 5),
                               _line('Total Booking Amount',
                                   '+  ₹${_money(data['grossBookingAmount'])}',
                                   valueColor: const Color(0xFF12C900)),
@@ -737,8 +740,8 @@ class _PayoutTransactionDetailsScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Transaction & Slot Details',
-                                  style: _text(16, bold: true)),
-                              const SizedBox(height: 8),
+                                  style: _text(12, bold: true)),
+                              const SizedBox(height: 5),
                               _line('Activity Name', data['activityName']),
                               _line('Date', data['slotDate']),
                               _line('Slot Time', data['slotTime']),
@@ -765,7 +768,7 @@ class _PayoutTransactionDetailsScreenState
   }
 
   Widget _statusChip(dynamic value, {Color? color}) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
           color: color ??
               (value == 'success' ? Colors.green : const Color(0xFFE19400)),
@@ -774,7 +777,7 @@ class _PayoutTransactionDetailsScreenState
           maxLines: 1,
           softWrap: false,
           overflow: TextOverflow.ellipsis,
-          style: _text(12, bold: true, color: Colors.white)));
+          style: _text(10, bold: true, color: Colors.white)));
 }
 
 class ExportPayoutReportScreen extends StatefulWidget {
