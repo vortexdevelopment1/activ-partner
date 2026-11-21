@@ -41,7 +41,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
 
   void _validateNumber(String input) {
     setState(() {
-      isButtonEnabled = input.replaceAll('-', '').length == 10;
+      isButtonEnabled = input.replaceAll(RegExp(r'\D'), '').length == 10;
     });
   }
 
@@ -55,7 +55,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
     if (_isSubmitting || !validation(context)) return;
     FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
-    final mobile = mobileController.text.replaceAll('-', '');
+    final mobile = mobileController.text.replaceAll(RegExp(r'\D'), '');
 
     try {
       await SharedPreference.remove('jwt_token');
@@ -77,14 +77,14 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
       CommonUtilities.showLog('Request OTP status: ${response.statusCode}');
       if (response.statusCode == 200 || response.statusCode == 201) {
         await SharedPreference.addStringToSF('phoneCode', phoneCode);
-        await SharedPreference.addStringToSF(
-            'userMobileNumber', mobileController.text);
+        await SharedPreference.addStringToSF('userMobileNumber', mobile);
         if (!mounted) return;
         CommonUtilities.NavigateWithPush(
             context,
             OTPVerificationScreen(
               client: widget.client,
               isCreatingAccount: widget.isCreatingAccount,
+              mobileNumber: mobile,
             ));
       } else {
         final body = jsonDecode(response.body);
@@ -102,7 +102,7 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
   }
 
   bool validation(BuildContext context) {
-    final digits = mobileController.text.replaceAll('-', '');
+    final digits = mobileController.text.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) {
       _showMessage(ConstantsMessages.mobileNumberEnter);
       return false;

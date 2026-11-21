@@ -27,10 +27,12 @@ class OTPVerificationScreen extends StatefulWidget {
     super.key,
     this.client,
     this.isCreatingAccount = false,
+    this.mobileNumber,
   });
 
   final http.Client? client;
   final bool isCreatingAccount;
+  final String? mobileNumber;
 
   @override
   State<OTPVerificationScreen> createState() => _State();
@@ -51,6 +53,7 @@ class _State extends State<OTPVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    userMobileNumber = widget.mobileNumber ?? '';
     for (int i = 0; i < otpLength; i++) {
       _controllers.add(TextEditingController());
       final node = FocusNode();
@@ -136,7 +139,8 @@ class _State extends State<OTPVerificationScreen> {
 
   Future<void> _loadPhone() async {
     final code = await SharedPreference.readStr('phoneCode') ?? '';
-    final number = await SharedPreference.readStr('userMobileNumber') ?? '';
+    final number = widget.mobileNumber ??
+        (await SharedPreference.readStr('userMobileNumber') ?? '');
     if (!mounted) return;
     setState(() {
       phoneCode = code;
@@ -183,10 +187,6 @@ class _State extends State<OTPVerificationScreen> {
       _focusNodes[index - 1].requestFocus();
     }
     setState(() {});
-    if (_controllers
-        .every((controller) => RegExp(r'^\d$').hasMatch(controller.text))) {
-      _submit();
-    }
   }
 
   void _submit() {
@@ -234,7 +234,7 @@ class _State extends State<OTPVerificationScreen> {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
     String enteredOTP = _controllers.map((c) => c.text).join();
-    String mobile = userMobileNumber.replaceAll("-", "");
+    String mobile = userMobileNumber.replaceAll(RegExp(r'\D'), '');
 
     try {
       final response = await (widget.client?.post ?? http.post)(
@@ -613,7 +613,6 @@ class _State extends State<OTPVerificationScreen> {
                               textAlignVertical: TextAlignVertical.center,
                               onChanged: (value) =>
                                   onChangedValue(value, index),
-                              onSubmitted: (_) => _submit(),
                             ),
                           ),
                         ),

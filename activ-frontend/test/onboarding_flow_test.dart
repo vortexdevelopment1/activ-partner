@@ -2079,8 +2079,9 @@ void main() {
     await tester.tap(find.byKey(const Key('mobile-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(OTPVerificationScreen), findsOneWidget);
+    expect(tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen)).mobileNumber, '9876544567');
     expect(find.text('We sent a code to +91-98-7654-4567'), findsOneWidget);
-    expect((await SharedPreferences.getInstance()).getString('userMobileNumber'), '98-7654-4567');
+    expect((await SharedPreferences.getInstance()).getString('userMobileNumber'), '9876544567');
   });
 
   testWidgets('notification preferences scroll without moving save button', (tester) async {
@@ -2557,6 +2558,7 @@ void main() {
     });
     await showScreen(tester, OTPVerificationScreen(client: client));
     await tester.enterText(digit(0), '1234');
+    await tester.tap(find.byKey(const Key('otp-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(ManagerHomeScreen), findsOneWidget);
     expect(intent, 'login');
@@ -2725,7 +2727,7 @@ void main() {
   });
 
   for (final pasted in [false, true]) {
-    testWidgets('complete ${pasted ? "pasted" : "typed"} OTP automatically verifies and opens profile', (tester) async {
+    testWidgets('complete ${pasted ? "pasted" : "typed"} OTP verifies once from the button', (tester) async {
       var calls = 0;
       http.Request? submittedRequest;
       await showScreen(
@@ -2752,6 +2754,9 @@ void main() {
           await tester.enterText(digit(index), '${index + 1}');
         }
       }
+      await tester.pump();
+      expect(calls, 0);
+      await tester.tap(find.byKey(const Key('otp-submit')));
       await tester.pumpAndSettle();
       expect(calls, 1);
       expect(jsonDecode(submittedRequest!.body), {'phone': '9876544567', 'otp': '1234'});
@@ -2801,6 +2806,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen)).isCreatingAccount, creatingAccount);
       await tester.enterText(digit(0), '1234');
+      await tester.tap(find.byKey(const Key('otp-submit')));
       await tester.pumpAndSettle();
       expect(find.byType(TellUsAboutScreen), findsOneWidget);
       expect(find.byType(VenueScreen), findsNothing);
@@ -2827,6 +2833,7 @@ void main() {
     });
     await showScreen(tester, OTPVerificationScreen(client: client));
     await tester.enterText(digit(0), '1234');
+    await tester.tap(find.byKey(const Key('otp-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(VenueScreen), findsOneWidget);
     expect(tester.widget<VenueScreen>(find.byType(VenueScreen)).changeReason, 'Upload clearer venue photos');

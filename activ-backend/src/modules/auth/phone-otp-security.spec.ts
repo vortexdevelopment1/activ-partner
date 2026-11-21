@@ -26,7 +26,8 @@ describe('phone OTP challenge lifecycle', () => {
     provider = { sendOtp: jest.fn(), resendOtp: jest.fn(), verifyOtp: jest.fn().mockResolvedValue(true) };
     service = Object.assign(Object.create(AuthService.prototype), { prisma, otpService: provider,
       teamService: { findByPhone: jest.fn().mockResolvedValue({ id: 'staff', isActive: true }) },
-      completeTeamMemberLogin: jest.fn().mockResolvedValue({ userType: 'team_member' }) });
+      completeTeamMemberLogin: jest.fn().mockResolvedValue({ userType: 'team_member' }),
+      logger: { warn: jest.fn() } });
   });
   it('consumes the previous challenge before saving a newly issued OTP', async () => {
     await service.requestOtp({ phone });
@@ -75,6 +76,18 @@ describe('phone OTP challenge lifecycle', () => {
     }
     expect(provider.verifyOtp).toHaveBeenCalledTimes(PHONE_OTP_MAX_ATTEMPTS);
     expect(challenge.attempts).toBe(PHONE_OTP_MAX_ATTEMPTS);
+    expect((service as any).logger.warn).toHaveBeenCalledWith('OTP verification rejected: provider_rejected');
+  });
+  it.each([
+    ['consumed', 'challenge_consumed'],
+    ['expired', 'challenge_expired'],
+    ['exhausted', 'attempts_exhausted'],
+  ])('logs a safe reason for a %s challenge', async (state, reason) => {
+    if (state === 'consumed') challenge.consumed_at = new Date();
+    if (state === 'expired') challenge.expires_at = new Date(Date.now() - 1);
+    if (state === 'exhausted') challenge.attempts = PHONE_OTP_MAX_ATTEMPTS;
+    await expect(service.verifyOtp({ phone, otp: '1234' })).rejects.toThrow('Invalid or expired');
+    expect((service as any).logger.warn).toHaveBeenCalledWith(`OTP verification rejected: ${reason}`);
   });
   it('atomically reserves only the remaining attempt for concurrent guesses', async () => {
     challenge.attempts = PHONE_OTP_MAX_ATTEMPTS - 1;

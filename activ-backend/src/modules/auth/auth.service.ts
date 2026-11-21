@@ -5,6 +5,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -36,6 +37,8 @@ import { AdminNotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -432,6 +435,11 @@ export class AuthService {
       orderBy: { created_at: 'desc' },
     });
     if (!challenge || challenge.consumed_at || challenge.expires_at <= new Date() || challenge.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+      const reason = !challenge ? 'challenge_missing'
+        : challenge.consumed_at ? 'challenge_consumed'
+        : challenge.expires_at <= new Date() ? 'challenge_expired'
+        : 'attempts_exhausted';
+      this.logger.warn(`OTP verification rejected: ${reason}`);
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
@@ -440,10 +448,14 @@ export class AuthService {
       where: { id: challenge.id, consumed_at: null, expires_at: { gt: new Date() }, attempts: { lt: PHONE_OTP_MAX_ATTEMPTS } },
       data: { attempts: { increment: 1 } },
     });
-    if (attempt.count !== 1) throw new BadRequestException('Invalid or expired OTP.');
+    if (attempt.count !== 1) {
+      this.logger.warn('OTP verification rejected: attempt_reservation_failed');
+      throw new BadRequestException('Invalid or expired OTP.');
+    }
 
     const isValid = await this.otpService.verifyOtp(phone, dto.otp);
     if (!isValid) {
+      this.logger.warn('OTP verification rejected: provider_rejected');
       throw new BadRequestException('Invalid or expired OTP.');
     }
 
@@ -474,6 +486,7 @@ export class AuthService {
         data: { consumed_at: new Date() },
       });
       if (claimed.count !== 1) {
+        this.logger.warn('OTP verification rejected: challenge_claim_failed');
         throw new BadRequestException('Invalid or expired OTP.');
       }
       return this.completeTeamMemberLogin(staffMember);
@@ -489,6 +502,7 @@ export class AuthService {
         data: { consumed_at: new Date() },
       });
       if (claimed.count !== 1) {
+        this.logger.warn('OTP verification rejected: challenge_claim_failed');
         throw new BadRequestException('Invalid or expired OTP.');
       }
 

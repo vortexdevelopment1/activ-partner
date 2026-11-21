@@ -42,6 +42,7 @@ void main() {
         'isProfileComplete': false, 'partner': {'isActive': false},
       }}), 200))));
     await tester.enterText(find.byKey(const Key('otp-digit-0')), '1234');
+    await tester.tap(find.byKey(const Key('otp-submit')));
     await tester.pumpAndSettle();
     expect(find.byType(TellUsAboutScreen), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();

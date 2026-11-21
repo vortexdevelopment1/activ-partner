@@ -432,6 +432,7 @@ void main() {
       for (int i = 0; i < 4; i++) {
         await tester.enterText(find.byType(TextField).at(i), '${i + 1}');
       }
+      await tester.tap(find.byKey(const Key('otp-submit')));
       await tester.pumpAndSettle();
 
       expect(find.byType(VenueApprovedCongratsScreen), findsOneWidget);
