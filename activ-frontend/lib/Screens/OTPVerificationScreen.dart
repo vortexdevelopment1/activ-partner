@@ -19,6 +19,7 @@ import 'VenueApprovedCongratsScreen.dart';
 import '../Utills/venue_session_ownership.dart';
 import 'VenuePhotoListViewScreen.dart';
 import 'MobileNumberScreen.dart';
+import 'AuthWrapper.dart';
 import '../Utills/venue_onboarding_draft.dart';
 import '../Database/auth_service.dart';
 
@@ -28,11 +29,14 @@ class OTPVerificationScreen extends StatefulWidget {
     this.client,
     this.isCreatingAccount = false,
     this.mobileNumber,
+    this.firebasePartnerSync,
   });
 
   final http.Client? client;
   final bool isCreatingAccount;
   final String? mobileNumber;
+  final Future<bool> Function(Map<String, dynamic>? partner)?
+      firebasePartnerSync;
 
   @override
   State<OTPVerificationScreen> createState() => _State();
@@ -202,32 +206,53 @@ class _State extends State<OTPVerificationScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<bool> _syncFirebasePartnerMapping(Map<String, dynamic>? partner) async {
+  Future<void> _syncFirebasePartnerMapping(Map<String, dynamic>? partner) async {
     // The production entrypoint initializes Firebase before rendering the app.
     // Widget tests intentionally do not initialize a real Firebase app; the
     // backend OTP response is sufficient for navigation in that environment.
-    if (Firebase.apps.isEmpty) return true;
-    final rawPhone = partner?['phone']?.toString() ?? userMobileNumber;
-    final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 10) return false;
-    final nationalNumber = digits.length == 12 && digits.startsWith('91')
-        ? digits.substring(2)
-        : digits.substring(digits.length - 10);
-    final authService = AuthService();
-    await authService.ensureAnonymousLogin();
-    await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
-    await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
-    return authService.registerWithNumber(
-      'IND (+91)',
-      nationalNumber,
-      'unknown',
-      'unknown',
-      'unknown',
-      'unknown',
-      'unknown',
-      DateTime.now().toIso8601String(),
-      'OTPVerification',
-    );
+    if (Firebase.apps.isEmpty && widget.firebasePartnerSync == null) return;
+    var synced = false;
+    try {
+      if (widget.firebasePartnerSync != null) {
+        synced = await widget.firebasePartnerSync!(partner);
+      } else {
+        final rawPhone = partner?['phone']?.toString() ?? userMobileNumber;
+        final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+        if (digits.length >= 10) {
+          final nationalNumber = digits.length == 12 && digits.startsWith('91')
+              ? digits.substring(2)
+              : digits.substring(digits.length - 10);
+          final authService = AuthService();
+          await authService.ensureAnonymousLogin();
+          await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
+          await SharedPreference.addStringToSF(
+              'userMobileNumber', nationalNumber);
+          synced = await authService.registerWithNumber(
+            'IND (+91)',
+            nationalNumber,
+            'unknown',
+            'unknown',
+            'unknown',
+            'unknown',
+            'unknown',
+            DateTime.now().toIso8601String(),
+            'OTPVerification',
+          );
+        }
+      }
+    } catch (_) {
+      CommonUtilities.showLog('Firebase partner metadata sync deferred');
+    }
+    try {
+      if (synced) {
+        await SharedPreference.remove('firebase_partner_sync_pending');
+      } else {
+        await SharedPreference.addStringToSF(
+            'firebase_partner_sync_pending', 'true');
+      }
+    } catch (_) {
+      CommonUtilities.showLog('Firebase sync recovery state could not be saved');
+    }
   }
 
   Future<void> handleOTP() async {
@@ -235,6 +260,7 @@ class _State extends State<OTPVerificationScreen> {
     setState(() => _isSubmitting = true);
     String enteredOTP = _controllers.map((c) => c.text).join();
     String mobile = userMobileNumber.replaceAll(RegExp(r'\D'), '');
+    var sessionStored = false;
 
     try {
       final response = await (widget.client?.post ?? http.post)(
@@ -277,6 +303,7 @@ class _State extends State<OTPVerificationScreen> {
           VenuePhotoListViewScreen.returnToReviewBuilder = null;
         }
         await SharedPreference.addStringToSF("jwt_token", token);
+        sessionStored = true;
         await SharedPreference.addStringToSF(
             "is_profile_complete", isProfileComplete ? "true" : "false");
         await SharedPreference.addStringToSF(
@@ -293,12 +320,7 @@ class _State extends State<OTPVerificationScreen> {
         } else {
           await SharedPreference.addStringToSF("user_type", "partner");
           await SharedPreference.addStringToSF("permissions", "{}");
-          if (!await _syncFirebasePartnerMapping(body['data']?['partner'])) {
-            if (!mounted) return;
-            _showMessage(context,
-                'OTP verified, but account synchronization failed. Please try again.');
-            return;
-          }
+          await _syncFirebasePartnerMapping(body['data']?['partner']);
           await _restorePartnerDraft(body['data']?['partner']);
         }
 
@@ -350,8 +372,14 @@ class _State extends State<OTPVerificationScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      CommonUtilities.showLog("Verify OTP error: $e");
-      _showMessage(context, 'Network error. Please check your connection.');
+      if (sessionStored) {
+        CommonUtilities.showLog('Post-login initialization deferred');
+        CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
+            context, AuthWrapper(client: widget.client));
+      } else {
+        CommonUtilities.showLog('Verify OTP request failed');
+        _showMessage(context, 'Network error. Please check your connection.');
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

@@ -19,7 +19,6 @@ class AuthService {
     if (FirebaseAuth.instance.currentUser == null) {
       await FirebaseAuth.instance.signInAnonymously();
     }
-    CommonUtilities.showLog("✅ Firebase UID: ${FirebaseAuth.instance.currentUser!.uid}");
   }
 
   // login
@@ -399,23 +398,15 @@ class AuthService {
       String screenName,
       ) async {
     try {
-      final String phoneKey = "$countryCode$number";
-
-      // Check if phone number already mapped
-      final phoneDoc = await FirebaseFirestore.instance
-          .collection("users_by_phone")
-          .doc(phoneKey)
-          .get();
-
-      String uid;
-
-      if (phoneDoc.exists) {
-        // Existing user → use old UID
-        uid = phoneDoc["uid"];
-        CommonUtilities.showLog("Existing number → use old UID: $uid");
-
-        // Update metadata in activ_user
-        await FirebaseFirestore.instance.collection("activ_user").doc(uid).update({
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return false;
+      await FirebaseFirestore.instance
+          .collection("activ_user")
+          .doc(currentUser.uid)
+          .set({
+          "uid": currentUser.uid,
+          "basic_details.countryCode": countryCode,
+          "basic_details.mobile": number,
           "basic_details.deviceType": deviceType,
           "basic_details.appVersionName": appVersionName,
           "basic_details.appVersionCode": appVersionCode,
@@ -423,49 +414,11 @@ class AuthService {
           "basic_details.deviceVersion": deviceVersion,
           "basic_details.lastLogin": dateTime,
           "basic_details.screenName": screenName,
-        });
-      } else {
-        // New user → use current Firebase UID
-        final currentUser = FirebaseAuth.instance.currentUser;
-        if (currentUser == null) {
-          CommonUtilities.showLog("❌ User not signed in yet!");
-          return false;
-        }
-        uid = currentUser.uid;
-        CommonUtilities.showLog("New user → UID: $uid");
-
-        String last4Digits = number.trim().substring(number.trim().length - 4);
-
-        await FirebaseFirestore.instance.collection("activ_user").doc(uid).set({
-          "uid": uid,
-          "basic_details": {
-            "countryCode": countryCode,
-            "mobile": number,
-            "otp": last4Digits,
-            "is_profile_completed": false,
-            "deviceType": deviceType,
-            "appVersionName": appVersionName,
-            "appVersionCode": appVersionCode,
-            "deviceName": deviceName,
-            "deviceVersion": deviceVersion,
-            "createdAt": dateTime,
-            "screenName": screenName,
-          }
-        });
-
-        // Map phone → UID
-        await FirebaseFirestore.instance.collection("users_by_phone").doc(phoneKey).set({
-          "uid": uid,
-          "is_profile_completed": false,
-          "createdAt": Timestamp.now(),
-        });
-
-        CommonUtilities.showLog("Created users_by_phone document for $phoneKey");
-      }
+        }, SetOptions(merge: true));
 
       return true;
-    } catch (e) {
-      CommonUtilities.showLog("❌ registerWithNumber error: $e");
+    } catch (_) {
+      CommonUtilities.showLog("Firebase partner metadata sync failed");
       return false;
     }
   }

@@ -352,17 +352,17 @@ class _LoginScreenState extends State<LoginScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<bool> _syncFirebasePartnerMapping(Map<String, dynamic> data) async {
+  Future<void> _syncFirebasePartnerMapping(Map<String, dynamic> data) async {
     final rawPhone = data['partner']?['phone']?.toString() ?? '';
     final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 10) return widget.client != null;
+    if (digits.length < 10) return;
     final nationalNumber = digits.length == 12 && digits.startsWith('91')
         ? digits.substring(2)
         : digits.substring(digits.length - 10);
     try {
       final firebaseUser = FirebaseAuth.instance.currentUser ??
           (await FirebaseAuth.instance.signInAnonymously()).user;
-      if (firebaseUser == null) return widget.client != null;
+      if (firebaseUser == null) return;
       await SharedPreference.addStringToSF('phoneCode', 'IND (+91)');
       await SharedPreference.addStringToSF('userMobileNumber', nationalNumber);
       final synced = await AuthService().registerWithNumber(
@@ -376,10 +376,19 @@ class _LoginScreenState extends State<LoginScreen> {
         DateTime.now().toIso8601String(),
         'PartnerLogin',
       );
-      return synced;
+      try {
+        if (synced) {
+          await SharedPreference.remove('firebase_partner_sync_pending');
+        } else {
+          await SharedPreference.addStringToSF(
+              'firebase_partner_sync_pending', 'true');
+        }
+      } catch (_) {}
     } catch (_) {
-      if (widget.client != null) return true;
-      return false;
+      try {
+        await SharedPreference.addStringToSF(
+            'firebase_partner_sync_pending', 'true');
+      } catch (_) {}
     }
   }
 
@@ -481,12 +490,7 @@ class _LoginScreenState extends State<LoginScreen> {
           }
 
           if (isPartnerActive) {
-            if (!await _syncFirebasePartnerMapping(data)) {
-              if (!mounted) return;
-              _showMessage(context,
-                  'Login succeeded, but account synchronization failed. Please try again.');
-              return;
-            }
+            await _syncFirebasePartnerMapping(data);
             await SharedPreference.addStringToSF("is_active", "true");
             await SharedPreference.addStringToSF("user_type", "partner");
             await SharedPreference.addStringToSF("permissions", "{}");

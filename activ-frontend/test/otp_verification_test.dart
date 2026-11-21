@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:activ_app/Screens/MobileNumberScreen.dart';
 import 'package:activ_app/Screens/OTPVerificationScreen.dart';
+import 'package:activ_app/Screens/TellUsAboutScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -15,7 +16,7 @@ void main() {
     tester.view.physicalSize = const Size(430, 932);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    await tester.pumpWidget(MaterialApp(home: child));
+    await tester.pumpWidget(MaterialApp(key: UniqueKey(), home: child));
     await tester.pump();
   }
 
@@ -80,4 +81,52 @@ void main() {
       expect(find.byType(OTPVerificationScreen), findsOneWidget);
     });
   }
+
+  testWidgets('Firebase failure after HTTP 200 keeps the JWT and navigation',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'phoneCode': '+91',
+      'userMobileNumber': '9876544567',
+    });
+    var syncAttempts = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/verify-otp')) {
+        return http.Response(jsonEncode({
+          'data': {
+            'accessToken': 'test-token',
+            'isProfileComplete': false,
+            'partner': {
+              'isActive': false,
+              'phone': '+919876544567',
+            },
+          }
+        }), 200);
+      }
+      return http.Response('{"data":[]}', 200);
+    });
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await open(
+        tester,
+        OTPVerificationScreen(
+          key: ValueKey(attempt),
+          client: client,
+          firebasePartnerSync: (_) async {
+            syncAttempts++;
+            throw StateError('denied');
+          },
+        ),
+      );
+      await tester.enterText(find.byKey(const Key('otp-digit-0')), '1234');
+      await tester.tap(find.byKey(const Key('otp-submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TellUsAboutScreen), findsOneWidget);
+      expect(find.text('Network error. Please check your connection.'), findsNothing);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('jwt_token'), 'test-token');
+      expect(prefs.getString('firebase_partner_sync_pending'), 'true');
+    }
+    expect(syncAttempts, 2);
+  });
 }
