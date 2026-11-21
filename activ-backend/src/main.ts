@@ -1,5 +1,9 @@
+
 import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
+import {
+  ValidationPipe,
+  ClassSerializerInterceptor,
+} from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -8,32 +12,55 @@ import * as express from 'express';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  console.log('Starting ACTIV Partner backend...');
+
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule,
+  );
 
   const configService = app.get(ConfigService);
-  const port = process.env.PORT || configService.get<number>('APP_PORT', 3000);
 
-  // Increase body size limit for file uploads
+  // Render provides PORT automatically.
+  const port = Number(
+    process.env.PORT ?? configService.get('APP_PORT', 3000),
+  );
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid application port: ${port}`);
+  }
+
+  const host = '0.0.0.0';
+
+  // Increase body size limit
   app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(
+    express.urlencoded({
+      limit: '50mb',
+      extended: true,
+    }),
+  );
 
   // Enable CORS
   app.enableCors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Google-OAuth-Setup-Key'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Google-OAuth-Setup-Key',
+    ],
     credentials: true,
   });
 
-  // Global prefix
+  // Global API prefix
   app.setGlobalPrefix('api/v1');
 
-  // Serve static files (uploads)
+  // Serve uploaded files
   app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
   });
 
-  // Global pipes
+  // Global validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -45,30 +72,31 @@ async function bootstrap() {
     }),
   );
 
-  // Class serializer for @Exclude()
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  // Global serializer
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+  );
 
   // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('ActivProduct API')
-    .setDescription(
-      `
+    .setDescription(`
       ## ActivProduct Backend API
 
       ### Authentication
-      Use the /auth/login endpoint to get a JWT token, then click **Authorize** and enter: **Bearer {your-token}**
+      Use the /auth/login endpoint to get a JWT token,
+      then click Authorize and enter Bearer {your-token}.
 
       ### Roles
-      - **admin** - Full access to all resources
-      - **partner** - Can manage their venues, services, view their bookings
-      - **user** - Can browse venues, create bookings, make payments
+      - admin - Full access to all resources
+      - partner - Manage venues, services and bookings
+      - user - Browse venues, create bookings and payments
 
       ### Venue Approval Flow
-      1. Partner creates a venue → status: **pending**
-      2. Admin reviews and approves/rejects → status: **approved** or **rejected**
+      1. Partner creates venue - pending
+      2. Admin approves or rejects venue
       3. Approved venues are visible to users
-    `,
-    )
+    `)
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('Authentication', 'Login, Register, Profile')
@@ -82,16 +110,32 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
     },
   });
 
-  await app.listen(port);
+  // Start HTTP server
+  console.log(`Attempting to bind to ${host}:${port}`);
 
-  console.log(`\n🚀 Application is running on: http://localhost:${port}/api/v1`);
-  console.log(`📚 Swagger docs: http://localhost:${port}/api/docs\n`);
+  await app.listen(port, host);
+
+  console.log('========================================');
+  console.log('ACTIV Partner Backend Started');
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Listening on: ${host}:${port}`);
+  console.log(`API: http://localhost:${port}/api/v1`);
+  console.log(`Swagger: http://localhost:${port}/api/docs`);
+  console.log('========================================');
 }
 
-bootstrap();
+// Catch startup failures
+bootstrap().catch((error) => {
+  console.error('========================================');
+  console.error('ACTIV Partner Backend Startup Failed');
+  console.error(error);
+  console.error('========================================');
+  process.exit(1);
+});
