@@ -77,10 +77,8 @@ const missingLiveDetails = (profile: any, legal: any, bank: any) =>
     !legal?.aadhaar_card_url && "Aadhaar document",
     !legal?.pan_number && "PAN number",
     !legal?.pan_card_url && "PAN document",
-    !bank?.account_holder_name && "approved bank account",
-    !bank?.bank_name && "approved bank account",
-    !bank?.account_number && "approved bank account",
-    !bank?.ifsc_code && "approved bank account",
+    !(bank?.account_holder_name && bank?.bank_name && bank?.account_number && bank?.ifsc_code) &&
+      "approved bank account",
   ].filter((value): value is string => Boolean(value));
 
 const liveProfile = (businessProfile: any, partner: any, venueProfile?: any, venue?: any) => ({

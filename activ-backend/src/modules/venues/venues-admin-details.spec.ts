@@ -102,6 +102,16 @@ describe('admin venue detail access', () => {
     expect(venue.partner.panNumber).toBeNull();
   });
 
+  it.each([null, { status: 'APPROVED', account_holder_name: 'Test Holder' }])(
+    'lists the bank requirement once for an absent or incomplete account (%j)',
+    async (bankAccount) => {
+      jest.mocked(service["prisma"].partner_bank_accounts.findFirst).mockResolvedValueOnce(bankAccount as any);
+      const venue = await service.findAdminVenue(approvedId);
+      expect(venue.liveReady).toBe(false);
+      expect(venue.liveMissing.filter((detail) => detail === 'approved bank account')).toHaveLength(1);
+    },
+  );
+
   it('returns rejected and suspended venues for admin review', async () => {
     reviews[pendingId].status = 'ARCHIVED';
     reviews[pendingId].review_status = 'suspended';

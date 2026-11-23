@@ -226,7 +226,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     'We’re here to help!',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 24,
+                      fontSize: 26,
                       fontWeight: FontWeight.w700,
                       color: AppColors.darkBlack,
                     ),
@@ -236,7 +236,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     'Send us an email and we’ll get back to\nyou as soon as possible',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w400,
                       height: 1.35,
                       color: AppColors.darkBlack,
@@ -250,7 +250,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     'This is our official support email address.',
                     style: TextStyle(
                       fontFamily: 'Satoshi',
-                      fontSize: 11,
+                      fontSize: 13,
                       color: AppColors.black1,
                     ),
                   ),
@@ -287,7 +287,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                         ),
                         style: TextStyle(
                           fontFamily: 'Satoshi',
-                          fontSize: 12,
+                          fontSize: 14,
                           color: AppColors.darkBlack,
                         ),
                       ),
@@ -306,7 +306,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontFamily: 'Satoshi',
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.purple,
                                 ),
@@ -323,7 +323,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                     style: TextStyle(
                       fontFamily: 'Satoshi',
                       fontWeight: FontWeight.w400,
-                      fontSize: 12,
+                      fontSize: 14,
                       height: 1.35,
                       color: AppColors.darkBlack,
                     ),
@@ -336,7 +336,7 @@ class _EmailUsScreenState extends State<EmailUsScreen> {
                       style: TextStyle(
                         fontFamily: 'Satoshi',
                         fontWeight: FontWeight.w400,
-                        fontSize: 12,
+                        fontSize: 14,
                         height: 1.35,
                         color: AppColors.darkBlack,
                       ),
@@ -524,7 +524,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
     _email.text = email;
     final digits = phone.replaceAll(RegExp(r'\D'), '');
     _phone.text = digits.length == 12 && digits.startsWith('91')
-        ? digits.substring(2) : digits;
+        ? digits.substring(2)
+        : digits;
     if (code.isNotEmpty) _phoneCode = code;
     setState(() {});
     await _refreshDetails();
@@ -540,8 +541,8 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
     if (mounted) {
       setState(() {
         _loadingDetails = false;
-        _detailsUnavailable = [_partner, _venue, _city]
-            .any((field) => field.text.trim().isEmpty);
+        _detailsUnavailable =
+            [_partner, _venue, _city].any((field) => field.text.trim().isEmpty);
       });
     }
   }
@@ -562,16 +563,21 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
       final profile = data['member'] ?? data['partner'] ?? data;
       if (profile is! Map) return;
       final name = [profile['firstName'], profile['lastName']]
-          .map(checkString).where((part) => part.isNotEmpty).join(' ');
+          .map(checkString)
+          .where((part) => part.isNotEmpty)
+          .join(' ');
       final fullName = name.isEmpty
-          ? checkString(profile['fullName'] ?? profile['name']) : name;
+          ? checkString(profile['fullName'] ?? profile['name'])
+          : name;
       if (fullName.isNotEmpty) _partner.text = fullName;
       final email = checkString(profile['email']);
       if (email.isNotEmpty && _email.text == initialEmail) _email.text = email;
-      final digits = checkString(profile['phone']).replaceAll(RegExp(r'\D'), '');
+      final digits =
+          checkString(profile['phone']).replaceAll(RegExp(r'\D'), '');
       if (digits.isNotEmpty && _phone.text == initialPhone) {
         _phone.text = digits.length == 12 && digits.startsWith('91')
-            ? digits.substring(2) : digits;
+            ? digits.substring(2)
+            : digits;
       }
     } catch (_) {
       CommonUtilities.showLog('Callback profile details unavailable.');
@@ -585,14 +591,17 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
     try {
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse(selectedId.isEmpty
-            ? MY_VENUES_URL : '$CREATE_VENUE_URL/${Uri.encodeComponent(selectedId)}'),
+            ? MY_VENUES_URL
+            : '$CREATE_VENUE_URL/${Uri.encodeComponent(selectedId)}'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      if (!mounted || (response.statusCode != 200 && response.statusCode != 201)) return;
+      if (!mounted ||
+          (response.statusCode != 200 && response.statusCode != 201)) return;
       final body = jsonDecode(response.body);
       final data = body is Map ? body['data'] : null;
       final items = selectedId.isNotEmpty && data is Map
-          ? [data] : (data is Map ? data['items'] : data);
+          ? [data]
+          : (data is Map ? data['items'] : data);
       if (items is! List || items.isEmpty) return;
       final venues = items.whereType<Map>();
       if (venues.isEmpty) return;
@@ -722,8 +731,10 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Unable to load all your details. Please try again.'),
-                  TextButton(onPressed: _refreshDetails, child: const Text('Retry')),
+                  const Text(
+                      'Unable to load all your details. Please try again.'),
+                  TextButton(
+                      onPressed: _refreshDetails, child: const Text('Retry')),
                 ],
               ),
             _Input(
@@ -960,7 +971,7 @@ class _SupportScaffold extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Satoshi',
-                          fontSize: compactHeader ? 20 : 25,
+                          fontSize: compactHeader ? 22 : 25,
                           fontWeight: FontWeight.w700,
                           color: AppColors.darkBlack,
                         ),
@@ -1078,7 +1089,7 @@ class _Label extends StatelessWidget {
       style: TextStyle(
         fontFamily: 'Satoshi',
         fontWeight: FontWeight.w500,
-        fontSize: compact ? 12 : 14,
+        fontSize: compact ? 14 : 14,
         color: AppColors.darkBlack,
       ),
     );
@@ -1095,7 +1106,7 @@ class _ReadOnlyBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.only(top: compact ? 4 : 8),
-      height: compact ? 34 : 50,
+      height: compact ? 38 : 50,
       alignment: Alignment.centerLeft,
       padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16),
       decoration: BoxDecoration(
@@ -1106,7 +1117,7 @@ class _ReadOnlyBox extends StatelessWidget {
         text,
         style: TextStyle(
           fontFamily: 'Satoshi',
-          fontSize: compact ? 11 : 16,
+          fontSize: compact ? 13 : 16,
           color: AppColors.darkBlack,
         ),
       ),
@@ -1144,12 +1155,12 @@ class _Input extends StatelessWidget {
           controller: controller,
           maxLines: maxLines,
           readOnly: readOnly,
-          style: TextStyle(
-              fontFamily: 'Satoshi', fontSize: compact ? 12 : 15),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: compact ? 14 : 15),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(
+            hintStyle: TextStyle(
               fontFamily: 'Satoshi',
+              fontSize: compact ? 14 : 15,
               color: AppColors.hintColor,
             ),
             filled: true,
@@ -1359,7 +1370,8 @@ class _FaqTile extends StatelessWidget {
 }
 
 class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.text, required this.onPressed, this.padding});
+  const _PrimaryButton(
+      {required this.text, required this.onPressed, this.padding});
 
   final String text;
   final VoidCallback? onPressed;

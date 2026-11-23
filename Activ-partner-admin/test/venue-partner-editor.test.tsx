@@ -13,6 +13,36 @@ vi.mock('../src/api/venues.api', () => ({ venuesApi: { getById: vi.fn() } }));
 vi.mock('../src/api/partners.api', () => ({ partnersApi: { getById: vi.fn(), update: vi.fn() } }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+function renderVenue() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/venues/venue']}>
+        <Routes>
+          <Route path="/venues/:id" element={<VenueDetail />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return client;
+}
+
+it('shows each missing live requirement once when the API returns duplicates', async () => {
+  vi.mocked(venuesApi.getById).mockResolvedValue({ data: { data: {
+    id: 'venue', name: 'Arena', status: 'approved',
+    createdAt: '2026-11-02', updatedAt: '2026-11-02',
+    liveReady: false,
+    liveMissing: [
+      'approved bank account', 'PAN document', 'approved bank account',
+      'approved bank account', 'approved bank account',
+    ],
+  } } } as any);
+
+  const client = renderVenue();
+  expect(await screen.findByText('approved bank account, PAN document')).toBeTruthy();
+  client.clear();
+});
+
 it('opens the correct partner from the venue page and refreshes the displayed details after saving', async () => {
   let name = 'Original';
   vi.mocked(venuesApi.getById).mockImplementation(async () => ({ data: { data: {
@@ -25,8 +55,7 @@ it('opens the correct partner from the venue page and refreshes the displayed de
     status: 'active', kycStatus: 'PENDING', createdAt: '2026-11-02', updatedAt: '2026-11-02',
   } } } as any);
   vi.mocked(partnersApi.update).mockImplementation(async () => { name = 'Updated'; return { data: {} } as any; });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/venues/venue']}><Routes><Route path="/venues/:id" element={<VenueDetail />} /></Routes></MemoryRouter></QueryClientProvider>);
+  const client = renderVenue();
   fireEvent.click(await screen.findByRole('button', { name: 'Edit partner' }));
   const firstName = await screen.findByLabelText('First name');
   expect(partnersApi.getById).toHaveBeenCalledWith('owner-partner');

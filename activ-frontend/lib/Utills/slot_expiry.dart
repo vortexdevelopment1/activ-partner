@@ -5,7 +5,7 @@ DateTime venueCalendarDate(DateTime instant) {
   return DateTime(wallTime.year, wallTime.month, wallTime.day);
 }
 
-int? _minutes(String value) {
+int? slotTimeMinutes(String value) {
   final match = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$',
           caseSensitive: false).firstMatch(value.trim());
   if (match == null) return null;
@@ -25,8 +25,8 @@ int? _minutes(String value) {
 /// Availability times are venue wall-clock values in Asia/Kolkata, matching
 /// the backend. Device timezone must not change which slot has expired.
 DateTime? slotEndInstant(DateTime date, String startTime, String endTime) {
-  final start = _minutes(startTime);
-  final end = _minutes(endTime);
+  final start = slotTimeMinutes(startTime);
+  final end = slotTimeMinutes(endTime);
   if (start == null || end == null) return null;
   final effectiveStart = start < 5 * 60 ? start + 24 * 60 : start;
   var effectiveEnd = end < 5 * 60 ? end + 24 * 60 : end;

@@ -373,7 +373,7 @@ export const VenueDetail: React.FC = () => {
             Complete these details before making the venue live:
           </p>
           <p className="mt-1 text-sm text-amber-700">
-            {venue.liveMissing.join(', ')}
+            {[...new Set(venue.liveMissing)].join(', ')}
           </p>
         </div>
       ) : null}

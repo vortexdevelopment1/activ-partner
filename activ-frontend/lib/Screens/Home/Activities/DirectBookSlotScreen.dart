@@ -1629,9 +1629,26 @@ class _WalkInSlotSelectionScreenState
   @override
   Widget build(BuildContext context) {
     const sections = ['Morning', 'Afternoon', 'Evening', 'Night'];
-    final visibleSlots = _slots
-        .where((slot) => !_hasEnded(slot))
-        .toList();
+    final visibleSlots = <_BookableSlot>[];
+    for (final slot in _slots.where((slot) => !_hasEnded(slot))) {
+      final previous = visibleSlots.lastOrNull;
+      if (previous != null &&
+          previous.status == 'not_operational' &&
+          slot.status == 'not_operational' &&
+          slotTimeMinutes(previous.endTime)! % Duration.minutesPerDay ==
+              slotTimeMinutes(slot.startTime)! % Duration.minutesPerDay) {
+        final start = _BookableSlot._displayTime(previous.startTime);
+        final end = _BookableSlot._displayTime(slot.endTime);
+        visibleSlots[visibleSlots.length - 1] = _BookableSlot(
+          label: '$start - $end',
+          startTime: previous.startTime,
+          endTime: slot.endTime,
+          status: slot.status,
+        );
+      } else {
+        visibleSlots.add(slot);
+      }
+    }
     return Scaffold(
       backgroundColor: _background,
       body: SafeArea(
