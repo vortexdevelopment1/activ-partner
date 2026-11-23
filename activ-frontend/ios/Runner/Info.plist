@@ -38,11 +38,19 @@
 
     <!-- Camera permission -->
     <key>NSCameraUsageDescription</key>
-    <string>Take photos of your venue and verification documents.</string>
+    <string>ACTIV Partner uses the camera to capture venue photos and verification documents.</string>
 
     <!-- Photo library permission -->
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Select venue photos and verification documents from your library.</string>
+    <string>ACTIV Partner accesses your photo library so you can upload venue photos and verification documents.</string>
+
+    <!-- Location permission while using the app -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ACTIV Partner uses your location while the app is open to help identify nearby sports venues and provide location-based venue information.</string>
+
+    <!-- Always location permission -->
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>ACTIV Partner uses your location to support venue location features, including background location access when enabled.</string>
 
     <!-- Launch screen -->
     <key>UILaunchStoryboardName</key>
