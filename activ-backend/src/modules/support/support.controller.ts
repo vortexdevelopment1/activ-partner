@@ -30,7 +30,6 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import type { PartnerRecord as Partner } from '../../common/domain-types';
 
 @ApiTags('Support')
 @Controller('support')
@@ -132,13 +131,16 @@ export class SupportController {
   )
   async createEmail(
     @Body() dto: CreateSupportEmailDto,
-    @CurrentUser() partner: Partner & { userId?: string },
+    @CurrentUser() user:
+      | { role: UserRole.PARTNER; id: string; userId: string }
+      | { role: UserRole.TEAM_MEMBER; partnerId: string; userId: string },
     @UploadedFile() file?: Express.Multer.File,
   ) {
+    const partnerId = user.role === UserRole.TEAM_MEMBER ? user.partnerId : user.id;
     const data = await this.supportService.createEmail(
       dto,
-      partner.id,
-      partner.userId,
+      partnerId,
+      user.userId,
       file,
     );
     return { message: 'Support email submitted successfully', data };

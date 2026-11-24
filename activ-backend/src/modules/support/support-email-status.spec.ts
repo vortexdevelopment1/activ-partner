@@ -1,5 +1,29 @@
 import { SupportService } from './support.service';
+import { SupportController } from './support.controller';
 import { CallbackStatus } from '../../common/enums/callback-status.enum';
+import { UserRole } from '../../common/enums/user-role.enum';
+
+describe('support email submission', () => {
+  it.each([
+    { role: UserRole.PARTNER as const, id: 'partner', userId: 'owner-user' },
+    { role: UserRole.TEAM_MEMBER as const, id: 'staff-profile', partnerId: 'partner', userId: 'staff-user' },
+  ])('saves a request under the partner and attributes it to the $role sender', async (user) => {
+    const record = { id: 'support' };
+    const findFirst = jest.fn().mockResolvedValue({ id: 'sender-link', users: { email: 'sender@example.com' } });
+    const create = jest.fn().mockResolvedValue(record);
+    const prisma = { partner_users: { findFirst }, partner_support_requests: { create } };
+    const mail = { sendSupportRequestEmail: jest.fn().mockResolvedValue(true) };
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const service = new SupportService(mail as any, {} as any, prisma as any, notifications as any);
+    const dto = { subject: 'Booking question', message: 'Please help with this booking.' };
+
+    await expect(new SupportController(service).createEmail(dto, user)).resolves.toMatchObject({ data: record });
+
+    expect(findFirst).toHaveBeenCalledWith({ where: { partner_id: 'partner', user_id: user.userId }, include: { users: true } });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ partner_id: 'partner', partner_user_id: 'sender-link' }) });
+    expect(mail.sendSupportRequestEmail).toHaveBeenCalledWith(expect.objectContaining({ partnerEmail: 'sender@example.com', ...dto }));
+  });
+});
 
 describe('support partner status emails', () => {
   const statusCases = [
