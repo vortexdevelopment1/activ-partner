@@ -7,7 +7,7 @@ import {
   Logger,
   UnauthorizedException,
 } from "@nestjs/common";
-import { randomBytes, randomUUID } from "crypto";
+import { randomInt, randomUUID } from "crypto";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TeamMemberRecord as TeamMember, TeamMemberStatus } from '../../common/domain-types';
@@ -219,7 +219,11 @@ export class TeamService {
   }
 
   private async createInvitationPassword() {
-    const password = `Activ@${randomBytes(18).toString('base64url')}`;
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let password: string;
+    do {
+      password = Array.from({ length: 8 }, () => characters.charAt(randomInt(characters.length))).join('');
+    } while (!/[a-z]/i.test(password) || !/[0-9]/.test(password));
     return { password, passwordHash: await bcrypt.hash(password, 12) };
   }
 

@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import { MailService } from '../mail/mail.service';
 
 describe('current-schema team management', () => {
+  const invitationPasswordFormat = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8}$/;
   const staff = {
     id: 'staff', partner_user_id: 'link', display_name: 'Alex', designation: 'manager', contact_phone_e164: '+919876543210',
     permissions: { bookingManagement: true, setupStatus: 'invite_sent' },
@@ -65,9 +66,10 @@ describe('current-schema team management', () => {
     expect(prisma.users.create.mock.calls[0][0].data.email).toBe('alex@example.com');
     expect(member.invitationDelivery).toEqual({ emailSent: true, smsSent: true });
     expect(member.status).toBe('invite_sent');
-    expect(JSON.stringify(member)).not.toContain('Activ@');
-    expect(mail.sendTeamMemberInviteSms.mock.calls[0][0].password)
-      .toBe(mail.prepareTeamMemberInviteEmail.mock.calls[0][0].password);
+    const password = mail.sendTeamMemberInviteSms.mock.calls[0][0].password;
+    expect(password).toMatch(invitationPasswordFormat);
+    expect(JSON.stringify(member)).not.toContain(password);
+    expect(mail.prepareTeamMemberInviteEmail.mock.calls[0][0].password).toBe(password);
   });
   it('keeps a saved member recoverable when both providers fail', async () => {
     mail.deliverPreparedEmail.mockRejectedValue(new Error('mail offline'));
@@ -81,7 +83,7 @@ describe('current-schema team management', () => {
     const password = mail.sendTeamMemberInviteSms.mock.calls[0][0].password;
     const saved = prisma.users.update.mock.calls[0][0];
     expect(saved.where).toEqual({ id: 'user' });
-    expect(password).toMatch(/^Activ@[A-Za-z0-9_-]{24}$/);
+    expect(password).toMatch(invitationPasswordFormat);
     expect(await bcrypt.compare(password, saved.data.password_hash)).toBe(true);
     expect(mail.prepareTeamMemberInviteEmail.mock.calls[0][0].password).toBe(password);
     expect(member.invitationDelivery).toEqual({ emailSent: true, smsSent: true });
@@ -114,6 +116,7 @@ describe('current-schema team management', () => {
     expect(mail.deliverPreparedEmail).toHaveBeenCalledWith('delivery');
     const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
     const password = payload.recipients[0].var2;
+    expect(password).toMatch(invitationPasswordFormat);
     expect(payload).toEqual({ template_id: '6afdeef436aedc84d2040fc4', short_url: '0',
       recipients: [{ mobiles: '919876543210', var1: '9876543210', var2: password }] });
     expect(await bcrypt.compare(password, existingAccount.password_hash)).toBe(true);
@@ -153,6 +156,7 @@ describe('current-schema team management', () => {
     const member = await service.resendInvitation('staff', 'partner');
     expect(member.invitationDelivery).toEqual({ emailSent: true, smsSent: true });
     const password = mail.sendTeamMemberInviteSms.mock.calls[0][0].password;
+    expect(password).toMatch(invitationPasswordFormat);
     expect(mail.prepareTeamMemberInviteEmail.mock.calls[0][0].password).toBe(password);
     expect(await bcrypt.compare(password, prisma.users.update.mock.calls[0][0].data.password_hash)).toBe(true);
     prisma.partner_staff_profiles.findFirst.mockResolvedValue(null);
