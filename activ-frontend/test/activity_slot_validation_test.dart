@@ -166,15 +166,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('adjacent ranges and a blank optional discount can proceed',
+  testWidgets('new adjacent slot has independent pricing and capacity fields',
       (tester) async {
     await open(tester, [
-      slot({'close': '12:00 PM'}),
-      slot({'open': '12:00 PM'})
+      slot({'open': '07:00 AM', 'close': '09:00 AM'}),
     ]);
+    final addSlot = find.text('Add time slot');
+    await tester.ensureVisible(addSlot);
+    await tester.tap(addSlot);
+    await tester.pumpAndSettle();
+    final secondSlot = {'capacity': '5', 'price': '750', 'discountedPrice': '600'};
+    for (final entry in secondSlot.entries) {
+      final field = find.byKey(ValueKey('slot-Mon-${entry.key}-1'));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, entry.value);
+      await tester.pumpAndSettle();
+    }
     final dynamic state = tester.state(find.byType(AddVenueTimingScreen));
     final timing = state.buildVenueTiming();
-    expect(timing['Monday'][0]['discountedPrice'], '500');
+    expect(timing['Monday'][0], containsPair('price', '500'));
+    expect(timing['Monday'][0], containsPair('discountedPrice', '500'));
+    expect(timing['Monday'][1], containsPair('price', '750'));
+    expect(timing['Monday'][1], containsPair('discountedPrice', '600'));
+    expect(timing['Monday'][1], containsPair('capacity', '5'));
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(requests, greaterThan(0));

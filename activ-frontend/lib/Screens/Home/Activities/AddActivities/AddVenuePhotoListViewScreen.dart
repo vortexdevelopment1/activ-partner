@@ -260,14 +260,14 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                   getText(),
 
-                                  getSubText(),
-                                  const Padding(
-                                    padding: EdgeInsets.only(bottom: 12),
-                                    child: Text(
-                                      'Long press a photo to reorder. The first photo is the cover.',
-                                      style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: AppColors.black1),
+                                  if (_images.isNotEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 10, bottom: 12),
+                                      child: Text(
+                                        'Long press a photo to reorder. The first photo is the cover.',
+                                        style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: AppColors.black1),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -559,22 +559,6 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     );
   }
 
-  Widget getSubText()
-  {
-    return Container(
-      margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      child: const Text(
-        "Upload this activity's images",
-        style: TextStyle(
-            fontSize: AppSize.size_16,
-            fontFamily: 'Satoshi',
-            color: AppColors.black1,
-            height: 1.4
-        ),
-        textAlign: TextAlign.left,
-      ),
-    );
-  }
 }
 
 class _ActivitySetup {

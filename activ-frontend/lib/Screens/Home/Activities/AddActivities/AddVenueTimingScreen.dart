@@ -600,9 +600,9 @@ class _State extends State<AddVenueTimingScreen> {
                                             children: List.generate(
                                               timings[day]!.timeSlots.length,
                                               (index) {
-                                                var slot = timings[day]!
+                                                final slot = timings[day]!
                                                     .timeSlots[index];
-                                                return Row(
+                                                final timeFields = Row(
                                                   //crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     // -------- Open Time ----------
@@ -886,21 +886,22 @@ class _State extends State<AddVenueTimingScreen> {
                                                         )),
                                                   ],
                                                 );
+                                                return Column(
+                                                  key: ObjectKey(slot),
+                                                  children: [
+                                                    timeFields,
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              top: 4, bottom: 12),
+                                                      child: _slotDetails(
+                                                          day, slot, index),
+                                                    ),
+                                                  ],
+                                                );
                                               },
                                             ),
                                           ),
-
-                                          if (timings[day]!
-                                              .timeSlots
-                                              .isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 4, bottom: 12),
-                                              child: _slotDetails(
-                                                  day,
-                                                  timings[day]!.timeSlots.first,
-                                                  0),
-                                            ),
 
                                           // Add Slot Time Click Event.
                                           InkWell(
@@ -982,14 +983,7 @@ class _State extends State<AddVenueTimingScreen> {
                               child: InkWell(
                                   onTap: () async {
                                     if (hasAnyTimingSelected()) {
-                                      if (_validateTimings()) {
-                                        /* Map<String, dynamic> finalData = {
-                                          "venue_timing": buildVenueTiming(),
-                                        };
-                                        print("FINAL VENUE TIMING => ${jsonEncode(finalData)}");*/
-
-                                        await _submit();
-                                      }
+                                      await _submit();
                                     } else {
                                       CommonUtilities.createSnackBar(context,
                                           ConstantsMessages.selectDayTimeslot);
@@ -1146,8 +1140,6 @@ class _State extends State<AddVenueTimingScreen> {
     }
 
     return Column(
-      // Reset initialValue fields when copying replaces the slot map.
-      key: ObjectKey(slot),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         field(

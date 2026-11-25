@@ -227,10 +227,9 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
   void _showInvitationResult(dynamic member) {
     final delivery = member is Map ? member['invitationDelivery'] : null;
     if (delivery is! Map) return;
-    final email = delivery['emailSent'] == true ? 'sent' : 'not confirmed';
     final sms = _TeamMember.smsSummary(delivery);
     CommonUtilities.createSnackBar(context,
-        'Email: $email. SMS: $sms. The member can sign in using their phone OTP.');
+        'SMS: $sms. The member can sign in using their phone OTP.');
   }
 
   Future<void> _updateMember(

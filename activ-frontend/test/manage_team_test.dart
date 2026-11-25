@@ -238,6 +238,7 @@ void main() {
     await show(tester, client);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNWidgets(2));
     expect(find.text('Resend Invite'), findsNothing);
     expect(find.text('Delete Member'), findsOneWidget);
     expect(find.text('Save Changes'), findsOneWidget);
@@ -256,25 +257,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('invalid edited email is blocked before saving a member', (tester) async {
-    var writes = 0;
-    await show(tester, MockClient((request) async {
-      if (request.method == 'PATCH') writes++;
-      return http.Response(jsonEncode({'data': [member]}), 200);
-    }));
-    await tester.tap(find.byIcon(Icons.edit_outlined));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'Alex');
-    await tester.enterText(find.byType(TextField).at(1), '9876543210');
-    await tester.enterText(find.byType(TextField).at(2), 'invalid');
-    await tester.ensureVisible(find.text('Save Changes'));
-    await tester.tap(find.text('Save Changes'));
-    await tester.pumpAndSettle();
-    expect(writes, 0);
-    expect(messages, contains('Enter a valid email address'));
-  });
-
-  testWidgets('pending Send Invite blocks duplicate submissions and reports acceptance', (tester) async {
+  testWidgets('pending Send Invite blocks duplicate submissions and reports only SMS status', (tester) async {
     final pending = Completer<http.Response>();
     var writes = 0;
     var reads = 0;
@@ -297,7 +280,9 @@ void main() {
       'invitationDelivery': {'emailSent': false, 'smsSent': true}}}), 201));
     await tester.pumpAndSettle();
     expect(reads, 2);
-    expect(messages.any((message) => message.contains('SMS: accepted; delivery unconfirmed')), isTrue);
+    expect(messages, [
+      'SMS: accepted; delivery unconfirmed. The member can sign in using their phone OTP.',
+    ]);
     expect(tester.takeException(), isNull);
   });
 }
