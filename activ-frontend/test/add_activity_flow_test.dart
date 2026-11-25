@@ -13,6 +13,7 @@ import 'package:activ_app/Screens/Home/Activities/AddActivities/AddVenueTimingSc
 import 'package:activ_app/Screens/Home/Activities/AddActivities/AddActivityConfigureScreen.dart';
 import 'package:activ_app/api_calling/activity_setup_api.dart';
 import 'package:activ_app/api_calling/api_constant.dart';
+import 'package:activ_app/Utills/activity_flow_checkpoint.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -356,6 +357,211 @@ void main() {
     expect(preferences.getString('venue_id'), 'venue');
     expect(
         jsonDecode(preferences.getString('operate_value')!)['id'], 'swimming');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saved activity selection is restored when returning to step one',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'venue_id': 'venue',
+      'operate_value': jsonEncode({'id': 'boxing', 'title': 'Boxing'}),
+      'activity_current_draft_id': 'local-draft',
+    });
+    await ActivityFlowCheckpoint.save(
+      activityId: 'local-draft',
+      step: 'photoUpload',
+      data: const {
+        'venueId': 'venue',
+        'categoryId': 'boxing',
+        'activityName': 'Boxing',
+      },
+    );
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/categories/active')) {
+        return response([
+          {'id': 'boxing', 'name': 'Boxing'}
+        ]);
+      }
+      return response([
+        {'id': 'venue', 'name': 'Arena', 'services': []}
+      ]);
+    });
+
+    await tester.pumpWidget(
+        MaterialApp(home: AddListActivityTypeScreen(client: client)));
+    await tester.pumpAndSettle();
+    final dynamic selectionState =
+        tester.state(find.byType(AddListActivityTypeScreen));
+    expect(selectionState.isActivitySelected, isTrue);
+    await tester.tap(find.text('Next'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(AddVenuePhotoUploadScreen), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('activity_current_draft_id'), 'local-draft');
+  });
+
+  testWidgets(
+      'switching activities keeps each draft separate and restores its photos',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'venue_id': 'venue',
+      'operate_value': jsonEncode({'id': 'boxing', 'title': 'Boxing'}),
+      'activity_current_draft_id': 'boxing-draft',
+      'activity_images_boxing-draft': 'persisted-photo-marker',
+    });
+    await ActivityFlowCheckpoint.save(
+      activityId: 'boxing-draft',
+      step: 'photoReview',
+      data: const {
+        'venueId': 'venue',
+        'categoryId': 'boxing',
+        'activityName': 'Boxing',
+      },
+    );
+    // Later steps must not erase the identity used to find this draft again.
+    await ActivityFlowCheckpoint.save(
+      activityId: 'boxing-draft',
+      step: 'details',
+    );
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/categories/active')) {
+        return response([
+          {'id': 'boxing', 'name': 'Boxing'},
+          {'id': 'yoga', 'name': 'Yoga'},
+        ]);
+      }
+      return response([
+        {'id': 'venue', 'name': 'Arena', 'services': []}
+      ]);
+    });
+
+    await tester.pumpWidget(
+        MaterialApp(home: AddListActivityTypeScreen(client: client)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yoga'));
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    final yogaDraft = prefs.getString('activity_current_draft_id');
+    expect(yogaDraft, isNotEmpty);
+    expect(yogaDraft, isNot('boxing-draft'));
+    expect(prefs.getString('activity_images_boxing-draft'),
+        'persisted-photo-marker');
+
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Boxing'));
+    await tester.tap(find.text('Next'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(prefs.getString('activity_current_draft_id'), 'boxing-draft');
+    expect(prefs.getString('activity_images_boxing-draft'),
+        'persisted-photo-marker');
+  });
+
+  testWidgets('Back from photo upload preserves the draft checkpoint',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'venue_id': 'venue',
+      'operate_value': jsonEncode({'id': 'boxing', 'title': 'Boxing'}),
+      'activity_current_draft_id': 'local-draft',
+    });
+    await ActivityFlowCheckpoint.save(
+      activityId: 'local-draft',
+      step: 'photoUpload',
+      data: const {'venueId': 'venue', 'categoryId': 'boxing'},
+    );
+    var deletes = 0;
+    final client = MockClient((request) async {
+      if (request.method == 'DELETE') deletes++;
+      return response({});
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => Navigator.push<void>(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => AddVenuePhotoUploadScreen(client: client),
+            ),
+          ),
+          child: const Text('Open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open'), findsOneWidget);
+    expect(await ActivityFlowCheckpoint.read('local-draft'), isNotNull);
+    expect(deletes, 0);
+  });
+
+  testWidgets('activity catalogue matches the reference card typography',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/categories/active')) {
+        return response([
+          {
+            'id': 'pilates',
+            'name': 'Pilates',
+            'description': 'Pilates class bookings',
+          }
+        ]);
+      }
+      if (request.url.path.endsWith('/my-approved-venues')) {
+        return response([
+          {'id': 'venue', 'name': 'Arena', 'services': []}
+        ]);
+      }
+      throw StateError('Unexpected request ${request.url}');
+    });
+
+    await tester.pumpWidget(
+        MaterialApp(home: AddListActivityTypeScreen(client: client)));
+    await tester.pumpAndSettle();
+
+    final filters = find.byWidgetPredicate((widget) =>
+        widget is ListView && widget.scrollDirection == Axis.horizontal);
+    expect(tester.getTopLeft(find.byType(GridView)).dy -
+        tester.getBottomLeft(filters).dy, 8);
+    final allChip = tester.widget<Container>(find
+        .ancestor(of: find.text('All'), matching: find.byType(Container))
+        .first);
+    expect((allChip.decoration as BoxDecoration).borderRadius,
+        BorderRadius.circular(8));
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is SizedBox && widget.width == 72 && widget.height == 72),
+        findsOneWidget);
+    final title = tester.widget<Text>(find.text('Pilates'));
+    expect(title.style?.fontSize, 16);
+    expect(title.style?.fontWeight, FontWeight.w700);
+    expect(tester.widget<Text>(find.text('Pilates class bookings')).style?.fontSize,
+        14);
+    expect(
+        find.ancestor(
+            of: find.text('Pilates'),
+            matching: find.byWidgetPredicate((widget) =>
+                widget is Container &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).borderRadius ==
+                    BorderRadius.circular(24))),
+        findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

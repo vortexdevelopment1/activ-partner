@@ -80,6 +80,10 @@ void main() {
             key: key,
             child: PayoutHistoryScreen(client: client, initialRange: range)));
     expect(find.text('No payout records found'), findsOneWidget);
+    void expectEmptyStateCentered() => expect(
+        tester.getCenter(find.text('No payout records found')).dy,
+        closeTo(400, 30));
+    expectEmptyStateCentered();
     await capture(tester, key, 'empty');
     for (final entry in {
       'Successful': 'success',
@@ -90,6 +94,7 @@ void main() {
       await tester.tap(find.text(entry.key));
       await tester.pumpAndSettle();
       expect(requests.last.url.queryParameters['status'], entry.value);
+      expectEmptyStateCentered();
     }
     expect(tester.takeException(), isNull);
   });
@@ -139,7 +144,7 @@ void main() {
     expect(requests, 2);
   });
 
-  testWidgets('PDF and CSV downloads keep selected range and status',
+  testWidgets('CSV download keeps selected range and status',
       (tester) async {
     final exports = <String>[];
     final saved = <String>[];
@@ -148,13 +153,14 @@ void main() {
       expect(request.url.queryParameters['status'], 'pending');
       expect(request.url.queryParameters['startDate'], '2026-09-10');
       expect(request.headers['Authorization'], 'Bearer token');
-      final format = request.url.queryParameters['format']!;
-      exports.add(format);
+      expect(request.url.path, endsWith('/bookings/payout-history/download'));
+      expect(request.url.queryParameters.containsKey('format'), isFalse);
+      exports.add('csv');
       return http.Response(
           jsonEncode({
             'data': {
-              'filename': 'payouts.$format',
-              'base64': base64Encode(utf8.encode('report-$format'))
+              'filename': 'payouts.csv',
+              'base64': base64Encode(utf8.encode('report-csv'))
             }
           }),
           200);
@@ -174,14 +180,12 @@ void main() {
     await tester.tap(find.byTooltip('Export report'));
     await tester.pumpAndSettle();
     expect(find.text('Export Report'), findsOneWidget);
+    expect(find.text('PDF'), findsNothing);
+    expect(find.text('CSV'), findsOneWidget);
     await tester.tap(find.text('Download Report'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('CSV'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Download Report'));
-    await tester.pumpAndSettle();
-    expect(exports, ['pdf', 'csv']);
-    expect(saved, ['payouts.pdf', 'payouts.csv']);
+    expect(exports, ['csv']);
+    expect(saved, ['payouts.csv']);
     expect(tester.takeException(), isNull);
   });
 

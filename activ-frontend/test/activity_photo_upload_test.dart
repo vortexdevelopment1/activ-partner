@@ -11,6 +11,20 @@ import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _PhotoPicker extends ImagePicker {
+  _PhotoPicker(this.photos);
+  final List<XFile> photos;
+
+  @override
+  Future<List<XFile>> pickMultiImage({
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+    int? limit,
+    bool requestFullMetadata = true,
+  }) async => photos;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -37,6 +51,90 @@ void main() {
   http.Response categories() => json([
         {'id': 'swimming-category', 'name': 'Swimming'}
       ]);
+
+  testWidgets('review header is left aligned and plus adds another photo',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'operate_value': jsonEncode({'title': 'Boxing'}),
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1000);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    List<XFile>? changed;
+    final added = XFile.fromData(
+      Uint8List.fromList([137, 80, 78, 71, 99]),
+      name: 'added.png',
+      mimeType: 'image/png',
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddVenuePhotoListViewScreen(
+        images: photos,
+        imagePicker: _PhotoPicker([added]),
+        onPhotosChanged: (images) => changed = images,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Boxing')).dx,
+        tester.getTopLeft(find.text("Upload this activity's images")).dx);
+    await tester.tap(find.byKey(const ValueKey('add-activity-photos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gallery'));
+    await tester.pumpAndSettle();
+
+    expect(changed, hasLength(5));
+    expect(changed!.last, same(added));
+  });
+
+  testWidgets('photo added from review is included in the final upload',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'operate_value': jsonEncode({'title': 'Boxing'}),
+    });
+    final added = XFile.fromData(
+      Uint8List.fromList([137, 80, 78, 71, 99]),
+      name: 'added.png',
+      mimeType: 'image/png',
+    );
+    var uploadedFiles = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/questions')) return json([]);
+      if (request.method == 'GET') {
+        return json({'id': 'activity', 'status': 'draft'});
+      }
+      if (request.method == 'POST') {
+        final body = latin1.decode(request.bodyBytes);
+        uploadedFiles = 'name="images"'.allMatches(body).length;
+        expect(body, contains('added.png'));
+        return json({
+          'imageUrls': List.generate(uploadedFiles, (i) => 'image-$i'),
+        });
+      }
+      throw StateError('Unexpected request ${request.method} ${request.url}');
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddVenuePhotoListViewScreen(
+        images: photos,
+        activityId: 'activity',
+        uploadFuture: Future<void>.value(),
+        imagePicker: _PhotoPicker([added]),
+        client: client,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-activity-photos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gallery'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(uploadedFiles, 5);
+  });
 
   for (final useHandle in [true, false]) {
     testWidgets('photo review swaps cover using ${useHandle ? 'the visible handle' : 'a long press'}', (tester) async {

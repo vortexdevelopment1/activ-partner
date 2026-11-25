@@ -170,7 +170,9 @@ class _State extends State<AddActivityConfigureScreen> {
     );
   }
 
-  Widget _card(String title, Widget child, {VoidCallback? onEdit}) => Container(
+  Widget _card(String title, Widget child,
+          {VoidCallback? onEdit, double titleFontSize = 17}) =>
+      Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -181,8 +183,9 @@ class _State extends State<AddActivityConfigureScreen> {
         Row(children: [
           Expanded(
               child: Text(title,
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w700))),
+                  style: TextStyle(
+                      fontSize: titleFontSize,
+                      fontWeight: FontWeight.w700))),
           if (onEdit != null)
             TextButton.icon(
                 key: Key(title == 'Photos'
@@ -337,18 +340,66 @@ class _State extends State<AddActivityConfigureScreen> {
                       children: [
                         for (final q in _questions)
                           Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Text(
-                                  '${q['questionText'] ?? ''}\n${q['answer'] ?? '-'}'))
+                            padding: const EdgeInsets.only(bottom: 18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  q['questionText']?.toString() ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'Satoshi',
+                                    color: AppColors.hintColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  q['answer']?.toString() ?? '-',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontFamily: 'Satoshi',
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.darkBlack,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ]),
+                  titleFontSize: 20,
                   onEdit: _editDetails),
               _card(
                   'Amenities List',
-                  Text(((_activity['amenities'] as List?) ?? [])
-                      .asMap()
-                      .entries
-                      .map((e) => '${e.key + 1}. ${e.value}')
-                      .join('\n')),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Amenities',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'Satoshi',
+                          color: AppColors.hintColor,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Text(
+                          ((_activity['amenities'] as List?) ?? [])
+                              .asMap()
+                              .entries
+                              .map((e) => '${e.key + 1}. ${e.value}')
+                              .join('\n'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontFamily: 'Satoshi',
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.darkBlack,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   onEdit: _editAmenities),
               _card(
                 'Operational Details',

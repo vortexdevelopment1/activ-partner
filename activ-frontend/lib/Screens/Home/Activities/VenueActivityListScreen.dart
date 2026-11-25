@@ -20,6 +20,9 @@ import '../../../Utills/activity_flow_checkpoint.dart';
 import '../../../Utills/activity_image_draft_store.dart';
 import '../../../api_calling/activity_setup_api.dart';
 
+bool canDeleteActivityFromList(String? status) =>
+    const {'draft', 'rejected'}.contains(status?.toLowerCase());
+
 class VenueActivityListScreen extends StatefulWidget {
   const VenueActivityListScreen({super.key, this.client});
   final http.Client? client;
@@ -84,6 +87,7 @@ class _State extends State<VenueActivityListScreen> {
           info[service['id'].toString()] = {
             'venueId': venue['id']?.toString() ?? '',
             'status': label,
+            'rawStatus': status,
             'bookings': service['bookingCount'],
             'earnings': service['earnings'],
           };
@@ -469,6 +473,8 @@ class _State extends State<VenueActivityListScreen> {
       );
 
   Future<void> _deleteActivity(ActivityModel activity) async {
+    if (!canDeleteActivityFromList(
+        activityInfo[activity.activityId]?['rawStatus']?.toString())) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -553,6 +559,11 @@ class _State extends State<VenueActivityListScreen> {
       }
       await ActivityFlowCheckpoint.clear(activity.activityId);
       await ActivityImageDraftStore.clear(activity.activityId);
+      if (await SharedPreference.readStr('activity_current_draft_id') ==
+          activity.activityId) {
+        await SharedPreference.remove('activity_current_draft_id');
+        await SharedPreference.remove('operate_value');
+      }
       if (mounted) fetchActivities();
     } catch (error) {
       if (mounted) {
@@ -566,6 +577,8 @@ class _State extends State<VenueActivityListScreen> {
   Widget activityCard(ActivityModel activity) {
     final info = activityInfo[activity.activityId]!;
     final status = info['status'] as String;
+    final canDeleteFromList =
+        canDeleteActivityFromList(info['rawStatus']?.toString());
     final displayStatus = switch (status) {
       'In Review' => 'In review',
       'Inactive' => 'In-active',
@@ -596,7 +609,8 @@ class _State extends State<VenueActivityListScreen> {
           side: const BorderSide(color: Color(0xFFDDE0D5))),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onLongPress: () => _deleteActivity(activity),
+        onLongPress:
+            canDeleteFromList ? () => _deleteActivity(activity) : null,
         onTap: () async {
           if (status == 'Draft') {
             final checkpoint =

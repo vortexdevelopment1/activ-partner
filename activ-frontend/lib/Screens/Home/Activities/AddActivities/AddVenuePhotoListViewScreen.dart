@@ -19,6 +19,7 @@ import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 import '../../../../Utills/activity_image_draft_store.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
+import '../../../../Utills/venue_photo_duplicates.dart';
 import '../../../onboarding_widgets.dart';
 
 class AddVenuePhotoListViewScreen extends StatefulWidget {
@@ -28,7 +29,8 @@ class AddVenuePhotoListViewScreen extends StatefulWidget {
   final String? activityId;
   final Future<void>? uploadFuture;
   final ValueChanged<List<XFile>>? onPhotosChanged;
-  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client, this.activityIdFuture, this.activityId, this.uploadFuture});
+  final ImagePicker? imagePicker;
+  const AddVenuePhotoListViewScreen({super.key, required this.images, this.onPhotosChanged, this.client, this.activityIdFuture, this.activityId, this.uploadFuture, this.imagePicker});
 
   @override
   State<AddVenuePhotoListViewScreen> createState() => _State();
@@ -40,6 +42,8 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   int? _coverIndex = 0; // by default first image is cover
   String activityName = "Activity";
   bool _isUploading = false;
+  bool _photosChanged = false;
+  late final ImagePicker _picker = widget.imagePicker ?? ImagePicker();
 
 
   @override
@@ -53,14 +57,14 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   Future<void> _recordCheckpoint() async {
-    final id = widget.activityId;
+    final id = widget.activityId ?? await widget.activityIdFuture;
     if (id != null && id.isNotEmpty && !ActivityFlowCheckpoint.restoring) {
       await ActivityFlowCheckpoint.save(activityId: id, step: 'photoReview');
     }
   }
 
   Future<void> _restorePersistedImages() async {
-    final id = widget.activityId;
+    final id = widget.activityId ?? await widget.activityIdFuture;
     if (id == null || id.isEmpty) return;
     final saved = await ActivityImageDraftStore.read(id);
     if (saved.isNotEmpty && mounted) {
@@ -72,7 +76,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   }
 
   Future<void> _persistImages() async {
-    final id = widget.activityId;
+    final id = widget.activityId ?? await widget.activityIdFuture;
     if (id != null && id.isNotEmpty) {
       await ActivityImageDraftStore.save(id, _images);
     }
@@ -105,6 +109,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
       // Update cover index
       _coverIndex = 0;
+      _photosChanged = true;
     });
     widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
     _persistImages();
@@ -115,6 +120,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     setState(() {
       _images.removeAt(index);
       _imageIds.removeAt(index);
+      _photosChanged = true;
 
       if (_coverIndex == index) {
         _coverIndex = _images.isNotEmpty ? 0 : null;
@@ -143,9 +149,97 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       _images.insert(newIndex, item);
       _imageIds.insert(newIndex, id);
       _coverIndex = _images.isNotEmpty ? 0 : null;
+      _photosChanged = true;
     });
     widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
     _persistImages();
+  }
+
+  Future<void> _addPhotos(Iterable<XFile> picked) async {
+    if (_isUploading) return;
+    final additions = <XFile>[];
+    var duplicateFound = false;
+    for (final image in picked) {
+      if (_images.length + additions.length >= 12) {
+        if (!mounted) return;
+        CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+        break;
+      }
+      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+        if (!mounted) return;
+        CommonUtilities.createSnackBar(
+            context, 'Each image must be less than 5 MB.');
+        continue;
+      }
+      if (await containsVenuePhoto(bytes,
+          selectedPhotos: [..._images, ...additions])) {
+        duplicateFound = true;
+        continue;
+      }
+      additions.add(image);
+    }
+    if (!mounted) return;
+    if (additions.isNotEmpty) {
+      setState(() {
+        _images.addAll(additions);
+        _imageIds.addAll(List.generate(additions.length,
+            (index) => 'added_${DateTime.now().microsecondsSinceEpoch}_$index'));
+        _photosChanged = true;
+      });
+      widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
+      await _persistImages();
+    }
+    if (duplicateFound && mounted) {
+      await showDuplicateVenuePhotoDialog(context);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    if (_images.length >= 12) {
+      CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+      return;
+    }
+    await _addPhotos(await _picker.pickMultiImage());
+  }
+
+  Future<void> _pickFromCamera() async {
+    if (_images.length >= 12) {
+      CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+      return;
+    }
+    final image = await _picker.pickImage(
+        source: ImageSource.camera, imageQuality: 40);
+    if (image != null) await _addPhotos([image]);
+  }
+
+  void _showPickOptions() {
+    if (_isUploading) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromCamera();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromGallery();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
 
@@ -258,9 +352,39 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                   getStepBarCount(3 / 6, 3, 6),
 
-                                  getText(),
-
-                                  getSubText(),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            getText(),
+                                            getSubText(),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Material(
+                                          color: AppColors.white,
+                                          shape: const CircleBorder(),
+                                          elevation: 2,
+                                          child: IconButton(
+                                            key: const ValueKey('add-activity-photos'),
+                                            tooltip: 'Add photos',
+                                            onPressed: _isUploading ? null : _showPickOptions,
+                                            icon: const Icon(Icons.add,
+                                                color: AppColors.purple, size: 26),
+                                            constraints: const BoxConstraints.tightFor(
+                                                width: 46, height: 46),
+                                            padding: const EdgeInsets.all(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   const Padding(
                                     padding: EdgeInsets.only(bottom: 12),
                                     child: Text(
@@ -417,6 +541,9 @@ class _State extends State<AddVenuePhotoListViewScreen> {
                                               if (widget.uploadFuture != null) {
                                                 await widget.uploadFuture!;
                                               }
+                                              if (_photosChanged) {
+                                                await _replaceUploadedImages(setup.id);
+                                              }
                                               if (!context.mounted) return;
                                               CommonUtilities.NavigateWithPush(
                                                 context,
@@ -479,6 +606,22 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       );
     } finally {
       api.dispose();
+    }
+  }
+
+  Future<void> _replaceUploadedImages(String activityId) async {
+    final token = checkString(await SharedPreference.readStr('jwt_token'));
+    final client = widget.client ?? http.Client();
+    try {
+      await ActivityPhotoUploader(client: client, baseUrl: BASE_URL)
+          .uploadImages(
+        token: token,
+        serviceId: activityId,
+        images: List<XFile>.of(_images),
+      );
+      _photosChanged = false;
+    } finally {
+      if (widget.client == null) client.close();
     }
   }
 
@@ -563,6 +706,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
+      alignment: Alignment.centerLeft,
       child: const Text(
         "Upload this activity's images",
         style: TextStyle(

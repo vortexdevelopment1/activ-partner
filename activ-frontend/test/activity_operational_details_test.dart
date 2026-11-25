@@ -158,6 +158,66 @@ void main() {
   });
 
   testWidgets(
+      'Activity Specific Details shows gray questions and bold answers',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/questions')) {
+        return http.Response(jsonEncode({'data': [
+          {
+            'id': 'courts',
+            'questionText': 'Number of Courts',
+            'answer': '6',
+          }
+        ]}), 200);
+      }
+      return http.Response(jsonEncode({'data': {
+        'id': 'activity-1',
+        'imageUrls': [],
+        'amenities': ['Free Parking', 'First Aid Kit'],
+      }}), 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddActivityConfigureScreen(
+        activityId: 'activity-1',
+        activityName: 'Badminton',
+        timing: sampleTiming(),
+        client: client,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final heading = tester.widget<Text>(find.text('Activity Specific Details'));
+    final question = tester.widget<Text>(find.text('Number of Courts'));
+    final answer = tester.widget<Text>(find.text('6'));
+    expect(heading.style?.fontSize, 20);
+    expect(heading.style?.fontWeight, FontWeight.w700);
+    expect(question.style?.fontSize, 12);
+    expect(question.style?.color, const Color(0xFF7F7F7F));
+    expect(answer.style?.fontSize, 14);
+    expect(answer.style?.fontWeight, FontWeight.w600);
+    final amenitiesLabel = tester.widget<Text>(find.text('Amenities'));
+    final amenities = tester
+        .widget<Text>(find.text('1. Free Parking\n2. First Aid Kit'));
+    expect(amenitiesLabel.style?.fontSize, 12);
+    expect(amenitiesLabel.style?.color, const Color(0xFF7F7F7F));
+    expect(amenities.style?.fontSize, 14);
+    expect(amenities.style?.fontWeight, FontWeight.w600);
+    final card = find
+        .ancestor(
+          of: find.text('Activity Specific Details'),
+          matching: find.byType(Container),
+        )
+        .first;
+    expect(find.descendant(of: card, matching: find.byType(Divider)),
+        findsOneWidget);
+  });
+
+  testWidgets(
       'Editing slot price in AddVenueTimingScreen updates AddActivityConfigureScreen dynamically',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);

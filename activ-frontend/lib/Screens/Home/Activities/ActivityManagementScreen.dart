@@ -19,6 +19,7 @@ import '../../CategoryQuestionsScreen.dart';
 const _background = Color(0xFFF0F6D2);
 const _purple = Color(0xFFA536F5);
 const _border = Color(0xFFDCE2E5);
+const _inReviewColor = Color(0xFFDC9300);
 
 String? _terminalBookingLabel(String status) =>
     switch (status.trim().toLowerCase().replaceAll(RegExp(r'[_-]+'), ' ')) {
@@ -103,6 +104,9 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
   }
 
   bool get _active => _status == 'Active';
+  bool get _inReview => _status == 'In Review';
+  bool get _quickActionsLocked => _inReview || _status == 'Inactive';
+  bool get _deleteLocked => _data['status'] != 'approved';
   bool get _canControl =>
       !_loading &&
       _error == null &&
@@ -590,29 +594,23 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                       _reviews),
                                 ])),
                             const SizedBox(height: 12),
-                            Row(children: [
-                              Expanded(
-                                  child: _text('Recent Bookings',
-                                      bold: true, size: 17)),
-                              TextButton(
-                                  onPressed: _loading || _error != null
-                                      ? null
-                                      : _allBookings,
-                                  child: const Text('View all \u2192',
-                                      style: TextStyle(
-                                          color: _purple,
-                                          fontFamily: 'Satoshi')))
-                            ]),
                             if (!_loading &&
                                 _error == null &&
-                                _items('bookings').isEmpty)
-                              Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 20),
-                                  child: _text('No bookings yet',
-                                      color: Colors.grey)),
-                            ..._items('bookings').take(5).map(_booking),
-                            const SizedBox(height: 6),
+                                _items('bookings').isNotEmpty) ...[
+                              Row(children: [
+                                Expanded(
+                                    child: _text('Recent Bookings',
+                                        bold: true, size: 17)),
+                                TextButton(
+                                    onPressed: _allBookings,
+                                    child: const Text('View all \u2192',
+                                        style: TextStyle(
+                                            color: _purple,
+                                            fontFamily: 'Satoshi')))
+                              ]),
+                              ..._items('bookings').take(5).map(_booking),
+                              const SizedBox(height: 6),
+                            ],
                             _statusPanel(),
                             const SizedBox(height: 16),
                             _deletePanel(),
@@ -654,7 +652,11 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   : _status == 'Inactive'
                       ? 'InACTIV'
                       : _status,
-              _active ? Colors.green : Colors.red,
+              _active
+                  ? Colors.green
+                  : _inReview
+                      ? _inReviewColor
+                      : Colors.red,
               filled: true)
         ]),
         const SizedBox(height: 5),
@@ -750,8 +752,8 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
       ));
 
   Widget _action(
-          String title, String subtitle, IconData icon, VoidCallback onTap) =>
-      Padding(
+      String title, String subtitle, IconData icon, VoidCallback onTap) {
+    final action = Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
               color: Colors.white,
@@ -760,7 +762,12 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   side: const BorderSide(color: _border)),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                  onTap: _saving || _loading || _error != null ? null : onTap,
+                  onTap: _saving ||
+                          _loading ||
+                          _error != null ||
+                          _quickActionsLocked
+                      ? null
+                      : onTap,
                   child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Row(children: [
@@ -783,6 +790,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                             ])),
                         const Icon(Icons.chevron_right, size: 20),
                       ])))));
+    return _quickActionsLocked
+        ? Opacity(
+            opacity: .45,
+            child: ColorFiltered(
+                colorFilter:
+                    const ColorFilter.mode(Colors.grey, BlendMode.saturation),
+                child: action))
+        : action;
+  }
 
   Widget _booking(Map<String, dynamic> booking) {
     final status = booking['status']?.toString() ?? 'Upcoming';
@@ -1058,7 +1074,12 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                   : _status == 'Inactive'
                       ? 'InACTIV'
                       : _status,
-              _active ? const Color(0xFF16A34A) : const Color(0xFFE53935))
+              _active
+                  ? const Color(0xFF16A34A)
+                  : _inReview
+                      ? _inReviewColor
+                      : const Color(0xFFE53935),
+              filled: _inReview)
         ]),
         const SizedBox(height: 10),
         _text(
@@ -1250,14 +1271,17 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
         Expanded(child: _text(text, size: 12))
       ]));
 
-  Widget _deletePanel() => Material(
+  Widget _deletePanel() {
+    final panel = Material(
       color: const Color(0xFFFFF6F6),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: Colors.redAccent)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-          onTap: _saving || _loading || _error != null ? null : _delete,
+          onTap: _saving || _loading || _error != null || _deleteLocked
+              ? null
+              : _delete,
           child: Padding(
               padding: const EdgeInsets.all(16),
               child:
@@ -1280,6 +1304,15 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     ])),
                 const Icon(Icons.chevron_right, color: Colors.redAccent),
               ]))));
+    return _deleteLocked
+        ? Opacity(
+            opacity: .45,
+            child: ColorFiltered(
+                colorFilter:
+                    const ColorFilter.mode(Colors.grey, BlendMode.saturation),
+                child: panel))
+        : panel;
+  }
 }
 
 Widget _text(String text,
@@ -1843,18 +1876,18 @@ class _ReviewsPage extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                         child:
-                            _text('Reviews & Ratings', bold: true, size: 20)),
+                            _text('Reviews & Ratings', bold: true, size: 24)),
                   ]),
                   const SizedBox(height: 24),
-                  _text(activityName, bold: true, size: 13),
+                  _text(activityName, bold: true, size: 16),
                   const SizedBox(height: 14),
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     SizedBox(
                         width: 134,
-                        height: 102,
+                        height: 120,
                         child: _reviewPanel(
                             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      _text(rating.toStringAsFixed(1), bold: true, size: 30),
+                      _text(rating.toStringAsFixed(1), bold: true, size: 36),
                       Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
@@ -1863,9 +1896,9 @@ class _ReviewsPage extends StatelessWidget {
                                   i < rating.round()
                                       ? Icons.star
                                       : Icons.star_border,
-                                  color: const Color(0xFFD8F34A), size: 14))),
+                                  color: const Color(0xFFD8F34A), size: 18))),
                       const SizedBox(height: 6),
-                      _text('(${reviews.length} Review)', size: 9),
+                      _text('(${reviews.length} Review)', size: 12),
                     ]))),
                     const SizedBox(width: 14),
                     Expanded(child: _ratingBars()),
@@ -1889,8 +1922,8 @@ class _ReviewsPage extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(children: [
                 SizedBox(
-                    width: 14, child: _text('$star', bold: true, size: 12)),
-                const Icon(Icons.star, size: 12, color: Color(0xFF202124)),
+                    width: 16, child: _text('$star', bold: true, size: 14)),
+                const Icon(Icons.star, size: 14, color: Color(0xFF202124)),
                 const SizedBox(width: 4),
                 Expanded(
                     child: ClipRRect(
@@ -1904,10 +1937,10 @@ class _ReviewsPage extends StatelessWidget {
                             color: const Color(0xFFD8F34A)))),
                 const SizedBox(width: 4),
                 SizedBox(
-                    width: 18,
+                    width: 30,
                     child: _text(
                         '${reviews.isEmpty ? 0 : ((_ratingCounts[star]! / reviews.length) * 100).round()}%',
-                        size: 7)),
+                        size: 10)),
               ]),
             )
         ],
@@ -1926,8 +1959,8 @@ class _ReviewsPage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
                 child: _text(_reviewValue(review, 'name', 'Customer'),
-                    bold: true, size: 10)),
-            _text(_reviewAge(review), size: 7, color: Colors.black87),
+                    bold: true, size: 13)),
+            _text(_reviewAge(review), size: 9, color: Colors.black87),
           ]),
           const SizedBox(height: 5),
           Row(
@@ -1941,10 +1974,10 @@ class _ReviewsPage extends StatelessWidget {
                           ? Icons.star
                           : Icons.star_border,
                       color: const Color(0xFFD8F34A),
-                      size: 11))),
+                      size: 14))),
           const SizedBox(height: 5),
           _text(_reviewValue(review, 'body', _reviewValue(review, 'comment')),
-              size: 9),
+              size: 12),
         ])),
       );
 

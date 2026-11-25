@@ -2793,8 +2793,15 @@ class _BookableSlot {
 
     final result = <_BookableSlot>[];
     final consumed = <_BookableSlot>{};
+    final activeHours = source
+        .map((slot) => parseStartHour(slot.startTime))
+        .whereType<int>()
+        .toSet();
+    final firstHourIndex = hoursOrder.indexWhere(activeHours.contains);
+    final lastHourIndex = hoursOrder.lastIndexWhere(activeHours.contains);
+    if (firstHourIndex == -1) return source;
 
-    for (final hour in hoursOrder) {
+    for (final hour in hoursOrder.sublist(firstHourIndex, lastHourIndex + 1)) {
       final matches = source
           .where((s) => !consumed.contains(s) && parseStartHour(s.startTime) == hour)
           .toList();
