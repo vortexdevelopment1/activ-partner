@@ -825,6 +825,59 @@ export class BookingsService {
     };
   }
 
+  async generatePayoutHistoryCsv(
+    currentUser: { id: string; role: string },
+    query: BookingPayoutQueryDto,
+  ): Promise<{ base64: string; filename: string; mimeType: string }> {
+    const exportQuery = Object.assign(new BookingPayoutQueryDto(), query, {
+      page: 1,
+      limit: 10_001,
+    });
+    const history = await this.getPayoutHistory(currentUser, exportQuery);
+    if (history.total > 10_000) {
+      throw new BadRequestException(
+        "Select a smaller date range to export up to 10,000 payouts.",
+      );
+    }
+    const cell = (value: unknown) => {
+      const text = String(value ?? "");
+      const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const rows = history.items.map((item) => [
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+      }).format(new Date(item.payoutDate)),
+      item.reference,
+      "",
+      "",
+      Number(item.amount).toFixed(2),
+      item.status,
+      "",
+    ]);
+    const csv = [
+      [
+        "Date",
+        "Transaction Reference",
+        "Bank",
+        "Account Last 4",
+        "Amount (INR)",
+        "Status",
+        "Failure Reason",
+      ],
+      ...rows,
+    ]
+      .map((row) => row.map(cell).join(","))
+      .join("\r\n");
+    const start = query.startDate ?? "all";
+    const end = query.endDate ?? "all";
+    return {
+      base64: Buffer.from(`\uFEFF${csv}`, "utf8").toString("base64"),
+      filename: `activ-payouts-${start}-${end}.csv`,
+      mimeType: "text/csv",
+    };
+  }
+
   async generatePayoutStatementPdf(
     bookingId: string,
     currentUser: { id: string; role: string },

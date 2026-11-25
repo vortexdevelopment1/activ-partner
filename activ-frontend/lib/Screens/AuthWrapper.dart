@@ -120,8 +120,9 @@ class _AuthWrapperState — reads userMobileNumber from SharedPrefs,
 */
 
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key, this.client});
+  const AuthWrapper({super.key, this.client, this.onResolved});
   final http.Client? client;
+  final VoidCallback? onResolved;
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
@@ -132,6 +133,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       'pending_legal_camera_document_type';
 
   bool isLoading = true;
+  bool _didResolve = false;
   Widget _destination = const GetStartedScreen();
 
   @override
@@ -161,9 +163,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final userType = await SharedPreference.readStr("user_type") ?? "";
       final pendingLegalCameraDocument =
           await SharedPreference.readStr(_pendingLegalCameraDocumentTypeKey);
+      final cachedProfileComplete =
+          await SharedPreference.readStr("is_profile_complete");
+      final cachedIsActive = await SharedPreference.readStr("is_active");
 
       // Team members can only manage bookings; keep them out of partner screens.
       if (userType == "team_member") {
+        if (!isBrowserSession) {
+          _finish(ManagerHomeScreen(client: widget.client));
+        }
         final response = await (widget.client?.get ?? http.get)(
           Uri.parse(AUTH_PROFILE_URL),
           headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
@@ -179,7 +187,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      // Partner flow — always fetch fresh state from server
+      // A returning partner can render the last server-validated destination
+      // while startup revalidates the token and approval state in background.
+      if (!isBrowserSession) {
+        if (cachedProfileComplete == "true" && cachedIsActive == "true") {
+          _finish(HomeScreen(client: widget.client));
+        } else if (cachedProfileComplete == "false") {
+          _finish(const TellUsAboutScreen());
+        } else if (pendingLegalCameraDocument != null &&
+            pendingLegalCameraDocument.isNotEmpty) {
+          _finish(const LegalInformationScreen());
+        }
+      }
+
+      // These independent checks run together to avoid two network round trips.
+      final unseenVenueFuture =
+          checkUnseenApprovedVenue(token, client: widget.client);
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse(AUTH_PROFILE_URL),
         headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
@@ -211,8 +234,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
       // Check immediately if partner has an approved venue waiting for the welcome screen!
       // Must be shown immediately when approved, without waiting for profile completion.
-      final unseenVenue =
-          await checkUnseenApprovedVenue(token, client: widget.client);
+      final unseenVenue = await unseenVenueFuture;
       if (unseenVenue != null) {
         final venueId = unseenVenue['id']?.toString() ?? '';
         final venueRef = unseenVenue['publicReference']?.toString() ??
@@ -336,11 +358,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _finish(Widget destination) {
     if (mounted) {
+      if (!isLoading && _destination.runtimeType == destination.runtimeType) {
+        return;
+      }
       SessionNavigation.instance.setRoot(destination);
       setState(() {
         _destination = destination;
         isLoading = false;
       });
+      if (!_didResolve) {
+        _didResolve = true;
+        widget.onResolved?.call();
+      }
     }
   }
 

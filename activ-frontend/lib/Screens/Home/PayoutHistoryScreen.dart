@@ -315,7 +315,7 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
                                                     child: Align(
                                                         alignment:
                                                             const Alignment(
-                                                                0, 0.3),
+                                                                0, -0.35),
                                                         child: Text(
                                                             'No payout records found',
                                                             style: _text(16))))
@@ -799,7 +799,6 @@ class ExportPayoutReportScreen extends StatefulWidget {
 
 class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
   late DateTimeRange _range;
-  String _format = 'pdf';
   bool _downloading = false;
   @override
   void initState() {
@@ -816,11 +815,8 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
     setState(() => _downloading = true);
     try {
       final token = await SharedPreference.readStr('jwt_token') ?? '';
-      final uri = Uri.parse('$BASE_URL/payouts/download').replace(
-          queryParameters: {
-            ..._filters(_range, widget.status),
-            'format': _format
-          });
+      final uri = Uri.parse('$BASE_URL/bookings/payout-history/download')
+          .replace(queryParameters: _filters(_range, widget.status));
       final response = await (widget.client?.get ?? http.get)(uri,
               headers: {'Authorization': 'Bearer $token'})
           .timeout(const Duration(seconds: 45));
@@ -835,7 +831,7 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
                   dialogTitle: 'Save payout report',
                   fileName: filename,
                   type: FileType.custom,
-                  allowedExtensions: [_format],
+                  allowedExtensions: const ['csv'],
                   bytes: bytes) !=
               null;
       if (saved && mounted) {
@@ -863,61 +859,37 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
             children: [
               _dateField(_range, _downloading ? null : _dates),
               const SizedBox(height: 36),
-              Text('Select Format', style: _text(20, bold: true)),
+              Text('CSV Report', style: _text(20, bold: true)),
               const SizedBox(height: 18),
-              for (final format in ['pdf', 'csv']) ...[
-                Container(
-                    padding: EdgeInsets.all(_format == format ? 2 : 1),
-                    decoration: BoxDecoration(
-                        gradient: _format == format
-                            ? const LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                colors: [
-                                    Color(0xFF424242),
-                                    Color(0xFFB9D749),
-                                  ])
-                            : null,
-                        color:
-                            _format == format ? null : const Color(0xFFD5DADA),
-                        borderRadius: BorderRadius.circular(24)),
-                    child: Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      child: InkWell(
-                          borderRadius: BorderRadius.circular(22),
-                          onTap: _downloading
-                              ? null
-                              : () => setState(() => _format = format),
-                          child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 24),
-                              child: Row(children: [
-                                Icon(
-                                    _format == format
-                                        ? Icons.check_circle
-                                        : Icons.radio_button_unchecked,
-                                    color: _format == format
-                                        ? _purple
-                                        : Colors.grey,
-                                    size: 24),
-                                const SizedBox(width: 22),
-                                Expanded(
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                      Text(format.toUpperCase(),
-                                          style: _text(28, bold: true)),
-                                      const SizedBox(height: 4),
-                                      Text('${format.toUpperCase()} Document',
-                                          style: _text(16,
-                                              color: const Color(0xFF484848))),
-                                    ])),
-                              ]))),
-                    )),
-                const SizedBox(height: 14),
-              ],
+              Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [Color(0xFF424242), Color(0xFFB9D749)]),
+                      borderRadius: BorderRadius.circular(24)),
+                  child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 24),
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(22)),
+                      child: Row(children: [
+                        const Icon(Icons.check_circle,
+                            color: _purple, size: 24),
+                        const SizedBox(width: 22),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text('CSV', style: _text(28, bold: true)),
+                              const SizedBox(height: 4),
+                              Text('CSV Document',
+                                  style: _text(16,
+                                      color: const Color(0xFF484848))),
+                            ])),
+                      ]))),
             ]),
         bottom: SizedBox(
             width: double.infinity,

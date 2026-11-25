@@ -109,6 +109,140 @@ void main() {
     expect(find.text('What happens next?'), findsNothing);
   });
 
+  testWidgets('in-review activity greys and disables actions and deletion',
+      (tester) async {
+    await open(tester, MockClient((_) async => response({
+          'status': 'pending',
+          'isActive': false,
+          'bookingAccept': false,
+        })));
+
+    final quickAction = find.text('Manage Slot & Pricing');
+    expect(
+        tester
+            .widget<InkWell>(find
+                .ancestor(of: quickAction, matching: find.byType(InkWell))
+                .first)
+            .onTap,
+        isNull);
+    expect(
+        tester
+            .widget<Opacity>(find
+                .ancestor(of: quickAction, matching: find.byType(Opacity))
+                .first)
+            .opacity,
+        .45);
+    expect(find.text('Recent Bookings'), findsNothing);
+    expect(find.text('View all \u2192'), findsNothing);
+    expect(find.text('No bookings yet'), findsNothing);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color ==
+                const Color(0xFFDC9300)),
+        findsNWidgets(2));
+
+    await tester.scrollUntilVisible(find.text('Delete Activity'), 250,
+        scrollable: find.byType(Scrollable).first);
+    final deleteAction = find.text('Delete Activity');
+    expect(
+        tester
+            .widget<InkWell>(find
+                .ancestor(of: deleteAction, matching: find.byType(InkWell))
+                .first)
+            .onTap,
+        isNull);
+    expect(
+        tester
+            .widget<Opacity>(find
+                .ancestor(of: deleteAction, matching: find.byType(Opacity))
+                .first)
+            .opacity,
+        .45);
+  });
+
+  testWidgets('recent bookings appears after the first booking from any source',
+      (tester) async {
+    await open(tester, MockClient((_) async => response({
+          'status': 'pending',
+          'isActive': false,
+          'bookingAccept': false,
+          'bookings': [
+            {
+              'id': 'walk-in',
+              'source': 'WALK_IN',
+              'customerName': 'Walk-in Customer',
+              'status': 'Upcoming',
+              'startsAt': '2030-01-01T10:00:00.000Z',
+              'endsAt': '2030-01-01T11:00:00.000Z',
+              'amount': 500,
+            }
+          ],
+        })));
+
+    expect(find.text('Recent Bookings'), findsOneWidget);
+    expect(find.text('View all \u2192'), findsOneWidget);
+    expect(find.text('Walk-in Customer'), findsOneWidget);
+  });
+
+  testWidgets('partner-paused activity locks quick actions but keeps delete',
+      (tester) async {
+    await open(tester, MockClient((_) async => response({
+          'status': 'approved',
+          'isActive': false,
+          'bookingAccept': true,
+        })));
+
+    final quickAction = find.text('Manage Slot & Pricing');
+    expect(
+        tester
+            .widget<InkWell>(find
+                .ancestor(of: quickAction, matching: find.byType(InkWell))
+                .first)
+            .onTap,
+        isNull);
+    expect(
+        tester
+            .widget<Opacity>(find
+                .ancestor(of: quickAction, matching: find.byType(Opacity))
+                .first)
+            .opacity,
+        .45);
+
+    await tester.scrollUntilVisible(find.text('Delete Activity'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(
+        tester
+            .widget<InkWell>(find
+                .ancestor(
+                    of: find.text('Delete Activity'),
+                    matching: find.byType(InkWell))
+                .first)
+            .onTap,
+        isNotNull);
+  });
+
+  testWidgets('unapproved activity cannot use delete', (tester) async {
+    await open(tester, MockClient((_) async => response({
+          'status': 'rejected',
+          'isActive': false,
+          'bookingAccept': false,
+        })));
+
+    await tester.scrollUntilVisible(find.text('Delete Activity'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(
+        tester
+            .widget<InkWell>(find
+                .ancestor(
+                    of: find.text('Delete Activity'),
+                    matching: find.byType(InkWell))
+                .first)
+            .onTap,
+        isNull);
+  });
+
   testWidgets('single activity pause waits for server and refreshes status',
       (tester) async {
     var active = true;

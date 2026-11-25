@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -11,6 +13,7 @@ import '../Screens/Home/Activities/AddActivities/AddVenuePhotoUploadScreen.dart'
 import '../Screens/Home/Activities/AddActivities/AddVenueTimingScreen.dart';
 import 'activity_flow_checkpoint.dart';
 import 'activity_image_draft_store.dart';
+import '../api_calling/api_request.dart';
 
 /// Reopens an interrupted add-activity flow without using transient Futures.
 class ActivityResumeNavigator {
@@ -20,6 +23,15 @@ class ActivityResumeNavigator {
     http.Client? client,
   ) async {
     final id = checkpoint.activityId;
+    final categoryId = checkpoint.data['categoryId']?.toString() ?? '';
+    final activityName = checkpoint.data['activityName']?.toString() ?? '';
+    await SharedPreference.addStringToSF('activity_current_draft_id', id);
+    if (categoryId.isNotEmpty) {
+      await SharedPreference.addStringToSF(
+        'operate_value',
+        jsonEncode({'id': categoryId, 'title': activityName}),
+      );
+    }
     final pages = <Widget>[
       AddListActivityTypeScreen(client: client),
       AddVenuePhotoUploadScreen(client: client),

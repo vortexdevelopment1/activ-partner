@@ -23,8 +23,8 @@ void main() {
     SharedPreferences.setMockInitialValues({'jwt_token': 'session'});
     BASE_URL = 'https://backend.test/api/v1';
 
-    // 14:57 India on Friday, Nov 13, 2026 (matching user screenshot)
-    final now = DateTime.utc(2026, 11, 13, 9, 27);
+    // 04:00 India on Friday, Nov 13, 2026, before every returned slot.
+    final now = DateTime.utc(2026, 11, 12, 22, 30);
 
     final client = MockClient((request) async {
       return http.Response(
@@ -68,6 +68,10 @@ void main() {
 
     // Verify Select Slot screen is open
     expect(find.text('Select Slot'), findsOneWidget);
+
+    // Do not fabricate closures before opening or after closing.
+    expect(find.text('05:00 AM - 02:00 PM'), findsNothing);
+    expect(find.text('10:00 PM - 05:00 AM'), findsNothing);
 
     expect(find.text('05:00 PM - 06:00 PM'), findsOneWidget);
 

@@ -46,14 +46,39 @@ class _State extends State<AddListActivityTypeScreen> {
 
   static const Map<String, List<String>> _filterKeywords = {
     'Indoor Sports': [
-      'gym', 'yoga', 'pilates', 'zumba', 'dance', 'crossfit', 'hiit',
-      'badminton', 'squash', 'table tennis', 'padel', 'pickle', 'martial',
-      'boxing', 'mma', 'billiard', 'bowling', 'shooting', 'archery',
-      'boulder', 'climbing',
+      'gym',
+      'yoga',
+      'pilates',
+      'zumba',
+      'dance',
+      'crossfit',
+      'hiit',
+      'badminton',
+      'squash',
+      'table tennis',
+      'padel',
+      'pickle',
+      'martial',
+      'boxing',
+      'mma',
+      'billiard',
+      'bowling',
+      'shooting',
+      'archery',
+      'boulder',
+      'climbing',
     ],
     'Outdoor Sports': [
-      'football', 'basketball', 'tennis', 'hockey', 'volleyball', 'frisbee',
-      'cricket', 'adventure', 'equestrian', 'paintball',
+      'football',
+      'basketball',
+      'tennis',
+      'hockey',
+      'volleyball',
+      'frisbee',
+      'cricket',
+      'adventure',
+      'equestrian',
+      'paintball',
     ],
     'Water Sports': ['swimming', 'diving', 'water', 'aquatic', 'pool'],
   };
@@ -105,6 +130,7 @@ class _State extends State<AddListActivityTypeScreen> {
       final categories = await _api.categories();
       final venues = await _api.approvedVenues();
       final selected = await SharedPreference.readStr('venue_id');
+      final savedOperate = await SharedPreference.readStr('operate_value');
       if (!mounted) return;
       _venues = venues;
       _venueId = venues.any((v) => v['id'] == selected)
@@ -124,6 +150,14 @@ class _State extends State<AddListActivityTypeScreen> {
               type: c['type']?.toString() ?? '',
               description: c['description']?.toString() ?? ''))
           .toList();
+      try {
+        final saved = jsonDecode(savedOperate ?? '') as Map<String, dynamic>;
+        final selectedId = saved['id']?.toString();
+        for (final activity in resultList) {
+          activity.isSelected = activity.id == selectedId;
+        }
+        isActivitySelected = resultList.any((activity) => activity.isSelected);
+      } catch (_) {}
       if (venues.isEmpty)
         _loadError = 'Your venue must be approved before adding an activity.';
     } catch (e) {
@@ -137,9 +171,11 @@ class _State extends State<AddListActivityTypeScreen> {
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
     } else {
-      Navigator.pushReplacement(context, MaterialPageRoute<void>(
-        builder: (_) => VenueActivityListScreen(client: widget.client),
-      ));
+      Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => VenueActivityListScreen(client: widget.client),
+          ));
     }
   }
 
@@ -237,13 +273,67 @@ class _State extends State<AddListActivityTypeScreen> {
                                                 'id': chosen.id,
                                                 'title': chosen.title
                                               }));
-                                          final draftId = await ActivityDraftIdentity.createNew(
-                                            venueId: _venueId!, categoryId: chosen.id);
+                                          var draftId =
+                                              await SharedPreference.readStr(
+                                                      'activity_current_draft_id') ??
+                                                  '';
+                                          final checkpoint =
+                                              await ActivityFlowCheckpoint.read(
+                                                  draftId);
+                                          final sameDraft =
+                                              checkpoint != null &&
+                                                  checkpoint.data['venueId']
+                                                          ?.toString() ==
+                                                      _venueId &&
+                                                  checkpoint.data['categoryId']
+                                                          ?.toString() ==
+                                                      chosen.id;
+                                          if (!sameDraft) {
+                                            if (checkpoint != null) {
+                                              final previousVenueId = checkpoint
+                                                  .data['venueId']
+                                                  ?.toString();
+                                              final previousCategoryId =
+                                                  checkpoint.data['categoryId']
+                                                      ?.toString();
+                                              if (previousVenueId?.isNotEmpty ==
+                                                      true &&
+                                                  previousCategoryId
+                                                          ?.isNotEmpty ==
+                                                      true) {
+                                                await ActivityDraftIdentity
+                                                    .link(
+                                                  venueId: previousVenueId!,
+                                                  categoryId:
+                                                      previousCategoryId!,
+                                                  activityId: draftId,
+                                                );
+                                              }
+                                            }
+                                            draftId =
+                                                await ActivityDraftIdentity
+                                                    .forActivity(
+                                              venueId: _venueId!,
+                                              categoryId: chosen.id,
+                                            );
+                                          } else {
+                                            await ActivityDraftIdentity.link(
+                                              venueId: _venueId!,
+                                              categoryId: chosen.id,
+                                              activityId: draftId,
+                                            );
+                                          }
                                           await SharedPreference.addStringToSF(
-                                              'activity_current_draft_id', draftId);
+                                              'activity_current_draft_id',
+                                              draftId);
                                           await ActivityFlowCheckpoint.save(
-                                            activityId: draftId, step: 'activityType',
-                                            data: {'venueId': _venueId, 'categoryId': chosen.id},
+                                            activityId: draftId,
+                                            step: 'activityType',
+                                            data: {
+                                              'venueId': _venueId,
+                                              'categoryId': chosen.id,
+                                              'activityName': chosen.title,
+                                            },
                                           );
                                           if (!context.mounted) return;
                                           CommonUtilities.NavigateWithPush(
@@ -355,14 +445,14 @@ class _State extends State<AddListActivityTypeScreen> {
           final label = _filterLabels[index];
           final selected = label == _selectedFilter;
           return InkWell(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             onTap: () => setState(() => _selectedFilter = label),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 15),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected ? AppColors.purple : AppColors.white,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: selected ? AppColors.purple : AppColors.darkBlack,
                 ),
@@ -403,11 +493,10 @@ class _State extends State<AddListActivityTypeScreen> {
     }).toList();
     if (activeList.isEmpty)
       return const Center(
-          child: Text(
-              'No activities match your search or filter.'));
+          child: Text('No activities match your search or filter.'));
 
     return Container(
-      margin: EdgeInsets.fromLTRB(10, 0, 10, 0),
+      margin: EdgeInsets.fromLTRB(10, 8, 10, 0),
       child: LazyLoadScrollView(
         scrollDirection: Axis.vertical,
         scrollOffset: activeList.length,
@@ -454,11 +543,11 @@ class _State extends State<AddListActivityTypeScreen> {
               gradient: const LinearGradient(
                 colors: [AppColors.borderGradient1, AppColors.borderGradient2],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(24),
             )
           : BoxDecoration(
               color: AppColors.gray,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.gray, width: 1),
             ),
       child: InkWell(
@@ -494,7 +583,7 @@ class _State extends State<AddListActivityTypeScreen> {
               : EdgeInsets.zero,
           decoration: BoxDecoration(
             color: model.isSelected ? AppColors.gray3 : AppColors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -519,8 +608,8 @@ class _State extends State<AddListActivityTypeScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(2, 2, 2, 0),
       child: SizedBox(
-        width: 48,
-        height: 48,
+        width: 72,
+        height: 72,
         child: Image.asset(
           setTypeImages(model),
           fit: BoxFit.contain,
@@ -531,16 +620,16 @@ class _State extends State<AddListActivityTypeScreen> {
 
   Widget getTitle(VenueTypeModel model, BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(5, 5, 5, 0),
+      margin: const EdgeInsets.fromLTRB(5, 8, 5, 0),
       child: Text(
         (model.title != "") ? model.title : "",
         textAlign: TextAlign.center,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 14,
+          fontSize: 16,
           fontFamily: 'Satoshi',
-          fontWeight: FontWeight.w400,
+          fontWeight: FontWeight.w700,
           color: AppColors.darkBlack,
         ),
       ),
@@ -556,7 +645,7 @@ class _State extends State<AddListActivityTypeScreen> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 14,
           fontFamily: 'Satoshi',
           fontWeight: FontWeight.w400,
           color: AppColors.black1,

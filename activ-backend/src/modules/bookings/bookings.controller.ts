@@ -167,6 +167,20 @@ export class BookingsController {
     return { message: "Payout history fetched successfully", data };
   }
 
+  @Get("payout-history/download")
+  @Roles(UserRole.PARTNER)
+  @ApiOperation({ summary: "Download the filtered payout history as CSV" })
+  async downloadPayoutHistory(
+    @Query() query: BookingPayoutQueryDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.bookingsService.generatePayoutHistoryCsv(
+      user,
+      query,
+    );
+    return { message: "Payout report generated successfully", data };
+  }
+
   @Get(":id/payout-statement")
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   @ApiOperation({

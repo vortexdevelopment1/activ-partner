@@ -11,6 +11,20 @@ import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _PhotoPicker extends ImagePicker {
+  _PhotoPicker(this.photos);
+  final List<XFile> photos;
+
+  @override
+  Future<List<XFile>> pickMultiImage({
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+    int? limit,
+    bool requestFullMetadata = true,
+  }) async => photos;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -38,38 +52,128 @@ void main() {
         {'id': 'swimming-category', 'name': 'Swimming'}
       ]);
 
-  testWidgets('photo review swaps cover using a long press', (tester) async {
-    SharedPreferences.setMockInitialValues({'operate_value': jsonEncode({'title': 'Gym'})});
+  testWidgets('review header is left aligned and plus adds another photo',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'operate_value': jsonEncode({'title': 'Boxing'}),
+    });
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 1100);
+    tester.view.physicalSize = const Size(430, 1000);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final images = ['swimming', 'tennis', 'yoga', 'volleyball']
-        .map((name) => XFile('assets/activities/$name.png')).toList();
     List<XFile>? changed;
-    await tester.pumpWidget(MaterialApp(home: AddVenuePhotoListViewScreen(
-      images: images, onPhotosChanged: (photos) => changed = photos,
-    )));
+    final added = XFile.fromData(
+      Uint8List.fromList([137, 80, 78, 71, 99]),
+      name: 'added.png',
+      mimeType: 'image/png',
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddVenuePhotoListViewScreen(
+        images: photos,
+        imagePicker: _PhotoPicker([added]),
+        onPhotosChanged: (images) => changed = images,
+      ),
+    ));
     await tester.pumpAndSettle();
-    final cards = find.byType(Card);
-    final from = tester.getCenter(cards.at(1));
-    final to = tester.getCenter(cards.first);
-    final gesture = await tester.startGesture(from);
-    await tester.pump(const Duration(milliseconds: 650));
-    await gesture.moveBy(const Offset(0, -20));
-    await tester.pump();
-    await gesture.moveTo(to);
-    await tester.pump(const Duration(milliseconds: 500));
-    await gesture.up();
+
+    expect(tester.getTopLeft(find.text('Boxing')).dx,
+        tester.getTopLeft(find.text("Upload this activity's images")).dx);
+    await tester.tap(find.byKey(const ValueKey('add-activity-photos')));
     await tester.pumpAndSettle();
-    expect(changed?.map((image) => image.path), [
-      images[1].path, images[0].path, images[2].path, images[3].path,
-    ]);
-    expect(find.descendant(
-        of: find.byKey(ValueKey('img_1_${images[1].path}')),
-        matching: find.text('Cover Photo')), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Gallery'));
+    await tester.pumpAndSettle();
+
+    expect(changed, hasLength(5));
+    expect(changed!.last, same(added));
   });
+
+  testWidgets('photo added from review is included in the final upload',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'session',
+      'operate_value': jsonEncode({'title': 'Boxing'}),
+    });
+    final added = XFile.fromData(
+      Uint8List.fromList([137, 80, 78, 71, 99]),
+      name: 'added.png',
+      mimeType: 'image/png',
+    );
+    var uploadedFiles = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/questions')) return json([]);
+      if (request.method == 'GET') {
+        return json({'id': 'activity', 'status': 'draft'});
+      }
+      if (request.method == 'POST') {
+        final body = latin1.decode(request.bodyBytes);
+        uploadedFiles = 'name="images"'.allMatches(body).length;
+        expect(body, contains('added.png'));
+        return json({
+          'imageUrls': List.generate(uploadedFiles, (i) => 'image-$i'),
+        });
+      }
+      throw StateError('Unexpected request ${request.method} ${request.url}');
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddVenuePhotoListViewScreen(
+        images: photos,
+        activityId: 'activity',
+        uploadFuture: Future<void>.value(),
+        imagePicker: _PhotoPicker([added]),
+        client: client,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-activity-photos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gallery'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(uploadedFiles, 5);
+  });
+
+  for (final useHandle in [true, false]) {
+    testWidgets('photo review swaps cover using ${useHandle ? 'the visible handle' : 'a long press'}', (tester) async {
+      SharedPreferences.setMockInitialValues({'operate_value': jsonEncode({'title': 'Gym'})});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 1100);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final images = ['swimming', 'tennis', 'yoga', 'volleyball']
+          .map((name) => XFile('assets/activities/$name.png')).toList();
+      List<XFile>? changed;
+      await tester.pumpWidget(MaterialApp(home: AddVenuePhotoListViewScreen(
+        images: images, onPhotosChanged: (photos) => changed = photos,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('drag the handle to reorder'), findsOneWidget);
+      final handles = find.byType(ReorderableDragStartListener);
+      final from = useHandle
+          ? tester.getCenter(handles.at(1))
+          : tester.getCenter(find.byType(Card).at(1));
+      final to = tester.getCenter(handles.first);
+      if (useHandle) expect(handles.at(1).hitTestable(), findsOneWidget);
+      final gesture = await tester.startGesture(from);
+      if (!useHandle) await tester.pump(const Duration(milliseconds: 650));
+      await gesture.moveBy(const Offset(0, -20));
+      await tester.pump();
+      await gesture.moveTo(to);
+      await tester.pump(const Duration(milliseconds: 500));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(changed?.map((image) => image.path), [
+        images[1].path, images[0].path, images[2].path, images[3].path,
+      ]);
+      expect(find.descendant(
+          of: find.byKey(ValueKey('img_1_${images[1].path}')),
+          matching: find.text('Cover Photo')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   test('uploads ordered photos with MIME types, auth and replacement on retry',
       () async {

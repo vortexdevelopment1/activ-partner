@@ -16,6 +16,8 @@ import 'AddActivitySubmitReviewScreen.dart';
 import 'AddActivityConfigureScreen.dart';
 import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
+import '../../../../Utills/activity_flow_checkpoint.dart';
+import '../../../../Utills/activity_image_draft_store.dart';
 
 class AddActivitySubmissionResultScreen extends StatefulWidget {
   const AddActivitySubmissionResultScreen(
@@ -179,6 +181,12 @@ class _AddActivitySubmissionResultScreenState
       // A local checkpoint must never prevent navigation after server removal.
       try {
         await SharedPreference.remove('activity_draft_resume_$id');
+        await ActivityFlowCheckpoint.clear(id);
+        await ActivityImageDraftStore.clear(id);
+        if (await SharedPreference.readStr('activity_current_draft_id') == id) {
+          await SharedPreference.remove('activity_current_draft_id');
+          await SharedPreference.remove('operate_value');
+        }
       } catch (_) {}
       if (mounted) _backToActivities();
     } catch (_) {

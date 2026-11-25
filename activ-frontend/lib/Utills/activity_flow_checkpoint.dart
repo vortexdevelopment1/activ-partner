@@ -38,7 +38,8 @@ class ActivityFlowCheckpoint {
         step: value['step']?.toString() ?? '',
         data: Map<String, dynamic>.from(value['data'] as Map? ?? {}),
         interrupted: value['interrupted'] != false,
-        updatedAt: DateTime.tryParse(value['updatedAt']?.toString() ?? '') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse(value['updatedAt']?.toString() ?? '') ??
+            DateTime.now(),
       );
     } catch (_) {
       return null;
@@ -53,10 +54,11 @@ class ActivityFlowCheckpoint {
     Map<String, dynamic> data = const {},
   }) async {
     if (activityId.trim().isEmpty) return;
+    final existing = await read(activityId);
     final checkpoint = ActivityFlowCheckpoint(
       activityId: activityId,
       step: step,
-      data: data,
+      data: {...?existing?.data, ...data},
       updatedAt: DateTime.now(),
     );
     await SharedPreference.addStringToSF(
@@ -81,10 +83,14 @@ class ActivityFlowCheckpoint {
     final source = await read(fromId);
     if (source == null) return;
     final destination = ActivityFlowCheckpoint(
-      activityId: toId, step: source.step, data: source.data,
-      interrupted: source.interrupted, updatedAt: source.updatedAt,
+      activityId: toId,
+      step: source.step,
+      data: source.data,
+      interrupted: source.interrupted,
+      updatedAt: source.updatedAt,
     );
-    await SharedPreference.addStringToSF(key(toId), jsonEncode(destination.toJson()));
+    await SharedPreference.addStringToSF(
+        key(toId), jsonEncode(destination.toJson()));
     final verified = await read(toId);
     if (verified != null && verified.step == source.step) await clear(fromId);
   }
@@ -99,6 +105,7 @@ class ActivityFlowCheckpoint {
       interrupted: false,
       updatedAt: DateTime.now(),
     );
-    await SharedPreference.addStringToSF(key(activityId), jsonEncode(completed.toJson()));
+    await SharedPreference.addStringToSF(
+        key(activityId), jsonEncode(completed.toJson()));
   }
 }

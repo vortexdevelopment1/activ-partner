@@ -37,7 +37,6 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   final ImagePicker _picker = ImagePicker();
   String _imageDraftKey = '';
   Future<String>? _createdActivityFuture;
-  bool _discardingActivity = false;
 
   @override
   void initState() {
@@ -48,21 +47,35 @@ class _State extends State<AddVenuePhotoUploadScreen> {
 
   Future<void> _restoreImageDraft() async {
     final venue = checkString(await SharedPreference.readStr('venue_id'));
-    final category = checkString(await SharedPreference.readStr('operate_value'));
+    final category =
+        checkString(await SharedPreference.readStr('operate_value'));
     Map<String, dynamic> categoryMap = {};
-    try { categoryMap = Map<String, dynamic>.from(jsonDecode(category)); } catch (_) {}
+    try {
+      categoryMap = Map<String, dynamic>.from(jsonDecode(category));
+    } catch (_) {}
     final categoryId = categoryMap['id']?.toString() ?? '';
-    _imageDraftKey = await SharedPreference.readStr('activity_current_draft_id') ?? '';
+    _imageDraftKey =
+        await SharedPreference.readStr('activity_current_draft_id') ?? '';
     if (_imageDraftKey.isEmpty) {
       _imageDraftKey = categoryId.isEmpty
           ? '$venue:$category'
-          : await ActivityDraftIdentity.forActivity(venueId: venue, categoryId: categoryId);
+          : await ActivityDraftIdentity.forActivity(
+              venueId: venue, categoryId: categoryId);
     }
     if (_imageDraftKey.isNotEmpty && !ActivityFlowCheckpoint.restoring) {
-      await ActivityFlowCheckpoint.save(activityId: _imageDraftKey, step: 'photoUpload');
+      await ActivityFlowCheckpoint.save(
+        activityId: _imageDraftKey,
+        step: 'photoUpload',
+        data: {
+          'venueId': venue,
+          'categoryId': categoryId,
+          'activityName': categoryMap['title']?.toString() ?? '',
+        },
+      );
     }
     final saved = await ActivityImageDraftStore.read(_imageDraftKey);
-    if (saved.isNotEmpty && mounted) setState(() => _selectedImages.addAll(saved));
+    if (saved.isNotEmpty && mounted)
+      setState(() => _selectedImages.addAll(saved));
   }
 
   Future<void> _persistImageDraft() async {
@@ -71,37 +84,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     }
   }
 
-  Future<void> _backFromUploadStep() async {
-    if (_discardingActivity) return;
-    setState(() => _discardingActivity = true);
-    try {
-      final future = _createdActivityFuture;
-      if (future != null) {
-        final activityId = await future;
-        final api = ActivitySetupApi(client: widget.client);
-        try {
-          await api.discardDraft(activityId);
-        } finally {
-          api.dispose();
-        }
-        await ActivityFlowCheckpoint.clear(activityId);
-        await ActivityImageDraftStore.clear(activityId);
-      }
-      if (_imageDraftKey.isNotEmpty) {
-        await ActivityFlowCheckpoint.clear(_imageDraftKey);
-        await ActivityImageDraftStore.clear(_imageDraftKey);
-      }
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to discard this unfinished activity: $error')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _discardingActivity = false);
-    }
-  }
+  void _backFromUploadStep() => Navigator.pop(context);
 
   // File Size Validation (5 MB se jyada na ho)
   Future<bool> _isValidFileSize(String path) async {
@@ -110,7 +93,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     final sizeInMB = (sizeInBytes / (1024 * 1024)).toStringAsFixed(2);
 
     const maxSizeInBytes = 5 * 1024 * 1024; // 5 MB
- //   CommonUtilities.createSnackBar(context, "Image Size : " +sizeInMB.toString());
+    //   CommonUtilities.createSnackBar(context, "Image Size : " +sizeInMB.toString());
     return sizeInBytes <= maxSizeInBytes;
   }
 
@@ -141,7 +124,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     if (cropped != null) {
       final isValid = await _isValidFileSize(cropped.path);
       if (!isValid) {
-        CommonUtilities.createSnackBar(context, "Each image must be less than 5 MB.");
+        CommonUtilities.createSnackBar(
+            context, "Each image must be less than 5 MB.");
         return null;
       }
       return XFile(cropped.path);
@@ -182,9 +166,32 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     final activityId = await activityIdFuture;
     await ActivityImageDraftStore.migrate(_imageDraftKey, activityId);
     await ActivityFlowCheckpoint.migrate(_imageDraftKey, activityId);
+    final raw = checkString(await SharedPreference.readStr('operate_value'));
+    Map<String, dynamic> category = {};
+    try {
+      category = Map<String, dynamic>.from(jsonDecode(raw));
+    } catch (_) {}
+    final venueId = checkString(await SharedPreference.readStr('venue_id'));
+    final categoryId = category['id']?.toString() ?? '';
+    if (venueId.isNotEmpty && categoryId.isNotEmpty) {
+      await ActivityDraftIdentity.link(
+        venueId: venueId,
+        categoryId: categoryId,
+        activityId: activityId,
+      );
+    }
+    await SharedPreference.addStringToSF(
+        'activity_current_draft_id', activityId);
+    final checkpoint = await ActivityFlowCheckpoint.read(activityId);
+    await ActivityFlowCheckpoint.save(
+      activityId: activityId,
+      step: 'photoReview',
+      data: checkpoint?.data ?? const {},
+    );
     final client = widget.client ?? http.Client();
     try {
-      await ActivityPhotoUploader(client: client, baseUrl: BASE_URL).uploadImages(
+      await ActivityPhotoUploader(client: client, baseUrl: BASE_URL)
+          .uploadImages(
         token: token,
         serviceId: activityId,
         images: List.of(images),
@@ -206,13 +213,15 @@ class _State extends State<AddVenuePhotoUploadScreen> {
 // Update function to check button status
   void _updateButtonStatus() {
     setState(() {
-      _isButtonEnabled = _selectedImages.length >= 4 && _selectedImages.length <= 12;
+      _isButtonEnabled =
+          _selectedImages.length >= 4 && _selectedImages.length <= 12;
     });
   }
 
   Future<void> _pickImages() async {
     if (_selectedImages.length >= 12) {
-      CommonUtilities.createSnackBar(context, "You can upload maximum 12 images.");
+      CommonUtilities.createSnackBar(
+          context, "You can upload maximum 12 images.");
       return;
     }
 
@@ -231,7 +240,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
           continue;
         }
 
-        if (await containsVenuePhoto(await img.readAsBytes(), selectedPhotos: _selectedImages)) {
+        if (await containsVenuePhoto(await img.readAsBytes(),
+            selectedPhotos: _selectedImages)) {
           duplicateFound = true;
           continue;
         }
@@ -247,7 +257,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         await _persistImageDraft();
       }
       _updateButtonStatus();
-      if (duplicateFound && mounted) await showDuplicateVenuePhotoDialog(context);
+      if (duplicateFound && mounted)
+        await showDuplicateVenuePhotoDialog(context);
     }
 
     _updateButtonStatus(); // ✅ update button state
@@ -259,7 +270,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
       return;
     }
 
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 40);
+    final XFile? image =
+        await _picker.pickImage(source: ImageSource.camera, imageQuality: 40);
     if (image != null) {
       final isValid = await _isValidImage(image);
 
@@ -271,7 +283,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
         return;
       }
 
-      if (await containsVenuePhoto(await image.readAsBytes(), selectedPhotos: _selectedImages)) {
+      if (await containsVenuePhoto(await image.readAsBytes(),
+          selectedPhotos: _selectedImages)) {
         if (mounted) await showDuplicateVenuePhotoDialog(context);
         return;
       }
@@ -284,7 +297,6 @@ class _State extends State<AddVenuePhotoUploadScreen> {
 
     _updateButtonStatus(); // ✅ update button state
   }
-
 
 // Show Bottom Popup
   void _showPickOptions() {
@@ -316,8 +328,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
   }
 
   @override
-  Widget build(BuildContext context)
-  {
+  Widget build(BuildContext context) {
     return Container(
       child: Stack(
         children: [
@@ -354,7 +365,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                     bool isTablet = width >= 600 && width < 1100;
 
                     double containerWidth =
-                    isMobile ? width * 1 : (isTablet ? 500 : 600);
+                        isMobile ? width * 1 : (isTablet ? 500 : 600);
 
                     return Container(
                       //width: containerWidth,
@@ -371,7 +382,6 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                 child: ListView(
                                   shrinkWrap: true,
                                   children: [
-
                                     getStepBarCount(2 / 6, 2, 6),
 
                                     getText(),
@@ -380,133 +390,167 @@ class _State extends State<AddVenuePhotoUploadScreen> {
 
                                     // Upload Box
                                     Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 25, 0, 0),
-                                      child: DottedBorder(
-                                        color: AppColors.purple,
-                                        strokeWidth: 1.5,
-                                        dashPattern: [6, 4],
-                                        borderType: BorderType.RRect,
-                                        radius: const Radius.circular(12),
-                                        child: Container(
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              SizedBox(
-                                                width: 74,
-                                                height: 58,
-                                                child: Image.asset('assets/ic_pan.png'),
-                                              ),
-                                              Container(
-                                                margin: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-                                                child: const Text(
-                                                  "Drag and drop",
-                                                  style: TextStyle(
-                                                      fontSize: AppSize.size_16,
-                                                      fontFamily: 'Satoshi',
-                                                      fontWeight: FontWeight.w700,
-                                                      color: AppColors.darkBlack,
-                                                      height: 1
+                                        margin: const EdgeInsets.fromLTRB(
+                                            0, 25, 0, 0),
+                                        child: DottedBorder(
+                                          color: AppColors.purple,
+                                          strokeWidth: 1.5,
+                                          dashPattern: [6, 4],
+                                          borderType: BorderType.RRect,
+                                          radius: const Radius.circular(12),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 20, horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                SizedBox(
+                                                  width: 74,
+                                                  height: 58,
+                                                  child: Image.asset(
+                                                      'assets/ic_pan.png'),
+                                                ),
+                                                Container(
+                                                  margin:
+                                                      const EdgeInsets.fromLTRB(
+                                                          0, 12, 0, 0),
+                                                  child: const Text(
+                                                    "Drag and drop",
+                                                    style: TextStyle(
+                                                        fontSize:
+                                                            AppSize.size_16,
+                                                        fontFamily: 'Satoshi',
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color:
+                                                            AppColors.darkBlack,
+                                                        height: 1),
                                                   ),
                                                 ),
-                                              ),
-                                              // Sub Text
-                                              Container(
-                                                margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-                                                child: const Text(
-                                                  "or browse for photos",
-                                                  style: TextStyle(
-                                                      fontSize: AppSize.size_14,
-                                                      fontFamily: 'Satoshi',
-                                                      color: AppColors.black1,
-                                                      height: 1
+                                                // Sub Text
+                                                Container(
+                                                  margin:
+                                                      const EdgeInsets.fromLTRB(
+                                                          0, 8, 0, 0),
+                                                  child: const Text(
+                                                    "or browse for photos",
+                                                    style: TextStyle(
+                                                        fontSize:
+                                                            AppSize.size_14,
+                                                        fontFamily: 'Satoshi',
+                                                        color: AppColors.black1,
+                                                        height: 1),
                                                   ),
                                                 ),
-                                              ),
-                                              // Browser Button to Pick Images
-                                              InkWell(
-                                                onTap: ()
-                                                {
-                                                  _showPickOptions();
-                                                  //_pickImages();
-                                                },
-                                                child: Container(
-                                                    height: 45,
-                                                    margin: const EdgeInsets.fromLTRB(65, 15, 65, 5),
-                                                    decoration: BoxDecoration(
-                                                      borderRadius: const BorderRadius.only(
-                                                        topLeft: Radius.circular(12),
-                                                        topRight: Radius.circular(12),
-                                                        bottomLeft: Radius.circular(12),
-                                                        bottomRight: Radius.circular(12),
+                                                // Browser Button to Pick Images
+                                                InkWell(
+                                                  onTap: () {
+                                                    _showPickOptions();
+                                                    //_pickImages();
+                                                  },
+                                                  child: Container(
+                                                      height: 45,
+                                                      margin: const EdgeInsets
+                                                          .fromLTRB(
+                                                          65, 15, 65, 5),
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .only(
+                                                          topLeft:
+                                                              Radius.circular(
+                                                                  12),
+                                                          topRight:
+                                                              Radius.circular(
+                                                                  12),
+                                                          bottomLeft:
+                                                              Radius.circular(
+                                                                  12),
+                                                          bottomRight:
+                                                              Radius.circular(
+                                                                  12),
+                                                        ),
+                                                        border: Border.all(
+                                                            color: AppColors
+                                                                .purple,
+                                                            width: 1),
+                                                        color: AppColors.white,
                                                       ),
-                                                      border: Border.all(color: AppColors.purple, width: 1),
-                                                      color: AppColors.white,
-                                                    ),
-                                                    child: Container(
-                                                        alignment: Alignment.center,
-                                                        child: const Text(
-                                                          "Browse",
-                                                          style: TextStyle(
-                                                              fontSize: AppSize.size_16,
-                                                              fontFamily: 'Satoshi',
-                                                              color: AppColors.purple,
-                                                              height: 1
-                                                          ),
-                                                        )
-                                                    )
+                                                      child: Container(
+                                                          alignment:
+                                                              Alignment.center,
+                                                          child: const Text(
+                                                            "Browse",
+                                                            style: TextStyle(
+                                                                fontSize: AppSize
+                                                                    .size_16,
+                                                                fontFamily:
+                                                                    'Satoshi',
+                                                                color: AppColors
+                                                                    .purple,
+                                                                height: 1),
+                                                          ))),
                                                 ),
-                                              ),
 
-                                              Container(
-                                                alignment: Alignment.center,
-                                                margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-                                                child: const Text(
-                                                  "Please upload a minimum of 4 clear wide-angle photos in PNG or JPG formats up-to 5 MB",
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                      fontSize: AppSize.size_14,
-                                                      fontFamily: 'Satoshi',
-                                                      color: AppColors.black1,
-                                                      height: 1.4
+                                                Container(
+                                                  alignment: Alignment.center,
+                                                  margin:
+                                                      const EdgeInsets.fromLTRB(
+                                                          0, 8, 0, 0),
+                                                  child: const Text(
+                                                    "Please upload a minimum of 4 clear wide-angle photos in PNG or JPG formats up-to 5 MB",
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                        fontSize:
+                                                            AppSize.size_14,
+                                                        fontFamily: 'Satoshi',
+                                                        color: AppColors.black1,
+                                                        height: 1.4),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      )
-
-                                    ),
+                                        )),
 
                                     Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 20, 0, 15),
+                                      margin: const EdgeInsets.fromLTRB(
+                                          0, 20, 0, 15),
                                       height: 120,
                                       child: ListView.builder(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: _selectedImages.length,
                                         itemBuilder: (context, index) {
                                           return Container(
-                                            margin: const EdgeInsets.only(right: 8), // spacing between images
-                                            width: 120, // ✅ fixed width for each image
+                                            margin: const EdgeInsets.only(
+                                                right:
+                                                    8), // spacing between images
+                                            width:
+                                                120, // ✅ fixed width for each image
                                             child: Stack(
                                               children: [
                                                 ClipRRect(
-                                                  borderRadius: BorderRadius.circular(10),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
                                                   child: kIsWeb
                                                       ? Image.network(
-                                                          _selectedImages[index].path,
+                                                          _selectedImages[index]
+                                                              .path,
                                                           fit: BoxFit.cover,
                                                           width: 120,
                                                           height: 120,
                                                         )
                                                       : Image.file(
-                                                          File(_selectedImages[index].path),
+                                                          File(_selectedImages[
+                                                                  index]
+                                                              .path),
                                                           fit: BoxFit.cover,
                                                           width: 120,
                                                           height: 120,
@@ -518,17 +562,23 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   child: InkWell(
                                                     onTap: () {
                                                       setState(() {
-                                                        _selectedImages.removeAt(index);
+                                                        _selectedImages
+                                                            .removeAt(index);
                                                       });
                                                     },
                                                     child: Container(
-                                                      decoration: const BoxDecoration(
+                                                      decoration:
+                                                          const BoxDecoration(
                                                         color: Colors.black54,
                                                         shape: BoxShape.circle,
                                                       ),
-                                                      padding: const EdgeInsets.all(4),
-                                                      child: const Icon(Icons.close,
-                                                          size: 18, color: Colors.white),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              4),
+                                                      child: const Icon(
+                                                          Icons.close,
+                                                          size: 18,
+                                                          color: Colors.white),
                                                     ),
                                                   ),
                                                 ),
@@ -538,43 +588,45 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                         },
                                       ),
                                     ),
-
                                   ],
                                 ),
                               ),
                             ),
                             // Top Progress
 
-
                             Container(
                               margin: const EdgeInsets.only(top: 10),
                               child: Column(
                                 children: [
                                   bottomBarShadow(),
-
                                   Row(
                                     children: [
-
                                       Expanded(
                                           flex: 3,
                                           child: InkWell(
                                               onTap: _backFromUploadStep,
-                                              child: getBackButton(context, "Back", "venuePhoto"))
-                                      ),
-
-
+                                              child: getBackButton(context,
+                                                  "Back", "venuePhoto"))),
                                       Expanded(
                                         flex: 7,
                                         child: InkWell(
                                           onTap: () {
-                                              if (_isStartingUpload) return;
-                                              if (_selectedImages.length >= 4 && _selectedImages.length <= 12) {
-                                                _isStartingUpload = true;
-                                                final selectedImages = List<XFile>.of(_selectedImages);
-                                                final activityIdFuture = _startImageUpload(selectedImages);
-                                                _createdActivityFuture = activityIdFuture;
-                                                final uploadFuture = _uploadCreatedActivity(
-                                                    activityIdFuture, selectedImages);
+                                            if (_isStartingUpload) return;
+                                            if (_selectedImages.length >= 4 &&
+                                                _selectedImages.length <= 12) {
+                                              _isStartingUpload = true;
+                                              final selectedImages =
+                                                  List<XFile>.of(
+                                                      _selectedImages);
+                                              final activityIdFuture =
+                                                  _startImageUpload(
+                                                      selectedImages);
+                                              _createdActivityFuture =
+                                                  activityIdFuture;
+                                              final uploadFuture =
+                                                  _uploadCreatedActivity(
+                                                      activityIdFuture,
+                                                      selectedImages);
                                               // ✅ Valid case: navigate
                                               Navigator.push(
                                                 context,
@@ -582,21 +634,23 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   builder: (context) =>
                                                       AddVenuePhotoListViewScreen(
                                                     client: widget.client,
-                                                        activityIdFuture: activityIdFuture,
-                                                        uploadFuture: uploadFuture,
-                                                        images: selectedImages,
-                                                        onPhotosChanged: (images) {
-                                                          if (!mounted) return;
-                                                          setState(() {
-                                                            _selectedImages
-                                                              ..clear()
-                                                              ..addAll(images);
-                                                          });
-                                                        },
-                                                      ),
+                                                    activityIdFuture:
+                                                        activityIdFuture,
+                                                    uploadFuture: uploadFuture,
+                                                    images: selectedImages,
+                                                    onPhotosChanged: (images) {
+                                                      if (!mounted) return;
+                                                      setState(() {
+                                                        _selectedImages
+                                                          ..clear()
+                                                          ..addAll(images);
+                                                      });
+                                                    },
+                                                  ),
                                                 ),
                                               ).then((value) {
-                                                if (mounted) _isStartingUpload = false;
+                                                if (mounted)
+                                                  _isStartingUpload = false;
                                                 refresh();
                                               });
                                             } else {
@@ -607,25 +661,24 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                               );
                                             }
                                           },
-                                          child: (_selectedImages.length >= 4 && _selectedImages.length <= 12)
-                                              ? getButtonBlack(context, "Next", "venuePhoto") // ✅ Active button
-                                              : getButtonGray(context, "Next", "venuePhoto"), // ❌ Disabled button
+                                          child: (_selectedImages.length >= 4 &&
+                                                  _selectedImages.length <= 12)
+                                              ? getButtonBlack(context, "Next",
+                                                  "venuePhoto") // ✅ Active button
+                                              : getButtonGray(context, "Next",
+                                                  "venuePhoto"), // ❌ Disabled button
                                         ),
                                       )
-
                                     ],
-
                                   )
                                 ],
                               ),
                             ),
-
                           ],
                         ),
                       ),
                     );
                   },
-
                 ),
               ),
             ),
@@ -635,10 +688,7 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     );
   }
 
-
-
-  Widget getText()
-  {
+  Widget getText() {
     return Container(
       margin: const EdgeInsets.only(top: 25),
       alignment: Alignment.centerLeft,
@@ -649,15 +699,13 @@ class _State extends State<AddVenuePhotoUploadScreen> {
             fontFamily: 'Satoshi',
             fontWeight: FontWeight.w700,
             color: AppColors.darkBlack,
-            height: 1.2
-        ),
+            height: 1.2),
         textAlign: TextAlign.left,
       ),
     );
   }
 
-  Widget getSubText()
-  {
+  Widget getSubText() {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
       child: const Text(
@@ -666,21 +714,17 @@ class _State extends State<AddVenuePhotoUploadScreen> {
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',
             color: AppColors.black1,
-            height: 1.4
-        ),
+            height: 1.4),
         textAlign: TextAlign.left,
       ),
     );
   }
 
-  void refresh()
-  {
-    if(CommonUtilities.callVenueImagesClear == "yes")
-    {
+  void refresh() {
+    if (CommonUtilities.callVenueImagesClear == "yes") {
       CommonUtilities.callVenueImagesClear = "";
       _selectedImages.clear();
       setState(() {});
-    }else{}
+    } else {}
   }
 }
-

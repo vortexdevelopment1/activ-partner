@@ -251,6 +251,7 @@ class _AddActivityAmenitiesScreenState
                                       style: const TextStyle(
                                         fontSize: AppSize.size_16,
                                         fontFamily: 'Satoshi',
+                                        fontWeight: FontWeight.w700,
                                         color: AppColors.darkBlack,
                                       ),
                                     ),
