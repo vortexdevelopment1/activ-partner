@@ -32,7 +32,6 @@ class _TeamMember {
     required this.id,
     required this.name,
     required this.phone,
-    required this.email,
     required this.role,
     required this.status,
     required this.createdAt,
@@ -42,7 +41,6 @@ class _TeamMember {
   final String id;
   final String name;
   final String phone;
-  final String email;
   final String role;
   final String status;
   final String createdAt;
@@ -59,7 +57,6 @@ class _TeamMember {
       id: checkString(json['id']),
       name: checkString(json['fullName'] ?? json['name']),
       phone: checkString(json['phone']),
-      email: checkString(json['email']),
       role: role.isEmpty ? 'staff' : role,
       status: status.isEmpty ? 'invite_sent' : status,
       createdAt: _formatDate(checkString(json['createdAt'])),
@@ -469,14 +466,12 @@ class _TeamMemberFormData {
   const _TeamMemberFormData({
     required this.fullName,
     required this.phone,
-    required this.email,
     required this.role,
     required this.bookingManagement,
   });
 
   final String fullName;
   final String phone;
-  final String email;
   final String role;
   final bool bookingManagement;
 
@@ -484,7 +479,6 @@ class _TeamMemberFormData {
     return {
       'fullName': fullName,
       'phone': phone,
-      if (email.isNotEmpty) 'email': email,
       'role': role,
       'permissions': {
         'bookingManagement': bookingManagement,
@@ -554,7 +548,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
     if (_saving || _deleting) return;
     final name = _nameController.text.trim();
     final phoneDigits = _phoneDigits(_phoneController.text);
-    final email = widget.member?.email ?? '';
 
     if (name.isEmpty) {
       CommonUtilities.createSnackBar(context, 'Full name is required');
@@ -570,7 +563,6 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
       _TeamMemberFormData(
         fullName: name,
         phone: '+91$phoneDigits',
-        email: email,
         role: _role,
         bookingManagement: _bookingManagement,
       ),

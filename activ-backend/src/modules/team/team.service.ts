@@ -49,7 +49,10 @@ export class TeamService {
       },
       createdAt: record.created_at,
       updatedAt: record.updated_at,
-      invitationDelivery: settings.invitationDelivery,
+      invitationDelivery: settings.invitationDelivery && {
+        smsSent: settings.invitationDelivery.smsSent === true,
+        smsUnavailableReason: settings.invitationDelivery.smsUnavailableReason,
+      },
     };
   }
 
@@ -134,9 +137,8 @@ export class TeamService {
     dto: CreateTeamMemberDto,
   ): Promise<TeamMember> {
     try {
-      const { password: temporaryPassword, passwordHash } = await this.createInvitationPassword();
-      const email = dto.email?.trim().toLowerCase();
-      const prepared = await this.prisma.$transaction(async (tx) => {
+      const { password, passwordHash } = await this.createInvitationPassword();
+      const row = await this.prisma.$transaction(async (tx) => {
         const user = await tx.users.findUnique({
           where: { phone_e164: dto.phone },
         });
@@ -151,12 +153,6 @@ export class TeamService {
           );
         }
         if (user && user.status !== 'ACTIVE') throw new ConflictException('This account is unavailable for invitation');
-        if (email) {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`team-email:${email}`}, 0))`;
-          const emailOwner = await tx.users.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-          if (emailOwner && emailOwner.id !== user?.id) throw new ConflictException('Email address is already in use');
-          if (user && user.email?.toLowerCase() !== email) throw new ConflictException('Use the registered email for this phone number');
-        }
         const now = new Date();
         const account =
           user ??
@@ -165,7 +161,6 @@ export class TeamService {
               id: randomUUID(),
               phone_e164: dto.phone,
               name: dto.fullName,
-              email,
               password_hash: passwordHash,
               updated_at: now,
             },
@@ -183,7 +178,7 @@ export class TeamService {
             role: "PARTNER_USER",
           },
         });
-        const row = await tx.partner_staff_profiles.create({
+        return tx.partner_staff_profiles.create({
           data: {
             id: randomUUID(),
             partner_user_id: link.id,
@@ -203,17 +198,11 @@ export class TeamService {
           },
           include: this.include,
         });
-        const password = temporaryPassword;
-        const deliveryId = email ? await this.mailService.prepareTeamMemberInviteEmail({
-          toEmail: email, phone: dto.phone, fullName: dto.fullName, role: dto.role, password,
-          deliveryKey: `team-invite:${row.id}:${randomUUID()}`,
-        }, tx) : undefined;
-        return { row, password, deliveryId };
       });
-      return this.deliverInvitation(prepared.row, prepared.password, prepared.deliveryId);
+      return this.deliverInvitation(row, password);
     } catch (error) {
       if ((error as { code?: string }).code === "P2002")
-        throw new ConflictException("Phone number or email is already in use");
+        throw new ConflictException("Phone number is already in use");
       throw error;
     }
   }
@@ -227,20 +216,18 @@ export class TeamService {
     return { password, passwordHash: await bcrypt.hash(password, 12) };
   }
 
-  private async deliverInvitation(row: any, password: string, deliveryId?: string): Promise<TeamMember> {
+  private async deliverInvitation(row: any, password: string): Promise<TeamMember> {
     const member = this.toMember(row);
-    const results = await Promise.allSettled([
-      deliveryId ? this.mailService.deliverPreparedEmail(deliveryId) : Promise.resolve(false),
-      this.mailService?.sendTeamMemberInviteSms({ phone: member.phone, fullName: member.fullName, role: member.role, password }),
-    ]);
-    const sent = (index: number) => {
-      const result = results[index];
-      return result.status === 'fulfilled' && result.value === true;
-    };
-    const invitationDelivery: NonNullable<TeamMember['invitationDelivery']> = {
-      emailSent: sent(0), smsSent: sent(1),
-    };
-    let status = invitationDelivery.emailSent || invitationDelivery.smsSent
+    let smsSent = false;
+    try {
+      smsSent = await this.mailService?.sendTeamMemberInviteSms({
+        phone: member.phone, fullName: member.fullName, role: member.role, password,
+      }) === true;
+    } catch {
+      this.logger.warn('Team account saved; SMS invitation could not be confirmed');
+    }
+    const invitationDelivery = { smsSent };
+    let status = smsSent
       ? TeamMemberStatus.INVITE_SENT : TeamMemberStatus.INVITE_PENDING;
     try {
       await this.prisma.$transaction(async tx => {
@@ -259,7 +246,7 @@ export class TeamService {
 
   async resendInvitation(id: string, partnerId: string): Promise<TeamMember> {
     const { password, passwordHash } = await this.createInvitationPassword();
-    const prepared = await this.prisma.$transaction(async tx => {
+    const row = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM partner_staff_profiles WHERE id = ${id}::uuid FOR UPDATE`;
       const row = await tx.partner_staff_profiles.findFirst({
         where: { id, partner_users: { partner_id: partnerId } }, include: this.include,
@@ -278,18 +265,12 @@ export class TeamService {
         where: { id: row.partner_users.user_id },
         data: { password_hash: passwordHash, updated_at: new Date() },
       });
-      const email = row.partner_users.users.email;
-      const deliveryId = email ? await this.mailService.prepareTeamMemberInviteEmail({
-        toEmail: email, phone: row.contact_phone_e164, fullName: row.display_name, role: row.designation,
-        password,
-        deliveryKey: `team-invite:${id}:${randomUUID()}`,
-      }, tx) : undefined;
       await tx.partner_staff_profiles.update({ where: { id }, data: {
         permissions: { ...settings, lastInvitationAt: new Date().toISOString() }, updated_at: new Date(),
       } });
-      return { row, deliveryId };
+      return row;
     });
-    return this.deliverInvitation(prepared.row, password, prepared.deliveryId);
+    return this.deliverInvitation(row, password);
   }
 
   async update(
@@ -304,19 +285,10 @@ export class TeamService {
           where: { id, partner_users: { partner_id: partnerId } }, include: this.include,
         });
         if (!latest) throw new NotFoundException('Team member not found');
-        const contactChanged = (dto.phone && dto.phone !== latest.partner_users.users.phone_e164) ||
-          (dto.email && dto.email.trim().toLowerCase() !== latest.partner_users.users.email?.toLowerCase());
-        if (contactChanged && (latest.permissions as Record<string, any>)?.accountCreatedForTeam !== true) {
-          throw new BadRequestException('Existing account contact details must be changed by the member');
-        }
-        if (dto.email) {
-          const email = dto.email.trim().toLowerCase();
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`team-email:${email}`}, 0))`;
-          const conflict = await tx.users.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, id: { not: latest.partner_users.user_id } } });
-          if (conflict) throw new ConflictException('Email address is already in use');
-          await tx.users.update({ where: { id: latest.partner_users.user_id }, data: { email, updated_at: new Date() } });
-        }
         if (dto.phone && dto.phone !== latest.partner_users.users.phone_e164) {
+          if ((latest.permissions as Record<string, any>)?.accountCreatedForTeam !== true) {
+            throw new BadRequestException('Existing account contact details must be changed by the member');
+          }
           const conflict = await tx.users.findUnique({
             where: { phone_e164: dto.phone },
           });

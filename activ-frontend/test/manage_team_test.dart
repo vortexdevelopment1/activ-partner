@@ -219,7 +219,7 @@ void main() {
   testWidgets('editing persists phone and blocks invalid numbers locally',
       (tester) async {
     var writes = 0;
-    var saved = {...member};
+    var saved = {...member, 'email': 'existing@example.test'};
     final client = MockClient((request) async {
       if (request.method == 'PATCH') {
         writes++;
@@ -277,7 +277,7 @@ void main() {
     expect(find.text('Send Invite'), findsNothing);
     expect(writes, 1);
     pending.complete(http.Response(jsonEncode({'data': {...member,
-      'invitationDelivery': {'emailSent': false, 'smsSent': true}}}), 201));
+      'invitationDelivery': {'smsSent': true}}}), 201));
     await tester.pumpAndSettle();
     expect(reads, 2);
     expect(messages, [

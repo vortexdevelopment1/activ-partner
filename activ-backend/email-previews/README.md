@@ -26,7 +26,6 @@ The shared design uses the existing project logo, white email panel, highlighted
 | Partner support | `support_received`, `support_in_progress`, `support_resolved`, `support_cancelled` | Creation and changed status |
 | Callback requests | `callback_received`, `callback_in_progress`, `callback_resolved`, `callback_cancelled` | Creation and changed status |
 | Password reset | `password_reset` | Existing reset-code method |
-| Team invitation | `team_invitation` | Existing invitation method |
 
 Agreements and suspensions previously had plain-text messages; venue approval, rejection, change requests, invitations and password resets used MSG91-hosted templates. They now use the shared branded renderer when SMTP or Gmail is configured. Existing internal staff support/callback alerts and invitation SMS remain in their existing flows.
 

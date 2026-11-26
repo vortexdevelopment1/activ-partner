@@ -17,7 +17,6 @@ const fixtures: Partial<Record<EmailTemplateId, EmailData>> = {
   activity_rejected: { reason: 'Please add clear court photographs and complete the safety information.' },
   bank_rejected: { reason: 'The account holder name does not match the supporting document.' },
   password_reset: { code: '123456' },
-  team_invitation: { email: 'teammate@example.com', role: 'Venue Manager', password: 'Demo8Ab2' },
 };
 const ids = Object.keys(EMAIL_TEMPLATES) as EmailTemplateId[];
 for (const id of ids) {

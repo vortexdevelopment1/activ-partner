@@ -66,7 +66,7 @@ export class TeamController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Add a team member and attempt SMS/email invitation (Partner only)' })
+  @ApiOperation({ summary: 'Add a team member and attempt an SMS invitation (Partner only)' })
   async create(@CurrentUser() user: any, @Body() dto: CreateTeamMemberDto) {
     const data = await this.teamService.create(user.id, dto);
     return { message: 'Team member added; check invitation delivery status', data };

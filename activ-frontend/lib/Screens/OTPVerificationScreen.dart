@@ -574,7 +574,10 @@ class _State extends State<OTPVerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 32),
-                  const Text('Enter the 4 digit one-time code'),
+                  const Text(
+                    'Enter the 4 digit one-time code',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 8),
                   LayoutBuilder(builder: (context, constraints) {
                     final boxSize =
@@ -695,6 +698,7 @@ class _State extends State<OTPVerificationScreen> {
                       textStyle: const TextStyle(
                         fontFamily: 'Satoshi',
                         fontSize: 18,
+                        fontWeight: FontWeight.w700,
                         decoration: TextDecoration.underline,
                       ),
                     ),

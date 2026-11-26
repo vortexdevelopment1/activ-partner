@@ -92,13 +92,6 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     return this.deliveries.findApproval(venueId, tx);
   }
 
-  async prepareTeamMemberInviteEmail(
-    params: Params<'sendTeamMemberInviteEmail'> & { deliveryKey: string }, tx: any,
-  ): Promise<string> {
-    if (!this.deliveries) throw new Error('Durable invitation delivery is required');
-    return (await this.deliveries.enqueue(this.job('invitation', params, params.toEmail), tx)).id;
-  }
-
   /** Approval always requires an outbox, including migration-compatible legacy mode. */
   async preparePartnerApprovalEmail(params: Parameters<MailService['sendPartnerApprovalEmail']>[0], tx: any, alreadySent = false): Promise<string> {
     if (!this.deliveries) throw new Error('Durable approval email delivery is required');
@@ -109,7 +102,6 @@ export class MailService extends LegacyMailService implements OnModuleInit {
     try { return (await this.deliveries.deliver(id)).sent; }
     catch { this.logger.warn('Prepared email is pending; use email delivery recovery'); return false; }
   }
-  async sendTeamMemberInviteEmail(params: Params<'sendTeamMemberInviteEmail'>): Promise<boolean> { return this.notice('invitation', params, params.toEmail); }
   async sendPasswordResetEmail(params: Params<'sendPasswordResetEmail'> & { deliveryKey?: string; challengeKey?: string; expiresAt?: Date }): Promise<boolean> {
     try {
       const job = this.job('reset', params, params.toEmail);
@@ -142,7 +134,6 @@ export class MailService extends LegacyMailService implements OnModuleInit {
         case 'reactivation': result = await super.sendReactivationEmail(p); break;
         case 'changes': result = await super.sendVenueChangesRequestedEmail(p); break;
         case 'approval': result = await super.sendPartnerApprovalEmail(p); break;
-        case 'invitation': result = await super.sendTeamMemberInviteEmail(p); break;
         case 'reset': result = await super.sendPasswordResetEmail(p); break;
         case 'callback': result = await super.sendCallbackRequestEmail(p); break;
         case 'support': result = await super.sendSupportRequestEmail(p); break;
@@ -189,9 +180,6 @@ export class MailService extends LegacyMailService implements OnModuleInit {
       case 'changes': id = 'venue_changes_requested'; break;
       case 'approval': id = 'venue_approved'; data.email = p.toEmail;
         if (!p.password) data.message = 'Sign in with your phone OTP or existing password. Use Forgot Password if you need to set a password.';
-        break;
-      case 'invitation': id = 'team_invitation'; data.partnerName = p.fullName; data.email = p.toEmail;
-        data.message = 'Sign in using your invited phone number and phone OTP, or your existing password.';
         break;
       case 'reset': id = 'password_reset'; data.partnerName = p.firstName; break;
       case 'rejection': id = 'venue_rejected'; data.partnerName = p.firstName; data.reference = p.venueId; data.reason = p.rejectionReason; break;

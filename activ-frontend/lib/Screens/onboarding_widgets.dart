@@ -743,37 +743,45 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
   }
 
   Future<void> _loadSavedDetails() async {
-    _partner.text =
-        checkString(await SharedPreference.readStr('owner_full_name'));
-    _email.text = checkString(await SharedPreference.readStr('owner_email'));
-    _phone.text =
-        checkString(await SharedPreference.readStr('userMobileNumber'))
-            .replaceAll(RegExp(r'\D'), '');
-    final rawVenue =
-        checkString(await SharedPreference.readStr('venue_details'));
-    final savedVenueName =
-        checkString(await SharedPreference.readStr('venue_name'));
+    final [partner, email, phone, rawVenue, savedVenueName] =
+        (await Future.wait([
+          'owner_full_name',
+          'owner_email',
+          'userMobileNumber',
+          'venue_details',
+          'venue_name',
+        ].map(SharedPreference.readStr)))
+            .map(checkString)
+            .toList();
+    if (!mounted) return;
+    if (_partner.text.isEmpty) _partner.text = partner;
+    if (_email.text.isEmpty) _email.text = email;
+    if (_phone.text.isEmpty) _phone.text = phone.replaceAll(RegExp(r'\D'), '');
     try {
       final venue = rawVenue.isEmpty ? {} : jsonDecode(rawVenue);
       final venueName = checkString(venue['venue_name']);
       final city = checkString(venue['venue_city']);
-      _venue.text = venueName.isEmpty ? savedVenueName : venueName;
-      _city.text = city.isEmpty ? checkString(venue['city']) : city;
+      if (_venue.text.isEmpty) _venue.text = venueName;
+      if (_city.text.isEmpty) {
+        _city.text = city.isEmpty ? checkString(venue['city']) : city;
+      }
     } catch (_) {}
-    if (_venue.text.trim().isEmpty) _venue.text = savedVenueName;
+    if (_venue.text.isEmpty) _venue.text = savedVenueName;
     await _loadVenueIdentityFromApi();
-    if (mounted) setState(() {});
   }
 
   Future<void> _loadVenueIdentityFromApi() async {
+    final initialVenue = _venue.text;
+    final initialCity = _city.text;
     final token = checkString(await SharedPreference.readStr('jwt_token'));
-    if (token.isEmpty) return;
+    if (!mounted || token.isEmpty) return;
     try {
       final response = await (widget.client?.get ?? http.get)(
         Uri.parse(MY_VENUES_URL),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200 && response.statusCode != 201) return;
+      if (!mounted ||
+          (response.statusCode != 200 && response.statusCode != 201)) return;
       final body = jsonDecode(response.body);
       final data = body is Map ? body['data'] : null;
       final items = data is Map ? data['items'] : data;
@@ -785,8 +793,10 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
       final city = checkString(venue['city']).isEmpty
           ? checkString(venue['venue_city'])
           : checkString(venue['city']);
-      if (venueName.isNotEmpty) _venue.text = venueName;
-      if (city.isNotEmpty) _city.text = city;
+      if (_venue.text == initialVenue && venueName.isNotEmpty) {
+        _venue.text = venueName;
+      }
+      if (_city.text == initialCity && city.isNotEmpty) _city.text = city;
     } catch (_) {}
   }
 
@@ -900,10 +910,9 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _dialogInput('Venue Partner Name', _partner,
-                              readOnly: true),
-                          _dialogInput('Venue Name', _venue, readOnly: true),
-                          _dialogInput('City', _city, readOnly: true),
+                          _dialogInput('Venue Partner Name', _partner),
+                          _dialogInput('Venue Name', _venue),
+                          _dialogInput('City', _city),
                           _dialogPhoneInput(),
                           _dialogInput('Email', _email,
                               keyboardType: TextInputType.emailAddress),
@@ -1040,7 +1049,6 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
     TextEditingController controller, {
     int maxLines = 1,
     TextInputType? keyboardType,
-    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -1053,7 +1061,6 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
-            readOnly: readOnly,
             enabled: !_submitting,
             style: OnboardingStyles.body.copyWith(fontSize: 15),
             decoration: _dialogDecoration(),

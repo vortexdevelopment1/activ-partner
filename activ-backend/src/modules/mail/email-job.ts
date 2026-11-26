@@ -1,7 +1,9 @@
 export type EmailProvider = 'legacy' | 'gmail' | 'smtp';
 
 export type EmailMethod = 'template' | 'agreement' | 'smtpAgreement' | 'suspension' | 'reactivation'
-  | 'changes' | 'approval' | 'invitation' | 'reset' | 'callback' | 'support' | 'rejection';
+  | 'changes' | 'approval' | 'reset' | 'callback' | 'support' | 'rejection';
+
+type StoredEmailJob = Omit<EmailJob, 'method'> & { method: EmailMethod | 'invitation' };
 
 /** Encrypted at rest, including temporary passwords, reset codes and PDF bytes. */
 export interface EmailJob {
@@ -20,5 +22,5 @@ export interface DeliveryResult {
 }
 
 export const serializeJob = (job: EmailJob) => JSON.stringify(job);
-export const deserializeJob = (value: string): EmailJob => JSON.parse(value, (_key, item) =>
+export const deserializeJob = (value: string): StoredEmailJob => JSON.parse(value, (_key, item) =>
   item?.type === 'Buffer' && Array.isArray(item.data) ? Buffer.from(item.data) : item);

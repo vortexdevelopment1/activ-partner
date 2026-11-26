@@ -50,7 +50,7 @@ export class EmailDeliveryService implements OnModuleDestroy {
     return JSON.stringify({ iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), value: value.toString('base64') });
   }
 
-  private decrypt(id: string, payload: string): EmailJob {
+  private decrypt(id: string, payload: string) {
     const record = JSON.parse(payload);
     const cipher = createDecipheriv('aes-256-gcm', this.key(), Buffer.from(record.iv, 'base64'));
     cipher.setAAD(Buffer.from(id));
@@ -110,7 +110,7 @@ export class EmailDeliveryService implements OnModuleDestroy {
       data: { status: 'PROCESSING', attempts: { increment: 1 }, locked_at: new Date(), updated_at: new Date() },
     });
     if (claimed.count !== 1) return { sent: false };
-    let job: EmailJob;
+    let job: ReturnType<typeof deserializeJob>;
     try { job = this.decrypt(id, row.payload); }
     catch {
       await this.finishFailure(id, 'FAILED', 'PAYLOAD_UNAVAILABLE');
@@ -118,6 +118,12 @@ export class EmailDeliveryService implements OnModuleDestroy {
     }
     let messageId: string;
     try {
+      if (job.method === 'invitation' || (job.method === 'template' && job.params?.id === 'team_invitation')) {
+        await this.prisma.email_deliveries.update({ where: { id }, data: {
+          status: 'EXPIRED', error_code: 'TEAM_INVITE_EMAIL_RETIRED', payload: null, locked_at: null, updated_at: new Date(),
+        } });
+        return { sent: false };
+      }
       if (job.method === 'reset' && job.params.challengeKey) {
         const current = await this.prisma.otp_challenges.findFirst({
           where: { phone_e164: job.params.challengeKey }, orderBy: { created_at: 'desc' },
@@ -130,7 +136,7 @@ export class EmailDeliveryService implements OnModuleDestroy {
         }
       }
       if (!this.sender) throw Object.assign(new Error('Sender unavailable'), { code: 'EMAIL_CONFIG' });
-      messageId = await this.sender(job);
+      messageId = await this.sender({ ...job, method: job.method });
     } catch (error) {
       // Only known rejections are safe to retry. Network/timeout/5xx outcomes may
       // have been accepted: hold them for provider-log review, never blind retry.

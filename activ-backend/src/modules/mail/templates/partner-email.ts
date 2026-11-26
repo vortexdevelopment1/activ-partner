@@ -368,17 +368,6 @@ export const EMAIL_TEMPLATES = {
       "If you didn’t request a password reset, you can ignore this email. Your password has not been changed.",
     ],
   },
-  team_invitation: {
-    subject: "You’re Invited to ACTIV Partner",
-    heading: "You’ve Been Invited",
-    highlight: "To Your Venue Team",
-    status: "Invited",
-    tone: "green",
-    paragraphs: [
-      "Your venue administrator has created an ACTIV Partner team account for you.",
-      "Use the account details below to sign in. If a temporary password is provided, change it after your first login.",
-    ],
-  },
   partner_invitation: {
     subject: "Congratulations! You’ve Been Invited to ACTIV Partner",
     heading: "Congratulations!",
@@ -469,7 +458,6 @@ export function renderPartnerEmail(
         ? "Request Status"
         : [
               "partner_invitation",
-              "team_invitation",
               "partner_suspended",
               "partner_reactivated",
             ].includes(id)

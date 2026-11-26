@@ -104,6 +104,16 @@ describe('durable encrypted email delivery', () => {
     expect(sender).not.toHaveBeenCalled();
   });
 
+  it('expires stored team invitation emails and clears their payload without sending', async () => {
+    const retiredJob = { ...job, method: 'invitation', eventKey: 'team-invite:staff:attempt' };
+    const row = await service.enqueue(retiredJob as unknown as EmailJob);
+    expect(await service.deliver(row.id)).toEqual({ sent: false });
+    expect(rows.get(row.id)).toMatchObject({
+      status: 'EXPIRED', error_code: 'TEAM_INVITE_EMAIL_RETIRED', payload: null,
+    });
+    expect(sender).not.toHaveBeenCalled();
+  });
+
   it('does not resend when provider acceptance could not be written to the database', async () => {
     store.update.mockRejectedValueOnce(new Error('database interrupted'));
     await service.send(job);
