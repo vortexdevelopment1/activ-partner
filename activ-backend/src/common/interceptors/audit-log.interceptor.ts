@@ -21,22 +21,31 @@ export class AuditLogInterceptor implements NestInterceptor {
     const path: string = `${request.baseUrl || ''}${request.route?.path || request.path}`;
     const segments = path.split('/').filter(Boolean).filter((part) => part !== 'api' && !/^v\d+$/.test(part));
     const resource = segments[0] === 'admin' ? segments[1] || 'admin' : segments[0] || 'system';
-    const actorId = request.user.userId || (request.user.role === 'team_member' ? null : request.user.id);
+    const { id, role, userId } = request.user;
+    const actorId = userId || (role === 'partner' || role === 'team_member' ? null : id);
     const requestedStatus = typeof request.body?.status === 'string' ? request.body.status.toLowerCase() : '';
     const decision = ['approved', 'rejected', 'pending', 'suspended', 'verified', 'active', 'inactive']
       .includes(requestedStatus) ? requestedStatus : undefined;
     const write = (outcome: 'success' | 'failed', statusCode: number, result?: any) => {
       const targetId = request.params?.id || request.params?.venueId || request.params?.partnerId ||
         result?.data?.id || result?.data?.venueId || result?.id || '';
-      void this.prisma.audit_events.create({
-        data: {
-          id: randomUUID(),
-          actor_id: actorId,
-          action: `${method} ${path}`,
-          entity_type: resource,
-          entity_id: typeof targetId === 'string' ? targetId : '',
-          after_json: { outcome, statusCode, ...(decision ? { decision } : {}) },
-        },
+      void this.prisma.$transaction(async (tx) => {
+        // The request may have deleted its own actor. Lock an existing user
+        // until the audit insert completes so concurrent deletions are safe too.
+        const [actor] = actorId
+          ? await tx.$queryRaw<Array<{ id: string }>>`
+              SELECT id FROM users WHERE id = ${actorId}::uuid FOR KEY SHARE`
+          : [];
+        await tx.audit_events.create({
+          data: {
+            id: randomUUID(),
+            actor_id: actor?.id ?? null,
+            action: `${method} ${path}`,
+            entity_type: resource,
+            entity_id: typeof targetId === 'string' ? targetId : '',
+            after_json: { outcome, statusCode, ...(decision ? { decision } : {}) },
+          },
+        });
       }).catch((error) => this.logger.warn(`Could not record activity: ${error.message}`));
     };
 

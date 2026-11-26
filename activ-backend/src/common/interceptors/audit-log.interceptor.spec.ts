@@ -4,7 +4,9 @@ import { AuditLogInterceptor } from './audit-log.interceptor';
 
 describe('AuditLogInterceptor', () => {
   const create = jest.fn().mockResolvedValue({});
-  const interceptor = new AuditLogInterceptor({ audit_events: { create } } as any);
+  const queryActor = jest.fn();
+  const transaction = jest.fn((callback) => callback({ $queryRaw: queryActor, audit_events: { create } }));
+  const interceptor = new AuditLogInterceptor({ $transaction: transaction } as any);
   const context = (request: any) => ({
     switchToHttp: () => ({
       getRequest: () => request,
@@ -12,7 +14,10 @@ describe('AuditLogInterceptor', () => {
     }),
   }) as ExecutionContext;
 
-  beforeEach(() => create.mockClear());
+  beforeEach(() => {
+    create.mockClear();
+    queryActor.mockReset().mockImplementation(async (_sql, id) => [{ id }]);
+  });
 
   it('records an authenticated change without its body or query values', async () => {
     const request = {
@@ -46,6 +51,31 @@ describe('AuditLogInterceptor', () => {
       await new Promise<void>((resolve) => interceptor.intercept(context(request), { handle: () => of(null) }).subscribe({ complete: resolve }));
     }
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('records successful self-deletion with a null actor after the user has been removed', async () => {
+    const request = { method: 'DELETE', route: { path: '/api/v1/partners/account' },
+      user: { id: 'partner-id', userId: 'owner-id', role: 'partner' } };
+    queryActor.mockResolvedValueOnce([]);
+    await new Promise<void>((resolve) => interceptor.intercept(context(request), {
+      handle: () => of({ data: null }),
+    }).subscribe({ complete: resolve }));
+    expect(queryActor).toHaveBeenCalledWith(expect.anything(), 'owner-id');
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      actor_id: null, action: 'DELETE /api/v1/partners/account',
+    }) });
+  });
+
+  it('does not use a partner or staff profile ID as a missing user ID', async () => {
+    for (const role of ['partner', 'team_member']) {
+      const request = { method: 'PATCH', route: { path: '/api/v1/team/:id' }, user: { id: 'profile-id', role } };
+      await new Promise<void>((resolve) => interceptor.intercept(context(request), {
+        handle: () => of(null),
+      }).subscribe({ complete: resolve }));
+    }
+    expect(queryActor).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(2);
+    for (const [entry] of create.mock.calls) expect(entry.data.actor_id).toBeNull();
   });
 
   it('records a server error on an authenticated read', async () => {
