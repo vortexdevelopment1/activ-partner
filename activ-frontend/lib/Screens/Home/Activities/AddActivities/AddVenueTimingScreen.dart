@@ -606,18 +606,8 @@ class _State extends State<AddVenueTimingScreen> {
                                               (index) {
                                                 final slot = timings[day]!
                                                     .timeSlots[index];
-<<<<<<< Updated upstream
-                                                final timeFields = Row(
-                                                  //crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    // -------- Open Time ----------
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-=======
                                                 return Padding(
+                                                  key: ObjectKey(slot),
                                                   padding:
                                                       const EdgeInsets.only(
                                                           bottom: 16),
@@ -627,7 +617,6 @@ class _State extends State<AddVenueTimingScreen> {
                                                             .stretch,
                                                     children: [
                                                       Row(
->>>>>>> Stashed changes
                                                         children: [
                                                           // -------- Open Time ----------
                                                           Expanded(
@@ -909,19 +898,6 @@ class _State extends State<AddVenueTimingScreen> {
                                                           day, slot, index),
                                                     ],
                                                   ),
-                                                );
-                                                return Column(
-                                                  key: ObjectKey(slot),
-                                                  children: [
-                                                    timeFields,
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              top: 4, bottom: 12),
-                                                      child: _slotDetails(
-                                                          day, slot, index),
-                                                    ),
-                                                  ],
                                                 );
                                               },
                                             ),

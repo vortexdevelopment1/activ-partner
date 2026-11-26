@@ -711,11 +711,7 @@ class _State extends State<OTPVerificationScreen> {
                       textStyle: const TextStyle(
                         fontFamily: 'Satoshi',
                         fontSize: 18,
-<<<<<<< Updated upstream
-                        fontWeight: FontWeight.w700,
-=======
                         fontWeight: FontWeight.bold,
->>>>>>> Stashed changes
                         decoration: TextDecoration.underline,
                       ),
                     ),
