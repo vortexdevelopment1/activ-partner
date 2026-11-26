@@ -1,10 +1,8 @@
 import axios from 'axios';
-
-const LOCAL_API_URL = import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') || '';
-const DEPLOYED_API_URL = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
+import { DEPLOYED_API_URL, LOCAL_API_URL } from './urls';
 
 if (!LOCAL_API_URL && !DEPLOYED_API_URL) {
-  throw new Error('Set VITE_API_URL or VITE_LOCAL_API_URL in the admin .env file.');
+  throw new Error('Set VITE_API_URL for hosted builds or VITE_LOCAL_API_URL for local development.');
 }
 
 const LOCAL_CHECK_TIMEOUT_MS = 5000;

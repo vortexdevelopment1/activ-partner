@@ -1,9 +1,7 @@
 import api from '../api/axios';
+import { DEPLOYED_API_URL, LOCAL_API_URL } from '../api/urls';
 
-const API_URL =
-  import.meta.env.VITE_LOCAL_API_URL?.trim().replace(/\/+$/, '') ||
-  import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
-const ASSET_BASE_URL = API_URL.replace(/\/api\/v\d+$/i, '');
+const ASSET_BASE_URL = (LOCAL_API_URL || DEPLOYED_API_URL).replace(/\/api\/v\d+$/i, '');
 
 export const resolveAssetUrl = (src?: string | null) => {
   const value = src?.trim();

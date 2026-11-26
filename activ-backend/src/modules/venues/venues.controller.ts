@@ -1671,6 +1671,7 @@ export class VenuesController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   @ApiOperation({
     summary: "Update venue (Partner can update own, Admin can update any)",
+    description: "Partners submit changes to approved venue details through the venue update request endpoint.",
   })
   async update(
     @Param("id", ParseUUIDPipe) id: string,

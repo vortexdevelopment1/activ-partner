@@ -23,14 +23,17 @@ export function formatIndiaDateTime(
   if (!date) return '-';
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
+  const useStyles = options?.dateStyle || options?.timeStyle;
   return d.toLocaleString('en-IN', {
     timeZone: INDIA_TIMEZONE,
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
     hour12: true,
+    ...(useStyles ? {} : {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
     ...options,
   });
 }

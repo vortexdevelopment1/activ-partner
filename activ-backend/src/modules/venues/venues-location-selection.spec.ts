@@ -11,6 +11,7 @@ describe('venue location rates and selected categories', () => {
 
   beforeEach(() => {
     tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'DRAFT' }]),
       venues: { update: jest.fn().mockResolvedValue({}) },
       partner_venue_profiles: { upsert: jest.fn().mockResolvedValue({}) },
       partner_service_categories: { findMany: jest.fn().mockResolvedValue([{ id: 'volleyball', name: 'Volleyball' }]) },
@@ -54,6 +55,21 @@ describe('venue location rates and selected categories', () => {
   it('keeps selections when an unrelated venue field is updated', async () => {
     await service.update(venue.id, { name: 'Updated Arena' }, { id: venue.partnerId, role: UserRole.PARTNER });
     expect(tx.partner_venue_services.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('blocks a partner from directly changing details after the venue is published', async () => {
+    tx.$queryRaw.mockResolvedValue([{ status: 'PUBLISHED' }]);
+    await expect(service.update(venue.id, { name: 'Updated Arena', description: 'New details' },
+      { id: venue.partnerId, role: UserRole.PARTNER }))
+      .rejects.toThrow('Submit changes to approved venue details for review');
+    expect(tx.venues.update).not.toHaveBeenCalled();
+    expect(tx.partner_venue_profiles.upsert).not.toHaveBeenCalled();
+  });
+
+  it('allows admins to edit approved venue details directly', async () => {
+    (service.findOne as jest.Mock).mockResolvedValue({ ...venue, status: VenueStatus.APPROVED });
+    await service.update(venue.id, { name: 'Corrected Arena' }, { id: 'admin', role: UserRole.ADMIN });
+    expect(tx.venues.update).toHaveBeenCalledWith(expect.objectContaining({ data: { name: 'Corrected Arena' } }));
   });
 
   it('rejects an empty selection rather than silently retaining old categories', async () => {

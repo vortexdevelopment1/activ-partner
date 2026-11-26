@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 import { VenuesService } from './venues.service';
 import { SubmitVenueUpdateDto } from './dto/submit-venue-update.dto';
 
@@ -50,6 +51,55 @@ describe('post-approval venue updates', () => {
       'venue_request_submitted', expect.any(String), expect.any(String),
       { partnerId: 'partner-1', venueId: 'venue-1', venueRequestId: result.id },
     );
+  });
+
+  it.each(['approve', 'reject'] as const)('keeps the last approved public details until the admin decision: %s', async (decision) => {
+    const publicVenue = {
+      id: 'venue-1', partner_id: 'partner-1', status: 'PUBLISHED', booking_accept: true,
+      name: 'Original Arena', city_code: 'Pune', latitude: 18, longitude: 73,
+      partners: { partner_business_profiles: null, partner_users: [] },
+      partner_venue_profiles: { display_name: 'Original Arena', address_line_1: 'Original address' },
+      partner_venue_availability: [], partner_venue_amenities: [], partner_venue_images: [], partner_venue_answers: [],
+      partner_venue_services: [{
+        id: 'activity', status: 'APPROVED', is_active: true, service_category_id: 'tennis',
+        partner_service_categories: { id: 'tennis', name: 'Tennis' },
+        partner_venue_images: [], partner_service_amenities: [],
+      }],
+    };
+    tx.venues.findUnique.mockResolvedValue(publicVenue);
+    tx.venues.update.mockImplementation(async ({ data }) => Object.assign(publicVenue, data));
+    tx.partner_venue_profiles.upsert.mockImplementation(async ({ update }) =>
+      Object.assign(publicVenue.partner_venue_profiles, update));
+    tx.partner_venue_update_requests.create.mockImplementation(async ({ data }) => {
+      tx.partner_venue_update_requests.findUnique.mockResolvedValue(data);
+      return data;
+    });
+    prisma.venues = {
+      findUnique: tx.venues.findUnique,
+      findMany: jest.fn().mockResolvedValue([{ id: publicVenue.id }]),
+      count: jest.fn().mockResolvedValue(1),
+    };
+    service.findOne = VenuesService.prototype.findOne;
+    const oldDetails = { name: 'Original Arena', address: 'Original address', latitude: 18 };
+    const newDetails = { name: 'Updated Arena', address: 'New address', latitude: 19 };
+    const expectPublicDetails = async (details: typeof oldDetails) => {
+      const expected = { ...details, status: 'approved', bookingAccept: true };
+      await expect(service.findPublicVenue(publicVenue.id)).resolves.toMatchObject(expected);
+      const [items, total] = await service.findApproved(new PaginationDto());
+      expect(total).toBe(1);
+      expect(items).toMatchObject([expected]);
+    };
+
+    const submission = await service.submitVenueUpdateRequest(publicVenue.id, publicVenue.partner_id, newDetails);
+    expect(submission.status).toBe('pending');
+    await expectPublicDetails(oldDetails);
+
+    if (decision === 'approve') {
+      await service.approveVenueUpdateRequest(submission.id, 'admin-1');
+    } else {
+      await service.rejectVenueUpdateRequest(submission.id, { adminNotes: 'Please verify the address' }, 'admin-1');
+    }
+    await expectPublicDetails(decision === 'approve' ? newDetails : oldDetails);
   });
 
   it('rejects duplicate pending requests', async () => {

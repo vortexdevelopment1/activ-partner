@@ -2138,6 +2138,22 @@ export class VenuesService {
         .map(([key, column]) => [column, venueData[key]]),
     );
     await this.prisma.$transaction(async (tx) => {
+      if (
+        currentUser.role === UserRole.PARTNER &&
+        (Object.keys(profile).length > 0 ||
+          venueData.latitude !== undefined ||
+          venueData.longitude !== undefined ||
+          venueData.amenities !== undefined)
+      ) {
+        const [current] = await tx.$queryRaw<Array<{ status: string }>>`
+          SELECT status FROM venues WHERE id = ${id}::uuid FOR UPDATE`;
+        if (!current) throw new NotFoundException("Venue not found");
+        if (current.status === "PUBLISHED") {
+          throw new ConflictException(
+            "Submit changes to approved venue details for review from Venue Information",
+          );
+        }
+      }
       await tx.venues.update({
         where: { id },
         data: {
