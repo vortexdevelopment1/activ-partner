@@ -13,9 +13,7 @@ import '../Style/app_colors.dart';
 import '../Style/onboarding_styles.dart';
 import '../Utills/common_utilities.dart';
 import '../api_calling/api_constant.dart';
-import '../api_calling/api_request.dart';
 import 'HelpSupportScreen.dart';
-import 'StringExtensions.dart';
 
 export '../Style/onboarding_styles.dart';
 
@@ -735,70 +733,6 @@ class _LoginCallbackDialogState extends State<_LoginCallbackDialog> {
   String _callbackDate = '';
   String _callbackTime = '';
   bool _submitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSavedDetails();
-  }
-
-  Future<void> _loadSavedDetails() async {
-    final [partner, email, phone, rawVenue, savedVenueName] =
-        (await Future.wait([
-          'owner_full_name',
-          'owner_email',
-          'userMobileNumber',
-          'venue_details',
-          'venue_name',
-        ].map(SharedPreference.readStr)))
-            .map(checkString)
-            .toList();
-    if (!mounted) return;
-    if (_partner.text.isEmpty) _partner.text = partner;
-    if (_email.text.isEmpty) _email.text = email;
-    if (_phone.text.isEmpty) _phone.text = phone.replaceAll(RegExp(r'\D'), '');
-    try {
-      final venue = rawVenue.isEmpty ? {} : jsonDecode(rawVenue);
-      final venueName = checkString(venue['venue_name']);
-      final city = checkString(venue['venue_city']);
-      if (_venue.text.isEmpty) _venue.text = venueName;
-      if (_city.text.isEmpty) {
-        _city.text = city.isEmpty ? checkString(venue['city']) : city;
-      }
-    } catch (_) {}
-    if (_venue.text.isEmpty) _venue.text = savedVenueName;
-    await _loadVenueIdentityFromApi();
-  }
-
-  Future<void> _loadVenueIdentityFromApi() async {
-    final initialVenue = _venue.text;
-    final initialCity = _city.text;
-    final token = checkString(await SharedPreference.readStr('jwt_token'));
-    if (!mounted || token.isEmpty) return;
-    try {
-      final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(MY_VENUES_URL),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
-      if (!mounted ||
-          (response.statusCode != 200 && response.statusCode != 201)) return;
-      final body = jsonDecode(response.body);
-      final data = body is Map ? body['data'] : null;
-      final items = data is Map ? data['items'] : data;
-      if (items is! List || items.isEmpty || items.last is! Map) return;
-      final venue = Map<String, dynamic>.from(items.last as Map);
-      final venueName = checkString(venue['name']).isEmpty
-          ? checkString(venue['venue_name'])
-          : checkString(venue['name']);
-      final city = checkString(venue['city']).isEmpty
-          ? checkString(venue['venue_city'])
-          : checkString(venue['city']);
-      if (_venue.text == initialVenue && venueName.isNotEmpty) {
-        _venue.text = venueName;
-      }
-      if (_city.text == initialCity && city.isNotEmpty) _city.text = city;
-    } catch (_) {}
-  }
 
   @override
   void dispose() {

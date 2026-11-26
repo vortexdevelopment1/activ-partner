@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:activ_app/Screens/onboarding_widgets.dart';
@@ -66,22 +65,25 @@ void main() {
     expect(find.text('Callback requested successfully.'), findsOneWidget);
   });
 
-  testWidgets('late venue autofill preserves callback fields already edited', (tester) async {
-    SharedPreferences.setMockInitialValues({'jwt_token': 'session', 'venue_name': 'Saved Arena'});
-    final response = Completer<http.Response>();
-    await openCallback(tester, MockClient((_) => response.future));
-    final venue = find.byType(TextField).at(1);
-    final city = find.byType(TextField).at(2);
-    expect(tester.widget<TextField>(venue).controller!.text, 'Saved Arena');
-    await tester.enterText(venue, 'Typed Arena');
-    await tester.enterText(city, 'Pune');
+  testWidgets('login callback opens blank even with saved account details', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'previous-session',
+      'owner_full_name': 'Saved Partner',
+      'owner_email': 'saved@example.test',
+      'userMobileNumber': '9876543210',
+      'venue_name': 'Saved Arena',
+      'venue_details': jsonEncode({'venue_name': 'Saved Arena', 'venue_city': 'Pune'}),
+    });
+    final requests = <http.Request>[];
+    await openCallback(tester, MockClient((request) async {
+      requests.add(request);
+      return http.Response('{}', 200);
+    }));
 
-    response.complete(http.Response(jsonEncode({
-      'data': [{'name': 'Server Arena', 'city': 'Mumbai'}],
-    }), 200));
-    await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(venue).controller!.text, 'Typed Arena');
-    expect(tester.widget<TextField>(city).controller!.text, 'Pune');
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(fields, hasLength(6));
+    expect(fields.map((field) => field.controller!.text), everyElement(isEmpty));
+    expect(requests, isEmpty);
   });
 
   testWidgets('support button moves with a drag and remains tappable', (tester) async {
