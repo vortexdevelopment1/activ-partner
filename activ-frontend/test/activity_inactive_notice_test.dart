@@ -117,6 +117,11 @@ void main() {
           'bookingAccept': false,
         })));
 
+    expect(
+        find.text(
+            'Actions are unavailable until this activity is approved. Please contact the ACTIV admin for assistance.'),
+        findsOneWidget);
+
     final quickAction = find.text('Manage Slot & Pricing');
     expect(
         tester
@@ -193,6 +198,11 @@ void main() {
           'isActive': false,
           'bookingAccept': true,
         })));
+
+    expect(
+        find.text(
+            'Actions are unavailable until this activity is approved. Please contact the ACTIV admin for assistance.'),
+        findsNothing);
 
     final quickAction = find.text('Manage Slot & Pricing');
     expect(

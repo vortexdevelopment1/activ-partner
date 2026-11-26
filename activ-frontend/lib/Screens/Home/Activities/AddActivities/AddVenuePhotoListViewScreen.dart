@@ -45,6 +45,11 @@ class _State extends State<AddVenuePhotoListViewScreen> {
   bool _photosChanged = false;
   late final ImagePicker _picker = widget.imagePicker ?? ImagePicker();
 
+  bool _isRemoteImage(XFile image) {
+    final uri = Uri.tryParse(image.path);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
 
   @override
   void initState() {
@@ -115,8 +120,22 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     _persistImages();
   }
 
-  void deletePhoto(int index) {
+  Future<void> deletePhoto(int index) async {
     if (_isUploading) return;
+    final image = _images[index];
+    final activityId = widget.activityId ?? await widget.activityIdFuture;
+    if (activityId != null && _isRemoteImage(image)) {
+      final api = ActivitySetupApi(client: widget.client);
+      try {
+        await api.removePhoto(activityId, image.path);
+      } catch (error) {
+        if (mounted) CommonUtilities.createSnackBar(context, error.toString());
+        return;
+      } finally {
+        api.dispose();
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _images.removeAt(index);
       _imageIds.removeAt(index);
@@ -129,7 +148,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
       }
     });
     widget.onPhotosChanged?.call(List<XFile>.unmodifiable(_images));
-    _persistImages();
+    await _persistImages();
 
     if (_images.isEmpty)
     {
@@ -301,7 +320,7 @@ class _State extends State<AddVenuePhotoListViewScreen> {
     if (selected == 'cover') {
       setAsCover(index);
     } else if (selected == 'delete') {
-      deletePhoto(index);
+      await deletePhoto(index);
     }
   }
 
@@ -434,12 +453,18 @@ class _State extends State<AddVenuePhotoListViewScreen> {
 
                                                   AspectRatio(
                                                     aspectRatio: 16/9,
-                                                    child: kIsWeb
+                                                    child: kIsWeb ||
+                                                            _isRemoteImage(
+                                                                _images[index])
                                                         ? Image.network(
                                                             _images[index].path,
                                                             fit: BoxFit.cover,
                                                             width: double.infinity,
                                                             height: 200,
+                                                            errorBuilder: (_, __,
+                                                                    ___) =>
+                                                                const Icon(Icons
+                                                                    .broken_image_outlined),
                                                           )
                                                         : Image.file(
                                                             File(_images[index].path),

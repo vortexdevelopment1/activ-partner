@@ -607,50 +607,78 @@ class _State extends State<ReviewVenueDetailsScreen> {
                 style: const TextStyle(
                     fontFamily: 'Satoshi',
                     fontSize: 16,
+                    fontWeight: FontWeight.w600,
                     height: 1.3)),
             const SizedBox(height: 4),
             Text(_activityDescription(activity),
                 style: const TextStyle(
                     fontSize: 14, color: AppColors.hintColor, height: 1.4)),
           ]);
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: AppColors.gray),
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Image.asset(
-                      _activityImage(activity['title']?.toString() ?? ''),
-                      width: compact ? 44 : 60,
-                      height: compact ? 44 : 60,
-                      fit: BoxFit.contain),
-                  const SizedBox(width: 12),
-                  Expanded(child: details),
-                ]),
-              ]);
+                Image.asset(
+                    _activityImage(activity['title']?.toString() ?? ''),
+                    width: compact ? 44 : 56,
+                    height: compact ? 44 : 56,
+                    fit: BoxFit.contain),
+                const SizedBox(width: 14),
+                Expanded(child: details),
+                const SizedBox(width: 8),
+                _editButton(_editActivity),
+              ],
+            ),
+          );
         },
       );
 
-  Widget _activities() => _section(
-      'Activities',
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text(
-            'You can always add more activities or update activity details later, once venue is approved.',
-            style:
-                TextStyle(fontSize: 14, height: 1.5, color: AppColors.black1)),
-        const SizedBox(height: 16),
-        if (activities.isEmpty) const Text('No activities selected.'),
-        for (var i = 0; i < activities.length; i++)
-          Padding(
-              padding:
-                  EdgeInsets.only(bottom: i == activities.length - 1 ? 0 : 16),
-              child: _activityRow(activities[i], i)),
-      ]),
-      onEdit: _editActivity);
+  Widget _activities() => Container(
+        margin: const EdgeInsets.only(top: 24),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: AppColors.gray),
+            borderRadius: BorderRadius.circular(16)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Activities',
+              style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.4)),
+          const SizedBox(height: 6),
+          const Text(
+              'You can always add more activities or update activity details later, once venue is approved.',
+              style: TextStyle(
+                  fontSize: 14, height: 1.5, color: AppColors.black1)),
+          const SizedBox(height: 16),
+          if (activities.isEmpty)
+            Row(
+              children: [
+                const Expanded(child: Text('No activities selected.')),
+                _editButton(_editActivity),
+              ],
+            ),
+          for (var i = 0; i < activities.length; i++)
+            Padding(
+                padding: EdgeInsets.only(
+                    bottom: i == activities.length - 1 ? 0 : 14),
+                child: _activityRow(activities[i], i)),
+        ]),
+      );
 
   @override
   Widget build(BuildContext context) => OnboardingScaffold(
           child: Column(children: [
         Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

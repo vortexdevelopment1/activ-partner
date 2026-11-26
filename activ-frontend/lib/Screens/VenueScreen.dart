@@ -630,6 +630,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -704,6 +705,7 @@ class _State extends State<VenueScreen> {
               style: TextStyle(
                   fontSize: AppSize.size_14,
                   fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w600,
                   color: AppColors.black1,
                   height: 1
               ),
@@ -759,6 +761,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1),
           ),
@@ -1124,6 +1127,7 @@ class _State extends State<VenueScreen> {
               style: TextStyle(
                   fontSize: AppSize.size_14,
                   fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.w600,
                   color: AppColors.black1,
                   height: 1
               ),
@@ -1180,6 +1184,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1249,6 +1254,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1319,6 +1325,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -1511,6 +1518,7 @@ class _State extends State<VenueScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.w600,
                 color: AppColors.black1,
                 height: 1
             ),

@@ -69,6 +69,59 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'each new-activity time slot has independent pricing and capacity',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 2400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(const MaterialApp(
+      home: AddVenueTimingScreen(activityId: 'activity', initialTiming: {
+        'Monday': [
+          {
+            'open': '07:00 AM',
+            'close': '10:00 AM',
+            'capacity': '4',
+            'price': '500',
+            'discountedPrice': '350'
+          },
+          {
+            'open': '11:00 AM',
+            'close': '02:00 PM',
+            'capacity': '6',
+            'price': '400',
+            'discountedPrice': '300'
+          }
+        ],
+      }),
+    ));
+    await tester.pumpAndSettle();
+
+    for (final index in [0, 1]) {
+      for (final key in ['capacity', 'price', 'discountedPrice']) {
+        expect(find.byKey(ValueKey('slot-Mon-$key-$index')), findsOneWidget);
+      }
+    }
+
+    final secondPrice = find.byKey(const ValueKey('slot-Mon-price-1'));
+    await tester.ensureVisible(secondPrice);
+    await tester.enterText(secondPrice, '450');
+    await tester.pump();
+
+    final dynamic state = tester.state(find.byType(AddVenueTimingScreen));
+    expect(state.timings['Mon'].timeSlots[0]['price'], '500');
+    expect(state.timings['Mon'].timeSlots[1]['price'], '450');
+
+    final deleteSecond = find.byKey(const ValueKey('delete-slot-Mon-1'));
+    await tester.ensureVisible(deleteSecond);
+    await tester.tap(deleteSecond);
+    await tester.pump();
+    expect(state.timings['Mon'].timeSlots, hasLength(1));
+    expect(find.text('⚠ Alert!'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final back in ['button', 'system', 'root']) {
     testWidgets('add another activity returns to management using $back back',
         (tester) async {
@@ -236,6 +289,93 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('continued draft restores Back navigation through steps 6 to 1',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final timing = {
+      'Monday': [
+        {'open': '09:00 AM', 'close': '06:00 PM', 'price': '500'}
+      ]
+    };
+    await ActivityFlowCheckpoint.save(
+      activityId: 'saved-activity',
+      step: 'configure',
+      data: {
+        'venueId': 'venue',
+        'categoryId': 'swimming',
+        'activityName': 'Swimming',
+        'timing': timing,
+      },
+    );
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/categories/active')) {
+        return response([
+          {'id': 'swimming', 'name': 'Swimming'}
+        ]);
+      }
+      if (request.url.path.endsWith('/my-approved-venues')) {
+        return response([
+          {'id': 'venue', 'name': 'Arena', 'services': []}
+        ]);
+      }
+      if (request.url.path.endsWith('/amenities/active')) return response([]);
+      if (request.url.path.endsWith('/questions')) return response([]);
+      return response({
+        'id': 'saved-activity',
+        'name': 'Swimming',
+        'imageUrls': [
+          'https://images.test/1.jpg',
+          'https://images.test/2.jpg',
+          'https://images.test/3.jpg',
+          'https://images.test/4.jpg',
+        ],
+        'amenities': [],
+      });
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddActivitySubmissionResultScreen(
+        activityId: 'saved-activity',
+        activityName: 'Swimming',
+        savedAsDraft: true,
+        client: client,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Continue Editing'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue Editing').hitTestable());
+    await tester.pumpAndSettle();
+
+    for (final screen in <Type>[
+      AddActivityConfigureScreen,
+      AddVenueTimingScreen,
+      AddActivityAmenitiesScreen,
+      AddSelectedVenueFormScreen,
+      AddVenuePhotoListViewScreen,
+      AddVenuePhotoUploadScreen,
+      AddListActivityTypeScreen,
+    ]) {
+      expect(find.byType(screen), findsOneWidget);
+      if (screen == AddVenuePhotoUploadScreen) {
+        expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Image && widget.image is NetworkImage),
+          findsNWidgets(4),
+        );
+      }
+      if (screen != AddListActivityTypeScreen) {
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+      }
+    }
+    expect(find.byType(VenueActivityListScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
       'older draft opens its own editable details instead of the activity list',

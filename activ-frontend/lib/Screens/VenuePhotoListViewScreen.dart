@@ -15,6 +15,7 @@ import '../api_calling/api_constant.dart';
 import '../api_calling/api_request.dart';
 import 'onboarding_widgets.dart';
 import '../Utills/session_photo_draft.dart';
+import '../Utills/venue_photo_duplicates.dart';
 
 class VenuePhotoListViewScreen extends StatefulWidget {
   static List<Uint8List> cachedImageBytes = [];
@@ -66,6 +67,7 @@ class _State extends State<VenuePhotoListViewScreen> {
   late List<XFile> _images;
   late List<Uint8List> _imageBytes;
   late List<String> _imageIds;
+  final ImagePicker _picker = ImagePicker();
   int? _coverIndex = 0; // by default first image is cover
   int currentStep = onboardingPhotosStep;
   final int totalSteps = totalSetup;
@@ -205,6 +207,97 @@ class _State extends State<VenuePhotoListViewScreen> {
     }
   }
 
+  Future<void> _addPhotos(Iterable<XFile> picked) async {
+    final addedFiles = <XFile>[];
+    final addedBytes = <Uint8List>[];
+    var duplicateFound = false;
+    for (final image in picked) {
+      if (_images.length + addedFiles.length >= 12) {
+        if (!mounted) return;
+        CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+        break;
+      }
+      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+        if (!mounted) return;
+        CommonUtilities.createSnackBar(
+            context, 'Each image must be less than 5 MB.');
+        continue;
+      }
+      if (await containsVenuePhoto(
+        bytes,
+        selectedPhotos: [..._images, ...addedFiles],
+        processedPhotos: [..._imageBytes, ...addedBytes],
+      )) {
+        duplicateFound = true;
+        continue;
+      }
+      addedFiles.add(image);
+      addedBytes.add(bytes);
+    }
+    if (!mounted) return;
+    if (addedFiles.isNotEmpty) {
+      setState(() {
+        final stamp = DateTime.now().microsecondsSinceEpoch;
+        _images.addAll(addedFiles);
+        _imageBytes.addAll(addedBytes);
+        _imageIds.addAll(List.generate(
+            addedFiles.length, (index) => 'added_${stamp}_$index'));
+        _coverIndex ??= 0;
+      });
+      _notifyPhotosChanged();
+    }
+    if (duplicateFound && mounted) {
+      await showDuplicateVenuePhotoDialog(context);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    if (_images.length >= 12) {
+      CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+      return;
+    }
+    await _addPhotos(await _picker.pickMultiImage());
+  }
+
+  Future<void> _pickFromCamera() async {
+    if (_images.length >= 12) {
+      CommonUtilities.createSnackBar(context, 'Maximum 12 images allowed.');
+      return;
+    }
+    final image = await _picker.pickImage(
+        source: ImageSource.camera, imageQuality: 40);
+    if (image != null) await _addPhotos([image]);
+  }
+
+  void _showPickOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromCamera();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromGallery();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void onReorder(int oldIndex, int newIndex) {
     setState(() {
       if (newIndex > oldIndex) {
@@ -338,9 +431,43 @@ class _State extends State<VenuePhotoListViewScreen> {
 
                                   getStepBar(progress),
 
-                                  getText(),
-
-                                  getSubText(),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            getText(),
+                                            getSubText(),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 25),
+                                        child: Material(
+                                          color: AppColors.white,
+                                          shape: const CircleBorder(),
+                                          elevation: 2,
+                                          child: IconButton(
+                                            key: const ValueKey(
+                                                'add-venue-photos'),
+                                            tooltip: 'Add photos',
+                                            onPressed: _showPickOptions,
+                                            icon: const Icon(Icons.add,
+                                                color: AppColors.purple,
+                                                size: 26),
+                                            constraints:
+                                                const BoxConstraints.tightFor(
+                                                    width: 46, height: 46),
+                                            padding: const EdgeInsets.all(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -582,12 +709,19 @@ class _State extends State<VenuePhotoListViewScreen> {
 
   Widget getText()
   {
+    final rawTitle =
+        (widget.currentCategory['title'] ?? widget.currentCategory['name'])
+                ?.toString()
+                .trim() ??
+            '';
+    final heading =
+        rawTitle.isNotEmpty ? rawTitle : "Review Your Venue Photos";
     return Container(
       margin: EdgeInsets.only(top: 25),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        "Review Your Venue Photos",
-        style: TextStyle(
+      child: Text(
+        heading,
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
             fontWeight: FontWeight.w700,
@@ -602,9 +736,10 @@ class _State extends State<VenuePhotoListViewScreen> {
   Widget getSubText()
   {
     return Container(
-      margin: EdgeInsets.fromLTRB(0, 10, 0, 10),
+      margin: const EdgeInsets.fromLTRB(0, 3, 0, 10),
+      alignment: Alignment.centerLeft,
       child: const Text(
-        "Review the photos that will appear on your venue listing. You can go back to add or remove photos before submitting your venue for review.",
+        "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',

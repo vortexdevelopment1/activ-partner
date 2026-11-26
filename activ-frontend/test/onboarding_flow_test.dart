@@ -1115,11 +1115,12 @@ void main() {
       expect(find.text('Last Name'), findsWidgets);
       expect(find.text('Virat'), findsOneWidget);
       expect(find.text('Kohli'), findsOneWidget);
-      expect(find.text('Phone Number'), findsOneWidget);
+      expect(find.text('Partner Phone Number'), findsOneWidget);
       expect(find.text('3/10'), findsOneWidget);
       final emailField = find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.hintText == 'Enter Email Address');
-      expect(tester.getTopLeft(find.text('Phone Number')).dy - tester.getBottomLeft(emailField).dy, lessThanOrEqualTo(32));
-      expect(find.text('Same as owner number'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Partner Phone Number')).dy - tester.getBottomLeft(emailField).dy, lessThanOrEqualTo(32));
+      expect(find.text('Venue’s primary phone number'), findsOneWidget);
+      expect(find.text('Same as partner number'), findsOneWidget);
       expect(find.text('Back'), findsOneWidget);
       expect(find.byType(TextFormField), findsNWidgets(4));
       expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
@@ -1129,6 +1130,7 @@ void main() {
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
       expect(find.byType(TextFormField), findsNWidgets(5));
+      expect(find.text('Venue Phone Number'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

@@ -20,7 +20,8 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('request and verification use the same normalized phone', (tester) async {
+  testWidgets('request and verification use the same normalized phone',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     http.Request? request;
     await open(tester, MobileNumberScreen(client: MockClient((value) async {
@@ -28,19 +29,51 @@ void main() {
       return http.Response('{}', 200);
     })));
 
-    await tester.enterText(find.byKey(const Key('mobile-number')), '9876544567');
+    await tester.enterText(
+        find.byKey(const Key('mobile-number')), '9876544567');
     await tester.pump();
     await tester.tap(find.byKey(const Key('mobile-submit')));
     await tester.pumpAndSettle();
 
     expect(jsonDecode(request!.body), {'phone': '9876544567'});
-    final otp = tester.widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen));
+    final otp = tester
+        .widget<OTPVerificationScreen>(find.byType(OTPVerificationScreen));
     expect(otp.mobileNumber, '9876544567');
-    expect((await SharedPreferences.getInstance()).getString('userMobileNumber'), '9876544567');
+    expect(
+        (await SharedPreferences.getInstance()).getString('userMobileNumber'),
+        '9876544567');
   });
 
+  for (final creatingAccount in [true, false]) {
+    testWidgets(
+        'registration progress is ${creatingAccount ? 'shown' : 'hidden'} on mobile and OTP screens',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await open(
+        tester,
+        MobileNumberScreen(isCreatingAccount: creatingAccount),
+      );
+      expect(
+          find.text('1/10'), creatingAccount ? findsOneWidget : findsNothing);
+      expect(find.byType(LinearProgressIndicator),
+          creatingAccount ? findsOneWidget : findsNothing);
+
+      await open(
+        tester,
+        OTPVerificationScreen(isCreatingAccount: creatingAccount),
+      );
+      expect(
+          find.text('2/10'), creatingAccount ? findsOneWidget : findsNothing);
+      expect(find.byType(LinearProgressIndicator),
+          creatingAccount ? findsOneWidget : findsNothing);
+    });
+  }
+
   for (final pasted in [false, true]) {
-    testWidgets('${pasted ? 'pasted' : 'typed'} OTP waits for Verify and submits once', (tester) async {
+    testWidgets(
+        '${pasted ? 'pasted' : 'typed'} OTP waits for Verify and submits once',
+        (tester) async {
       SharedPreferences.setMockInitialValues({
         'phoneCode': '+91',
         'userMobileNumber': '1111111111',
@@ -72,10 +105,16 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('otp-submit')));
       expect(requests, hasLength(1));
-      expect(jsonDecode(requests.single.body), {'phone': '9876544567', 'otp': '1234'});
-      expect(tester.widget<TextField>(find.byKey(const Key('otp-digit-0'))).enabled, isFalse);
+      expect(jsonDecode(requests.single.body),
+          {'phone': '9876544567', 'otp': '1234'});
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('otp-digit-0')))
+              .enabled,
+          isFalse);
 
-      response.complete(http.Response('{"message":"Invalid or expired OTP."}', 400));
+      response.complete(
+          http.Response('{"message":"Invalid or expired OTP."}', 400));
       await tester.pumpAndSettle();
       expect(find.text('Invalid or expired OTP.'), findsOneWidget);
       expect(find.byType(OTPVerificationScreen), findsOneWidget);
@@ -91,16 +130,18 @@ void main() {
     var syncAttempts = 0;
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/verify-otp')) {
-        return http.Response(jsonEncode({
-          'data': {
-            'accessToken': 'test-token',
-            'isProfileComplete': false,
-            'partner': {
-              'isActive': false,
-              'phone': '+919876544567',
-            },
-          }
-        }), 200);
+        return http.Response(
+            jsonEncode({
+              'data': {
+                'accessToken': 'test-token',
+                'isProfileComplete': false,
+                'partner': {
+                  'isActive': false,
+                  'phone': '+919876544567',
+                },
+              }
+            }),
+            200);
       }
       return http.Response('{"data":[]}', 200);
     });
@@ -122,7 +163,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TellUsAboutScreen), findsOneWidget);
-      expect(find.text('Network error. Please check your connection.'), findsNothing);
+      expect(find.text('Network error. Please check your connection.'),
+          findsNothing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('jwt_token'), 'test-token');
       expect(prefs.getString('firebase_partner_sync_pending'), 'true');

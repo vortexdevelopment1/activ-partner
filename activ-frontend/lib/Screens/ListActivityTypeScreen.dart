@@ -512,7 +512,7 @@ class _State extends State<ListActivityTypeScreen> {
       margin: const EdgeInsets.fromLTRB(15, 12, 15, 0),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppColors.gray, width: 1),
       ),
       child: TextField(
@@ -559,7 +559,7 @@ class _State extends State<ListActivityTypeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? AppColors.purple : AppColors.white,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: isSelected ? AppColors.purple : AppColors.gray,
                   width: 1,
@@ -807,8 +807,8 @@ class _State extends State<ListActivityTypeScreen> {
     required VenueTypeModel model,
     required BuildContext context,
   }) {
-    final cardRadius = BorderRadius.circular(16);
-    final innerRadius = BorderRadius.circular(model.isSelected ? 14 : 15);
+    final cardRadius = BorderRadius.circular(28);
+    final innerRadius = BorderRadius.circular(model.isSelected ? 26 : 27);
 
     return Container(
       decoration: BoxDecoration(

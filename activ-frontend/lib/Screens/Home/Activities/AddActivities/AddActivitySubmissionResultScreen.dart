@@ -13,11 +13,11 @@ import '../../../StringExtensions.dart';
 import '../VenueActivityListScreen.dart';
 import 'AddListActivityTypeScreen.dart';
 import 'AddActivitySubmitReviewScreen.dart';
-import 'AddActivityConfigureScreen.dart';
 import 'AddSelectedVenueFormScreen.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../../Utills/activity_image_draft_store.dart';
+import '../../../../Utills/activity_resume_navigator.dart';
 
 class AddActivitySubmissionResultScreen extends StatefulWidget {
   const AddActivitySubmissionResultScreen(
@@ -134,6 +134,11 @@ class _AddActivitySubmissionResultScreenState
     }
     setState(() => _resuming = true);
     try {
+      final checkpoint = await ActivityFlowCheckpoint.read(id);
+      if (checkpoint != null) {
+        await ActivityResumeNavigator.open(context, checkpoint, widget.client);
+        return;
+      }
       final raw = await SharedPreference.readStr('activity_draft_resume_$id');
       Map<String, List<Map<String, String>>>? timing;
       if (raw != null && raw.isNotEmpty) {
@@ -145,17 +150,27 @@ class _AddActivitySubmissionResultScreenState
                 .toList()));
       }
       if (!mounted) return;
-      await Navigator.pushReplacement(
+      if (timing != null) {
+        await ActivityResumeNavigator.open(
+          context,
+          ActivityFlowCheckpoint(
+            activityId: id,
+            step: 'configure',
+            data: {'activityName': _title, 'timing': timing},
+            interrupted: false,
+            updatedAt: DateTime.now(),
+          ),
+          widget.client,
+        );
+      } else {
+        await Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => timing == null
-                  ? AddSelectedVenueFormScreen(
-                      activityId: id, client: widget.client)
-                  : AddActivityConfigureScreen(
-                      activityId: id,
-                      activityName: _title,
-                      timing: timing!,
-                      client: widget.client)));
+            builder: (_) => AddSelectedVenueFormScreen(
+                activityId: id, client: widget.client),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -339,7 +354,10 @@ class _AddActivitySubmissionResultScreenState
                         fit: BoxFit.contain)
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(18),
-                        child: Image.network(_imageUrl!, fit: BoxFit.cover)),
+                        child: Image.network(_imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.broken_image_outlined))),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -395,8 +413,9 @@ class _AddActivitySubmissionResultScreenState
           _detailRow(
             draft ? "What's Next" : 'Estimated Review Time',
             draft
-                ? 'Continue editing or submit for review when ready.'
+                ? 'Continue editing or submit for\nreview when you’re ready.'
                 : 'Within 24-48 hours',
+            valueLeftAligned: draft,
           ),
           if (!draft) ...[
             const SizedBox(height: 8),
@@ -483,16 +502,20 @@ class _AddActivitySubmissionResultScreenState
     );
   }
 
-  Widget _detailRow(String label, String value, {bool badge = false}) {
+  Widget _detailRow(String label, String value,
+      {bool badge = false, bool valueLeftAligned = false}) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontFamily: 'Satoshi',
-            color: AppColors.black1,
+        SizedBox(
+          width: 122,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontFamily: 'Satoshi',
+              color: AppColors.black1,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -518,14 +541,18 @@ class _AddActivitySubmissionResultScreenState
                     ),
                   ),
                 )
-              : Text(
-                  value,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontFamily: 'Satoshi',
-                    color: AppColors.darkBlack,
-                    height: 1.35,
+              : Transform.translate(
+                  offset: Offset(valueLeftAligned ? 6 : 0, 0),
+                  child: Text(
+                    value,
+                    textAlign:
+                        valueLeftAligned ? TextAlign.left : TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'Satoshi',
+                      color: AppColors.darkBlack,
+                      height: 1.35,
+                    ),
                   ),
                 ),
         ),

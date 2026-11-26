@@ -343,7 +343,7 @@ class _State extends State<TellUsAboutScreen> {
             margin: const EdgeInsets.fromLTRB(0, 15, 0, 0),
             child: Row(
               children: [
-                Text(label, style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.black1, height: 1)),
+                Text(label, style: const TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', fontWeight: FontWeight.bold, color: AppColors.black1, height: 1)),
                 const Text("*", style: TextStyle(fontSize: AppSize.size_14, fontFamily: 'Satoshi', color: AppColors.red, height: 1)),
               ],
             ),
@@ -404,6 +404,7 @@ class _State extends State<TellUsAboutScreen> {
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.bold,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -481,10 +482,11 @@ class _State extends State<TellUsAboutScreen> {
         Container(
           margin: const EdgeInsets.fromLTRB(0, 20, 0, 0),
           child: const Text(
-            "Phone Number",
+            "Partner Phone Number",
             style: TextStyle(
                 fontSize: AppSize.size_14,
                 fontFamily: 'Satoshi',
+                fontWeight: FontWeight.bold,
                 color: AppColors.black1,
                 height: 1
             ),
@@ -646,10 +648,11 @@ class _State extends State<TellUsAboutScreen> {
     return Container(
       margin: EdgeInsets.fromLTRB(0, 20, 0, 0),
       child: const Text(
-        "Venue’s primary contact number",
+        "Venue’s primary phone number",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',
+            fontWeight: FontWeight.bold,
             color: AppColors.black1,
             height: 1
         ),
@@ -684,10 +687,11 @@ class _State extends State<TellUsAboutScreen> {
           Container(
             margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
             child: const Text(
-              "Phone Number",
+              "Venue Phone Number",
               style: TextStyle(
                   fontSize: AppSize.size_14,
                   fontFamily: 'Satoshi',
+                  fontWeight: FontWeight.bold,
                   color: AppColors.black1,
                   height: 1
               ),
@@ -843,7 +847,7 @@ class _State extends State<TellUsAboutScreen> {
           Flexible(child: Container(
             margin: EdgeInsets.only(left: 5),
             child: const Text(
-              'Same as owner number',
+              'Same as partner number',
               style: TextStyle(
                   fontSize: AppSize.size_14,
                   fontFamily: 'Satoshi',

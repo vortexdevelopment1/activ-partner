@@ -22,6 +22,7 @@ import 'MobileNumberScreen.dart';
 import 'AuthWrapper.dart';
 import '../Utills/venue_onboarding_draft.dart';
 import '../Database/auth_service.dart';
+import 'CommonCode.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   const OTPVerificationScreen({
@@ -206,7 +207,8 @@ class _State extends State<OTPVerificationScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _syncFirebasePartnerMapping(Map<String, dynamic>? partner) async {
+  Future<void> _syncFirebasePartnerMapping(
+      Map<String, dynamic>? partner) async {
     // The production entrypoint initializes Firebase before rendering the app.
     // Widget tests intentionally do not initialize a real Firebase app; the
     // backend OTP response is sufficient for navigation in that environment.
@@ -251,7 +253,8 @@ class _State extends State<OTPVerificationScreen> {
             'firebase_partner_sync_pending', 'true');
       }
     } catch (_) {
-      CommonUtilities.showLog('Firebase sync recovery state could not be saved');
+      CommonUtilities.showLog(
+          'Firebase sync recovery state could not be saved');
     }
   }
 
@@ -276,7 +279,8 @@ class _State extends State<OTPVerificationScreen> {
       if (!mounted) return;
 
       CommonUtilities.showLog("Verify OTP status: ${response.statusCode}");
-      CommonUtilities.showLog("Verify OTP completed with status ${response.statusCode}");
+      CommonUtilities.showLog(
+          "Verify OTP completed with status ${response.statusCode}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
@@ -413,11 +417,14 @@ class _State extends State<OTPVerificationScreen> {
             items.isNotEmpty ? (items.first['name']?.toString() ?? '') : '';
 
         if (items.isNotEmpty && items.first is Map) {
-          await restoreVenueOnboardingDraft(Map<String, dynamic>.from(items.first));
+          await restoreVenueOnboardingDraft(
+              Map<String, dynamic>.from(items.first));
         }
 
         final approvedVenue = items.firstWhere(
-          (item) => item is Map && item['status']?.toString().toLowerCase() == 'approved',
+          (item) =>
+              item is Map &&
+              item['status']?.toString().toLowerCase() == 'approved',
           orElse: () => null,
         );
         if (approvedVenue is Map) {
@@ -455,8 +462,10 @@ class _State extends State<OTPVerificationScreen> {
         } else if (total == 1 && firstStatus == 'draft') {
           if (!mounted) return;
           CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(
-              context, items.first['changesRequested'] == true
-                  ? VenueScreen(changeReason: items.first['rejectionReason']?.toString())
+              context,
+              items.first['changesRequested'] == true
+                  ? VenueScreen(
+                      changeReason: items.first['rejectionReason']?.toString())
                   : TellUsAboutScreen());
         } else {
           // No venue yet or unexpected incomplete state — restart from the
@@ -554,6 +563,10 @@ class _State extends State<OTPVerificationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.isCreatingAccount) ...[
+                  getStepBarCount(2 / 10, 2, 10),
+                  const SizedBox(height: 25),
+                ],
                 const Text('Verify your number',
                     style: OnboardingStyles.heading),
                 const SizedBox(height: 6),
@@ -698,7 +711,11 @@ class _State extends State<OTPVerificationScreen> {
                       textStyle: const TextStyle(
                         fontFamily: 'Satoshi',
                         fontSize: 18,
+<<<<<<< Updated upstream
                         fontWeight: FontWeight.w700,
+=======
+                        fontWeight: FontWeight.bold,
+>>>>>>> Stashed changes
                         decoration: TextDecoration.underline,
                       ),
                     ),

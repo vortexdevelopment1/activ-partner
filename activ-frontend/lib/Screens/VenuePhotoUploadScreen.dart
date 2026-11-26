@@ -853,12 +853,19 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
   }
 
   Widget getText() {
+    final rawTitle =
+        (widget.currentCategory['title'] ?? widget.currentCategory['name'])
+                ?.toString()
+                .trim() ??
+            '';
+    final heading =
+        rawTitle.isNotEmpty ? rawTitle : 'Add some photos of your venue';
     return Container(
       margin: const EdgeInsets.only(top: 30),
       alignment: Alignment.centerLeft,
-      child: const Text(
-        'Add some photos of your venue',
-        style: TextStyle(
+      child: Text(
+        heading,
+        style: const TextStyle(
             fontSize: AppSize.size_25,
             fontFamily: 'Satoshi',
             fontWeight: FontWeight.w700,
@@ -871,9 +878,10 @@ class _VenuePhotoUploadScreenState extends State<VenuePhotoUploadScreen> {
 
   Widget getSubText() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+      margin: const EdgeInsets.fromLTRB(0, 3, 0, 10),
+      alignment: Alignment.centerLeft,
       child: const Text(
-        'These images will be shown on the Activ venue listing page',
+        "Upload this activity's images",
         style: TextStyle(
             fontSize: AppSize.size_16,
             fontFamily: 'Satoshi',

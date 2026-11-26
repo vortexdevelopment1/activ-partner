@@ -255,53 +255,64 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
             padding: const EdgeInsets.fromLTRB(28, 42, 28, 28),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Container(
-                width: 88, height: 88,
+                width: 88,
+                height: 88,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFCEBEC), shape: BoxShape.circle),
+                    color: Color(0xFFFCEBEC), shape: BoxShape.circle),
                 child: const Icon(Icons.delete_outline,
-                  color: Color(0xFFFF3333), size: 42),
+                    color: Color(0xFFFF3333), size: 42),
               ),
               const SizedBox(height: 18),
-              _text('Delete Activity', size: 22, bold: true,
-                color: const Color(0xFFFF3333)),
+              _text('Delete Activity',
+                  size: 22, bold: true, color: const Color(0xFFFF3333)),
               const SizedBox(height: 18),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 280),
                 child: const Text(
-                'Are you sure you want to delete your activity? This action cannot be undone.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Satoshi', fontSize: 14,
-                  height: 1.45, color: Color(0xFF777777)),
+                  'Are you sure you want to delete your activity? This action cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 14,
+                      height: 1.45,
+                      color: Color(0xFF777777)),
                 ),
               ),
               const SizedBox(height: 30),
               Row(children: [
-                Expanded(flex: 2, child: TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 56),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-                    backgroundColor: const Color(0xFFFDF6DE),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Colors.black)),
-                  ),
-                  child: _text('Cancel', size: 16, bold: true),
-                )),
+                Expanded(
+                    flex: 2,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 56),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 14),
+                        backgroundColor: const Color(0xFFFDF6DE),
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: const BorderSide(color: Colors.black)),
+                      ),
+                      child: _text('Cancel', size: 16, bold: true),
+                    )),
                 const SizedBox(width: 12),
-                Expanded(flex: 5, child: TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 56),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-                    backgroundColor: Colors.black,
-                    foregroundColor: const Color(0xFFDAFF50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _text('Delete Activity', size: 16, bold: true,
-                    color: const Color(0xFFDAFF50)),
-                )),
+                Expanded(
+                    flex: 5,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 56),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 14),
+                        backgroundColor: Colors.black,
+                        foregroundColor: const Color(0xFFDAFF50),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _text('Delete Activity',
+                          size: 16, bold: true, color: const Color(0xFFDAFF50)),
+                    )),
               ]),
             ]),
           ),
@@ -522,8 +533,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                             const SizedBox(height: 16),
                             Row(children: [
                               Expanded(
-                                  child: _stat(
-                                      'Total Booking',
+                                  child: _stat('Total Booking',
                                       _data['bookingCount']?.toString() ?? '0',
                                       svgAsset: 'assets/total_booking.svg')),
                               const SizedBox(width: 8),
@@ -539,8 +549,7 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                       svgAsset: 'assets/total_earning.svg')),
                               const SizedBox(width: 8),
                               Expanded(
-                                  child: _stat(
-                                      'Occupancy',
+                                  child: _stat('Occupancy',
                                       '${_data['occupancy']?.toString() ?? '0'}%',
                                       icon: Icons.sync_alt_outlined)),
                             ]),
@@ -567,6 +576,40 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                                     children: [
                                   _text('Quick Actions', bold: true),
                                   const SizedBox(height: 14),
+                                  if (_inReview) ...[
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFF1F1),
+                                        border: Border.all(
+                                            color: const Color(0xFFFF5757)),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(Icons.info_outline,
+                                              color: Color(0xFFFF5757),
+                                              size: 20),
+                                          SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Actions are unavailable until this activity is approved. Please contact the ACTIV admin for assistance.',
+                                              style: TextStyle(
+                                                fontFamily: 'Satoshi',
+                                                fontSize: 13,
+                                                height: 1.4,
+                                                color: Color(0xFFFF3B3B),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
                                   _action(
                                       'Manage Slot & Pricing',
                                       'Update Slots, Availability & Pricing',
@@ -731,73 +774,64 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
                     ),
                 ],
               ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: const TextStyle(
-                  fontFamily: 'Satoshi',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                  color: Color(0xFF303030),
+              const SizedBox(height: 8),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
+                      color: Color(0xFF303030),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
-      ));
+            ],
+          ));
 
   Widget _action(
       String title, String subtitle, IconData icon, VoidCallback onTap) {
     final action = Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Material(
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: _border)),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                  onTap: _saving ||
-                          _loading ||
-                          _error != null ||
-                          _quickActionsLocked
-                      ? null
-                      : onTap,
-                  child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Row(children: [
-                        Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                                color: const Color(0xFFEED5FF),
-                                borderRadius: BorderRadius.circular(9)),
-                            child: Icon(icon, color: _purple, size: 23)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                              _text(title, bold: true, size: 13),
-                              const SizedBox(height: 3),
-                              _text(subtitle,
-                                  size: 12, color: const Color(0xFF686868)),
-                            ])),
-                        const Icon(Icons.chevron_right, size: 20),
-                      ])))));
-    return _quickActionsLocked
-        ? Opacity(
-            opacity: .45,
-            child: ColorFiltered(
-                colorFilter:
-                    const ColorFilter.mode(Colors.grey, BlendMode.saturation),
-                child: action))
-        : action;
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: _border)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+                onTap:
+                    _saving || _loading || _error != null || _quickActionsLocked
+                        ? null
+                        : onTap,
+                child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(children: [
+                      Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFEED5FF),
+                              borderRadius: BorderRadius.circular(9)),
+                          child: Icon(icon, color: _purple, size: 23)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            _text(title, bold: true, size: 13),
+                            const SizedBox(height: 3),
+                            _text(subtitle,
+                                size: 12, color: const Color(0xFF686868)),
+                          ])),
+                      const Icon(Icons.chevron_right, size: 20),
+                    ])))));
+    return _quickActionsLocked ? Opacity(opacity: .45, child: action) : action;
   }
 
   Widget _booking(Map<String, dynamic> booking) {
@@ -1273,45 +1307,39 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
 
   Widget _deletePanel() {
     final panel = Material(
-      color: const Color(0xFFFFF6F6),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Colors.redAccent)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-          onTap: _saving || _loading || _error != null || _deleteLocked
-              ? null
-              : _delete,
-          child: Padding(
-              padding: const EdgeInsets.all(16),
-              child:
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.delete_outline,
-                    color: Colors.redAccent, size: 28),
-                const SizedBox(width: 16),
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      _text('Delete Activity',
-                          color: Colors.redAccent, size: 18, bold: true),
-                      const SizedBox(height: 12),
-                      _text('This will stop new bookings immediately.',
-                          size: 13, color: Colors.grey.shade700),
-                      const SizedBox(height: 6),
-                      _text('Existing bookings will be honored.',
-                          size: 13, color: Colors.grey.shade700),
-                    ])),
-                const Icon(Icons.chevron_right, color: Colors.redAccent),
-              ]))));
-    return _deleteLocked
-        ? Opacity(
-            opacity: .45,
-            child: ColorFiltered(
-                colorFilter:
-                    const ColorFilter.mode(Colors.grey, BlendMode.saturation),
-                child: panel))
-        : panel;
+        color: const Color(0xFFFFF6F6),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Colors.redAccent)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+            onTap: _saving || _loading || _error != null || _deleteLocked
+                ? null
+                : _delete,
+            child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.delete_outline,
+                          color: Colors.redAccent, size: 28),
+                      const SizedBox(width: 16),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            _text('Delete Activity',
+                                color: Colors.redAccent, size: 18, bold: true),
+                            const SizedBox(height: 12),
+                            _text('This will stop new bookings immediately.',
+                                size: 13, color: Colors.grey.shade700),
+                            const SizedBox(height: 6),
+                            _text('Existing bookings will be honored.',
+                                size: 13, color: Colors.grey.shade700),
+                          ])),
+                      const Icon(Icons.chevron_right, color: Colors.redAccent),
+                    ]))));
+    return _deleteLocked ? Opacity(opacity: .45, child: panel) : panel;
   }
 }
 
@@ -1836,8 +1864,11 @@ class _ReviewsPage extends StatelessWidget {
 
   Map<int, int> get _ratingCounts => {
         for (var star = 1; star <= 5; star++)
-          star: reviews.where((review) =>
-              (num.tryParse(review['rating']?.toString() ?? '') ?? 0) == star).length,
+          star: reviews
+              .where((review) =>
+                  (num.tryParse(review['rating']?.toString() ?? '') ?? 0) ==
+                  star)
+              .length,
       };
 
   String _reviewValue(Map<String, dynamic> review, String key,
@@ -1886,20 +1917,24 @@ class _ReviewsPage extends StatelessWidget {
                         width: 134,
                         height: 120,
                         child: _reviewPanel(
-                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      _text(rating.toStringAsFixed(1), bold: true, size: 36),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                              5,
-                              (i) => Icon(
-                                  i < rating.round()
-                                      ? Icons.star
-                                      : Icons.star_border,
-                                  color: const Color(0xFFD8F34A), size: 18))),
-                      const SizedBox(height: 6),
-                      _text('(${reviews.length} Review)', size: 12),
-                    ]))),
+                            child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                              _text(rating.toStringAsFixed(1),
+                                  bold: true, size: 36),
+                              Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: List.generate(
+                                      5,
+                                      (i) => Icon(
+                                          i < rating.round()
+                                              ? Icons.star
+                                              : Icons.star_border,
+                                          color: const Color(0xFFD8F34A),
+                                          size: 18))),
+                              const SizedBox(height: 6),
+                              _text('(${reviews.length} Review)', size: 12),
+                            ]))),
                     const SizedBox(width: 14),
                     Expanded(child: _ratingBars()),
                   ]),

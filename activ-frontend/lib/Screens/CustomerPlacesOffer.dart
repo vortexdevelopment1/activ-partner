@@ -465,6 +465,7 @@ class _State extends State<CustomerPlacesOffer> {
         style: TextStyle(
           fontSize: AppSize.size_16,
           fontFamily: 'Satoshi',
+          fontWeight: FontWeight.w600,
           color: AppColors.darkBlack,
         ),
       ),

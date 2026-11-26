@@ -176,6 +176,7 @@ Widget getSubText(String subText)
 {
   return Container(
     margin: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+    alignment: Alignment.centerLeft,
     child: Text(
       subText,
       style: TextStyle(

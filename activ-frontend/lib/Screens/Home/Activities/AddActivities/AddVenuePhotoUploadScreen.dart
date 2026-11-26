@@ -25,7 +25,8 @@ import '../../../../Utills/activity_flow_checkpoint.dart';
 import '../../../../api_calling/activity_setup_api.dart';
 
 class AddVenuePhotoUploadScreen extends StatefulWidget {
-  const AddVenuePhotoUploadScreen({super.key, this.client});
+  const AddVenuePhotoUploadScreen({super.key, this.activityId, this.client});
+  final String? activityId;
   final http.Client? client;
 
   @override
@@ -82,6 +83,30 @@ class _State extends State<AddVenuePhotoUploadScreen> {
     if (_imageDraftKey.isNotEmpty) {
       await ActivityImageDraftStore.save(_imageDraftKey, _selectedImages);
     }
+  }
+
+  bool _isRemoteImage(XFile image) {
+    final uri = Uri.tryParse(image.path);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
+  Future<void> _removeImage(int index) async {
+    final image = _selectedImages[index];
+    final activityId = widget.activityId;
+    if (activityId != null && _isRemoteImage(image)) {
+      final api = ActivitySetupApi(client: widget.client);
+      try {
+        await api.removePhoto(activityId, image.path);
+      } catch (error) {
+        if (mounted) CommonUtilities.createSnackBar(context, error.toString());
+        return;
+      } finally {
+        api.dispose();
+      }
+    }
+    if (!mounted) return;
+    setState(() => _selectedImages.removeAt(index));
+    await _persistImageDraft();
   }
 
   void _backFromUploadStep() => Navigator.pop(context);
@@ -539,13 +564,20 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                 ClipRRect(
                                                   borderRadius:
                                                       BorderRadius.circular(10),
-                                                  child: kIsWeb
+                                                  child: kIsWeb ||
+                                                          _isRemoteImage(
+                                                              _selectedImages[
+                                                                  index])
                                                       ? Image.network(
                                                           _selectedImages[index]
                                                               .path,
                                                           fit: BoxFit.cover,
                                                           width: 120,
                                                           height: 120,
+                                                          errorBuilder: (_, __,
+                                                                  ___) =>
+                                                              const Icon(Icons
+                                                                  .broken_image_outlined),
                                                         )
                                                       : Image.file(
                                                           File(_selectedImages[
@@ -560,12 +592,8 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                                   top: 5,
                                                   right: 5,
                                                   child: InkWell(
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _selectedImages
-                                                            .removeAt(index);
-                                                      });
-                                                    },
+                                                    onTap: () =>
+                                                        _removeImage(index),
                                                     child: Container(
                                                       decoration:
                                                           const BoxDecoration(
@@ -614,6 +642,22 @@ class _State extends State<AddVenuePhotoUploadScreen> {
                                             if (_isStartingUpload) return;
                                             if (_selectedImages.length >= 4 &&
                                                 _selectedImages.length <= 12) {
+                                              if (widget.activityId != null) {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute<void>(
+                                                    builder: (_) =>
+                                                        AddVenuePhotoListViewScreen(
+                                                      activityId:
+                                                          widget.activityId,
+                                                      images: List<XFile>.of(
+                                                          _selectedImages),
+                                                      client: widget.client,
+                                                    ),
+                                                  ),
+                                                );
+                                                return;
+                                              }
                                               _isStartingUpload = true;
                                               final selectedImages =
                                                   List<XFile>.of(

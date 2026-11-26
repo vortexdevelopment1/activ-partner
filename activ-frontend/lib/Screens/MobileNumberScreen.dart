@@ -11,6 +11,7 @@ import '../api_calling/api_request.dart';
 import 'LoginScreen.dart';
 import 'MobileNumberFormatter.dart';
 import 'OTPVerificationScreen.dart';
+import 'CommonCode.dart';
 import 'onboarding_widgets.dart';
 
 class MobileNumberScreen extends StatefulWidget {
@@ -127,12 +128,16 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
     return OnboardingScaffold(
       child: Column(
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                if (widget.isCreatingAccount) ...[
+                  getStepBarCount(1 / 10, 1, 10),
+                  const SizedBox(height: 25),
+                ],
+                const Text(
                   'Enter your mobile number',
                   maxLines: 1,
                   softWrap: false,
@@ -144,8 +149,8 @@ class _MobileNumberScreenState extends State<MobileNumberScreen> {
                     color: AppColors.darkBlack,
                   ),
                 ),
-                SizedBox(height: 8),
-                Text(
+                const SizedBox(height: 8),
+                const Text(
                   "We'll send a 4-digit OTP to verify your number.",
                   maxLines: 1,
                   softWrap: false,

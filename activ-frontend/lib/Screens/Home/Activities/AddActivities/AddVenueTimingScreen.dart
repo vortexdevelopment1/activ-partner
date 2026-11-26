@@ -358,6 +358,7 @@ class _State extends State<AddVenueTimingScreen> {
                               style: TextStyle(
                                   fontSize: AppSize.size_16,
                                   fontFamily: 'Satoshi',
+                                  fontWeight: FontWeight.w700,
                                   color: AppColors.black1,
                                   height: 1.2),
                               textAlign: TextAlign.left,
@@ -414,6 +415,7 @@ class _State extends State<AddVenueTimingScreen> {
                                       style: const TextStyle(
                                         fontSize: AppSize.size_14,
                                         fontFamily: 'Satoshi',
+                                        fontWeight: FontWeight.w600,
                                         color: AppColors.darkBlack,
                                       ),
                                     ),
@@ -471,6 +473,7 @@ class _State extends State<AddVenueTimingScreen> {
                                   style: TextStyle(
                                     fontSize: AppSize.size_16,
                                     fontFamily: 'Satoshi',
+                                    fontWeight: FontWeight.w700,
                                     color: AppColors.black1,
                                   ),
                                 ),
@@ -535,6 +538,7 @@ class _State extends State<AddVenueTimingScreen> {
                                                   style: TextStyle(
                                                     fontSize: AppSize.size_14,
                                                     fontFamily: 'Satoshi',
+                                                    fontWeight: FontWeight.w700,
                                                     color: AppColors.darkBlack,
                                                   ),
                                                 ),
@@ -602,6 +606,7 @@ class _State extends State<AddVenueTimingScreen> {
                                               (index) {
                                                 final slot = timings[day]!
                                                     .timeSlots[index];
+<<<<<<< Updated upstream
                                                 final timeFields = Row(
                                                   //crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
@@ -611,280 +616,299 @@ class _State extends State<AddVenueTimingScreen> {
                                                         crossAxisAlignment:
                                                             CrossAxisAlignment
                                                                 .start,
+=======
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 16),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .stretch,
+                                                    children: [
+                                                      Row(
+>>>>>>> Stashed changes
                                                         children: [
-                                                          RichText(
-                                                            text: TextSpan(
+                                                          // -------- Open Time ----------
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
                                                               children: [
-                                                                TextSpan(
+                                                                RichText(
                                                                   text:
-                                                                      "Open Time",
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        AppSize
-                                                                            .size_14,
-                                                                    fontFamily:
-                                                                        'Satoshi',
-                                                                    color: AppColors
-                                                                        .darkBlack,
+                                                                      TextSpan(
+                                                                    children: [
+                                                                      TextSpan(
+                                                                        text:
+                                                                            "Open Time",
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              AppSize.size_14,
+                                                                          fontFamily:
+                                                                              'Satoshi',
+                                                                          color:
+                                                                              AppColors.darkBlack,
+                                                                        ),
+                                                                      ),
+                                                                      TextSpan(
+                                                                        text:
+                                                                            "*",
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              AppSize.size_14,
+                                                                          fontFamily:
+                                                                              'Satoshi',
+                                                                          color:
+                                                                              AppColors.red,
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
-                                                                TextSpan(
-                                                                  text: "*",
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        AppSize
-                                                                            .size_14,
-                                                                    fontFamily:
-                                                                        'Satoshi',
-                                                                    color:
-                                                                        AppColors
-                                                                            .red,
+                                                                const SizedBox(
+                                                                    height: 6),
+                                                                GestureDetector(
+                                                                  onTap:
+                                                                      () async {
+                                                                    String?
+                                                                        picked =
+                                                                        await _pickTime(
+                                                                            context,
+                                                                            slot["open"]);
+                                                                    if (picked !=
+                                                                        null) {
+                                                                      setState(
+                                                                          () {
+                                                                        timings[day]!.timeSlots[index]["open"] =
+                                                                            picked;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  child:
+                                                                      Container(
+                                                                    margin: const EdgeInsets
+                                                                        .only(
+                                                                        bottom:
+                                                                            8),
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        vertical:
+                                                                            12,
+                                                                        horizontal:
+                                                                            12),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: AppColors
+                                                                          .white,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              8),
+                                                                      border:
+                                                                          Border
+                                                                              .all(
+                                                                        color: AppColors
+                                                                            .gray,
+                                                                        width:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    child: Row(
+                                                                      mainAxisAlignment:
+                                                                          MainAxisAlignment
+                                                                              .spaceBetween,
+                                                                      children: [
+                                                                        Text(
+                                                                          slot[
+                                                                              "open"]!,
+                                                                          style:
+                                                                              const TextStyle(
+                                                                            fontSize:
+                                                                                AppSize.size_14,
+                                                                            fontFamily:
+                                                                                'Satoshi',
+                                                                            color:
+                                                                                AppColors.darkBlack,
+                                                                          ),
+                                                                        ),
+                                                                        SizedBox(
+                                                                          width:
+                                                                              16,
+                                                                          height:
+                                                                              16,
+                                                                          child:
+                                                                              Image.asset(
+                                                                            'assets/ic_drop_down.png',
+                                                                          ),
+                                                                        )
+                                                                      ],
+                                                                    ),
                                                                   ),
                                                                 ),
                                                               ],
                                                             ),
                                                           ),
+
                                                           const SizedBox(
-                                                              height: 6),
-                                                          GestureDetector(
-                                                            onTap: () async {
-                                                              String? picked =
-                                                                  await _pickTime(
-                                                                      context,
-                                                                      slot[
-                                                                          "open"]);
-                                                              if (picked !=
-                                                                  null) {
-                                                                setState(() {
-                                                                  timings[day]!
-                                                                              .timeSlots[
-                                                                          index]
-                                                                      [
-                                                                      "open"] = picked;
-                                                                });
-                                                              }
-                                                            },
-                                                            child: Container(
-                                                              margin:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                      bottom:
-                                                                          8),
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      vertical:
-                                                                          12,
-                                                                      horizontal:
-                                                                          12),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: AppColors
-                                                                    .white,
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            8),
-                                                                border:
-                                                                    Border.all(
-                                                                  color:
-                                                                      AppColors
-                                                                          .gray,
-                                                                  width: 1,
-                                                                ),
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisAlignment:
-                                                                    MainAxisAlignment
-                                                                        .spaceBetween,
-                                                                children: [
-                                                                  Text(
-                                                                    slot[
-                                                                        "open"]!,
-                                                                    style:
-                                                                        const TextStyle(
-                                                                      fontSize:
-                                                                          AppSize
-                                                                              .size_14,
-                                                                      fontFamily:
-                                                                          'Satoshi',
-                                                                      color: AppColors
-                                                                          .darkBlack,
-                                                                    ),
-                                                                  ),
-                                                                  SizedBox(
-                                                                    width: 16,
-                                                                    height: 16,
-                                                                    child: Image
-                                                                        .asset(
-                                                                      'assets/ic_drop_down.png',
-                                                                    ),
-                                                                  )
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
+                                                              width: 8),
 
-                                                    const SizedBox(width: 8),
-
-                                                    // -------- Close Time ----------
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          RichText(
-                                                            text: TextSpan(
+                                                          // -------- Close Time ----------
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
                                                               children: [
-                                                                TextSpan(
+                                                                RichText(
                                                                   text:
-                                                                      "Close Time",
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        AppSize
-                                                                            .size_14,
-                                                                    fontFamily:
-                                                                        'Satoshi',
-                                                                    color: AppColors
-                                                                        .darkBlack,
+                                                                      TextSpan(
+                                                                    children: [
+                                                                      TextSpan(
+                                                                        text:
+                                                                            "Close Time",
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              AppSize.size_14,
+                                                                          fontFamily:
+                                                                              'Satoshi',
+                                                                          color:
+                                                                              AppColors.darkBlack,
+                                                                        ),
+                                                                      ),
+                                                                      TextSpan(
+                                                                        text:
+                                                                            "*",
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              AppSize.size_14,
+                                                                          fontFamily:
+                                                                              'Satoshi',
+                                                                          color:
+                                                                              AppColors.red,
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
-                                                                TextSpan(
-                                                                  text: "*",
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        AppSize
-                                                                            .size_14,
-                                                                    fontFamily:
-                                                                        'Satoshi',
-                                                                    color:
-                                                                        AppColors
-                                                                            .red,
+                                                                const SizedBox(
+                                                                    height: 6),
+                                                                GestureDetector(
+                                                                  onTap:
+                                                                      () async {
+                                                                    String?
+                                                                        picked =
+                                                                        await _pickTime(
+                                                                            context,
+                                                                            slot["close"]);
+                                                                    if (picked !=
+                                                                        null) {
+                                                                      setState(
+                                                                          () {
+                                                                        timings[day]!.timeSlots[index]["close"] =
+                                                                            picked;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  child:
+                                                                      Container(
+                                                                    margin: const EdgeInsets
+                                                                        .only(
+                                                                        bottom:
+                                                                            8),
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        vertical:
+                                                                            12,
+                                                                        horizontal:
+                                                                            12),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: AppColors
+                                                                          .white,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              8),
+                                                                      border:
+                                                                          Border
+                                                                              .all(
+                                                                        color: AppColors
+                                                                            .gray,
+                                                                        width:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    child: Row(
+                                                                      mainAxisAlignment:
+                                                                          MainAxisAlignment
+                                                                              .spaceBetween,
+                                                                      children: [
+                                                                        Text(
+                                                                          slot[
+                                                                              "close"]!,
+                                                                          style:
+                                                                              const TextStyle(
+                                                                            fontSize:
+                                                                                AppSize.size_14,
+                                                                            fontFamily:
+                                                                                'Satoshi',
+                                                                            color:
+                                                                                AppColors.darkBlack,
+                                                                          ),
+                                                                        ),
+                                                                        SizedBox(
+                                                                          width:
+                                                                              16,
+                                                                          height:
+                                                                              16,
+                                                                          child:
+                                                                              Image.asset(
+                                                                            'assets/ic_drop_down.png',
+                                                                          ),
+                                                                        )
+                                                                      ],
+                                                                    ),
                                                                   ),
                                                                 ),
                                                               ],
                                                             ),
                                                           ),
+
                                                           const SizedBox(
-                                                              height: 6),
-                                                          GestureDetector(
-                                                            onTap: () async {
-                                                              String? picked =
-                                                                  await _pickTime(
-                                                                      context,
-                                                                      slot[
-                                                                          "close"]);
-                                                              if (picked !=
-                                                                  null) {
-                                                                setState(() {
-                                                                  timings[day]!
-                                                                              .timeSlots[
-                                                                          index]
-                                                                      [
-                                                                      "close"] = picked;
-                                                                });
-                                                              }
-                                                            },
-                                                            child: Container(
-                                                              margin:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                      bottom:
-                                                                          8),
+                                                              width: 8),
+
+                                                          // -------- Delete Icon ----------
+                                                          SizedBox(
+                                                            width: 32,
+                                                            child: IconButton(
+                                                              key: ValueKey(
+                                                                  'delete-slot-$day-$index'),
                                                               padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      vertical:
-                                                                          12,
-                                                                      horizontal:
-                                                                          12),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: AppColors
-                                                                    .white,
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            8),
-                                                                border:
-                                                                    Border.all(
-                                                                  color:
-                                                                      AppColors
-                                                                          .gray,
-                                                                  width: 1,
-                                                                ),
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisAlignment:
-                                                                    MainAxisAlignment
-                                                                        .spaceBetween,
-                                                                children: [
-                                                                  Text(
-                                                                    slot[
-                                                                        "close"]!,
-                                                                    style:
-                                                                        const TextStyle(
-                                                                      fontSize:
-                                                                          AppSize
-                                                                              .size_14,
-                                                                      fontFamily:
-                                                                          'Satoshi',
-                                                                      color: AppColors
-                                                                          .darkBlack,
-                                                                    ),
-                                                                  ),
-                                                                  SizedBox(
-                                                                    width: 16,
-                                                                    height: 16,
-                                                                    child: Image
-                                                                        .asset(
-                                                                      'assets/ic_drop_down.png',
-                                                                    ),
-                                                                  )
-                                                                ],
-                                                              ),
+                                                                  EdgeInsets
+                                                                      .zero,
+                                                              tooltip:
+                                                                  'Delete time slot',
+                                                              onPressed: () => setState(
+                                                                  () => timings[
+                                                                          day]!
+                                                                      .timeSlots
+                                                                      .removeAt(
+                                                                          index)),
+                                                              icon: const Icon(Icons
+                                                                  .delete_outline),
                                                             ),
                                                           ),
                                                         ],
                                                       ),
-                                                    ),
-
-                                                    const SizedBox(width: 8),
-
-                                                    // -------- Delete Icon ----------
-                                                    InkWell(
-                                                        onTap: () {
-                                                          customAlertDialog(
-                                                              context,
-                                                              day,
-                                                              index,
-                                                              "Are you sure you want to delete this time slot?");
-                                                        },
-                                                        child: Align(
-                                                          alignment: Alignment
-                                                              .centerRight,
-                                                          child: Container(
-                                                            margin:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                                    top: 10),
-                                                            alignment: Alignment
-                                                                .centerRight,
-                                                            width: 24,
-                                                            height: 24,
-                                                            child: Image.asset(
-                                                                'assets/ic_delete.png'),
-                                                          ),
-                                                        )),
-                                                  ],
+                                                      const SizedBox(height: 4),
+                                                      _slotDetails(
+                                                          day, slot, index),
+                                                    ],
+                                                  ),
                                                 );
                                                 return Column(
                                                   key: ObjectKey(slot),
@@ -1079,7 +1103,8 @@ class _State extends State<AddVenueTimingScreen> {
 
   Future<void> _copyTimingsToAllDays(String sourceDay) async {
     if (selectedDays.isEmpty) return;
-    final confirmed = await confirmCopyTimingsToAllDays(context, sourceDay: dayMap[sourceDay] ?? sourceDay);
+    final confirmed = await confirmCopyTimingsToAllDays(context,
+        sourceDay: dayMap[sourceDay] ?? sourceDay);
     if (!mounted || !confirmed || selectedDays.isEmpty) return;
     final source = timings[sourceDay]!;
     if (source.timeSlots.isEmpty) return;
@@ -1221,142 +1246,6 @@ class _State extends State<AddVenueTimingScreen> {
           : const EdgeInsets.fromLTRB(0, 0, 0, 0),
       color: AppColors.gray,
       height: 1,
-    );
-  }
-
-  customAlertDialog(
-      BuildContext context, String day, int index, String description) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Material(
-          type: MaterialType.transparency,
-          child: Container(
-            alignment: Alignment.center,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(top: 20),
-              margin: const EdgeInsets.only(top: 45, left: 40, right: 40),
-              decoration: BoxDecoration(
-                shape: BoxShape.rectangle,
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    '⚠ Alert!',
-                    style: TextStyle(
-                        fontSize: AppSize.size_16,
-                        fontFamily: 'Satoshi',
-                        color: AppColors.darkBlack,
-                        textBaseline: null),
-                  ),
-
-                  const SizedBox(
-                    height: 15,
-                  ),
-
-                  Container(
-                    margin: EdgeInsets.fromLTRB(8, 0, 8, 0),
-                    child: Text(
-                      description,
-                      style: TextStyle(
-                          fontSize: AppSize.size_14,
-                          fontFamily: 'Satoshi',
-                          color: AppColors.darkBlack,
-                          height: 1.5),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                  const SizedBox(
-                    height: 15,
-                  ),
-
-                  // Divider Line
-                  Container(
-                      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                      child: Divider(
-                        color: AppColors.gray1,
-                        height: 1,
-                      )),
-
-                  const SizedBox(
-                    height: 0,
-                  ),
-
-                  IntrinsicHeight(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.fromLTRB(30, 13, 30, 13),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'No',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: AppSize.size_14,
-                                  fontFamily: 'Satoshi',
-                                  color: AppColors.darkBlack,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        VerticalDivider(
-                          color: AppColors.gray1,
-                          thickness: .5,
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.pop(context);
-
-                              setState(() {
-                                if (timings.containsKey(day) &&
-                                    timings[day]!.timeSlots.length > index) {
-                                  timings[day]!.timeSlots.removeAt(index);
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.fromLTRB(30, 13, 30, 13),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Yes',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: AppSize.size_14,
-                                  fontFamily: 'Satoshi',
-                                  color: AppColors.darkBlack,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(
-                    height: 0,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

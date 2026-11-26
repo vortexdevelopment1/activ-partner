@@ -226,7 +226,7 @@ class _State extends State<ReviewSignAgreement> {
   Widget build(BuildContext context) => OnboardingScaffold(
         child: Column(children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.fromLTRB(15, 0, 15, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -249,7 +249,7 @@ class _State extends State<ReviewSignAgreement> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-              const SizedBox(height: 22),
+              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(

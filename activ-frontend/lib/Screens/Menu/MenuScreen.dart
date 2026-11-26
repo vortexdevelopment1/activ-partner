@@ -25,8 +25,9 @@ import '../default_partner_avatar.dart';
 import 'SettingsScreen.dart';
 
 class MenuScreen extends StatefulWidget {
-  const MenuScreen({super.key, this.client});
+  const MenuScreen({super.key, this.client, this.signOut});
   final http.Client? client;
+  final Future<void> Function()? signOut;
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -687,7 +688,13 @@ class _MenuScreenState extends State<MenuScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await FirebaseAuth.instance.signOut();
+      try {
+        await (widget.signOut?.call() ?? FirebaseAuth.instance.signOut())
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        CommonUtilities.showLog(
+            'Firebase sign-out unavailable; clearing local session.');
+      }
       await SharedPreference.clearSF();
       if (mounted) {
         CommonUtilities.NavigateWithPushAndKillAllPriviousScreens(

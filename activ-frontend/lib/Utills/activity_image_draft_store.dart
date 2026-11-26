@@ -13,21 +13,31 @@ import 'activity_image_platform.dart';
 /// web callers should pass durable remote/blob references.
 class ActivityImageDraftStore {
   static String _key(String activityId) => 'activity_images_$activityId';
+  static bool _isRemote(String path) {
+    final uri = Uri.tryParse(path);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
 
   static Future<void> save(String activityId, List<XFile> images) async {
     final durable = <XFile>[];
     if (!kIsWeb) {
+      durable.addAll(images.where((image) => _isRemote(image.path)));
+      final localImages =
+          images.where((image) => !_isRemote(image.path)).toList();
       try {
-        final directory = await getApplicationDocumentsDirectory();
-        for (var i = 0; i < images.length; i++) {
-          final source = images[i];
+        final directory = localImages.isEmpty
+            ? null
+            : await getApplicationDocumentsDirectory();
+        for (var i = 0; i < localImages.length; i++) {
+          final source = localImages[i];
           final filename = 'activity_${activityId.hashCode}_${i}_${DateTime.now().microsecondsSinceEpoch}${p.extension(source.name).isEmpty ? '.jpg' : p.extension(source.name)}';
-          final destination = p.join(directory.path, 'activity_drafts', filename);
+          final destination =
+              p.join(directory!.path, 'activity_drafts', filename);
           await source.saveTo(destination);
           durable.add(XFile(destination, name: filename));
         }
       } catch (_) {
-        durable.addAll(images);
+        durable.addAll(localImages);
       }
     } else {
       for (var i = 0; i < images.length; i++) {
@@ -67,6 +77,10 @@ class ActivityImageDraftStore {
       final valid = <XFile>[];
       for (var i = 0; i < images.length; i++) {
         var image = images[i];
+        if (_isRemote(image.path)) {
+          valid.add(image);
+          continue;
+        }
         if (kIsWeb) {
           final bytes = await readImageBytes(
             draftId: activityId,
