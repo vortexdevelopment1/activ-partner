@@ -27,9 +27,10 @@ function renderVenue() {
   return client;
 }
 
-it('shows each missing live requirement once when the API returns duplicates', async () => {
+it('shows each missing live requirement once and opens the editor for bank details awaiting approval', async () => {
   vi.mocked(venuesApi.getById).mockResolvedValue({ data: { data: {
-    id: 'venue', name: 'Arena', status: 'approved',
+    id: 'venue', name: 'Arena', status: 'approved', partnerId: 'owner-partner',
+    bankAccount: { id: 'bank', status: 'under_review' },
     createdAt: '2026-11-02', updatedAt: '2026-11-02',
     liveReady: false,
     liveMissing: [
@@ -37,9 +38,13 @@ it('shows each missing live requirement once when the API returns duplicates', a
       'approved bank account', 'approved bank account',
     ],
   } } } as any);
+  vi.mocked(partnersApi.getById).mockResolvedValue({ data: { data: { id: 'owner-partner' } } } as any);
 
   const client = renderVenue();
   expect(await screen.findByText('approved bank account, PAN document')).toBeTruthy();
+  expect(screen.getByText('Bank details are saved and awaiting approval.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit partner bank details' }));
+  await waitFor(() => expect(partnersApi.getById).toHaveBeenCalledWith('owner-partner'));
   client.clear();
 });
 

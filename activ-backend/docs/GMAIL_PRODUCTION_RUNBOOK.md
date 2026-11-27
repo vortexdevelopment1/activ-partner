@@ -143,7 +143,7 @@ EMAIL_DELIVERY_STORAGE_KEY=<preserve existing stable delivery key>
 EMAIL_RETRY_WORKER_ENABLED=false
 GOOGLE_CLIENT_ID=<existing OAuth client ID>
 GOOGLE_CLIENT_SECRET=<existing OAuth client secret>
-GOOGLE_REDIRECT_URI=https://activ-partner-jx53.onrender.com/api/v1/auth/google/callback
+GOOGLE_REDIRECT_URI=https://activ-partner-xhyz.onrender.com/api/v1/auth/google/callback
 GOOGLE_SENDER_EMAIL=support@activ.live
 SUPPORT_EMAIL=support@activ.live
 GOOGLE_TOKEN_SOURCE=database
@@ -192,7 +192,7 @@ change client credentials without the existing token/client dependency review.
 
 1. Enable Gmail API in the existing Google Cloud project. Verify the Web OAuth
    client has exactly this authorized redirect URI:
-   `https://activ-partner-jx53.onrender.com/api/v1/auth/google/callback`.
+   `https://activ-partner-xhyz.onrender.com/api/v1/auth/google/callback`.
 2. Confirm consent audience/publishing status and organization app-access policy.
    New consent is required for signed identity (`openid email`) in addition to
    gmail.send. The callback rejects missing identity/scope, unverified/wrong email,

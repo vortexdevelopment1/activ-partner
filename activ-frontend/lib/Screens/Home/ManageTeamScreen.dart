@@ -726,7 +726,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                       )
                     : SizedBox(
                         width: double.infinity,
-                        height: 58,
+                        height: _PurpleButton.regularHeight,
                         child: OutlinedButton(
                           onPressed: _saving ? null : _delete,
                           style: OutlinedButton.styleFrom(
@@ -754,7 +754,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                     )
                   : _PurpleButton(
                       label: _isEdit ? 'Save Changes' : 'Send Invite',
-                      compact: true,
+                      compact: !_isEdit,
                       onTap: _submit,
                     ),
             ],
@@ -1237,6 +1237,8 @@ class _RoleDropdown extends StatelessWidget {
 }
 
 class _PurpleButton extends StatelessWidget {
+  static const double regularHeight = 48;
+
   const _PurpleButton({
     required this.label,
     required this.onTap,
@@ -1253,7 +1255,7 @@ class _PurpleButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(compact ? 6 : 10),
       child: Container(
-        height: compact ? 36 : 48,
+        height: compact ? 36 : regularHeight,
         width: double.infinity,
         decoration: BoxDecoration(
           color: AppColors.purple,

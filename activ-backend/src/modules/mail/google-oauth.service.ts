@@ -86,7 +86,7 @@ export class GoogleOAuthService implements OnModuleInit {
     const configured = this.config.get<string>('GOOGLE_REDIRECT_URI')?.trim();
     if (configured) return configured;
     return this.config.get<string>('APP_ENV') === 'production'
-      ? 'https://activ-partner-jx53.onrender.com/api/v1/auth/google/callback'
+      ? 'https://activ-partner-xhyz.onrender.com/api/v1/auth/google/callback'
       : 'http://localhost:3000/api/v1/auth/google/callback';
   }
 

@@ -112,6 +112,21 @@ describe('admin venue detail access', () => {
     },
   );
 
+  it.each([true, false])('checks for an approved account when the primary account is under review (approved account exists: %s)', async (hasApprovedAccount) => {
+    const findBank = jest.mocked(service['prisma'].partner_bank_accounts.findFirst);
+    findBank.mockClear().mockResolvedValueOnce({ id: 'pending-bank', status: 'UNDER_REVIEW' } as any);
+    if (!hasApprovedAccount) findBank.mockResolvedValueOnce(null);
+
+    const venue = await service.findAdminVenue(approvedId);
+
+    expect(venue.bankAccount).toMatchObject({ id: 'pending-bank', status: 'under_review' });
+    expect(findBank).toHaveBeenNthCalledWith(2, {
+      where: { partner_id: 'partner', status: 'APPROVED' },
+      orderBy: [{ is_primary: 'desc' }, { created_at: 'desc' }],
+    });
+    expect(venue.liveMissing.includes('approved bank account')).toBe(!hasApprovedAccount);
+  });
+
   it('returns rejected and suspended venues for admin review', async () => {
     reviews[pendingId].status = 'ARCHIVED';
     reviews[pendingId].review_status = 'suspended';

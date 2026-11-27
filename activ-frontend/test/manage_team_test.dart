@@ -240,8 +240,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNWidgets(2));
     expect(find.text('Resend Invite'), findsNothing);
-    expect(find.text('Delete Member'), findsOneWidget);
-    expect(find.text('Save Changes'), findsOneWidget);
+    final deleteButton = find.widgetWithText(OutlinedButton, 'Delete Member');
+    final saveButton = find.widgetWithText(InkWell, 'Save Changes');
+    expect(tester.getSize(deleteButton), tester.getSize(saveButton));
     await tester.enterText(find.byType(TextField).at(1), '123');
     await tester.ensureVisible(find.text('Save Changes'));
     await tester.tap(find.text('Save Changes'));

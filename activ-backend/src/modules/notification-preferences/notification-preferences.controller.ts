@@ -7,27 +7,33 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 
+type PreferencesUser =
+  | { role: UserRole.PARTNER; id: string }
+  | { role: UserRole.TEAM_MEMBER; partnerId: string };
+
 @ApiTags('notification-preferences')
 @ApiBearerAuth()
 @Controller('notification-preferences')
-@Roles(UserRole.PARTNER)
+@Roles(UserRole.PARTNER, UserRole.TEAM_MEMBER)
 export class NotificationPreferencesController {
   constructor(private readonly service: NotificationPreferencesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get notification preferences for the authenticated partner' })
-  async getPreferences(@CurrentUser() partner: any) {
-    const data = await this.service.getPreferences(partner.id);
+  @ApiOperation({ summary: 'Get notification preferences for your partner account' })
+  async getPreferences(@CurrentUser() user: PreferencesUser) {
+    const partnerId = user.role === UserRole.TEAM_MEMBER ? user.partnerId : user.id;
+    const data = await this.service.getPreferences(partnerId);
     return { message: 'Notification preferences fetched successfully', data };
   }
 
   @Patch()
-  @ApiOperation({ summary: 'Save / update notification preferences for the authenticated partner' })
+  @ApiOperation({ summary: 'Save notification preferences for your partner account' })
   async updatePreferences(
-    @CurrentUser() partner: any,
+    @CurrentUser() user: PreferencesUser,
     @Body() dto: UpdateNotificationPreferencesDto,
   ) {
-    const data = await this.service.upsertPreferences(partner.id, dto);
+    const partnerId = user.role === UserRole.TEAM_MEMBER ? user.partnerId : user.id;
+    const data = await this.service.upsertPreferences(partnerId, dto);
     return { message: 'Notification preferences saved successfully', data };
   }
 }

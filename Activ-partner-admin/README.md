@@ -24,7 +24,7 @@ the build command to `npm run build`, and the output directory to `dist`.
 In Project Settings > Environment Variables, add:
 
 ```env
-VITE_API_URL=https://activ-partner-jx53.onrender.com/api/v1
+VITE_API_URL=https://activ-partner-xhyz.onrender.com/api/v1
 ```
 
 Enable it for Production and Preview as needed. Leave `VITE_LOCAL_API_URL`

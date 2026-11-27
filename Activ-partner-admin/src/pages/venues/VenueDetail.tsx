@@ -375,6 +375,22 @@ export const VenueDetail: React.FC = () => {
           <p className="mt-1 text-sm text-amber-700">
             {[...new Set(venue.liveMissing)].join(', ')}
           </p>
+          {venue.liveMissing.includes('approved bank account') && (
+            <div className="mt-2 text-sm text-amber-800">
+              <p>
+                {bankAccount?.status === 'under_review'
+                  ? 'Bank details are saved and awaiting approval.'
+                  : bankAccount?.status === 'rejected'
+                    ? 'The bank account was rejected. Correct the details and review the account again.'
+                    : 'Complete the bank details and set the account status to Approved after verifying them.'}
+              </p>
+              {partnerId && (
+                <button type="button" onClick={() => setPartnerEditorOpen(true)} className="mt-1 font-medium underline">
+                  Edit partner bank details
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
 

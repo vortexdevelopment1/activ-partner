@@ -587,35 +587,55 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
   Future<void> _loadVenueIdentityFromApi() async {
     final token = checkString(await SharedPreference.readStr('jwt_token'));
     final selectedId = checkString(await SharedPreference.readStr('venue_id'));
+    final isTeamMember =
+        await SharedPreference.readStr('user_type') == 'team_member';
     if (token.isEmpty || !mounted) return;
-    try {
-      final response = await (widget.client?.get ?? http.get)(
-        Uri.parse(selectedId.isEmpty
-            ? MY_VENUES_URL
-            : '$CREATE_VENUE_URL/${Uri.encodeComponent(selectedId)}'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
-      if (!mounted ||
-          (response.statusCode != 200 && response.statusCode != 201)) return;
-      final body = jsonDecode(response.body);
-      final data = body is Map ? body['data'] : null;
-      final items = selectedId.isNotEmpty && data is Map
-          ? [data]
-          : (data is Map ? data['items'] : data);
-      if (items is! List || items.isEmpty) return;
-      final venues = items.whereType<Map>();
-      if (venues.isEmpty) return;
-      final venue = venues.first;
-      final venueName = checkString(venue['name']).isEmpty
-          ? checkString(venue['venue_name'])
-          : checkString(venue['name']);
-      final city = checkString(venue['city']).isEmpty
-          ? checkString(venue['venue_city'])
-          : checkString(venue['city']);
-      if (venueName.isNotEmpty) _venue.text = venueName;
+
+    Future<dynamic> getVenueData(String url) async {
+      try {
+        final response = await (widget.client?.get ?? http.get)(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final body = jsonDecode(response.body);
+          return body is Map ? body['data'] : null;
+        }
+      } catch (_) {
+        CommonUtilities.showLog('Callback venue details unavailable.');
+      }
+      return null;
+    }
+
+    bool fillVenue(Map venue) {
+      final primaryName = checkString(venue['name']);
+      final primaryCity = checkString(venue['city']);
+      final name = primaryName.isEmpty ? checkString(venue['venue_name']) : primaryName;
+      final city = primaryCity.isEmpty ? checkString(venue['venue_city']) : primaryCity;
+      if (name.isNotEmpty) _venue.text = name;
       if (city.isNotEmpty) _city.text = city;
-    } catch (_) {
-      CommonUtilities.showLog('Callback venue details unavailable.');
+      return name.isNotEmpty && city.isNotEmpty;
+    }
+
+    if (!isTeamMember && selectedId.isNotEmpty) {
+      final selected = await getVenueData(
+          '$CREATE_VENUE_URL/${Uri.encodeComponent(selectedId)}');
+      if (!mounted) return;
+      if (selected is Map && fillVenue(selected)) return;
+    }
+
+    final data = await getVenueData(
+        isTeamMember ? MY_APPROVED_VENUES_URL : MY_VENUES_URL);
+    if (!mounted) return;
+    final items = data is Map ? data['items'] : data;
+    if (items is! List) return;
+    final venues = items.whereType<Map>();
+    final selected = venues
+            .where((venue) => checkString(venue['id']) == selectedId)
+            .firstOrNull ??
+        venues.firstOrNull;
+    if (selected != null) {
+      fillVenue(selected);
     }
   }
 
@@ -732,7 +752,7 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                      'Unable to load all your details. Please try again.'),
+                      'Enter any missing details, or retry to load them.'),
                   TextButton(
                       onPressed: _refreshDetails, child: const Text('Retry')),
                 ],
@@ -741,21 +761,21 @@ class _RequestCallbackScreenState extends State<RequestCallbackScreen> {
               label: 'Venue Partner Name',
               required: true,
               controller: _partner,
-              readOnly: true,
+              readOnly: !_detailsUnavailable || _loadingDetails,
             ),
             const SizedBox(height: 8),
             _Input(
               label: 'Venue Name',
               required: true,
               controller: _venue,
-              readOnly: true,
+              readOnly: !_detailsUnavailable || _loadingDetails,
             ),
             const SizedBox(height: 8),
             _Input(
               label: 'City',
               required: true,
               controller: _city,
-              readOnly: true,
+              readOnly: !_detailsUnavailable || _loadingDetails,
             ),
             const SizedBox(height: 8),
             _PhoneInput(

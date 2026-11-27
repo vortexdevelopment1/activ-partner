@@ -2,7 +2,7 @@
 
 Use [Gmail production runbook](./GMAIL_PRODUCTION_RUNBOOK.md) for provider migration, persistent token storage, protected authorization, delivery retries and rollback.
 
-Production callback: `https://activ-partner-jx53.onrender.com/api/v1/auth/google/callback`.
+Production callback: `https://activ-partner-xhyz.onrender.com/api/v1/auth/google/callback`.
 Required sender: `support@activ.live`.
 
 A successful new callback confirms verified primary Google account identity and encrypted token persistence. Setup now requests `openid email gmail.send` and requires fresh consent. The sender must be the primary Workspace account `support@activ.live`; aliases/groups are rejected. Old env/file tokens are not retroactively verified. No token is exposed by the setup API.

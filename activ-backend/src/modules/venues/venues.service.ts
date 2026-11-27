@@ -1237,10 +1237,16 @@ export class VenuesService {
           where: { partner_id: partnerId },
         })
       : null;
+    const approvedBankAccount = bankAccount && bankAccount.status !== "APPROVED"
+      ? await this.prisma.partner_bank_accounts.findFirst({
+          where: { partner_id: partnerId, status: "APPROVED" },
+          orderBy: [{ is_primary: "desc" }, { created_at: "desc" }],
+        })
+      : bankAccount;
     const liveMissing = missingLiveDetails(
       liveProfile(businessProfile, venue.partner, undefined, venue),
       legal,
-      bankAccount?.status === "APPROVED" ? bankAccount : null,
+      approvedBankAccount,
     );
     return {
       ...venue,
@@ -2422,11 +2428,29 @@ export class VenuesService {
           throw new ConflictException(
             "Venue review changed; refresh before submitting another decision",
           );
-        await tx.venues.update({ where: { id: venue.id }, data: venueData });
+        const isSuspension = venueData.review_status === VenueStatus.SUSPENDED;
+        const metadata = this.asRecord(current.metadata);
+        await tx.venues.update({
+          where: { id: venue.id },
+          data: {
+            ...venueData,
+            ...(isSuspension ? {
+              booking_accept: false,
+              metadata: {
+                ...metadata,
+                bookingAcceptBeforeSuspension:
+                  current.review_status === VenueStatus.SUSPENDED
+                    ? metadata.bookingAcceptBeforeSuspension ?? current.booking_accept
+                    : current.status === "PUBLISHED" && current.booking_accept,
+              },
+            } : {}),
+          },
+        });
         await tx.partner_venue_services.updateMany({
           where: { venue_id: venue.id, status: { in: ["DRAFT", "PENDING"] } },
           data: activityData,
         });
+        if (isSuspension) await syncLegacyActivityVisibility(tx, venue.id);
       },
       { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 60000 },
     );
@@ -2552,11 +2576,17 @@ export class VenuesService {
           throw new Error(
             "Durable approval email preparation did not return a delivery record",
           );
+        const { bookingAcceptBeforeSuspension, ...metadata } = this.asRecord(venue.metadata);
+        const bookingAccept = venue.review_status === VenueStatus.SUSPENDED &&
+          (typeof bookingAcceptBeforeSuspension === "boolean"
+            ? bookingAcceptBeforeSuspension
+            : venue.booking_accept);
         await tx.venues.update({
           where: { id },
           data: {
             status: "PUBLISHED",
-            booking_accept: false,
+            booking_accept: bookingAccept,
+            ...(bookingAcceptBeforeSuspension !== undefined ? { metadata } : {}),
             approved_at: now,
             approved_by: adminId,
             rejection_reason: null,
@@ -2585,12 +2615,15 @@ export class VenuesService {
             after_json: { deliveryId },
           },
         });
-        return { changed: true, partnerId: partner.id, venueName, deliveryId };
+        return { changed: true, partnerId: partner.id, venueName, deliveryId, bookingAccept };
       },
       { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 60000 },
     );
 
     if (outcome.changed) {
+      const message = outcome.bookingAccept
+        ? `${outcome.venueName} is live on ACTIV again`
+        : `${outcome.venueName} has been approved and is ready to go live on ACTIV`;
       // Transport/notification failures must not turn a committed approval into an API failure.
       try {
         await this.mailService.deliverPreparedEmail(outcome.deliveryId);
@@ -2604,7 +2637,7 @@ export class VenuesService {
           outcome.partnerId,
           NotificationType.VENUE_APPROVED,
           "Venue approved",
-          `${outcome.venueName} has been approved and is ready to go live on ACTIV`,
+          message,
           { venueId: id },
         );
       } catch {
@@ -2614,7 +2647,7 @@ export class VenuesService {
         await this.pushNotificationsService.sendToPartner(
           outcome.partnerId,
           "Venue approved",
-          `${outcome.venueName} has been approved and is ready to go live on ACTIV`,
+          message,
           { type: "venue_approved", venueId: id },
         );
       } catch {

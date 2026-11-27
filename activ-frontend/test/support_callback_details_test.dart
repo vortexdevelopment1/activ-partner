@@ -80,12 +80,50 @@ void main() {
     expect(value(tester, 2), 'Mumbai');
   });
 
+  testWidgets('team members load venue details from their approved venue list', (tester) async {
+    SharedPreferences.setMockInitialValues({'jwt_token': 'token', 'user_type': 'team_member'});
+    await show(tester, MockClient((request) async {
+      expect(request.headers['Authorization'], 'Bearer token');
+      if (request.url.path.endsWith('/auth-profile')) {
+        return http.Response(jsonEncode({'data': {'member': {
+          'fullName': 'Staff Member', 'phone': '+919876543210',
+        }}}), 200);
+      }
+      expect(request.url.path, endsWith('/my-approved-venues'));
+      return http.Response(jsonEncode({'data': [
+        {'id': 'approved', 'name': 'Approved Arena', 'city': 'Pune'},
+      ]}), 200);
+    }));
+    expect([for (var i = 0; i < 5; i++) value(tester, i)],
+        ['Staff Member', 'Approved Arena', 'Pune', '9876543210', '']);
+    expect(find.text('Retry'), findsNothing);
+  });
+
+  testWidgets('a paused venue is selected from the partner list after a public 404', (tester) async {
+    await show(tester, MockClient((request) async {
+      if (request.url.path.endsWith('/auth-profile')) return profile();
+      if (request.url.path.endsWith('/venues/selected')) return http.Response('{}', 404);
+      expect(request.url.path, endsWith('/my-venues'));
+      return http.Response(jsonEncode({'data': {'items': [
+        {'id': 'other', 'name': 'Other Arena', 'city': 'Delhi'},
+        {'id': 'selected', 'name': 'Paused Arena', 'city': 'Pune'},
+      ]}}), 200);
+    }));
+    expect(value(tester, 1), 'Paused Arena');
+    expect(value(tester, 2), 'Pune');
+    expect(find.text('Retry'), findsNothing);
+  });
+
   testWidgets('failed autofill offers retry and then loads details', (tester) async {
     var failed = true;
     await show(tester, MockClient((request) async => failed
         ? http.Response('{}', 503)
         : request.url.path.endsWith('/auth-profile') ? profile() : venue()));
     expect(find.text('Retry'), findsOneWidget);
+    final venueField = find.byType(TextField).at(1);
+    final cityField = find.byType(TextField).at(2);
+    expect(tester.widget<TextField>(venueField).readOnly, isFalse);
+    expect(tester.widget<TextField>(cityField).readOnly, isFalse);
     failed = false;
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();

@@ -1,6 +1,6 @@
 # ActivProduct Backend — API Reference
 
-> **Base URL (staging):** `https://staging-be.activ.co.in/api/v1`
+> **Base URL (staging):** `https://activ-partner-xhyz.onrender.com/api/v1`
 > **Auth:** All protected routes require `Authorization: Bearer <jwt_token>`
 > **Global response shape:**
 > ```json

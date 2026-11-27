@@ -41,11 +41,18 @@ function fixture() {
         update: jest.fn(async ({ where, data }) => { check('partner activation'); return update('partners', where, data); }) },
       users: { findUnique: jest.fn(async ({ where }) => read('users', where.id)),
         update: jest.fn(async ({ where, data }) => { check('credentials'); return update('users', where, data); }) },
-      partner_venue_services: { updateMany: jest.fn(async ({ where, data }) => {
-        check('activities');
-        for (const row of all('services').filter(row => row.venue_id === where.venue_id && where.status.in.includes(row.status))) write('services', { ...row, ...data });
-        return { count: 1 };
-      }) },
+      partner_venue_services: {
+        findUnique: jest.fn(async ({ where }) => {
+          const row = read('services', where.id);
+          return row && { ...row, venues: read('venues', row.venue_id) };
+        }),
+        update: jest.fn(async ({ where, data }) => update('services', where, data)),
+        updateMany: jest.fn(async ({ where, data }) => {
+          check('activities');
+          for (const row of all('services').filter(row => row.venue_id === where.venue_id && where.status.in.includes(row.status))) write('services', { ...row, ...data });
+          return { count: 1 };
+        }),
+      },
       audit_events: { findFirst: jest.fn(async ({ where }) => clone(all('audits').find(row => row.action === where.action && row.entity_id === where.entity_id) || null)),
         create: jest.fn(async ({ data }) => { check('audit'); return write('audits', data); }) },
       email_deliveries: {
@@ -123,6 +130,7 @@ describe('atomic venue approval', () => {
     const f = fixture();
     expect(await f.approve()).toMatchObject({ status: 'approved', address: 'Existing address', metadata: { existing: true } });
     expect(f.state.partners.partner.status).toBe('ACTIVE');
+    expect(f.state.venues.venue.booking_accept).toBe(false);
     expect(f.state.users.owner.password_hash).toBeTruthy();
     expect(f.state.services.activity.status).toBe('APPROVED');
     expect(f.state.slots.venue).toEqual({ id: 'venue', approved: true });
@@ -132,6 +140,35 @@ describe('atomic venue approval', () => {
     expect(f.gmail.sendEmail).toHaveBeenCalledWith(expect.objectContaining({ recipientEmail: 'owner@example.com', recipientName: 'Owner',
       html: expect.stringContaining('Arena'), inlineImages: [expect.objectContaining({ cid: 'activ-partner-logo' })] }));
     expect(f.acquired).toEqual(['partners:partner', 'venues:venue', 'users:owner']);
+  });
+
+  it.each([true, false])('preserves booking state %s through repeated suspensions and new activity approval', async (bookingAccept) => {
+    const f = fixture();
+    await f.approve();
+    f.state.venues.venue.booking_accept = bookingAccept;
+    f.state.services.activity.is_active = false;
+
+    const suspend = () => f.service.processApproval('venue', {
+      status: VenueStatus.SUSPENDED, reason: 'Venue review',
+    }, 'admin');
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await suspend();
+      await suspend();
+      expect(f.state.venues.venue).toMatchObject({ status: 'ARCHIVED', booking_accept: false });
+      await f.approve();
+      expect(f.state.venues.venue).toMatchObject({ status: 'PUBLISHED', booking_accept: bookingAccept });
+      expect(f.state.venues.venue.metadata).toEqual({ existing: true });
+      expect(f.state.services.activity.is_active).toBe(false);
+    }
+
+    f.state.services.newActivity = { id: 'newActivity', venue_id: 'venue', status: 'PENDING', is_active: false };
+    f.service.findOwnedActivity = jest.fn(async () => ({
+      name: 'Tennis', status: f.state.services.newActivity.status.toLowerCase(),
+      isActive: f.state.services.newActivity.is_active,
+      bookingAccept: f.state.venues.venue.booking_accept,
+    }));
+    await expect(f.service.processActivityApproval('newActivity', { status: 'approved' }, 'admin'))
+      .resolves.toMatchObject({ status: 'approved', isActive: true, bookingAccept });
   });
 
   it.each(['credentials', 'partner activation', 'email preparation', 'publication', 'activities', 'slots', 'audit', 'commit'])('rolls back every database effect on %s failure', async point => {
