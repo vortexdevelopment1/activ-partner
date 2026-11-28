@@ -14,7 +14,12 @@ export class PerformanceInterceptor implements NestInterceptor {
   private readonly logger = new Logger('ACTIV_PERF');
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (process.env.PERF_LOGGING !== 'true') return next.handle();
+    if (
+      process.env.ACTIV_PERF_LOGGING !== 'true' &&
+      process.env.PERF_LOGGING !== 'true'
+    ) {
+      return next.handle();
+    }
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
     const timing = response.locals.activPerf as { id: string; started: bigint } | undefined;

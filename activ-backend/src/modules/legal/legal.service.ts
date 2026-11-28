@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import PDFDocument = require('pdfkit');
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import type { content_documents } from '../../generated/prisma/client';
 
 import { LegalContentRecord as LegalContent, LegalContentType } from '../../common/domain-types';
@@ -20,6 +22,7 @@ const LEGAL_TITLES: Record<LegalContentType, string> = {
 export class LegalService {
   constructor(
     private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
   ) {}
 
   private validateType(type: LegalContentType) {
@@ -41,9 +44,9 @@ export class LegalService {
   async upsert(type: LegalContentType, dto: UpsertLegalContentDto, adminId: string): Promise<LegalContent> {
     this.validateType(type);
     // Keep published history and retry conflicting saves so version numbers stay unique.
-    for (let attempt = 0; ; attempt++) {
+      for (let attempt = 0; ; attempt++) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
           const existing = await tx.content_documents.findMany({ where: { type } });
           const version = Math.floor(existing.reduce((highest, record) =>
             Math.max(highest, Number(record.version) || 0), 0)) + 1;
@@ -64,6 +67,8 @@ export class LegalService {
           });
           return this.toLegalContent(record, adminId);
         }, { isolationLevel: 'Serializable' });
+        await this.cache?.invalidateTags('legal');
+        return result;
       } catch (error) {
         if (attempt >= 2 || !['P2034', 'P2002'].includes(error?.code)) throw error;
       }
@@ -72,14 +77,23 @@ export class LegalService {
 
   async findByType(type: LegalContentType): Promise<LegalContent> {
     this.validateType(type);
-    const record = await this.prisma.content_documents.findFirst({
-      where: { type, status: 'PUBLISHED' },
-      orderBy: [{ published_at: { sort: 'desc', nulls: 'last' } }, { updated_at: 'desc' }, { created_at: 'desc' }],
-    });
-    if (!record) {
-      throw new NotFoundException(`Content for '${type}' has not been set yet`);
-    }
-    return this.toLegalContent(record);
+    const fetcher = async () => {
+      const record = await this.prisma.content_documents.findFirst({
+        where: { type, status: 'PUBLISHED' },
+        orderBy: [{ published_at: { sort: 'desc', nulls: 'last' } }, { updated_at: 'desc' }, { created_at: 'desc' }],
+      });
+      if (!record) {
+        throw new NotFoundException(`Content for '${type}' has not been set yet`);
+      }
+      return this.toLegalContent(record);
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterLegal(type),
+      CACHE_TTL_SECONDS.MASTER_LEGAL,
+      fetcher,
+      ['legal'],
+    );
   }
 
   async findAll(): Promise<LegalContent[]> {

@@ -1,15 +1,20 @@
 import { randomUUID } from "crypto";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 
 import { PartnerServiceQuestionType } from "../../generated/prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CACHE_TTL_SECONDS } from "../../common/redis/redis-cache.keys";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import { CreateQuestionDto } from "./dto/create-question.dto";
 import { UpdateQuestionDto } from "./dto/update-question.dto";
 
 @Injectable()
 export class QuestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private mapQuestion(question: any) {
     const category = question.partner_service_categories;
@@ -60,6 +65,7 @@ export class QuestionsService {
       },
       include: { partner_service_categories: true },
     });
+    await this.cache?.invalidateTags('questions');
     return this.mapQuestion(question);
   }
 
@@ -86,24 +92,33 @@ export class QuestionsService {
   }
 
   async findByCategoryId(categoryId: string) {
-    const questions = await this.prisma.partner_service_questions.findMany({
-      where: {
-        OR: [
-          { service_category_id: categoryId },
-          { service_category_id: null },
-        ],
-      },
-      include: { partner_service_categories: true },
-      orderBy: { sort_order: "asc" },
-    });
-    return questions
-      .filter(
-        (question) =>
-          !["abcd", "abcde", "asdf2", "equipment available"].includes(
-            question.question.trim().toLowerCase().replace(/\s+/g, " "),
-          ),
-      )
-      .map((question) => this.mapQuestion(question));
+    const fetcher = async () => {
+      const questions = await this.prisma.partner_service_questions.findMany({
+        where: {
+          OR: [
+            { service_category_id: categoryId },
+            { service_category_id: null },
+          ],
+        },
+        include: { partner_service_categories: true },
+        orderBy: { sort_order: "asc" },
+      });
+      return questions
+        .filter(
+          (question) =>
+            !["abcd", "abcde", "asdf2", "equipment available"].includes(
+              question.question.trim().toLowerCase().replace(/\s+/g, " "),
+            ),
+        )
+        .map((question) => this.mapQuestion(question));
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterQuestions(categoryId),
+      CACHE_TTL_SECONDS.MASTER_QUESTIONS,
+      fetcher,
+      ['questions'],
+    );
   }
 
   async findOne(id: string) {
@@ -139,12 +154,14 @@ export class QuestionsService {
       },
       include: { partner_service_categories: true },
     });
+    await this.cache?.invalidateTags('questions');
     return this.mapQuestion(question);
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.partner_service_questions.delete({ where: { id } });
+    await this.cache?.invalidateTags('questions');
   }
 
   async toggleStatus(id: string) {
@@ -162,5 +179,6 @@ export class QuestionsService {
         }),
       ),
     );
+    await this.cache?.invalidateTags('questions');
   }
 }

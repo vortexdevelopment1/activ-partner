@@ -1,6 +1,11 @@
 import {
+  CallHandler,
   Controller,
+  ExecutionContext,
   Get,
+  Injectable,
+  NestInterceptor,
+  Optional,
   Post,
   Body,
   Patch,
@@ -17,6 +22,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from "@nestjs/common";
+import { tap } from "rxjs";
 import {
   ApiTags,
   ApiBearerAuth,
@@ -58,9 +64,34 @@ import { UserRole } from "../../common/enums/user-role.enum";
 import { VenueStatus } from "../../common/enums/venue-status.enum";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
+
+@Injectable()
+class VenueMutationCacheInterceptor implements NestInterceptor {
+  constructor(@Optional() private readonly cache?: RedisCacheService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler) {
+    const req = context.switchToHttp().getRequest();
+    const method = String(req?.method || "").toUpperCase();
+    if (!this.cache || !["POST", "PATCH", "PUT", "DELETE"].includes(method)) {
+      return next.handle();
+    }
+    return next.handle().pipe(
+      tap(() => {
+        const partnerId = req?.user?.id;
+        void this.cache?.invalidateTags(
+          "venues",
+          "admin:venues",
+          ...(partnerId ? [`partner:${partnerId}:venues`] : []),
+        );
+      }),
+    );
+  }
+}
 
 @ApiTags("Venues")
 @UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(VenueMutationCacheInterceptor)
 @Controller("venues")
 export class VenuesController {
   constructor(

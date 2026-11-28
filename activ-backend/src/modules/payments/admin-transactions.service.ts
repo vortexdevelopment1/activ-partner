@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import { IsEnum, IsOptional } from 'class-validator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { computeBookingCommission } from '../commission/booking-commission';
 
@@ -45,14 +47,26 @@ function bookingDetails(booking: Booking) {
 
 @Injectable()
 export class AdminTransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   async list(query: AdminTransactionsQuery) {
     const page = query.page ?? 1;
     const limit = Math.min(query.limit ?? 10, 100);
-    const pagination = { skip: (page - 1) * limit, take: limit };
-    const result = await this.findRecords(query.view, pagination);
-    return { ...result, page, limit, totalPages: Math.ceil(result.total / limit) };
+    const fetcher = async () => {
+      const pagination = { skip: (page - 1) * limit, take: limit };
+      const result = await this.findRecords(query.view, pagination);
+      return { ...result, page, limit, totalPages: Math.ceil(result.total / limit) };
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.adminTransactions({ view: query.view, page, limit }),
+      CACHE_TTL_SECONDS.ADMIN_LISTS,
+      fetcher,
+      ['admin:transactions'],
+    );
   }
 
   private async findRecords(view: TransactionView, pagination: { skip: number; take: number }) {

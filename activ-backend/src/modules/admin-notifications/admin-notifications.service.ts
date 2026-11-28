@@ -1,14 +1,19 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { AdminNotificationRecord as AdminNotification, AdminNotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class AdminNotificationsService {
   private readonly logger = new Logger(AdminNotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private mapNotification(notification: {
     id: string;
@@ -60,6 +65,7 @@ export class AdminNotificationsService {
           sent_at: now,
         })),
       });
+      await this.cache?.invalidateTags('admin:notifications');
     } catch (e) {
       this.logger.warn(`Failed to create admin notification (${type}): ${e}`);
     }
@@ -83,6 +89,7 @@ export class AdminNotificationsService {
       where: { id },
       data: { read_at: new Date() },
     });
+    await this.cache?.invalidateTags('admin:notifications');
     return this.mapNotification(updated);
   }
 
@@ -91,11 +98,20 @@ export class AdminNotificationsService {
       where: { user_id: adminUserId, read_at: null },
       data: { read_at: new Date() },
     });
+    await this.cache?.invalidateTags('admin:notifications');
   }
 
   async unreadCount(adminUserId: string): Promise<number> {
-    return this.prisma.notifications.count({
-      where: { user_id: adminUserId, read_at: null },
-    });
+    const fetcher = () =>
+      this.prisma.notifications.count({
+        where: { user_id: adminUserId, read_at: null },
+      });
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      `${this.cache.keys.adminNotificationsUnread()}:${adminUserId}`,
+      CACHE_TTL_SECONDS.ADMIN_NOTIFICATION_COUNT,
+      fetcher,
+      ['admin:notifications'],
+    );
   }
 }

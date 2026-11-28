@@ -10,6 +10,8 @@ import {
 import { randomInt, randomUUID } from "crypto";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CACHE_TTL_SECONDS } from "../../common/redis/redis-cache.keys";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
 import { TeamMemberRecord as TeamMember, TeamMemberStatus } from '../../common/domain-types';
 import { CreateTeamMemberDto } from "./dto/create-team-member.dto";
 import { UpdateTeamMemberDto } from "./dto/update-team-member.dto";
@@ -22,6 +24,7 @@ export class TeamService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly mailService?: MailService,
+    @Optional() private readonly cache?: RedisCacheService,
   ) {}
 
   private readonly include = {
@@ -57,14 +60,23 @@ export class TeamService {
   }
 
   async findAll(partnerId: string): Promise<TeamMember[]> {
-    const rows = await this.prisma.partner_staff_profiles.findMany({
-      where: { partner_users: { partner_id: partnerId } },
-      include: this.include,
-      orderBy: { created_at: "desc" },
-    });
-    return rows
-      .map((row) => this.toMember(row))
-      .filter((member) => member.isActive);
+    const fetcher = async () => {
+      const rows = await this.prisma.partner_staff_profiles.findMany({
+        where: { partner_users: { partner_id: partnerId } },
+        include: this.include,
+        orderBy: { created_at: "desc" },
+      });
+      return rows
+        .map((row) => this.toMember(row))
+        .filter((member) => member.isActive);
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.partnerTeam(partnerId),
+      CACHE_TTL_SECONDS.PARTNER_TEAM,
+      fetcher,
+      ['team', `partner:${partnerId}:team`],
+    );
   }
 
   private async owned(id: string, partnerId: string) {
@@ -217,6 +229,7 @@ export class TeamService {
   }
 
   private async deliverInvitation(row: any, password: string): Promise<TeamMember> {
+    await this.cache?.invalidateTags(`partner:${row.partner_users.partner_id}:team`, 'team');
     const member = this.toMember(row);
     let smsSent = false;
     try {
@@ -311,6 +324,7 @@ export class TeamService {
           include: this.include,
         });
       });
+      await this.cache?.invalidateTags(`partner:${partnerId}:team`, 'team');
       return this.toMember(row);
     } catch (error) {
       if ((error as { code?: string }).code === "P2002")
@@ -324,6 +338,7 @@ export class TeamService {
     await this.prisma.partner_users.delete({
       where: { id: current.partner_user_id },
     });
+    await this.cache?.invalidateTags(`partner:${partnerId}:team`, 'team');
   }
 
   async markActive(id: string): Promise<void> {
@@ -342,6 +357,7 @@ export class TeamService {
         },
       });
     });
+    await this.cache?.invalidateTags('team');
   }
 
   async updateAvatar(id: string, avatarUrl: string | null): Promise<void> {
@@ -357,6 +373,7 @@ export class TeamService {
       where: { id: link.user_id },
       data: { profile_photo: avatarUrl, updated_at: new Date() },
     });
+    await this.cache?.invalidateTags(`partner:${link.partner_id}:team`, 'team');
   }
 
   async removeAvatar(id: string): Promise<void> {

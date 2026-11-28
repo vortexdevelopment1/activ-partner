@@ -1,14 +1,19 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { NotificationRecord as Notification, NotificationType } from '../../common/domain-types';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private mapNotification(notification: {
     id: string;
@@ -69,6 +74,7 @@ export class NotificationsService {
           sent_at: now,
         },
       });
+      await this.cache?.invalidateTags(`notifications:${partnerId}`);
     } catch (e) {
       this.logger.warn(`Failed to create notification (${type}): ${e}`);
     }
@@ -97,6 +103,7 @@ export class NotificationsService {
       where: { id },
       data: { read_at: new Date() },
     });
+    await this.cache?.invalidateTags(`notifications:${partnerId}`);
     return this.mapNotification(updated, partnerId);
   }
 
@@ -108,14 +115,25 @@ export class NotificationsService {
       where: { user_id: { in: userIds }, read_at: null },
       data: { read_at: new Date() },
     });
+    await this.cache?.invalidateTags(`notifications:${partnerId}`);
   }
 
   async unreadCount(partnerId: string, currentUserId?: string): Promise<number> {
-    const defaultUserId = await this.getPartnerUserId(partnerId);
-    const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
-    if (userIds.length === 0) return 0;
-    return this.prisma.notifications.count({
-      where: { user_id: { in: userIds }, read_at: null },
-    });
+    const fetcher = async () => {
+      const defaultUserId = await this.getPartnerUserId(partnerId);
+      const userIds = Array.from(new Set([defaultUserId, currentUserId].filter(Boolean))) as string[];
+      if (userIds.length === 0) return 0;
+      return this.prisma.notifications.count({
+        where: { user_id: { in: userIds }, read_at: null },
+      });
+    };
+    if (!this.cache) return fetcher();
+    const scopeId = `${partnerId}:${currentUserId || 'default'}`;
+    return this.cache.getOrSet(
+      this.cache.keys.partnerNotificationsUnread(scopeId),
+      CACHE_TTL_SECONDS.PARTNER_NOTIFICATION_COUNT,
+      fetcher,
+      [`notifications:${partnerId}`],
+    );
   }
 }

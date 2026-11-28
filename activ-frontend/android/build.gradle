@@ -1,3 +1,18 @@
+buildscript {
+    ext {
+        kotlin_version = '2.3.20'
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.google.gms:google-services:4.4.4'
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -6,30 +21,36 @@ allprojects {
 }
 
 rootProject.buildDir = "../build"
+
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+subprojects { sub ->
+    sub.plugins.withId("com.android.library") {
+        sub.androidComponents {
+            finalizeDsl { extension ->
+                if (extension.compileSdk == null || extension.compileSdk < 36) {
+                    extension.compileSdk = 36
+                }
+            }
+        }
+    }
+    sub.tasks.matching { it.class.name.contains("KotlinCompile") }.configureEach { task ->
+        def androidExt = sub.extensions.findByName("android")
+        if (androidExt != null && androidExt.compileOptions?.targetCompatibility != null) {
+            def target = androidExt.compileOptions.targetCompatibility.toString()
+            if (task.hasProperty("kotlinOptions")) {
+                task.kotlinOptions.jvmTarget = target
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
-}
-// Add the buildscript block to include the Google services plugin
-buildscript {
-    ext {
-        // Define the Kotlin version here
-        kotlin_version = '2.2.21'  // or any other version you need
-    }
-
-    repositories {
-        google()  // Ensure google() is listed here
-        mavenCentral()
-    }
-
-    dependencies {
-        // Add the classpath for the google-services plugin
-        classpath 'com.google.gms:google-services:4.4.4'  // or your preferred version
-    }
 }

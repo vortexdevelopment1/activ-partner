@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { faqs } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import type { FaqRecord as Faq } from '../../common/domain-types';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
@@ -9,7 +11,10 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class FaqService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private toFaq(record: faqs): Faq {
     return {
@@ -32,29 +37,52 @@ export class FaqService {
       status: isActive ? 'PUBLISHED' : 'DRAFT',
       published_at: isActive ? now : null, updated_at: now,
     } });
+    await this.cache?.invalidateTags('faqs');
     return this.toFaq(record);
   }
 
   async findAll(pagination: PaginationDto): Promise<[Faq[], number]> {
-    const search = pagination.search?.trim();
-    const where = search ? { OR: [
-      { question: { contains: search, mode: 'insensitive' as const } },
-      { answer: { contains: search, mode: 'insensitive' as const } },
-    ] } : {};
-    const [records, total] = await Promise.all([
-      this.prisma.faqs.findMany({ where, skip: pagination.skip, take: pagination.limit,
-        orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }, { id: 'asc' }] }),
-      this.prisma.faqs.count({ where }),
-    ]);
-    return [records.map((record) => this.toFaq(record)), total];
+    const fetcher = async (): Promise<[Faq[], number]> => {
+      const search = pagination.search?.trim();
+      const where = search ? { OR: [
+        { question: { contains: search, mode: 'insensitive' as const } },
+        { answer: { contains: search, mode: 'insensitive' as const } },
+      ] } : {};
+      const [records, total] = await Promise.all([
+        this.prisma.faqs.findMany({ where, skip: pagination.skip, take: pagination.limit,
+          orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }, { id: 'asc' }] }),
+        this.prisma.faqs.count({ where }),
+      ]);
+      return [records.map((record) => this.toFaq(record)), total];
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterFaqList({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: pagination.search,
+      }),
+      CACHE_TTL_SECONDS.MASTER_FAQ,
+      fetcher,
+      ['faqs'],
+    );
   }
 
   async findAllActive(): Promise<Faq[]> {
-    const records = await this.prisma.faqs.findMany({
-      where: { status: 'PUBLISHED' },
-      orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }, { id: 'asc' }],
-    });
-    return records.map((record) => this.toFaq(record));
+    const fetcher = async () => {
+      const records = await this.prisma.faqs.findMany({
+        where: { status: 'PUBLISHED' },
+        orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }, { id: 'asc' }],
+      });
+      return records.map((record) => this.toFaq(record));
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterFaqActive(),
+      CACHE_TTL_SECONDS.MASTER_FAQ,
+      fetcher,
+      ['faqs'],
+    );
   }
 
   async findOne(id: string): Promise<Faq> {
@@ -76,11 +104,13 @@ export class FaqService {
       } : {}),
       updated_at: now,
     } });
+    await this.cache?.invalidateTags('faqs');
     return this.toFaq(record);
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.faqs.delete({ where: { id } });
+    await this.cache?.invalidateTags('faqs');
   }
 }

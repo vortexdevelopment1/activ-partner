@@ -5,6 +5,7 @@ import * as path from 'path';
 
 import { isProductionEnvironment } from './config/environment';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './common/redis/redis.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { MailModule } from './modules/mail/mail.module';
 import { OtpModule } from './modules/otp/otp.module';
@@ -54,6 +55,7 @@ import { PerformanceTimingMiddleware } from './common/middleware/performance-tim
       ],
     }),
     PrismaModule,
+    RedisModule,
     CloudinaryModule,
     MailModule,
     OtpModule,

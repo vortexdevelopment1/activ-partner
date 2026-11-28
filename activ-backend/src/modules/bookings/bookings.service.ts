@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
@@ -27,6 +28,8 @@ import { extractLegacyIdempotencyKey } from "./legacy-idempotency";
 import { assertNormalizedBookingWriteEnabled } from "./normalized-booking-feature";
 import { ConfigService } from "@nestjs/config";
 import { indiaDateBounds, weekdayForIndiaDate } from "../../common/time/india-time";
+import { CACHE_TTL_SECONDS } from "../../common/redis/redis-cache.keys";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
 const GST_ON_COMMISSION_RATE = 0.18;
@@ -37,6 +40,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Optional() private readonly cache?: RedisCacheService,
   ) { }
 
   private calculateDuration(startTime: string, endTime: string): number {
@@ -393,7 +397,9 @@ export class BookingsService {
   }
 
   async cancel(id: string, reason: string, currentUser: User): Promise<any> {
-    return this.cancelNormalized(id, reason, currentUser);
+    const result = await this.cancelNormalized(id, reason, currentUser);
+    await this.cache?.invalidateTags("venues", "admin:transactions", "payouts");
+    return result;
   }
 
   /** Default-off normalized cancellation path; legacy cancellation remains authoritative. */
@@ -758,72 +764,87 @@ export class BookingsService {
     currentUser: { id: string; role: string },
     query: BookingPayoutQueryDto,
   ) {
-    const where: any = {
-      bookings: {
-        slots: { facilities: { venues: { partner_id: currentUser.id } } },
-      },
-    };
-    if (query.startDate || query.endDate) {
-      const start = query.startDate ? indiaDateBounds(query.startDate).start : null;
-      const end = query.endDate ? indiaDateBounds(query.endDate).end : null;
-      where.updated_at = {
-        ...(start ? { gte: start } : {}),
-        ...(end ? { lt: end } : {}),
+    const fetcher = async () => {
+      const where: any = {
+        bookings: {
+          slots: { facilities: { venues: { partner_id: currentUser.id } } },
+        },
       };
-    }
-    if (query.status === "success") where.status = "CAPTURED";
-    if (query.status === "pending")
-      where.status = { in: ["CREATED", "AUTHORIZED"] };
-    if (query.status === "failed")
-      where.status = {
-        in: ["FAILED", "REFUND_PENDING", "REFUNDED", "EXCEPTION_REVIEW"],
-      };
+      if (query.startDate || query.endDate) {
+        const start = query.startDate ? indiaDateBounds(query.startDate).start : null;
+        const end = query.endDate ? indiaDateBounds(query.endDate).end : null;
+        where.updated_at = {
+          ...(start ? { gte: start } : {}),
+          ...(end ? { lt: end } : {}),
+        };
+      }
+      if (query.status === "success") where.status = "CAPTURED";
+      if (query.status === "pending")
+        where.status = { in: ["CREATED", "AUTHORIZED"] };
+      if (query.status === "failed")
+        where.status = {
+          in: ["FAILED", "REFUND_PENDING", "REFUNDED", "EXCEPTION_REVIEW"],
+        };
 
-    const [payments, total] = await Promise.all([
-      this.prisma.payments.findMany({
-        where,
-        include: {
-          bookings: {
-            include: {
-              slots: { include: { facilities: { include: { venues: true } } } },
+      const [payments, total] = await Promise.all([
+        this.prisma.payments.findMany({
+          where,
+          include: {
+            bookings: {
+              include: {
+                slots: { include: { facilities: { include: { venues: true } } } },
+              },
             },
           },
-        },
-        orderBy: { updated_at: "desc" },
-        skip: query.skip,
-        take: query.limit,
-      }),
-      this.prisma.payments.count({ where }),
-    ]);
+          orderBy: { updated_at: "desc" },
+          skip: query.skip,
+          take: query.limit,
+        }),
+        this.prisma.payments.count({ where }),
+      ]);
 
-    const items = payments.map((payment) => {
-      const { netReceived } = this.computeBreakdown(
-        Number(payment.bookings.total_paise) / 100,
-        Number(
-          payment.bookings.slots.facilities.venues.commission_percent ?? 5,
-        ),
-      );
+      const items = payments.map((payment) => {
+        const { netReceived } = this.computeBreakdown(
+          Number(payment.bookings.total_paise) / 100,
+          Number(
+            payment.bookings.slots.facilities.venues.commission_percent ?? 5,
+          ),
+        );
+        return {
+          id: payment.bookings.id,
+          reference:
+            payment.provider_payment_id ||
+            payment.provider_order_id ||
+            payment.bookings.booking_reference,
+          date: payment.bookings.starts_at,
+          payoutDate: payment.updated_at,
+          amount: netReceived,
+          netReceived,
+          status: this.mapCurrentPayoutStatus(payment.status),
+        };
+      });
+
       return {
-        id: payment.bookings.id,
-        reference:
-          payment.provider_payment_id ||
-          payment.provider_order_id ||
-          payment.bookings.booking_reference,
-        date: payment.bookings.starts_at,
-        payoutDate: payment.updated_at,
-        amount: netReceived,
-        netReceived,
-        status: this.mapCurrentPayoutStatus(payment.status),
+        items,
+        total,
+        page: query.page,
+        limit: query.limit,
+        totalPages: Math.ceil(total / query.limit),
       };
-    });
-
-    return {
-      items,
-      total,
-      page: query.page,
-      limit: query.limit,
-      totalPages: Math.ceil(total / query.limit),
     };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.partnerPayoutHistory(currentUser.id, {
+        page: query.page,
+        limit: query.limit,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        status: query.status,
+      }),
+      CACHE_TTL_SECONDS.PARTNER_PAYOUT_HISTORY,
+      fetcher,
+      ["payouts", `partner:${currentUser.id}:payouts`],
+    );
   }
 
   async generatePayoutHistoryCsv(

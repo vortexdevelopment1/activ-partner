@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Optional,
 } from "@nestjs/common";
 import type {
   CategoryRecord as Category,
@@ -50,6 +51,8 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { ManageActivityDto } from "./dto/manage-activity.dto";
 import { availabilityRows, mapVenueAvailability } from "./venue-table-data";
 import { CommissionService } from "../commission/commission.service";
+import { CACHE_TTL_SECONDS, canonicalQueryHash } from "../../common/redis/redis-cache.keys";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
 import { deleteVenue } from "./delete-venue";
 import { syncLegacyActivityVisibility } from "./activity-visibility";
 import { attendanceStatus, INDIA_OFFSET_MS } from "../bookings/booking-expiry";
@@ -108,8 +111,22 @@ export class VenuesService {
     private readonly pushNotificationsService: PushNotificationsService,
     private readonly prisma: PrismaService,
     private readonly commissionService: CommissionService,
-    private readonly partnerEmailService?: PartnerEmailService,
+    @Optional() private readonly partnerEmailService?: PartnerEmailService,
+    @Optional() private readonly cache?: RedisCacheService,
   ) {}
+
+  private async invalidateVenueCache(
+    partnerId?: string,
+    venueId?: string,
+  ): Promise<void> {
+    if (!this.cache) return;
+    await this.cache.invalidateTags(
+      "venues",
+      "admin:venues",
+      ...(partnerId ? [`partner:${partnerId}:venues`] : []),
+      ...(venueId ? [`venue:${venueId}`] : []),
+    );
+  }
 
   async create(
     createVenueDto: CreateVenueDto,
@@ -907,21 +924,31 @@ export class VenuesService {
   async findByPartner(partnerId: string, pagination: PaginationDto) {
     if (!partnerId)
       throw new ForbiddenException("Partner identity is required");
-    const where = { partner_id: partnerId };
-    const [records, total] = await Promise.all([
-      this.prisma.venues.findMany({
-        where,
-        select: { id: true },
-        orderBy: { name: "asc" },
-        skip: pagination.skip,
-        take: pagination.limit,
-      }),
-      this.prisma.venues.count({ where }),
-    ]);
-    return [
-      await Promise.all(records.map((record) => this.findOne(record.id))),
-      total,
-    ] as const;
+    const fetcher = async () => {
+      const where = { partner_id: partnerId };
+      const [records, total] = await Promise.all([
+        this.prisma.venues.findMany({
+          where,
+          select: { id: true },
+          orderBy: { name: "asc" },
+          skip: pagination.skip,
+          take: pagination.limit,
+        }),
+        this.prisma.venues.count({ where }),
+      ]);
+      return [
+        await Promise.all(records.map((record) => this.findOne(record.id))),
+        total,
+      ] as const;
+    };
+    if (!this.cache) return fetcher();
+    const hash = canonicalQueryHash({ page: pagination.page, limit: pagination.limit });
+    return this.cache.getOrSet(
+      `${this.cache.keys.partnerVenues(partnerId)}:${hash}`,
+      CACHE_TTL_SECONDS.VENUE_LIST,
+      fetcher,
+      ["venues", `partner:${partnerId}:venues`],
+    );
   }
 
   async pauseBookings(
@@ -944,6 +971,7 @@ export class VenuesService {
       await syncLegacyActivityVisibility(tx, id);
     });
     const saved = await this.findOne(id);
+    await this.invalidateVenueCache(partnerId, id);
 
     const partner = await this.prisma.partners.findUnique({
       where: { id: partnerId },
@@ -1100,50 +1128,60 @@ export class VenuesService {
       where: { id: venueId },
       data: { has_seen_welcome: true },
     });
+    await this.invalidateVenueCache(venue.partnerId, venueId);
     return this.findOne(venueId);
   }
 
   async findApprovedByPartner(partnerId: string): Promise<any[]> {
     if (!partnerId)
       throw new ForbiddenException("Partner identity is required");
-    const records = await this.prisma.venues.findMany({
-      where: { partner_id: partnerId, status: "PUBLISHED" },
-      select: { id: true },
-      orderBy: [
-        { partner_venue_profiles: { created_at: "desc" } },
-        { id: "asc" },
-      ],
-    });
-    const venues = await Promise.all(
-      records.map((record) => this.findOne(record.id)),
-    );
+    const fetcher = async () => {
+      const records = await this.prisma.venues.findMany({
+        where: { partner_id: partnerId, status: "PUBLISHED" },
+        select: { id: true },
+        orderBy: [
+          { partner_venue_profiles: { created_at: "desc" } },
+          { id: "asc" },
+        ],
+      });
+      const venues = await Promise.all(
+        records.map((record) => this.findOne(record.id)),
+      );
 
-    // Match by IDs: activity titles can be customized independently of categories.
-    return Promise.all(
-      venues.map(async (venue) => ({
-        ...venue,
-        services: await Promise.all(
-          (venue.services || []).map(async (service) => {
-            // Some lightweight public-venue tests provide only the venue
-            // projection; production Prisma clients always expose this model.
-            const stats = this.prisma.partner_venue_services
-              ? await this.getActivityManagement(service.id, partnerId)
-              : null;
-            return {
-              ...service,
-              ...(stats
-                ? { bookingCount: stats.bookingCount, earnings: stats.earnings }
-                : {}),
-              answers: (venue.answers || []).filter(
-                (a) =>
-                  a.venueServiceId === service.id ||
-                  (!a.venueServiceId &&
-                    a.question?.categoryId === service.categoryId),
-              ),
-            };
-          }),
-        ),
-      })),
+      // Match by IDs: activity titles can be customized independently of categories.
+      return Promise.all(
+        venues.map(async (venue) => ({
+          ...venue,
+          services: await Promise.all(
+            (venue.services || []).map(async (service) => {
+              // Some lightweight public-venue tests provide only the venue
+              // projection; production Prisma clients always expose this model.
+              const stats = this.prisma.partner_venue_services
+                ? await this.getActivityManagement(service.id, partnerId)
+                : null;
+              return {
+                ...service,
+                ...(stats
+                  ? { bookingCount: stats.bookingCount, earnings: stats.earnings }
+                  : {}),
+                answers: (venue.answers || []).filter(
+                  (a) =>
+                    a.venueServiceId === service.id ||
+                    (!a.venueServiceId &&
+                      a.question?.categoryId === service.categoryId),
+                ),
+              };
+            }),
+          ),
+        })),
+      );
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.partnerApprovedVenues(partnerId),
+      30,
+      fetcher,
+      ["venues", `partner:${partnerId}:venues`],
     );
   }
 
@@ -2258,6 +2296,7 @@ export class VenuesService {
       }
     }
     const saved = await this.findOne(id);
+    await this.invalidateVenueCache(venue.partnerId, id);
 
     if (currentUser.role === UserRole.PARTNER) {
       await this.adminNotificationsService.notify(
@@ -2454,6 +2493,7 @@ export class VenuesService {
       },
       { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 60000 },
     );
+    await this.invalidateVenueCache(venue.partner_id, venue.id);
   }
 
   /** All approval database effects commit together; no transport runs in this transaction. */
@@ -2654,6 +2694,7 @@ export class VenuesService {
         this.logger.warn("Approval committed; push notification failed");
       }
     }
+    await this.invalidateVenueCache(outcome.changed ? outcome.partnerId : undefined, id);
     return this.findOne(id);
   }
 
@@ -3069,15 +3110,24 @@ export class VenuesService {
   }
 
   async getVenueStats() {
-    const [total, draft, approved, rejected] = await Promise.all([
-      this.prisma.venues.count(),
-      this.prisma.venues.count({ where: { status: "DRAFT" } }),
-      this.prisma.venues.count({ where: { status: "PUBLISHED" } }),
-      this.prisma.venues.count({ where: { status: "ARCHIVED" } }),
-    ]);
-    const pending = draft;
+    const fetcher = async () => {
+      const [total, draft, approved, rejected] = await Promise.all([
+        this.prisma.venues.count(),
+        this.prisma.venues.count({ where: { status: "DRAFT" } }),
+        this.prisma.venues.count({ where: { status: "PUBLISHED" } }),
+        this.prisma.venues.count({ where: { status: "ARCHIVED" } }),
+      ]);
+      const pending = draft;
 
-    return { total, draft, pending, approved, rejected };
+      return { total, draft, pending, approved, rejected };
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.adminVenueStats(),
+      CACHE_TTL_SECONDS.ADMIN_DASHBOARD,
+      fetcher,
+      ["admin:venues"],
+    );
   }
 
   // ─── Venue Update Requests ────────────────────────────────────────────────

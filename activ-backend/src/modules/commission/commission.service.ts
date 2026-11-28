@@ -3,10 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { City, State } from "country-state-city";
 import { PaginationDto } from "../../common/dto/pagination.dto";
+import { CACHE_TTL_SECONDS } from "../../common/redis/redis-cache.keys";
+import { RedisCacheService } from "../../common/redis/redis-cache.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateCityCommissionDto } from "./dto/create-city-commission.dto";
 import { UpdateCityCommissionDto } from "./dto/update-city-commission.dto";
@@ -16,7 +19,10 @@ export const DEFAULT_COMMISSION = 5;
 
 @Injectable()
 export class CommissionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private mapCommission(record: {
     id: string;
@@ -70,32 +76,46 @@ export class CommissionService {
         updated_at: now,
       },
     });
+    await this.cache?.invalidateTags("commissions");
     return this.mapCommission(commission);
   }
 
   async findAll(
     pagination: PaginationDto,
   ): Promise<[CityCommission[], number]> {
-    const where = {
-      partner_id: null,
-      NOT: { city_code: "", state_code: null },
-      ...(pagination.search ? { OR: [
-        { city_code: { contains: pagination.search, mode: 'insensitive' as const } },
-        { state_code: { contains: pagination.search, mode: 'insensitive' as const } },
-      ] } : {}),
+    const fetcher = async (): Promise<[CityCommission[], number]> => {
+      const where = {
+        partner_id: null,
+        NOT: { city_code: "", state_code: null },
+        ...(pagination.search ? { OR: [
+          { city_code: { contains: pagination.search, mode: 'insensitive' as const } },
+          { state_code: { contains: pagination.search, mode: 'insensitive' as const } },
+        ] } : {}),
+      };
+      const [items, total] = await Promise.all([
+        this.prisma.partner_city_commissions.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.limit,
+          orderBy: { city_code: "asc" },
+        }),
+        this.prisma.partner_city_commissions.count({
+          where,
+        }),
+      ]);
+      return [items.map((item) => this.mapCommission(item)), total];
     };
-    const [items, total] = await Promise.all([
-      this.prisma.partner_city_commissions.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.limit,
-        orderBy: { city_code: "asc" },
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.commissionCities({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: pagination.search,
       }),
-      this.prisma.partner_city_commissions.count({
-        where,
-      }),
-    ]);
-    return [items.map((item) => this.mapCommission(item)), total];
+      CACHE_TTL_SECONDS.COMMISSION_CONFIG,
+      fetcher,
+      ["commissions"],
+    );
   }
 
   async findAllIndianCities(
@@ -227,12 +247,14 @@ export class CommissionService {
         updated_at: new Date(),
       },
     });
+    await this.cache?.invalidateTags("commissions");
     return this.mapCommission(updated);
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.partner_city_commissions.delete({ where: { id } });
+    await this.cache?.invalidateTags("commissions");
   }
 
   private normalize(value?: string | null): string {
@@ -248,13 +270,22 @@ export class CommissionService {
     commissionPercentage: number;
     isPersisted: boolean;
   }> {
-    const record = await this.findActiveDefault();
-    return {
-      commissionPercentage: record
-        ? record.commission_bps / 100
-        : DEFAULT_COMMISSION,
-      isPersisted: Boolean(record),
+    const fetcher = async () => {
+      const record = await this.findActiveDefault();
+      return {
+        commissionPercentage: record
+          ? record.commission_bps / 100
+          : DEFAULT_COMMISSION,
+        isPersisted: Boolean(record),
+      };
     };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.commissionDefault(),
+      CACHE_TTL_SECONDS.COMMISSION_CONFIG,
+      fetcher,
+      ["commissions"],
+    );
   }
 
   async updateDefaultCommission(commissionPercentage: number): Promise<{
@@ -286,6 +317,7 @@ export class CommissionService {
       });
     }
 
+    await this.cache?.invalidateTags("commissions");
     return { commissionPercentage, isPersisted: true };
   }
 

@@ -606,25 +606,16 @@ class _State extends State<AddVenueTimingScreen> {
                                               (index) {
                                                 final slot = timings[day]!
                                                     .timeSlots[index];
-                                                return Padding(
-                                                  key: ObjectKey(slot),
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          bottom: 16),
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .stretch,
-                                                    children: [
-                                                      Row(
+                                                final timeFields = Row(
+                                                  //crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    // -------- Open Time ----------
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
-                                                          // -------- Open Time ----------
-                                                          Expanded(
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
                                                                 RichText(
                                                                   text:
                                                                       TextSpan(
@@ -892,12 +883,19 @@ class _State extends State<AddVenueTimingScreen> {
                                                             ),
                                                           ),
                                                         ],
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      _slotDetails(
+                                                      );
+                                                return Column(
+                                                  key: ObjectKey(slot),
+                                                  children: [
+                                                    timeFields,
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              top: 4, bottom: 12),
+                                                      child: _slotDetails(
                                                           day, slot, index),
-                                                    ],
-                                                  ),
+                                                    ),
+                                                  ],
                                                 );
                                               },
                                             ),

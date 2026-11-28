@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
 import { randomInt, randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
@@ -18,6 +19,8 @@ import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { AdminNotificationType } from '../../common/domain-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { deletePartnerAccount } from './delete-partner-account';
 import { MailService } from '../mail/mail.service';
 import { PartnerKycStatus, PartnerRole, PartnerStatus, UserStatus } from '../../generated/prisma/client';
@@ -28,6 +31,7 @@ export class PartnersService {
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    @Optional() private readonly cache?: RedisCacheService,
   ) {}
 
   async create(createPartnerDto: CreatePartnerDto): Promise<any> {
@@ -195,68 +199,81 @@ export class PartnersService {
   }
 
   async findAll(pagination: PaginationDto) {
-    const where: any = pagination.search
-      ? {
-          OR: [
-            { legal_name: { contains: pagination.search, mode: 'insensitive' } },
-            {
-              partner_business_profiles: {
-                is: {
-                  OR: [
-                    { business_name: { contains: pagination.search, mode: 'insensitive' } },
-                    { city: { contains: pagination.search, mode: 'insensitive' } },
-                    { email: { contains: pagination.search, mode: 'insensitive' } },
-                  ],
+    const fetcher = async () => {
+      const where: any = pagination.search
+        ? {
+            OR: [
+              { legal_name: { contains: pagination.search, mode: 'insensitive' } },
+              {
+                partner_business_profiles: {
+                  is: {
+                    OR: [
+                      { business_name: { contains: pagination.search, mode: 'insensitive' } },
+                      { city: { contains: pagination.search, mode: 'insensitive' } },
+                      { email: { contains: pagination.search, mode: 'insensitive' } },
+                    ],
+                  },
                 },
               },
-            },
-          ],
-        }
-      : {};
+            ],
+          }
+        : {};
 
-    const [partners, total] = await Promise.all([
-      this.prisma.partners.findMany({
-        where,
-        include: {
-          partner_business_profiles: true,
-          partner_users: { where: { role: PartnerRole.PARTNER_ADMIN }, include: { users: true } },
-          _count: { select: { venues: true } },
-        },
-        skip: pagination.skip,
-        take: pagination.limit,
-        orderBy: { created_at: 'desc' },
+      const [partners, total] = await Promise.all([
+        this.prisma.partners.findMany({
+          where,
+          include: {
+            partner_business_profiles: true,
+            partner_users: { where: { role: PartnerRole.PARTNER_ADMIN }, include: { users: true } },
+            _count: { select: { venues: true } },
+          },
+          skip: pagination.skip,
+          take: pagination.limit,
+          orderBy: { created_at: 'desc' },
+        }),
+        this.prisma.partners.count({ where }),
+      ]);
+
+      const items = partners.map((partner) => {
+        const profile = partner.partner_business_profiles;
+        const owner = partner.partner_users[0]?.users;
+        const names = (owner?.name || '').trim().split(/\s+/);
+        return {
+          id: partner.id,
+          userId: owner?.id ?? null,
+          firstName: names[0] || null,
+          lastName: names.slice(1).join(' ') || null,
+          email: owner?.email ?? profile?.email ?? null,
+          phone: owner?.phone_e164 ?? profile?.phone_e164 ?? null,
+          businessName: profile?.business_name ?? partner.legal_name,
+          businessAddress: profile?.address_line_1 ?? null,
+          city: profile?.city ?? null,
+          state: profile?.state ?? null,
+          zipCode: profile?.postal_code ?? null,
+          gstNumber: profile?.gst_number ?? null,
+          panNumber: profile?.pan_number ?? null,
+          isVerified: profile?.kyc_status === 'APPROVED',
+          isActive: partner.status === 'ACTIVE',
+          status: partner.status.toLowerCase(),
+          venueCount: partner._count.venues,
+          createdAt: partner.created_at,
+          updatedAt: partner.updated_at,
+        };
+      });
+
+      return [items, total] as const;
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.adminPartners({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: pagination.search,
       }),
-      this.prisma.partners.count({ where }),
-    ]);
-
-    const items = partners.map((partner) => {
-      const profile = partner.partner_business_profiles;
-      const owner = partner.partner_users[0]?.users;
-      const names = (owner?.name || '').trim().split(/\s+/);
-      return {
-        id: partner.id,
-        userId: owner?.id ?? null,
-        firstName: names[0] || null,
-        lastName: names.slice(1).join(' ') || null,
-        email: owner?.email ?? profile?.email ?? null,
-        phone: owner?.phone_e164 ?? profile?.phone_e164 ?? null,
-        businessName: profile?.business_name ?? partner.legal_name,
-        businessAddress: profile?.address_line_1 ?? null,
-        city: profile?.city ?? null,
-        state: profile?.state ?? null,
-        zipCode: profile?.postal_code ?? null,
-        gstNumber: profile?.gst_number ?? null,
-        panNumber: profile?.pan_number ?? null,
-        isVerified: profile?.kyc_status === 'APPROVED',
-        isActive: partner.status === 'ACTIVE',
-        status: partner.status.toLowerCase(),
-        venueCount: partner._count.venues,
-        createdAt: partner.created_at,
-        updatedAt: partner.updated_at,
-      };
-    });
-
-    return [items, total] as const;
+      CACHE_TTL_SECONDS.ADMIN_LISTS,
+      fetcher,
+      ['admin:partners'],
+    );
   }
 
   async findOne(id: string) {
@@ -574,6 +591,7 @@ export class PartnersService {
         partnerName: [saved.firstName, saved.lastName].filter(Boolean).join(' ') || saved.businessName,
       });
     }
+    await this.cache?.invalidateTags('admin:partners', `partner:${id}`, 'admin:venues');
     return saved;
   }
 
@@ -634,6 +652,7 @@ export class PartnersService {
       (tx) => deletePartnerAccount(tx, partnerId),
       { maxWait: 10000, timeout: 60000, isolationLevel: 'Serializable' },
     );
+    await this.cache?.invalidateTags('admin:partners', `partner:${partnerId}`, 'admin:venues');
   }
 
   // ─── GST Verification ────────────────────────────────────────────────────

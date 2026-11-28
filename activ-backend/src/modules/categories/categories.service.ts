@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
 import {
   ActivityType,
@@ -7,6 +7,8 @@ import {
   PartnerVenueServiceStatus,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CACHE_TTL_SECONDS } from '../../common/redis/redis-cache.keys';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -38,7 +40,10 @@ const fromActivityType = (type?: ActivityType): string => {
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: RedisCacheService,
+  ) {}
 
   private mapCategory(category: any, activity?: { type: ActivityType }) {
     return {
@@ -86,41 +91,65 @@ export class CategoriesService {
           : CatalogueStatus.PUBLISHED,
       },
     });
+    await this.cache?.invalidateTags('categories');
     return this.mapCategory(category, activity);
   }
 
   async findAll(pagination: PaginationDto, activeOnly = false) {
-    const where: any = {};
-    if (activeOnly) where.status = PartnerVenueServiceStatus.APPROVED;
-    if (pagination.search) {
-      where.name = { contains: pagination.search, mode: 'insensitive' };
-    }
+    const fetcher = async () => {
+      const where: any = {};
+      if (activeOnly) where.status = PartnerVenueServiceStatus.APPROVED;
+      if (pagination.search) {
+        where.name = { contains: pagination.search, mode: 'insensitive' };
+      }
 
-    const [categories, total] = await Promise.all([
-      this.prisma.partner_service_categories.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.limit,
-        orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
+      const [categories, total] = await Promise.all([
+        this.prisma.partner_service_categories.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.limit,
+          orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
+        }),
+        this.prisma.partner_service_categories.count({ where }),
+      ]);
+      const activities = await this.prisma.activities.findMany({
+        where: { sport_code: { in: categories.map((category) => category.slug) } },
+      });
+      const byCode = new Map(activities.map((activity) => [activity.sport_code, activity]));
+      return [
+        categories.map((category) => this.mapCategory(category, byCode.get(category.slug))),
+        total,
+      ] as const;
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterCategoriesList({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: pagination.search,
+        activeOnly,
       }),
-      this.prisma.partner_service_categories.count({ where }),
-    ]);
-    const activities = await this.prisma.activities.findMany({
-      where: { sport_code: { in: categories.map((category) => category.slug) } },
-    });
-    const byCode = new Map(activities.map((activity) => [activity.sport_code, activity]));
-    return [
-      categories.map((category) => this.mapCategory(category, byCode.get(category.slug))),
-      total,
-    ] as const;
+      CACHE_TTL_SECONDS.MASTER_CATEGORIES,
+      fetcher,
+      ['categories'],
+    );
   }
 
   async findAllActive() {
-    const [items] = await this.findAll(
-      Object.assign(new PaginationDto(), { page: 1, limit: 500 }),
-      true,
+    const fetcher = async () => {
+      const [items] = await this.findAll(
+        Object.assign(new PaginationDto(), { page: 1, limit: 500 }),
+        true,
+      );
+      return items;
+    };
+    if (!this.cache) return fetcher();
+    return this.cache.getOrSet(
+      this.cache.keys.masterCategoriesActive(),
+      CACHE_TTL_SECONDS.MASTER_CATEGORIES,
+      fetcher,
+      ['categories'],
     );
-    return items;
   }
 
   async findOne(id: string) {
@@ -181,12 +210,14 @@ export class CategoriesService {
             status: activityStatus,
           },
         });
+    await this.cache?.invalidateTags('categories');
     return this.mapCategory(category, activity);
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.partner_service_categories.delete({ where: { id } });
+    await this.cache?.invalidateTags('categories');
   }
 
   async toggleStatus(id: string) {

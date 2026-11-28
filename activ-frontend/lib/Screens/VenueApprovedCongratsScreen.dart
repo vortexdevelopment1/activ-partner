@@ -338,14 +338,11 @@ class _AnimatedCelebrationGraphicState
             final double x = centerX + radiusX * math.cos(angle);
             final double y = centerY + radiusY * math.sin(angle);
 
-            // 3D Depth effect: objects in foreground (sin(angle) > 0, bottom) are larger with longer shadows;
+            // 3D Depth effect: objects in foreground (sin(angle) > 0, bottom) appear closer;
             // objects in background (sin(angle) < 0, top) are slightly smaller.
             final double depthNorm =
                 (math.sin(angle) + 1.0) / 2.0; // 0.0 at top (back), 1.0 at bottom (front)
             final double scale = 0.90 + (0.22 * depthNorm);
-            final double shadowBlur = 4.0 + (5.0 * depthNorm);
-            final double shadowY = 2.0 + (3.5 * depthNorm);
-            final double shadowAlpha = 0.16 + (0.12 * depthNorm);
             final double tilt =
                 math.sin(angle * 2) * 0.06; // subtle organic floating tilt
 
@@ -358,25 +355,11 @@ class _AnimatedCelebrationGraphicState
                   angle: tilt,
                   child: Transform.scale(
                     scale: scale,
-                    child: Container(
+                    child: Image.asset(
+                      _activityAssets[i],
                       width: emojiBaseSize,
                       height: emojiBaseSize,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: shadowAlpha),
-                            blurRadius: shadowBlur,
-                            offset: Offset(0, shadowY),
-                          ),
-                        ],
-                      ),
-                      child: Image.asset(
-                        _activityAssets[i],
-                        width: emojiBaseSize,
-                        height: emojiBaseSize,
-                        fit: BoxFit.contain,
-                      ),
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
@@ -794,7 +777,7 @@ class VenueApprovalService {
   /// Starts polling every [interval] while the app is in foreground.
   static void startPolling({
     http.Client? client,
-    Duration interval = const Duration(seconds: 3),
+    Duration interval = const Duration(seconds: 15),
   }) {
     if (client != null) _activeClient = client;
     _pollTimer?.cancel();
@@ -846,12 +829,14 @@ class _VenueApprovalWatcherState extends State<VenueApprovalWatcher>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _check();
     });
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
       _check();
     });
   }
 
   Future<void> _check() async {
+    final welcomeSeen = await SharedPreference.readStr("venue_approved_welcome_seen");
+    if (welcomeSeen == "true") return;
     final token = await SharedPreference.readStr("jwt_token");
     if (token != null && token.isNotEmpty) {
       await VenueApprovalService.checkAndShowCongrats(client: widget.client);
