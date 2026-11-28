@@ -1116,17 +1116,60 @@ class _ActivityManagementState extends State<ActivityManagementScreen> {
               filled: _inReview)
         ]),
         const SizedBox(height: 10),
-        _text(
-            _active
-                ? 'This activity is ACTIV and accepting bookings.'
-                : _status == 'Inactive'
-                    ? 'This activity is InACTIV and not accepting new bookings.'
-                    : 'This activity is $_status and is not accepting bookings.',
-            size: 12),
+        _active
+            ? const Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF303030)),
+                  children: [
+                    TextSpan(text: 'This activity is '),
+                    TextSpan(
+                        text: 'ACTIV',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    TextSpan(text: ' and accepting bookings.'),
+                  ],
+                ),
+              )
+            : _status == 'Inactive'
+                ? const Text.rich(
+                    TextSpan(
+                      style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF303030)),
+                      children: [
+                        TextSpan(text: 'This activity is '),
+                        TextSpan(
+                            text: 'InACTIV',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        TextSpan(text: ' and not accepting new bookings.'),
+                      ],
+                    ),
+                  )
+                : _text('This activity is $_status and is not accepting bookings.',
+                    size: 12),
         const SizedBox(height: 16),
         if (_active) ...[
-          _text('Go InACTIV and temporarily stop accepting bookings.',
-              size: 12),
+          const Text.rich(
+            TextSpan(
+              style: TextStyle(
+                  fontFamily: 'Satoshi',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFF303030)),
+              children: [
+                TextSpan(text: 'Go '),
+                TextSpan(
+                    text: 'InACTIV',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                TextSpan(text: ' and temporarily stop accepting bookings.'),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           OutlinedButton(
               onPressed: _canControl && !_saving ? _showPauseReasonSheet : null,

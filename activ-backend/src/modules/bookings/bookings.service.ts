@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
+import * as ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { PaymentStatus } from "../../common/enums/booking-status.enum";
 import { CreateBookingDto } from "./dto/create-booking.dto";
@@ -17,7 +18,6 @@ import { PaginationDto } from "../../common/dto/pagination.dto";
 import type { UserRecord as User } from "../../common/domain-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
-import { computeBookingCommission } from "../commission/booking-commission";
 import { bookingHasEnded } from "./booking-expiry";
 import { LegacySlotResolver } from "./legacy-slot-resolver";
 import { NormalizedBookingHoldService } from "./normalized-booking-hold.service";
@@ -29,6 +29,7 @@ import { ConfigService } from "@nestjs/config";
 import { indiaDateBounds, weekdayForIndiaDate } from "../../common/time/india-time";
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
+const GST_ON_COMMISSION_RATE = 0.18;
 
 @Injectable()
 export class BookingsService {
@@ -36,7 +37,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-  ) {}
+  ) { }
 
   private calculateDuration(startTime: string, endTime: string): number {
     const [startH, startM] = startTime.split(":").map(Number);
@@ -152,16 +153,16 @@ export class BookingsService {
       serviceId: service?.id ?? facility.activity_id,
       service: service
         ? {
-            id: service.id,
-            name: service.title,
-            venueId: service.venue_id,
-            isActive: service.is_active,
-          }
+          id: service.id,
+          name: service.title,
+          venueId: service.venue_id,
+          isActive: service.is_active,
+        }
         : {
-            id: facility.activity_id,
-            name: facility.activities?.name ?? facility.name,
-            venueId: facility.venue_id,
-          },
+          id: facility.activity_id,
+          name: facility.activities?.name ?? facility.name,
+          venueId: facility.venue_id,
+        },
       categoryId: service?.service_category_id ?? null,
       bookingDate: formatDate(slot.starts_at),
       startTime: formatTime(slot.starts_at),
@@ -513,13 +514,13 @@ export class BookingsService {
               : action === "complete"
                 ? { status: "COMPLETED" as const }
                 : {
-                    notes: [
-                      walkIn.notes,
-                      "Checked-in: " + new Date().toISOString(),
-                    ]
-                      .filter(Boolean)
-                      .join("\n"),
-                  }),
+                  notes: [
+                    walkIn.notes,
+                    "Checked-in: " + new Date().toISOString(),
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                }),
             updated_at: new Date(),
           },
         });
@@ -641,6 +642,14 @@ export class BookingsService {
     return "failed";
   }
 
+  private computeBreakdown(totalAmount: number, commissionPercent: number) {
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const activCommission = round2((totalAmount * commissionPercent) / 100);
+    const gstOnCommission = round2(activCommission * GST_ON_COMMISSION_RATE);
+    const netReceived = round2(totalAmount - activCommission - gstOnCommission);
+    return { commissionPercent, activCommission, gstOnCommission, netReceived };
+  }
+
   private maskAccountNumber(accountNumber: string): string {
     const last4 = accountNumber.slice(-4);
     return `XXXX XXXX ${last4}`;
@@ -678,7 +687,7 @@ export class BookingsService {
     }
 
     const { commissionPercent, activCommission, gstOnCommission, netReceived } =
-      computeBookingCommission(
+      this.computeBreakdown(
         Number(booking.total_paise) / 100,
         Number(venue.commission_percent ?? 5),
       );
@@ -696,8 +705,8 @@ export class BookingsService {
     // Settlement follows a T+7 cycle from when the payment succeeded.
     const payoutDate = payment.updated_at
       ? new Date(
-          new Date(payment.updated_at).getTime() + 7 * 24 * 60 * 60 * 1000,
-        )
+        new Date(payment.updated_at).getTime() + 7 * 24 * 60 * 60 * 1000,
+      )
       : null;
     const slot = booking.slots;
 
@@ -735,12 +744,12 @@ export class BookingsService {
         payment.provider_payment_id ?? payment.provider_order_id ?? "",
       bank: bankAccount
         ? {
-            accountHolderName: bankAccount.account_holder_name,
-            bankName: bankAccount.bank_name,
-            accountNumber: this.maskAccountNumber(bankAccount.account_number),
-            ifscCode: bankAccount.ifsc_code,
-            verified: bankAccount.status === "APPROVED",
-          }
+          accountHolderName: bankAccount.account_holder_name,
+          bankName: bankAccount.bank_name,
+          accountNumber: this.maskAccountNumber(bankAccount.account_number),
+          ifscCode: bankAccount.ifsc_code,
+          verified: bankAccount.status === "APPROVED",
+        }
         : null,
     };
   }
@@ -788,7 +797,7 @@ export class BookingsService {
     ]);
 
     const items = payments.map((payment) => {
-      const { netReceived } = computeBookingCommission(
+      const { netReceived } = this.computeBreakdown(
         Number(payment.bookings.total_paise) / 100,
         Number(
           payment.bookings.slots.facilities.venues.commission_percent ?? 5,
@@ -821,52 +830,504 @@ export class BookingsService {
     currentUser: { id: string; role: string },
     query: BookingPayoutQueryDto,
   ): Promise<{ base64: string; filename: string; mimeType: string }> {
-    const exportQuery = Object.assign(new BookingPayoutQueryDto(), query, {
-      page: 1,
-      limit: 10_001,
-    });
-    const history = await this.getPayoutHistory(currentUser, exportQuery);
-    if (history.total > 10_000) {
+    const where: any = {
+      bookings: {
+        slots: { facilities: { venues: { partner_id: currentUser.id } } },
+      },
+    };
+    if (query.startDate || query.endDate) {
+      const start = query.startDate ? indiaDateBounds(query.startDate).start : null;
+      const end = query.endDate ? indiaDateBounds(query.endDate).end : null;
+      where.updated_at = {
+        ...(start ? { gte: start } : {}),
+        ...(end ? { lt: end } : {}),
+      };
+    }
+    if (query.status === "success") where.status = "CAPTURED";
+    if (query.status === "pending")
+      where.status = { in: ["CREATED", "AUTHORIZED"] };
+    if (query.status === "failed")
+      where.status = {
+        in: ["FAILED", "REFUND_PENDING", "REFUNDED", "EXCEPTION_REVIEW"],
+      };
+
+    const total = await this.prisma.payments.count({ where });
+    if (total > 10_000) {
       throw new BadRequestException(
         "Select a smaller date range to export up to 10,000 payouts.",
       );
     }
-    const cell = (value: unknown) => {
-      const text = String(value ?? "");
-      const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
-    const rows = history.items.map((item) => [
+
+    const [payments, fallbackVenue, businessProfile, partnerUser, approvedBank, anyBank] =
+      await Promise.all([
+        this.prisma.payments.findMany({
+          where,
+          include: {
+            refunds: true,
+            bookings: {
+              include: {
+                users: { select: { name: true, phone_e164: true } },
+                slots: {
+                  include: {
+                    facilities: {
+                      include: {
+                        activities: { select: { name: true } },
+                        venues: {
+                          include: {
+                            partner_venue_legal_documents: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { updated_at: "desc" },
+          take: 10_001,
+        }),
+        this.prisma.venues?.findFirst?.({
+          where: { partner_id: currentUser.id },
+          include: { partner_venue_legal_documents: true },
+          orderBy: { approved_at: "desc" },
+        }) ?? Promise.resolve(null),
+        this.prisma.partner_business_profiles?.findUnique?.({
+          where: { partner_id: currentUser.id },
+        }) ?? Promise.resolve(null),
+        this.prisma.partner_users?.findFirst?.({
+          where: { partner_id: currentUser.id },
+          include: { users: { select: { name: true, phone_e164: true, email: true } } },
+        }) ?? Promise.resolve(null),
+        this.prisma.partner_bank_accounts?.findFirst?.({
+          where: { partner_id: currentUser.id, status: "APPROVED" },
+          orderBy: [{ is_primary: "desc" }, { updated_at: "desc" }],
+        }) ?? Promise.resolve(null),
+        this.prisma.partner_bank_accounts?.findFirst?.({
+          where: { partner_id: currentUser.id },
+          orderBy: [{ is_primary: "desc" }, { updated_at: "desc" }],
+        }) ?? Promise.resolve(null),
+      ]);
+    const bankAccount = approvedBank ?? anyBank;
+
+    const venue: any =
+      payments[0]?.bookings?.slots?.facilities?.venues ?? fallbackVenue;
+    const venueLegal = venue?.partner_venue_legal_documents;
+
+    const formatIstDate = (value: Date) =>
       new Intl.DateTimeFormat("en-GB", {
         timeZone: "Asia/Kolkata",
-      }).format(new Date(item.payoutDate)),
-      item.reference,
-      "",
-      "",
-      Number(item.amount).toFixed(2),
-      item.status,
-      "",
-    ]);
-    const csv = [
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+        .format(value)
+        .replace(/\//g, "-");
+
+    const formatIstTime = (value: Date) =>
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+        .format(value)
+        .toUpperCase();
+
+    const formatPeriodDate = (ymd?: string) => {
+      if (!ymd) return null;
+      const d = new Date(`${ymd}T00:00:00+05:30`);
+      if (Number.isNaN(d.getTime())) return ymd;
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(d);
+    };
+
+    const now = new Date();
+    const generatedOn = `${formatIstDate(now)} (${formatIstTime(now)} IST)`;
+    const startLabel = formatPeriodDate(query.startDate);
+    const endLabel = formatPeriodDate(query.endDate);
+    const periodText =
+      startLabel && endLabel
+        ? `${startLabel} - ${endLabel}`
+        : startLabel || endLabel || "All dates";
+
+    const fmtRs = (val: number) => `₹${val.toFixed(2)}`;
+
+    let grossBookings = 0;
+    let totalCommission = 0;
+    let totalGst = 0;
+    let totalRefund = 0;
+    let netPayable = 0;
+
+    const rows = payments.map((payment: any) => {
+      const booking = payment.bookings;
+      const bookingAmount = Number(booking.total_paise) / 100;
+      const commissionPercent = Number(
+        booking.slots?.facilities?.venues?.commission_percent ?? 5,
+      );
+      const { activCommission, gstOnCommission, netReceived } =
+        this.computeBreakdown(bookingAmount, commissionPercent);
+
+      const refundRecords: any[] = Array.isArray(payment.refunds)
+        ? payment.refunds.filter((r) => r.status !== "FAILED")
+        : [];
+      const recordedRefund = refundRecords.reduce(
+        (sum, r) => sum + Number(r.amount_paise ?? 0) / 100,
+        0,
+      );
+      const refundAmount =
+        recordedRefund > 0
+          ? recordedRefund
+          : payment.status === "REFUNDED"
+            ? bookingAmount
+            : 0;
+      const finalNet = Number((netReceived - refundAmount).toFixed(2));
+
+      let statusLabel = "Failed";
+      if (refundAmount > 0 && refundAmount < bookingAmount) {
+        statusLabel = "Partial Refund";
+      } else if (refundAmount >= bookingAmount || payment.status === "REFUNDED") {
+        statusLabel = "Refunded";
+      } else if (payment.status === "CAPTURED") {
+        statusLabel = "Success";
+      } else if (
+        payment.status === "CREATED" ||
+        payment.status === "AUTHORIZED"
+      ) {
+        statusLabel = "Pending";
+      }
+
+      grossBookings += bookingAmount;
+      totalCommission += activCommission;
+      totalGst += gstOnCommission;
+      totalRefund += refundAmount;
+      netPayable += finalNet;
+
+      return [
+        formatIstDate(new Date(booking.starts_at ?? payment.updated_at)),
+        booking.booking_reference ?? "",
+        payment.provider_payment_id || payment.provider_order_id || "",
+        booking.slots?.facilities?.activities?.name ?? "",
+        booking.users?.name || booking.users?.phone_e164 || "",
+        fmtRs(bookingAmount),
+        fmtRs(activCommission),
+        fmtRs(gstOnCommission),
+        fmtRs(netReceived),
+        refundAmount > 0 ? fmtRs(refundAmount) : "Nil",
+        "",
+        fmtRs(finalNet),
+        statusLabel,
+      ];
+    });
+
+    const maskedAccount = bankAccount?.account_number
+      ? `XXXX${bankAccount.account_number.slice(-4)}`
+      : "";
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Payout Statement");
+
+    sheet.columns = [
+      { width: 24 }, // A: Booking Date / Label
+      { width: 20 }, // B: Booking ID
+      { width: 24 }, // C: Transaction ID
+      { width: 15 }, // D: Activity
+      { width: 18 }, // E: Customer Name
+      { width: 16 }, // F: Booking Amount
+      { width: 18 }, // G: ACTIV Commission
+      { width: 18 }, // H: GST on Commission
+      { width: 18 }, // I: Net Before Refund
+      { width: 15 }, // J: Refund Amount
+      { width: 18 }, // K: Refund Reason
+      { width: 14 }, // L: Final Net
+      { width: 15 }, // M: Status
+    ];
+
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: "thin", color: { argb: "FF000000" } },
+      left: { style: "thin", color: { argb: "FF000000" } },
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+      right: { style: "thin", color: { argb: "FF000000" } },
+    };
+    const orangeFill: ExcelJS.Fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFF9900" },
+    };
+    const yellowFill: ExcelJS.Fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFFF00" },
+    };
+    const peachFill: ExcelJS.Fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFCE5CD" },
+    };
+    const centerAlign: Partial<ExcelJS.Alignment> = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+
+    const styleRange = (
+      rowNum: number,
+      startCol: number,
+      endCol: number,
+      opts: {
+        fill?: ExcelJS.Fill;
+        font?: Partial<ExcelJS.Font>;
+        alignment?: Partial<ExcelJS.Alignment>;
+      },
+    ) => {
+      const r = sheet.getRow(rowNum);
+      for (let c = startCol; c <= endCol; c++) {
+        const cellObj = r.getCell(c);
+        cellObj.border = thinBorder;
+        if (opts.fill) cellObj.fill = opts.fill;
+        if (opts.font) cellObj.font = { name: "Arial", ...opts.font };
+        if (opts.alignment) cellObj.alignment = opts.alignment;
+      }
+    };
+
+    // Row 1: Company Name
+    sheet.mergeCells("A1:M1");
+    sheet.getCell("A1").value = "ACTIVPULSE BOOKING PRIVATE LIMITED";
+    sheet.getRow(1).height = 24;
+    styleRange(1, 1, 13, {
+      font: { bold: true, size: 14 },
+      alignment: centerAlign,
+    });
+
+    // Row 2: Payout Statement (Orange)
+    sheet.mergeCells("A2:M2");
+    sheet.getCell("A2").value = "Payout Statement";
+    sheet.getRow(2).height = 20;
+    styleRange(2, 1, 13, {
+      fill: orangeFill,
+      font: { bold: true, italic: true, size: 11 },
+      alignment: centerAlign,
+    });
+
+    // Row 3: Generated On
+    sheet.mergeCells("A3:M3");
+    sheet.getCell("A3").value = `Generated On: ${generatedOn}`;
+    sheet.getRow(3).height = 18;
+    styleRange(3, 1, 13, {
+      font: { italic: true, size: 10 },
+      alignment: centerAlign,
+    });
+
+    // Row 4: Confidentiality Notice
+    sheet.mergeCells("A4:M4");
+    sheet.getCell("A4").value =
+      "This statement is generated by ACTIVPULSE BOOKING PRIVATE LIMITED exclusively for the registered Venue Partner. It contains confidential financial, settlement and transaction information. Unauthorized copying, forwarding, distribution, publication, modification or disclosure of this document, in whole or in part, without prior written authorization from ACTIVPULSE BOOKING PRIVATE LIMITED is strictly prohibited and may result in contractual and legal action.";
+    sheet.getRow(4).height = 30;
+    styleRange(4, 1, 13, {
+      font: { italic: true, size: 8.5 },
+      alignment: { horizontal: "left", vertical: "middle", wrapText: true },
+    });
+
+    // Row 5: Blank
+    // Row 6-11: Company Details (A:C)
+    sheet.mergeCells("A6:C6");
+    sheet.getCell("A6").value = "Company Details";
+    sheet.getRow(6).height = 20;
+    styleRange(6, 1, 3, {
+      fill: orangeFill,
+      font: { bold: true, size: 11 },
+      alignment: centerAlign,
+    });
+
+    const companyPairs: Array<[string, string, boolean?]> = [
+      ["GSTIN", "33ABCCA3430E1ZD"],
+      ["PAN", "ABCCA3430E"],
+      ["CIN", "U62099TN2025PTC177779"],
+      ["Website", "activ.live", true],
+      ["Support", "support@activ.live"],
+    ];
+    companyPairs.forEach(([label, val, isLink], idx) => {
+      const rowNum = 7 + idx;
+      sheet.getCell(rowNum, 1).value = label;
+      sheet.mergeCells(rowNum, 2, rowNum, 3);
+      sheet.getCell(rowNum, 2).value = val;
+      styleRange(rowNum, 1, 1, {
+        font: { bold: true, size: 10 },
+        alignment: centerAlign,
+      });
+      styleRange(rowNum, 2, 3, {
+        font: isLink
+          ? { size: 10, color: { argb: "FF1155CC" }, underline: true }
+          : { size: 10 },
+        alignment: centerAlign,
+      });
+    });
+
+    // Row 12: Blank
+    // Row 13-21: Venue Details (A:C)
+    sheet.mergeCells("A13:C13");
+    sheet.getCell("A13").value = "Venue Details";
+    sheet.getRow(13).height = 20;
+    styleRange(13, 1, 3, {
+      fill: orangeFill,
+      font: { bold: true, size: 11 },
+      alignment: centerAlign,
+    });
+
+    const venuePairs: Array<[string, string]> = [
+      ["Venue ID", venue?.public_reference ?? ""],
+      ["Venue Name", venue?.name ?? ""],
       [
-        "Date",
-        "Transaction Reference",
-        "Bank",
-        "Account Last 4",
-        "Amount (INR)",
-        "Status",
-        "Failure Reason",
+        "Venue Owner Name",
+        businessProfile?.owner_name ||
+        partnerUser?.users?.name ||
+        venueLegal?.aadhaar_name ||
+        "",
       ],
-      ...rows,
-    ]
-      .map((row) => row.map(cell).join(","))
-      .join("\r\n");
+      [
+        "Venue GSTIN (If available)",
+        venueLegal?.gst_number || businessProfile?.gst_number || "N/A",
+      ],
+      [
+        "Registered Mobile",
+        businessProfile?.phone_e164 || partnerUser?.users?.phone_e164 || "",
+      ],
+      [
+        "Registered Email",
+        businessProfile?.email || partnerUser?.users?.email || "",
+      ],
+      ["Registered Bank", bankAccount?.bank_name ?? ""],
+      ["Bank Account (Masked)", maskedAccount],
+    ];
+    venuePairs.forEach(([label, val], idx) => {
+      const rowNum = 14 + idx;
+      sheet.getCell(rowNum, 1).value = label;
+      sheet.mergeCells(rowNum, 2, rowNum, 3);
+      sheet.getCell(rowNum, 2).value = val;
+      styleRange(rowNum, 1, 1, {
+        font: { size: 10 },
+        alignment: centerAlign,
+      });
+      styleRange(rowNum, 2, 3, {
+        font: { size: 10 },
+        alignment: centerAlign,
+      });
+    });
+
+    // Row 22: Blank
+    // Row 23: Venue Payout Statement Period (Orange, A:M)
+    sheet.mergeCells("A23:M23");
+    sheet.getCell("A23").value = `Venue Payout Statement Period: ${periodText}`;
+    sheet.getRow(23).height = 20;
+    styleRange(23, 1, 13, {
+      fill: orangeFill,
+      font: { bold: true, size: 11 },
+      alignment: centerAlign,
+    });
+
+    // Row 24: Table Header (Yellow, A:M)
+    const headers = [
+      "Booking Date",
+      "Booking ID",
+      "Transaction ID",
+      "Activity",
+      "Customer Name",
+      "Booking Amount",
+      "ACTIV Commission",
+      "GST on Commission",
+      "Net Before Refund",
+      "Refund Amount",
+      "Refund Reason",
+      "Final Net",
+      "Status",
+    ];
+    headers.forEach((h, idx) => {
+      sheet.getCell(24, idx + 1).value = h;
+    });
+    sheet.getRow(24).height = 20;
+    styleRange(24, 1, 13, {
+      fill: yellowFill,
+      font: { bold: true, size: 10 },
+      alignment: centerAlign,
+    });
+
+    // Rows 25+: Transaction Rows
+    rows.forEach((rowData, idx) => {
+      const rowNum = 25 + idx;
+      rowData.forEach((val, colIdx) => {
+        sheet.getCell(rowNum, colIdx + 1).value = val;
+      });
+      styleRange(rowNum, 1, 13, {
+        font: { size: 10 },
+        alignment: centerAlign,
+      });
+    });
+
+    // Summary Section (A:C)
+    const summaryHeaderRow = 25 + rows.length + 1;
+    sheet.mergeCells(summaryHeaderRow, 1, summaryHeaderRow, 3);
+    sheet.getCell(summaryHeaderRow, 1).value = "Summary";
+    sheet.getRow(summaryHeaderRow).height = 20;
+    styleRange(summaryHeaderRow, 1, 3, {
+      fill: orangeFill,
+      font: { bold: true, size: 11 },
+      alignment: centerAlign,
+    });
+
+    const summaryPairs: Array<[string, string, boolean?]> = [
+      ["Gross Bookings", fmtRs(grossBookings)],
+      ["Commission", fmtRs(totalCommission)],
+      ["GST", fmtRs(totalGst)],
+      ["Refund", fmtRs(totalRefund)],
+      ["Net Payable", fmtRs(netPayable), true],
+    ];
+    summaryPairs.forEach(([label, val, isBold], idx) => {
+      const rowNum = summaryHeaderRow + 1 + idx;
+      sheet.getCell(rowNum, 1).value = label;
+      sheet.mergeCells(rowNum, 2, rowNum, 3);
+      sheet.getCell(rowNum, 2).value = val;
+      styleRange(rowNum, 1, 3, {
+        font: { bold: Boolean(isBold), size: 10 },
+        alignment: centerAlign,
+      });
+    });
+
+    // Note Section (A:J)
+    const noteHeaderRow = summaryHeaderRow + summaryPairs.length + 2;
+    sheet.mergeCells(noteHeaderRow, 1, noteHeaderRow, 10);
+    sheet.getCell(noteHeaderRow, 1).value = "Note";
+    sheet.getRow(noteHeaderRow).height = 18;
+    styleRange(noteHeaderRow, 1, 10, {
+      fill: peachFill,
+      font: { bold: true, size: 10 },
+      alignment: centerAlign,
+    });
+
+    const noteBodyRow = noteHeaderRow + 1;
+    sheet.getCell(noteBodyRow, 1).value = "GST on Commission (18%)";
+    sheet.mergeCells(noteBodyRow, 2, noteBodyRow, 10);
+    sheet.getCell(noteBodyRow, 2).value =
+      "GST is charged on ACTIV Platform services (ACTIV Commission). This amount is eligible for Input Tax Credit (ITC) in your GST returns.";
+    styleRange(noteBodyRow, 1, 1, {
+      font: { size: 10 },
+      alignment: centerAlign,
+    });
+    styleRange(noteBodyRow, 2, 10, {
+      font: { size: 10 },
+      alignment: { horizontal: "left", vertical: "middle" },
+    });
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     const start = query.startDate ?? "all";
     const end = query.endDate ?? "all";
     return {
-      base64: Buffer.from(`\uFEFF${csv}`, "utf8").toString("base64"),
-      filename: `activ-payouts-${start}-${end}.csv`,
-      mimeType: "text/csv",
+      base64: buffer.toString("base64"),
+      filename: `activ-payouts-${start}-${end}.xlsx`,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     };
   }
 
@@ -900,16 +1361,16 @@ export class BookingsService {
       statement.status.charAt(0).toUpperCase() + statement.status.slice(1);
     const payoutDateLabel = statement.payoutDate
       ? new Date(statement.payoutDate)
-          .toLocaleString("en-IN", {
-            timeZone: "Asia/Kolkata",
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          })
-          .replace(/\b(am|pm)\b/g, (value) => value.toUpperCase()) + " IST"
+        .toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })
+        .replace(/\b(am|pm)\b/g, (value) => value.toUpperCase()) + " IST"
       : "-";
 
     const draw = (
@@ -935,7 +1396,7 @@ export class BookingsService {
       const textSize = Math.min(
         size,
         (size * (boxW - 12)) /
-          Math.max(1, textFont.widthOfTextAtSize(text, size)),
+        Math.max(1, textFont.widthOfTextAtSize(text, size)),
       );
       const textWidth = textFont.widthOfTextAtSize(text, textSize);
       page.drawText(text, {

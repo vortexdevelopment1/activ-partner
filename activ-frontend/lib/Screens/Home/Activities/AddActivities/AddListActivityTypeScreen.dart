@@ -22,8 +22,13 @@ import '../../../onboarding_widgets.dart';
 import '../VenueActivityListScreen.dart';
 
 class AddListActivityTypeScreen extends StatefulWidget {
-  const AddListActivityTypeScreen({super.key, this.client});
+  const AddListActivityTypeScreen({
+    super.key,
+    this.client,
+    this.canExitFlow = true,
+  });
   final http.Client? client;
+  final bool canExitFlow;
 
   @override
   _State createState() => _State();
@@ -168,6 +173,7 @@ class _State extends State<AddListActivityTypeScreen> {
   }
 
   void goToBackScreen(BuildContext context) {
+    if (!widget.canExitFlow) return;
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
     } else {
@@ -252,11 +258,14 @@ class _State extends State<AddListActivityTypeScreen> {
                                 Expanded(
                                     flex: 3,
                                     child: InkWell(
-                                        onTap: () {
-                                          goToBackScreen(context);
-                                        },
-                                        child: getBackButton(context, "Back",
-                                            "selectActivity"))),
+                                        onTap: widget.canExitFlow
+                                            ? () => goToBackScreen(context)
+                                            : null,
+                                        child: widget.canExitFlow
+                                            ? getBackButton(context, "Back",
+                                                "selectActivity")
+                                            : getButtonGray(context, "Back",
+                                                "selectActivity"))),
                                 Expanded(
                                   flex: 7,
                                   child: InkWell(

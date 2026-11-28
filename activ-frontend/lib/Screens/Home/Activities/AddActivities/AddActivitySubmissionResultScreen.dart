@@ -436,15 +436,24 @@ class _AddActivitySubmissionResultScreenState
             color: draft ? AppColors.red : AppColors.purple, width: 1.4),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(draft ? Icons.info_outline : Icons.notifications_none,
               color: draft ? AppColors.red : AppColors.purple, size: 32),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              draft
-                  ? "Important\nYour activity is not live yet.\nIt will be visible to users only after ACTIV's Admin approves it."
-                  : "What Happens next?\nWe'll notify you once your activity is approved and live.",
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: draft ? 'Important\n' : 'What Happens next?\n',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: draft
+                      ? "Your activity is not live yet.\nIt will be visible to users only after ACTIV's Admin approves it."
+                      : "We'll notify you once your activity is approved and live.",
+                ),
+              ]),
               style: TextStyle(
                 fontSize: 13,
                 fontFamily: 'Satoshi',

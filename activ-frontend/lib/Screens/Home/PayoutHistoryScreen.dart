@@ -831,7 +831,7 @@ class _ExportPayoutReportScreenState extends State<ExportPayoutReportScreen> {
                   dialogTitle: 'Save payout report',
                   fileName: filename,
                   type: FileType.custom,
-                  allowedExtensions: const ['csv'],
+                  allowedExtensions: const ['xlsx', 'csv'],
                   bytes: bytes) !=
               null;
       if (saved && mounted) {

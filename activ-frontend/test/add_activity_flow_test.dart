@@ -374,6 +374,20 @@ void main() {
       }
     }
     expect(find.byType(VenueActivityListScreen), findsNothing);
+
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddListActivityTypeScreen), findsOneWidget);
+    expect(find.byType(VenueActivityListScreen), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(AddListActivityTypeScreen), findsOneWidget);
+    expect(find.byType(VenueActivityListScreen), findsNothing);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddVenuePhotoUploadScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -54,7 +54,7 @@ class ActivityResumeNavigator {
       }
     }
     final pages = <Widget>[
-      AddListActivityTypeScreen(client: client),
+      AddListActivityTypeScreen(client: client, canExitFlow: false),
       AddVenuePhotoUploadScreen(activityId: id, client: client),
       AddVenuePhotoListViewScreen(
         activityId: id,

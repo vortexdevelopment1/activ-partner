@@ -52,6 +52,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "country-state-city": "^3.2.1",
+    "exceljs": "^4.4.0",
     "googleapis": "^144.0.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.1",
@@ -106,6 +107,14 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "setupFilesAfterEnv": ["<rootDir>/../test/no-network.cjs"]
+    "setupFilesAfterEnv": [
+      "<rootDir>/../test/no-network.cjs"
+    ]
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "prisma@7.10.0": true,
+    "@nestjs/core": false,
+    "fsevents": false
   }
 }
