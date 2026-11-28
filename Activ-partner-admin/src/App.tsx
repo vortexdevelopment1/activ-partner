@@ -9,6 +9,7 @@ import { VenueDetail } from './pages/venues/VenueDetail';
 import { UsersList } from './pages/users/UsersList';
 import { PartnersList } from './pages/partners/PartnersList';
 import { CommissionsList } from './pages/commissions/CommissionsList';
+import { TransactionsList } from './pages/transactions/TransactionsList';
 import { LegalPage } from './pages/legal/LegalPage';
 import { BankAccountsList } from './pages/bank-accounts/BankAccountsList';
 import { BankAccountDetail } from './pages/bank-accounts/BankAccountDetail';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="users" element={<UsersList />} />
         <Route path="partners" element={<PartnersList />} />
         <Route path="commissions" element={<CommissionsList />} />
+        <Route path="transactions" element={<TransactionsList />} />
         <Route path="legal" element={<LegalPage />} />
         <Route path="bank-accounts" element={<BankAccountsList />} />
         <Route path="bank-accounts/:id" element={<BankAccountDetail />} />

@@ -29,7 +29,9 @@ export const Login: React.FC = () => {
       setAuth(res.data.data.user, res.data.data.accessToken);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Invalid email or password');
+      setError(err?.response?.data?.message || (
+        err?.response ? 'Unable to sign in. Please try again.' : 'Could not reach the backend. Please try again.'
+      ));
     }
   };
 
@@ -48,7 +50,7 @@ export const Login: React.FC = () => {
           <p className="mt-2 mb-7 text-sm text-gray-600">Manage your partners, venues and approvals.</p>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+              <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
                 {error}
               </div>
             )}

@@ -17,6 +17,7 @@ import { PaginationDto } from "../../common/dto/pagination.dto";
 import type { UserRecord as User } from "../../common/domain-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { BookingPayoutQueryDto } from "./dto/booking-payout-query.dto";
+import { computeBookingCommission } from "../commission/booking-commission";
 import { bookingHasEnded } from "./booking-expiry";
 import { LegacySlotResolver } from "./legacy-slot-resolver";
 import { NormalizedBookingHoldService } from "./normalized-booking-hold.service";
@@ -28,7 +29,6 @@ import { ConfigService } from "@nestjs/config";
 import { indiaDateBounds, weekdayForIndiaDate } from "../../common/time/india-time";
 
 // ACTIV Commission GST rate — fixed for the MVP settlement model (not configurable).
-const GST_ON_COMMISSION_RATE = 0.18;
 
 @Injectable()
 export class BookingsService {
@@ -641,14 +641,6 @@ export class BookingsService {
     return "failed";
   }
 
-  private computeBreakdown(totalAmount: number, commissionPercent: number) {
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const activCommission = round2((totalAmount * commissionPercent) / 100);
-    const gstOnCommission = round2(activCommission * GST_ON_COMMISSION_RATE);
-    const netReceived = round2(totalAmount - activCommission - gstOnCommission);
-    return { commissionPercent, activCommission, gstOnCommission, netReceived };
-  }
-
   private maskAccountNumber(accountNumber: string): string {
     const last4 = accountNumber.slice(-4);
     return `XXXX XXXX ${last4}`;
@@ -686,7 +678,7 @@ export class BookingsService {
     }
 
     const { commissionPercent, activCommission, gstOnCommission, netReceived } =
-      this.computeBreakdown(
+      computeBookingCommission(
         Number(booking.total_paise) / 100,
         Number(venue.commission_percent ?? 5),
       );
@@ -796,7 +788,7 @@ export class BookingsService {
     ]);
 
     const items = payments.map((payment) => {
-      const { netReceived } = this.computeBreakdown(
+      const { netReceived } = computeBookingCommission(
         Number(payment.bookings.total_paise) / 100,
         Number(
           payment.bookings.slots.facilities.venues.commission_percent ?? 5,

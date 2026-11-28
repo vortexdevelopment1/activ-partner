@@ -53,13 +53,16 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const isLoginRequest = (config?: { url?: string; method?: string }) =>
+  config?.url === '/auth/login' && config.method === 'post';
+
 api.interceptors.request.use(async (config) => {
   const isFallback = (config as typeof config & { _renderFallbackAttempted?: boolean })
     ._renderFallbackAttempted;
   config.baseURL = isFallback ? DEPLOYED_API_URL : await selectApiUrl();
 
   const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !isLoginRequest(config)) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -83,7 +86,7 @@ api.interceptors.response.use(
       return api.request(config);
     }
 
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !isLoginRequest(config)) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
